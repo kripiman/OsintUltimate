@@ -2,7 +2,7 @@ use crate::plugins::ScannerPlugin;
 use crate::models::{TargetHost, Finding, Severity, Category};
 use async_trait::async_trait;
 use anyhow::{Result, Context};
-use tracing::{info, error};
+use tracing::{info, error, warn};
 use std::process::Stdio;
 use tokio::process::Command;
 use quick_xml::de::from_str;
@@ -10,12 +10,15 @@ use serde::Deserialize;
 
 pub struct NmapScanner {
     nmap_path: String,
+    scripts: Option<String>,
+    stealth: bool,
+    service_detection: bool,
 }
 
 // Structs for QuickXML parsing
 #[derive(Debug, Deserialize)]
 struct NmapRun {
-    host: Option<Vec<Host>>, // Meticulous: Can be multiple hosts or None or single
+    host: Option<Vec<Host>>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -35,6 +38,7 @@ struct Port {
     #[serde(rename = "@protocol")]
     protocol: String,
     service: Option<Service>,
+    script: Option<Vec<Script>>, // Support for script output per port
 }
 
 #[derive(Debug, Deserialize)]
@@ -47,11 +51,24 @@ struct Service {
     version: String,
 }
 
+#[derive(Debug, Deserialize)]
+struct Script {
+    #[serde(rename = "@id")]
+    id: String,
+    #[serde(rename = "@output")]
+    output: String,
+    // We could parse structured tables here, but for now raw output is safer
+    // table: Option<Table>, 
+}
+
 impl NmapScanner {
-    pub fn new() -> Self {
+    pub fn new(scripts: Option<String>, stealth: bool, service_detection: bool) -> Self {
         let path = which::which("nmap").unwrap_or_else(|_| "nmap".into());
         Self {
             nmap_path: path.to_string_lossy().to_string(),
+            scripts,
+            stealth,
+            service_detection,
         }
     }
 }
@@ -65,15 +82,42 @@ impl ScannerPlugin for NmapScanner {
     async fn scan(&self, target: &mut TargetHost) -> Result<()> {
         info!("NmapScanner: launching scan against {}", target.host);
         
+        let mut args = vec!["-n".to_string(), "-Pn".to_string(), "--open".to_string()];
+
+        // Stealth Mode Logic
+        if self.stealth {
+             args.push("-T2".to_string());
+             args.push("-sS".to_string()); 
+             // Stealth usually implies avoiding heavy probing, but -sS is standard.
+        } else {
+             args.push("-T4".to_string());
+             args.push("-sS".to_string());
+        }
+
+        // Service Detection
+        if self.service_detection {
+            args.push("-sV".to_string());
+        }
+
+        // Scripts
+        if let Some(scripts) = &self.scripts {
+            args.push(format!("--script={}", scripts));
+            // Scripts often require service detection to work effectively
+            if !self.service_detection && !args.contains(&"-sV".to_string()) {
+                 warn!("Running scripts without -sV might limit effectiveness.");
+                 // We don't force it, user choice.
+            }
+        }
+
+        // Output XML
+        args.push("-oX".to_string());
+        args.push("-".to_string());
+        
+        // Target
+        args.push(target.host.clone());
+
         let output = Command::new(&self.nmap_path)
-            .args(&[
-                "-sS", "-sV",
-                "-T4",
-                "--open",
-                "-n", "-Pn",
-                "-oX", "-",
-                &target.host
-            ])
+            .args(&args)
             .stdout(Stdio::piped())
             .stderr(Stdio::piped())
             .spawn()
@@ -84,6 +128,7 @@ impl ScannerPlugin for NmapScanner {
         if !output.status.success() {
              let err = String::from_utf8_lossy(&output.stderr);
              error!("Nmap failed: {}", err);
+             // Don't error out, just log
              return Ok(());
         }
 
@@ -98,6 +143,8 @@ impl ScannerPlugin for NmapScanner {
                             if let Some(port_list) = ports.port {
                                 for port in port_list {
                                     let svc = port.service.unwrap_or(Service { name: "unknown".into(), product: "".into(), version: "".into() });
+                                    
+                                    // 1. Port Finding
                                     target.findings.push(Finding::new(
                                         &format!("PORT-{}-{}", port.protocol, port.portid),
                                         Category::NetworkPort,
@@ -110,6 +157,35 @@ impl ScannerPlugin for NmapScanner {
                                             "banner": format!("{} {}", svc.product, svc.version)
                                         })
                                     ));
+
+                                    // 2. Script Findings
+                                    if let Some(scripts) = port.script {
+                                        for script in scripts {
+                                             let severity = if script.id.contains("vuln") || script.id.contains("cve") || script.output.to_lowercase().contains("vulnerable") {
+                                                 Severity::High
+                                             } else {
+                                                 Severity::Info // e.g., http-title, ssl-cert
+                                             };
+                                             
+                                             let category = if severity == Severity::High {
+                                                 Category::Vulnerability
+                                             } else {
+                                                 Category::Misconfiguration // or Recon
+                                             };
+
+                                             target.findings.push(Finding::new(
+                                                 &format!("NSE-{}", script.id),
+                                                 category,
+                                                 severity,
+                                                 &format!("NSE Script {}: {}", script.id, script.output.lines().next().unwrap_or("")),
+                                                 serde_json::json!({
+                                                     "script_id": script.id,
+                                                     "output": script.output,
+                                                     "port": port.portid
+                                                 })
+                                             ));
+                                        }
+                                    }
                                 }
                             }
                         }
@@ -118,7 +194,6 @@ impl ScannerPlugin for NmapScanner {
             },
             Err(e) => {
                 error!("Failed to parse Nmap XML: {}", e);
-                // Fallback? No, we trust the meticulous parser.
             }
         }
         

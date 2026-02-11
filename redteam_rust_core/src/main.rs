@@ -27,6 +27,18 @@ struct Args {
     /// Number of concurrent scans
     #[arg(short, long, default_value_t = 10)]
     concurrency: usize,
+
+    /// Nmap Scripts to run (e.g., "default", "vuln", "http-title")
+    #[arg(long)]
+    scripts: Option<String>,
+
+    /// Enable Stealth Mode (slower, T2 timing, lighter fingerprinting)
+    #[arg(long, default_value_t = false)]
+    stealth: bool,
+
+    /// Enable Service Version Detection (-sV)
+    #[arg(long, default_value_t = false)]
+    service_detection: bool,
 }
 
 #[tokio::main]
@@ -72,7 +84,11 @@ async fn main() {
     
     // Register Plugins
     orchestrator.register_plugin(Box::new(WebFuzzer::new())).await;
-    orchestrator.register_plugin(Box::new(NmapScanner::new())).await;
+    orchestrator.register_plugin(Box::new(NmapScanner::new(
+        args.scripts,
+        args.stealth,
+        args.service_detection
+    ))).await;
     orchestrator.register_plugin(Box::new(OsintScanner::new())).await;
 
     // Run Scan
