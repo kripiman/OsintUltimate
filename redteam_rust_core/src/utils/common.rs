@@ -1,7 +1,8 @@
 use rand_distr::{LogNormal, Distribution};
 use tokio::time::{sleep, Duration};
 use tracing::warn;
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
+use tokio::sync::Mutex; // Use Tokio Mutex
 use std::collections::HashMap;
 use std::time::{SystemTime, UNIX_EPOCH};
 
@@ -46,13 +47,16 @@ impl ProxyManager {
         }
     }
 
-    pub fn get_next_proxy(&self) -> Option<String> {
+    pub async fn get_next_proxy(&self) -> Option<String> {
         if self.proxies.is_empty() {
             return None;
         }
 
-        let mut idx_guard = self.current_index.lock().unwrap();
-        let mut bl_guard = self.blacklist.lock().unwrap();
+        let mut idx_guard = self.current_index.lock().await;
+        // Blacklist is also a Mutex, need to lock it.
+        // Note: nesting locks can be dangerous, but here we surely don't have circular deps.
+        let mut bl_guard = self.blacklist.lock().await; 
+        
         let now = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_secs();
 
         // Simple round-robin with blacklist check
@@ -72,8 +76,8 @@ impl ProxyManager {
         None // All blacklisted
     }
 
-    pub fn blacklist_proxy(&self, proxy: &str) {
-        let mut bl_guard = self.blacklist.lock().unwrap();
+    pub async fn blacklist_proxy(&self, proxy: &str) {
+        let mut bl_guard = self.blacklist.lock().await;
         let now = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_secs();
         bl_guard.insert(proxy.to_string(), now);
         warn!("Proxy blacklisted: {}", proxy);

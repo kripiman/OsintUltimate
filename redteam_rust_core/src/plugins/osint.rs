@@ -1,17 +1,18 @@
 use crate::plugins::ScannerPlugin;
 use crate::models::{TargetHost, Finding, Severity, Category};
+use crate::utils::LivenessChecker; // Import LivenessChecker
 use async_trait::async_trait;
 use anyhow::Result;
 use tracing::{info, warn, debug};
 use reqwest::Client;
 use serde::Deserialize;
 use std::collections::HashSet;
-use hickory_resolver::TokioAsyncResolver;
-use hickory_resolver::config::{ResolverConfig, ResolverOpts};
+use futures::stream::{self, StreamExt}; // Concurrent stream
+use std::sync::Arc; // Shared state
 
 pub struct OsintScanner {
     client: Client,
-    resolver: TokioAsyncResolver,
+    liveness: LivenessChecker, // Use shared checker
 }
 
 #[derive(Deserialize, Debug)]
@@ -20,19 +21,14 @@ struct CrtShEntry {
 }
 
 impl OsintScanner {
-    pub fn new() -> Self {
+    pub fn new(liveness: LivenessChecker) -> Self {
         let client = Client::builder()
             .timeout(std::time::Duration::from_secs(20))
             .user_agent("Mozilla/5.0 (compatible; RedTeamRust/1.0)")
             .build()
             .expect("Failed to build OSINT client");
             
-        let resolver = TokioAsyncResolver::tokio(
-            ResolverConfig::google(),
-            ResolverOpts::default(),
-        );
-
-        Self { client, resolver }
+        Self { client, liveness }
     }
 
     async fn query_crt_sh(&self, domain: &str) -> Result<HashSet<String>> {
@@ -62,20 +58,6 @@ impl OsintScanner {
         
         Ok(subdomains)
     }
-
-    async fn resolve_domain(&self, domain: &str) -> Option<String> {
-        match self.resolver.lookup_ip(domain).await {
-            Ok(lookup) => {
-                if let Some(ip) = lookup.iter().next() {
-                    return Some(ip.to_string());
-                }
-            },
-            Err(_) => {
-                // Resolution failed (NXDOMAIN, Timeout, etc.)
-            }
-        }
-        None
-    }
 }
 
 #[async_trait]
@@ -103,20 +85,32 @@ impl ScannerPlugin for OsintScanner {
 
         info!("Found {} unique subdomains from crt.sh. Verifying...", subdomains.len());
         
-        let mut live_subdomains = Vec::new();
 
-        // 2. Active Verification (DNS)
-        // Note: For massive lists, we should use a Semaphore/Stream here.
-        // For now, sequential resolution is safer to avoid flooding local DNS.
-        for sub in subdomains {
-            // Skip the target itself if returned
-            if sub == target.host { continue; }
-            
-            if let Some(ip) = self.resolve_domain(&sub).await {
-                debug!("Subdomain alive: {} -> {}", sub, ip);
-                live_subdomains.push((sub, ip));
-            }
-        }
+        
+        let liveness_checker = Arc::new(&self.liveness);
+        
+        // 2. Concurrent Active Verification (DNS)
+        let live_subdomains: Vec<(String, String)> = stream::iter(subdomains)
+            .map(|sub| {
+                let checker = liveness_checker.clone();
+                let target_host = target.host.clone();
+                async move {
+                    if sub == target_host { return None; }
+                    
+                    if let Some(ip) = checker.is_live(&sub).await {
+                        debug!("Subdomain alive: {} -> {}", sub, ip);
+                        Some((sub, ip.to_string()))
+                    } else {
+                        None
+                    }
+                }
+            })
+            .buffer_unordered(50) // Concurrency limit
+            .collect::<Vec<_>>()
+            .await
+            .into_iter()
+            .flatten()
+            .collect();
 
         // 3. Report Findings
         for (sub, ip) in live_subdomains {

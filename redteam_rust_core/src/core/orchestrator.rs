@@ -27,7 +27,8 @@ impl Orchestrator {
 
     pub async fn run(&self, targets: Vec<String>) -> ScanResult {
         // Fix TODO: Real CLI args
-        let cmdline = std::env::args().collect::<Vec<_>>().join(" ");
+        // Redact command line for security (prevent leaking paths/configs in report)
+        let cmdline = "redteam_rust_core [REDACTED]".to_string();
         let mut scan_result = ScanResult::new(&cmdline);
         
         let semaphore = Arc::new(Semaphore::new(self.concurrency));
@@ -44,7 +45,14 @@ impl Orchestrator {
             let target_host_str = target_str.clone();
 
             tokio::spawn(async move {
-                let _permit = sem.acquire().await.unwrap();
+                // Graceful handling of semaphore acquisition
+                let _permit = match sem.acquire().await {
+                    Ok(p) => p,
+                    Err(e) => {
+                        error!("Failed to acquire semaphore for {}: {}", target_host_str, e);
+                        return;
+                    }
+                };
                 
                 let mut target_host = TargetHost {
                     host: target_host_str.clone(),

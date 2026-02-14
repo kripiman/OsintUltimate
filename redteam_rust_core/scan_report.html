@@ -1,0 +1,63 @@
+
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>RedTeam Rust Scan Report</title>
+  <style>
+    body {font-family: Inter, Roboto, Arial, sans-serif; padding: 20px; background:#f7fafc; color: #1e293b;}
+    h1, h2 { color: #0f172a; }
+    table {border-collapse: collapse; width: 100%; background: white; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1), 0 2px 4px -1px rgba(0,0,0,0.06); border-radius: 8px; overflow: hidden; margin-top: 20px;}
+    th, td {padding: 12px 16px; text-align: left; border-bottom: 1px solid #e2e8f0; font-size: 14px;}
+    th {background: #1e293b; color: #f8fafc; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em;}
+    tr:last-child td {border-bottom: none;}
+    tr:hover {background-color: #f1f5f9;}
+    
+    .Critical {background: #fecaca; color: #991b1b;}
+    .High {background: #ffedd5; color: #9a3412;}
+    .Medium {background: #fef08a; color: #854d0e;}
+    .Low {background: #e9f5db; color: #365314;}
+    .Info {background: #e0f2fe; color: #075985;}
+    
+    .badge {display:inline-block; padding:2px 8px; border-radius:9999px; font-size:11px; font-weight: 600; background: #cbd5e1; color: #334155; margin-right: 4px; margin-bottom: 4px;}
+    .finding-list {margin: 0; padding-left: 20px;}
+    .meta { font-size: 12px; color: #64748b; margin-bottom: 20px; }
+  </style>
+</head>
+<body>
+  <h1>🛡️ RedTeam Rust Engine - Engagement Report</h1>
+  <div class="meta">
+    <p><strong>Generated:</strong> 2026-02-13T21:51:42.975885383Z</p>
+    <p><strong>Tool Version:</strong> 0.1.0</p>
+    <p><strong>Command:</strong> <code>redteam_rust_core [REDACTED]</code></p>
+  </div>
+
+  <h2>Target Analysis Report</h2>
+  <p>Copy this table directly to Excel/Sheets.</p>
+  
+  <table>
+    <thead>
+      <tr>
+        <th>Host</th>
+        <th>IP Status</th>
+        <th>Top Severity</th>
+        <th>Detailed Findings</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td style="font-weight: 500;">google.com <div style="font-size:11px;color:#64748b"></div></td>
+        <td>
+           <span style='color:red;'>scanned</span>
+        </td>
+        <td class="Info">
+            Info
+        </td>
+        <td>
+            <span style="color:#94a3b8;font-style:italic;">No findings</span>
+        </td>
+      </tr>
+    </tbody>
+  </table>
+</body>
+</html>

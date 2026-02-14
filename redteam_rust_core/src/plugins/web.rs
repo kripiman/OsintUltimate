@@ -16,6 +16,7 @@ pub struct WebFuzzer {
     signatures: Vec<Signature>,
     user_agents: Vec<String>,
     proxy_manager: Option<Arc<ProxyManager>>,
+    insecure: bool, // Added field
 }
 
 struct Signature {
@@ -26,7 +27,7 @@ struct Signature {
 }
 
 impl WebFuzzer {
-    pub fn new() -> Self {
+    pub fn new(insecure: bool) -> Self { // Updated signature
         let signatures = vec![
             Signature { endpoint: "/.env".into(), keyword: "APP_KEY=".into(), title: "Laravel .env Exposure".into(), severity: Severity::Critical },
             Signature { endpoint: "/.git/config".into(), keyword: "[core]".into(), title: "Git Config Exposure".into(), severity: Severity::High },
@@ -39,7 +40,7 @@ impl WebFuzzer {
         ];
         
         let default_client = Client::builder()
-            .danger_accept_invalid_certs(true)
+            .danger_accept_invalid_certs(insecure) // Use flag
             .redirect(reqwest::redirect::Policy::limited(3))
             .timeout(std::time::Duration::from_secs(10))
             .build()
@@ -52,6 +53,7 @@ impl WebFuzzer {
             signatures,
             user_agents,
             proxy_manager: None,
+            insecure,
         }
     }
 
@@ -74,7 +76,7 @@ impl WebFuzzer {
                 // Using a simple head request to google.
                 if let Err(e) = client.head("http://www.google.com").send().await {
                     warn!("Proxy {} failed health check: {}", proxy, e);
-                    pm.blacklist_proxy(&proxy);
+                    pm.blacklist_proxy(&proxy).await;
                 } else {
                     debug!("Proxy {} is healthy", proxy);
                 }
@@ -95,9 +97,17 @@ impl WebFuzzer {
             }
             
             // Build new client
+            let proxy_obj = match reqwest::Proxy::all(p) {
+                Ok(proxy) => proxy,
+                Err(e) => {
+                    warn!("Invalid proxy URL '{}': {}", p, e);
+                    return self.default_client.clone();
+                }
+            };
+
             let client = Client::builder()
-                .proxy(reqwest::Proxy::all(p).unwrap())
-                .danger_accept_invalid_certs(true)
+                .proxy(proxy_obj)
+                .danger_accept_invalid_certs(self.insecure) // Use flag
                 .redirect(reqwest::redirect::Policy::limited(3))
                 .timeout(std::time::Duration::from_secs(10))
                 .build()
@@ -111,13 +121,17 @@ impl WebFuzzer {
     }
 
     async fn check_signature(&self, target_host: &str, sig: &Signature) -> Option<Finding> {
-        let url = format!("http://{}{}", target_host, sig.endpoint);
+        // Try HTTPS first, then HTTP
+        let protocols = ["https", "http"];
+        
+        for proto in protocols {
+            let url = format!("{}://{}{}", proto, target_host, sig.endpoint);
         let ua = self.get_ua();
         
         self.jitter.sleep().await;
 
         let proxy = if let Some(pm) = &self.proxy_manager {
-            pm.get_next_proxy()
+            pm.get_next_proxy().await
         } else {
             None
         };
@@ -162,7 +176,7 @@ impl WebFuzzer {
                         // If proxy failed, blacklist it
                         if let Some(p) = &proxy {
                             if let Some(pm) = &self.proxy_manager {
-                                pm.blacklist_proxy(p);
+                                pm.blacklist_proxy(p).await;
                             }
                         }
                         break;
@@ -172,7 +186,8 @@ impl WebFuzzer {
                     tokio::time::sleep(tokio::time::Duration::from_millis(wait)).await;
                 }
             }
-        }
+        } // End retry loop
+        } // End protocols loop
         None
     }
 }

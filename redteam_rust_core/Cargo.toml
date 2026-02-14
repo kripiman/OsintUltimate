@@ -33,7 +33,11 @@ indicatif = "0.17" # Progress bars
 
 # Logging & Error Handling
 tracing = "0.1"
-tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+tracing-subscriber = { version = "0.3", features = ["env-filter", "json"] } # Added json feature
+tracing-opentelemetry = "0.22"
+opentelemetry = "0.21"
+opentelemetry_sdk = { version = "0.21", features = ["rt-tokio"] }
+opentelemetry-otlp = "0.14"
 anyhow = "1.0"
 thiserror = "1.0"
 
