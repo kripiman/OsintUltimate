@@ -237,12 +237,12 @@ pub async fn generate_report(jsonl_path: &str, output_path: &str) -> Result<()> 
                 }
 
                 let target_vm = TargetVM {
-                    host: html_escape::encode_safe(&target.host).to_string(),
-                    ip: html_escape::encode_safe(&target.ip.clone().unwrap_or_default()).to_string(),
+                    host: target.host.clone(),
+                    ip: target.ip.clone().unwrap_or_default(),
                     status,
                     max_severity: severity_str.to_string(),
-                    has_findings: !sanitized_findings.is_empty(),
-                    findings: sanitized_findings,
+                    has_findings: !target.findings.is_empty(),
+                    findings: target.findings.clone(),
                 };
 
                 let rendered_row = reg.render("row", &target_vm)?;

@@ -40,7 +40,8 @@ impl Orchestrator {
                 _ = token.cancelled() => {
                     // V10 FIX (HIGH-001): Drain rx explicitly to avoid discarding targets upon cancellation.
                     rx.close();
-                    while let Ok(mut remaining_target) = rx.try_recv() {
+                    // AUDIT-005 FIX: Use recv() to ensure all buffered targets are processed after close()
+                    while let Some(mut remaining_target) = rx.recv().await {
                         remaining_target.status = TargetStatus::Dead;
                         remaining_target.findings.push(Finding::new(
                             "SHUTDOWN_ABORT",
@@ -79,55 +80,52 @@ impl Orchestrator {
 
                 let results = futures::future::join_all(futures).await;
 
+                // AUDIT-001 FIX: Collect all findings first to avoid O(N^2) cloning with Arc::make_mut
+                let mut all_findings = Vec::new();
+                let mut plugin_error = false;
+
                 for join_res in results {
                     match join_res {
                         Ok((name, res)) => {
-                            // Note: Since target_arc is shared among all futures, 
-                            // we need to collect findings and merge them back later
-                            // OR we need to rethink this if TargetHost is mutated.
-                            // Currently, ScannerPlugin::scan takes &TargetHost, so it shouldn't mutate it.
-                            // Wait, the orchestrator appends findings to 'target'.
-                            // If we use Arc, we need to handle the mutation.
-                            // The easiest way is to collect findings from results.
                             match res {
                                 Ok(mut findings) => {
-                                    // findings are already extracted from plugin.scan
-                                    // We will merge them into the final target below.
-                                    let mut target = Arc::make_mut(&mut target_arc);
-                                    target.findings.append(&mut findings);
+                                    all_findings.append(&mut findings);
                                 }
                                 Err(e) => {
                                     error!("Plugin {} error on {}: {}", name, target_arc.host, e);
-                                    let mut target = Arc::make_mut(&mut target_arc);
-                                    target.findings.push(Finding::new(
+                                    all_findings.push(Finding::new(
                                         FINDING_PLUGIN_ERROR,
                                         Category::Misconfiguration,
                                         Severity::Info, 
                                         &format!("Plugin {} failed", name),
                                         serde_json::json!({"error": e.to_string()})
                                     ));
-                                    target.status = TargetStatus::Error;
+                                    plugin_error = true;
                                 }
                             }
                         }
                         Err(join_err) => {
-                            // This captures panics in tokio::spawned tasks
                             error!("Target task panicked: {}", join_err);
-                            let mut target = Arc::make_mut(&mut target_arc);
-                            target.findings.push(Finding::new(
+                            all_findings.push(Finding::new(
                                 FINDING_PLUGIN_PANIC,
                                 Category::Misconfiguration,
                                 Severity::Critical, 
                                 "A scanner plugin panicked during execution!",
                                 serde_json::json!({"error": join_err.to_string()})
                             ));
-                            target.status = TargetStatus::Error;
+                            plugin_error = true;
                         }
                     }
                 }
                 
-                // Extract the final target from Arc. Since we are the only owner now (all clones dropped),
-                // we can unwrap or make_mut.
+                // Apply all gathered findings in a single make_mut call
+                let target = Arc::make_mut(&mut target_arc);
+                target.findings.append(&mut all_findings);
+                if plugin_error {
+                    target.status = TargetStatus::Error;
+                }
+                
+                // Extract the final target from Arc.
                 let mut target = Arc::try_unwrap(target_arc).unwrap_or_else(|a| (*a).clone());
 
                 if target.status == TargetStatus::Scanning {

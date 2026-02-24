@@ -30,7 +30,8 @@ impl JsonlSink {
         let path = path.into();
         let file = tokio::fs::OpenOptions::new()
             .create(true)
-            .append(true) // HIGH-006 FIX: Don't destroy old data by default
+            .write(true)
+            .truncate(true) // AUDIT-002 FIX: Truncate by default to avoid pollution and metadata issues
             .open(&path)
             .await
             .context("JsonlSink: Failed to open output file")?;

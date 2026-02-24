@@ -57,9 +57,18 @@ impl Pipeline {
                 // Track the root target itself
                 seen_domains.insert(target.host.clone());
 
-                // MED-005 FIX: Run all discovery plugins globally
-                for plugin in discovery_plugins.iter() {
-                    match plugin.discover(&target).await {
+                // AUDIT-004 FIX: Run all discovery plugins in parallel
+                let discovery_futures = discovery_plugins.iter().map(|plugin| {
+                    let target_ref = &target;
+                    async move {
+                        (plugin.name(), plugin.discover(target_ref).await)
+                    }
+                });
+
+                let results = futures::future::join_all(discovery_futures).await;
+
+                for (name, res) in results {
+                    match res {
                         Ok(subdomains) => {
                             for sub in subdomains {
                                 if seen_domains.insert(sub.clone()) {
@@ -68,10 +77,10 @@ impl Pipeline {
                                         "DISCOVERED_SUBDOMAIN",
                                         Category::Recon,
                                         Severity::Info,
-                                        &format!("Discovered via {}: {}", plugin.name(), sub),
+                                        &format!("Discovered via {}: {}", name, sub),
                                         serde_json::json!({
                                             "subdomain": sub.clone(),
-                                            "source": plugin.name()
+                                            "source": name
                                         })
                                     ));
                                     
@@ -89,7 +98,7 @@ impl Pipeline {
                             }
                         }
                         Err(e) => {
-                            warn!("Discovery plugin {} failed on {}: {}", plugin.name(), target.host, e);
+                            warn!("Discovery plugin {} failed on {}: {}", name, target.host, e);
                         }
                     }
                 }
