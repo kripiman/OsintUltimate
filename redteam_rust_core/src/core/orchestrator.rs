@@ -50,7 +50,7 @@ impl Orchestrator {
                             "Target scan aborted due to graceful shutdown",
                             serde_json::json!({"host": remaining_target.host})
                         ));
-                        let _ = out_tx.send(remaining_target).await;
+                        let _ = tokio::time::timeout(std::time::Duration::from_millis(100), out_tx.send(remaining_target)).await;
                     }
                     None // Graceful shutdown
                 }

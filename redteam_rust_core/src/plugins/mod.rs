@@ -1,6 +1,7 @@
 pub mod web;
 pub mod net;
-pub mod osint; // Export new module
+pub mod osint; 
+pub mod ffi;
 
 use async_trait::async_trait;
 use crate::models::{TargetHost, Finding};

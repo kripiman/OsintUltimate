@@ -72,10 +72,18 @@ impl WebFuzzer {
         }
     }
     
-    async fn get_target_client(&self, _target_host: &str, _target_ip: &str, is_https: bool, http_pinned: &Client, https_pinned: &Client) -> (Option<String>, Client) {
+    async fn get_target_client(&self, target_host: &str, target_ip: &str, is_https: bool, http_pinned: &Client, https_pinned: &Client) -> (Option<String>, Client) {
         if let Some(ref pm) = self.proxy_manager {
-            if let Some((url, client)) = pm.get_client() {
-                return (Some(url), client);
+            let port = if is_https { 443 } else { 80 };
+            if let Ok(ip) = target_ip.parse::<IpAddr>() {
+                if let Some((url, client)) = pm.get_client_pinned(target_host, ip, port) {
+                    return (Some(url), client);
+                }
+            } else {
+                warn!("WebFuzzer: Failed to parse target IP {} for pinning", target_ip);
+                if let Some((url, client)) = pm.get_client() {
+                    return (Some(url), client);
+                }
             }
         }
         if is_https {
@@ -98,10 +106,17 @@ impl WebFuzzer {
                 let (proxy_url, client) = self.get_target_client(target_host, target_ip, is_https, http_pinned, https_pinned).await;
                 
                 // HIGH-002: Dynamic User-Agent rotation per request
+                let start_time = std::time::Instant::now();
                 let res = client.get(&url)
                     .header("User-Agent", get_random_user_agent())
                     .header("X-Forwarded-For", "127.0.0.1") 
                     .send().await;
+                
+                let duration = start_time.elapsed().as_millis() as u64;
+
+                if let (Some(ref pm), Some(ref p_url)) = (&self.proxy_manager, &proxy_url) {
+                    pm.report_latency(p_url, duration);
+                }
                 
                 match res {
                     Ok(resp) => {

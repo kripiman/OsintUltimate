@@ -1,19 +1,38 @@
 use crate::plugins::ScannerPlugin;
+use crate::models::{TargetHost, Finding};
 use anyhow::{Context, Result};
 use libloading::{Library, Symbol};
 use std::fs;
 use std::path::Path;
 use tracing::{error, info, warn};
 
+use crate::plugins::ffi::{ScannerPluginFFI, FFIPluginWrapper};
+use std::sync::Arc;
+
 /// Signature for the external initialization function rust plugins must export.
-/// Since there is no stable Rust ABI, the plugin MUST be compiled with the same rustc version
-/// and core dependencies as the host binary.
-type PluginCreateFunc = unsafe extern "C" fn() -> *mut dyn ScannerPlugin;
+/// Updated to return a FFI-safe struct.
+type PluginCreateFunc = unsafe extern "C" fn() -> ScannerPluginFFI;
+
+pub struct LoadedPlugin {
+    pub plugin: Box<dyn ScannerPlugin>,
+    _lib: Arc<Library>,
+}
+
+#[async_trait::async_trait]
+impl ScannerPlugin for LoadedPlugin {
+    fn name(&self) -> &'static str {
+        self.plugin.name()
+    }
+
+    async fn scan(&self, target: &TargetHost) -> Result<Vec<Finding>> {
+        self.plugin.scan(target).await
+    }
+}
 
 pub struct DynamicPluginLoader {
-    // We hold onto the Library instances because dropping them unloads the code,
-    // which would cause a segfault if the loaded plugins are still executing.
-    loaded_libraries: Vec<Library>,
+    // We no longer strictly need to hold libraries here if we use Arc<Library> in LoadedPlugin,
+    // but keeping it for compatibility or as a secondary safety measure.
+    loaded_libraries: Vec<Arc<Library>>,
 }
 
 impl DynamicPluginLoader {
@@ -71,21 +90,24 @@ impl DynamicPluginLoader {
             
             // Locate the exported initialization function
             let func: Symbol<PluginCreateFunc> = lib.get(b"_plugin_create\0")
-                .context("Failed to find `_plugin_create` symbol in shared library. Make sure it exports `#[no_mangle] pub extern \"C\" fn _plugin_create() -> *mut dyn ScannerPlugin`")?;
+                .context("Failed to find `_plugin_create` symbol in shared library. Make sure it exports `#[no_mangle] pub extern \"C\" fn _plugin_create() -> ScannerPluginFFI`")?;
             
-            // Call the function to get the raw pointer, then convert it to a Box
-            let raw_plugin_ptr = func();
+            // Call the function to get the FFI-safe plugin struct
+            let ffi_plugin = func();
             
-            if raw_plugin_ptr.is_null() {
-                anyhow::bail!("Plugin creation function returned a null pointer");
+            if ffi_plugin.plugin_ptr.is_null() {
+                anyhow::bail!("Plugin creation function returned a null instance pointer");
             }
 
-            let plugin = Box::from_raw(raw_plugin_ptr);
+            let lib_arc = Arc::new(lib);
+            self.loaded_libraries.push(lib_arc.clone());
+
+            let wrapped_plugin = Box::new(LoadedPlugin {
+                plugin: Box::new(FFIPluginWrapper { ffi: ffi_plugin }),
+                _lib: lib_arc,
+            });
             
-            // Retain the library in memory so it doesn't get unloaded while the plugin is alive
-            self.loaded_libraries.push(lib);
-            
-            Ok(plugin)
+            Ok(wrapped_plugin)
         }
     }
 

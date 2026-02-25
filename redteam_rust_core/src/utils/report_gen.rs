@@ -237,7 +237,7 @@ pub async fn generate_report(jsonl_path: &str, output_path: &str) -> Result<()> 
                 }
 
                 let target_vm = TargetVM {
-                    host: target.host.clone(),
+                    host: html_escape::encode_safe(&target.host).to_string(),
                     ip: target.ip.clone().unwrap_or_default(),
                     status,
                     max_severity: severity_str.to_string(),
