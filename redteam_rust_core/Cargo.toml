@@ -31,6 +31,7 @@ reqwest = { version = "0.11", features = ["json", "rustls-tls", "gzip", "stream"
 # CLI & Interface
 clap = { version = "4.3", features = ["derive"] }
 indicatif = "0.17" # Progress bars
+inquire = "0.6"
 
 # Logging & Error Handling
 tracing = "0.1"

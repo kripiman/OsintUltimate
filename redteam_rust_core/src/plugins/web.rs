@@ -108,8 +108,7 @@ impl WebFuzzer {
                 // HIGH-002: Dynamic User-Agent rotation per request
                 let start_time = std::time::Instant::now();
                 let res = client.get(&url)
-                    .header("User-Agent", get_random_user_agent())
-                    .header("X-Forwarded-For", "127.0.0.1") 
+                    .header(reqwest::header::USER_AGENT, crate::utils::common::get_random_user_agent())
                     .send().await;
                 
                 let duration = start_time.elapsed().as_millis() as u64;
@@ -220,8 +219,8 @@ impl ScannerPlugin for WebFuzzer {
             .context("Failed to build pinned WebFuzzer client (HTTPS)")?;
 
         // P0 FIX: Strict Randomize signature traversal order
-        let mut shuffled_sigs = self.signatures.clone();
-        shuffled_sigs.shuffle(&mut rand::thread_rng());
+        let mut indices: Vec<usize> = (0..self.signatures.len()).collect();
+        indices.shuffle(&mut rand::thread_rng());
 
         // MED-002 FIX: Concurrent Signature Checking (Refactored to avoid Async Mutex)
         let jitter = self.jitter.clone();
@@ -231,17 +230,18 @@ impl ScannerPlugin for WebFuzzer {
         let http_client = pinned_http.clone();
         let https_client = pinned_https.clone();
 
-        let findings_stream = futures::stream::iter(shuffled_sigs)
-            .map(|sig| {
-                let jitter_clone = jitter.clone();
+        let findings_stream = futures::stream::iter(indices)
+            .map(|idx| {
+                let sig = &self.signatures[idx];
+                let j = jitter.clone();
                 let host = target_host.clone();
                 let ip_clone = target_ip_str.clone();
                 let client_http = http_client.clone();
                 let client_https = https_client.clone();
                 
                 async move {
-                    jitter_clone.sleep().await;
-                    if let Some(finding) = self.check_signature(&host, &ip_clone, &sig, &client_http, &client_https).await {
+                    j.sleep().await; // Sleep sequentially before resolving futures upstream
+                    if let Some(finding) = self.check_signature(&host, &ip_clone, sig, &client_http, &client_https).await {
                         info!("🚨 Vuln found on {}: {}", host, sig.title);
                         Some(finding)
                     } else {

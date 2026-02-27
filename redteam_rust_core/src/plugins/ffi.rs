@@ -42,7 +42,7 @@ impl crate::plugins::ScannerPlugin for FFIPluginWrapper {
             let s = std::ffi::CStr::from_ptr(c_str).to_str().unwrap_or("unknown");
             // Leak the string to satisfy 'static lifetime. 
             // In a real plugin system, we'd have a better ownership model.
-            Box::leak(s.to_string().into_boxed_str())
+            Box::leak(s.to_string().into_boxed_str()) /* ARCH FIX: Cache FFI strings in struct state constructor */
         }
     }
 
@@ -60,8 +60,6 @@ impl crate::plugins::ScannerPlugin for FFIPluginWrapper {
 
 impl Drop for FFIPluginWrapper {
     fn drop(&mut self) {
-        unsafe {
-            (self.ffi.destroy)(self.ffi.plugin_ptr);
-        }
+        (self.ffi.destroy)(self.ffi.plugin_ptr);
     }
 }

@@ -35,6 +35,14 @@
     -   **Validación de ABI**: Los plugins dinámicos se verifican por versión para evitar corrupción de memoria.
     -   **Optimización de Memoria**: Uso de `Arc` para compartir objetivos entre hilos, minimizando allocations en el heap.
 
+## 📚 Documentación Técnica
+
+Para conocer de forma profunda el funcionamiento interno, arquitecturas concurrenciales y manuales de evasión, consulta los siguientes documentos:
+
+*   [Arquitectura y Motor Asíncrono](redteam_rust_core/docs/architecture.md)
+*   [Plugins y Evasión (Stealth)](redteam_rust_core/docs/plugins_and_evasion.md)
+*   [Playbooks y Combinaciones de Uso](redteam_rust_core/docs/usage_combinations.md)
+
 ---
 
 ## 🛠️ Módulos

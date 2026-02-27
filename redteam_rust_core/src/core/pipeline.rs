@@ -125,24 +125,32 @@ impl Pipeline {
         // otherwise `Pipeline::run` holds the sender, and the `Pipeline::run` handle.await loop deadlocks.
         drop(scan_tx);
 
+        let token_for_stream = liveness_token.clone();
+        let token_for_each = liveness_token.clone();
+        
         handles.push(tokio::spawn(async move {
             let stream = async_stream::stream! {
                 let mut rx = liveness_rx;
                 while let Some(t) = rx.recv().await {
                     yield t;
-                    if liveness_token.is_cancelled() { break; }
+                    if token_for_stream.is_cancelled() { break; }
                 }
             };
 
             tokio::pin!(stream);
 
-            stream.for_each_concurrent(liveness_concurrency, |mut target| {
+            stream.for_each_concurrent(liveness_concurrency, move |mut target| {
                 let checker = liveness_checker.clone();
                 let scan_tx = scan_tx_clone.clone();
                 let sink_tx = sink_tx_err.clone();
+                let liveness_token_clone = token_for_each.clone();
                 
                 async move {
-                    if let Some(ip) = checker.is_live(&target.host).await {
+                    let ip_opt = tokio::select! {
+                        res = checker.is_live(&target.host) => res,
+                        _ = liveness_token_clone.cancelled() => return,
+                    };
+                    if let Some(ip) = ip_opt {
                         // HIGH-001 FIX: Enforce SSRF protection in Stage 2 before forwarding
                         if !is_safe_ip(&ip) {
                             warn!("⚠️ Blocking SSRF attempt: {} resolved to private IP {}", target.host, ip);
@@ -181,9 +189,12 @@ impl Pipeline {
             orchestrator.register_plugin(plugin);
         }
         let scan_token = self.shutdown_token.clone();
+        let sink_tx_stage3 = sink_tx.clone();
         handles.push(tokio::spawn(async move {
-            orchestrator.run(scan_rx, sink_tx, scan_token).await;
+            orchestrator.run(scan_rx, sink_tx_stage3, scan_token).await;
         }));
+        
+        drop(sink_tx);
 
         // --- STAGE 4: Sink ---
         // let mut sink = self.sink; // Already moved above for metadata

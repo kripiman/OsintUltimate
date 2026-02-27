@@ -69,22 +69,21 @@ impl Orchestrator {
                 let mut target_arc = Arc::new(target);
                 
                 // CRIT-003 & HIGH-009 FIX: Parallel execution + Panic Isolation via tokio::spawn
-                let futures = (0..plugins.len()).map(|i| {
+                let mut join_set = tokio::task::JoinSet::new();
+                for i in 0..plugins.len() {
                     let plugins_clone = plugins.clone();
                     let target_clone = target_arc.clone();
-                    tokio::task::spawn(async move {
+                    join_set.spawn(async move {
                         let p = &plugins_clone[i];
                         (p.name(), p.scan(&target_clone).await)
-                    })
-                });
-
-                let results = futures::future::join_all(futures).await;
+                    });
+                }
 
                 // AUDIT-001 FIX: Collect all findings first to avoid O(N^2) cloning with Arc::make_mut
                 let mut all_findings = Vec::new();
                 let mut plugin_error = false;
 
-                for join_res in results {
+                while let Some(join_res) = join_set.join_next().await {
                     match join_res {
                         Ok((name, res)) => {
                             match res {
@@ -126,7 +125,7 @@ impl Orchestrator {
                 }
                 
                 // Extract the final target from Arc.
-                let mut target = Arc::try_unwrap(target_arc).unwrap_or_else(|a| (*a).clone());
+                let mut target = Arc::try_unwrap(target_arc).unwrap_or_else(|a| (*a).clone()); // Needs refactor to message-passing findings.
 
                 if target.status == TargetStatus::Scanning {
                      target.status = TargetStatus::Scanned;

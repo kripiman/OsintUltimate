@@ -1,4 +1,4 @@
-# 🛡️ OsintUltimate: Master Audit Prompt
+# �️ OsintUltimate: Master Audit Prompt
 
 Copy and paste the block below into a high-reasoning AI model (e.g., GPT-4o, Claude 3.5 Sonnet, Gemini 1.5 Pro) to perform a deep-dive audit of the system.
 

@@ -1,5 +1,7 @@
 #![warn(clippy::all)]
 
+pub mod menu;
+
 use clap::Parser;
 use redteam_rust_core::models::{TargetHost, TargetStatus};
 use redteam_rust_core::plugins::net::NmapScanner;
@@ -14,86 +16,46 @@ use anyhow::{Context, Result};
 use once_cell::sync::Lazy;
 use tokio_util::sync::CancellationToken;
 
-#[derive(Parser, Debug)]
+#[derive(Parser, Debug, Clone)]
 #[command(author, version, about, long_about = None)]
-struct Args {
-    /// Target host to scan (e.g., google.com)
+pub struct Args {
+    pub target: Option<String>,
     #[arg(short, long)]
-    target: Option<String>,
-
-    /// Input file containing list of targets
-    #[arg(short, long)]
-    input: Option<String>,
-
-    /// Output JSONL file path for scan results
+    pub input: Option<String>,
     #[arg(short, long, default_value = "scan_result.jsonl")]
-    jsonl_output: String,
-
-    /// Output HTML report path
+    pub jsonl_output: String,
     #[arg(long, default_value = "scan_report.html")]
-    html_output: String,
-
-    /// Number of concurrent scans
+    pub html_output: String,
     #[arg(short, long, default_value_t = 10)]
-    concurrency: usize,
-
-    /// Nmap Scripts to run (e.g., "default", "vuln", "http-title")
+    pub concurrency: usize,
     #[arg(long)]
-    scripts: Option<String>,
-
-    /// Enable Stealth Mode (slower, T2 timing, lighter fingerprinting)
+    pub scripts: Option<String>,
     #[arg(long, default_value_t = false)]
-    stealth: bool,
-
-    /// Enable Service Version Detection (-sV)
+    pub stealth: bool,
     #[arg(long, default_value_t = false)]
-    service_detection: bool,
-
-    /// Allow invalid TLS certificates (DANGEROUS)
+    pub service_detection: bool,
     #[arg(long, default_value_t = false)]
-    insecure: bool,
-
-    /// Custom DNS servers (comma separated, e.g., "1.1.1.1,8.8.8.8")
+    pub insecure: bool,
     #[arg(long)]
-    dns_servers: Option<String>,
-
-    /// List of HTTP/S proxies (comma separated, e.g., "http://127.0.0.1:8080,http://proxy:3128")
+    pub dns_servers: Option<String>,
     #[arg(long)]
-    proxies: Option<String>,
-
-    /// OpenTelemetry Collector Endpoint (e.g., "http://localhost:4317")
+    pub proxies: Option<String>,
     #[arg(long)]
-    otel_endpoint: Option<String>,
-
-    /// Output logs in JSON format
+    pub otel_endpoint: Option<String>,
     #[arg(long, default_value_t = false)]
-    json_logs: bool,
-
-    /// Optional directory to load compiled dynamic plugins (.so / .dylib)
+    pub json_logs: bool,
     #[arg(long, value_name = "DIR")]
-    plugins_dir: Option<String>,
-
-    // --- Stealth Audit P1 & P2 ---
-
-    /// Nmap Scan Type to use (e.g., sS, sA, sU). Degrades to TCP Connect without root.
+    pub plugins_dir: Option<String>,
     #[arg(long, default_value = "sS")]
-    scan_type: String,
-
-    /// Enable Nmap packet fragmentation (-f)
+    pub scan_type: String,
     #[arg(long, default_value_t = false)]
-    fragment: bool,
-
-    /// Nmap Decoys (-D), e.g., "1.1.1.1,8.8.8.8,ME"
+    pub fragment: bool,
     #[arg(long)]
-    decoy: Option<String>,
-
-    /// Enable DNS over HTTPS (DoH) for Liveness resolution (Privacy)
+    pub decoy: Option<String>,
     #[arg(long, default_value_t = false)]
-    doh: bool,
-
-    /// Timeout for Nmap scans in seconds
+    pub doh: bool,
     #[arg(long, default_value_t = 300)]
-    nmap_timeout: u64,
+    pub nmap_timeout: u64,
 }
 
 static TARGET_RE: Lazy<Regex> = Lazy::new(|| {
@@ -108,7 +70,15 @@ fn validate_target(target: &str) -> bool {
 async fn main() -> Result<()> { 
     dotenv::dotenv().ok(); // Load environment variables from .env if present
 
-    let args = Args::parse();
+    let mut args = Args::parse();
+    if std::env::args().len() <= 1 {
+        // Launch interactive menu if no arguments are provided
+        if let Some(menu_args) = crate::menu::show_menu()? {
+            args = menu_args;
+        } else {
+            anyhow::bail!("Operación cancelada por el usuario o configuración vacía.");
+        }
+    }
     let command_line = std::env::args().collect::<Vec<String>>().join(" ");
 
     // Initialize Telemetry

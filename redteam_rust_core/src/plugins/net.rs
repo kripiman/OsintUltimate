@@ -278,7 +278,7 @@ fn process_host(host: &Host, findings: &mut Vec<Finding>) {
 // Tests
 #[cfg(test)]
 mod tests {
-    use super::*;
+    // None needed here
 
     #[test]
     fn test_nmap_target_validation() {

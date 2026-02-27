@@ -16,9 +16,8 @@ pub fn is_safe_ip(ip: &IpAddr) -> bool {
     match ip {
         IpAddr::V4(ipv4) => {
             let octets = ipv4.octets();
-            // Block standard non-routable: private, loopback, link-local, broadcast, doc, unspecified
             if ipv4.is_private() || ipv4.is_loopback() || ipv4.is_link_local() 
-                || ipv4.is_broadcast() || ipv4.is_documentation() || ipv4.is_unspecified() { 
+                || ipv4.is_broadcast() || ipv4.is_documentation() || ipv4.is_unspecified() || ipv4.is_multicast() { 
                 return false; 
             }
             // 100.64.0.0/10 CGNAT (Missing in stable Rust is_global, heavily used by cloud metadata)
@@ -35,6 +34,7 @@ pub fn is_safe_ip(ip: &IpAddr) -> bool {
         IpAddr::V6(ipv6) => {
             // Block loopback and unspecified
             if ipv6.is_loopback() || ipv6.is_unspecified() { return false; }
+            if let Some(mapped_v4) = ipv6.to_ipv4_mapped() { return is_safe_ip(&IpAddr::V4(mapped_v4)); }
             
             // fe80::/10 (Link-Local)
             // fc00::/7 (Unique Local)
@@ -85,11 +85,10 @@ impl LivenessChecker {
              // If this fails to compile, we may need to enable "webpki-roots" or "native-certs" features in Cargo.toml for hickory-resolver.
         }
 
+        let resolver = hickory_resolver::TokioAsyncResolver::tokio(router_config, resolver_opts);
+
         Self {
-            resolver: TokioAsyncResolver::tokio(
-                router_config,
-                resolver_opts,
-            )
+            resolver
         }
     }
 
@@ -110,7 +109,6 @@ impl LivenessChecker {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::net::IpAddr;
 
     #[test]
     fn test_is_safe_ip_v4() {
