@@ -7,7 +7,7 @@ use anyhow::{Context, Result};
 use std::sync::Arc;
 use tokio::sync::mpsc;
 use tokio_util::sync::CancellationToken;
-use tracing::{info, warn, error};
+use tracing::{info, warn, error, debug};
 use futures::stream::StreamExt;
 
 pub struct Pipeline {
