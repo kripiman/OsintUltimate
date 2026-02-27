@@ -54,8 +54,6 @@ pub struct Args {
     pub decoy: Option<String>,
     #[arg(long, default_value_t = false)]
     pub doh: bool,
-    #[arg(long, default_value_t = 300)]
-    pub nmap_timeout: u64,
 }
 
 static TARGET_RE: Lazy<Regex> = Lazy::new(|| {
@@ -176,7 +174,6 @@ async fn main() -> Result<()> {
             args.scan_type.clone(),
             args.fragment,
             args.decoy.clone(),
-            args.nmap_timeout,
         )));
 
     // CRIT-001 FIX: Resolve memory leak by scope-limited loader (ends with main)

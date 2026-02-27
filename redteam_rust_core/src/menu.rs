@@ -35,7 +35,6 @@ pub fn show_menu() -> Result<Option<Args>> {
         fragment: false,
         decoy: None,
         doh: false,
-        nmap_timeout: 300,
     };
 
     if std::path::Path::new(&target).exists() {

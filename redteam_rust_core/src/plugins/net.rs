@@ -16,7 +16,6 @@ pub struct NmapScanner {
     scan_type: String,
     fragment: bool,
     decoy: Option<String>,
-    timeout_sec: u64,
 }
 
 // Structs for QuickXML parsing
@@ -73,7 +72,6 @@ impl NmapScanner {
         scan_type: String,
         fragment: bool,
         decoy: Option<String>,
-        timeout_sec: u64,
     ) -> Self {
         let path = which::which("nmap").unwrap_or_else(|_| "nmap".into());
         Self {
@@ -84,7 +82,6 @@ impl NmapScanner {
             scan_type,
             fragment,
             decoy,
-            timeout_sec,
         }
     }
 }
@@ -192,17 +189,12 @@ impl ScannerPlugin for NmapScanner {
             Ok(local_findings)
         });
 
-        // Wait for Nmap to exit with a timeout
-        let status = match tokio::time::timeout(std::time::Duration::from_secs(self.timeout_sec), child.wait()).await {
-            Ok(res) => res?,
-            Err(_) => {
-                error!("NmapScanner: Scan timed out for {}", target.host);
-                let _ = child.kill().await; 
-                
-                // Return what we found so far if possible
-                if let Ok(Ok(partial)) = findings_handle.await {
-                     return Ok(partial);
-                }
+        // Wait for Nmap to exit indefinitely
+        let status = match child.wait().await {
+            Ok(res) => res,
+            Err(e) => {
+                error!("NmapScanner: Failed to wait for process: {}", e);
+                let _ = child.kill().await;
                 return Ok(Vec::new());
             }
         };
