@@ -54,8 +54,11 @@ impl Pipeline {
             while let Some(mut target) = rx.recv().await {
                 if discovery_token.is_cancelled() { break; }
                 
-                // Track the root target itself
-                seen_domains.insert(target.host.clone());
+                // Track the root target itself and skip if already seen
+                if !seen_domains.insert(target.host.clone()) {
+                    debug!("Skipping already seen root target: {}", target.host);
+                    continue;
+                }
 
                 // AUDIT-004 FIX: Run all discovery plugins in parallel
                 let discovery_futures = discovery_plugins.iter().map(|plugin| {
