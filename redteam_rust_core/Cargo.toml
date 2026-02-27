@@ -22,7 +22,7 @@ rand_distr = "0.4"
 quick-xml = { version = "0.31", features = ["serialize"] }
 dashmap = "5.5"
 which = "4.4"
-hickory-resolver = { version = "0.24", features = ["tokio-rustls", "system-config", "dns-over-https-rustls"] }
+hickory-resolver = { version = "0.24", features = ["tokio-rustls", "system-config", "dns-over-https-rustls", "webpki-roots"] }
 html-escape = "0.2"
 
 # Network
