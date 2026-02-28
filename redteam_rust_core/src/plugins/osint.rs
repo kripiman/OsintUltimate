@@ -22,6 +22,7 @@ impl OsintScanner {
     pub fn new() -> Self {
         let client = Client::builder()
             .timeout(std::time::Duration::from_secs(10))
+            .redirect(reqwest::redirect::Policy::none()) // QA-004: Prevent API key leak via Referer on 302
             .build()
             .expect("Failed to build HTTP client for OSINT");
             

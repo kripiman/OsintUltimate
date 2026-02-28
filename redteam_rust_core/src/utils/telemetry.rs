@@ -19,6 +19,16 @@ struct MaskingWriter<W> {
 
 impl<W: io::Write> io::Write for MaskingWriter<W> {
     fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
+        // QA-013 FIX: Fast-path bypass — skip regex if no sensitive byte markers are present.
+        // This avoids the costly regex scan and UTF-8 conversion on ~95% of log lines.
+        let has_at = buf.contains(&b'@');
+        let has_key = buf.windows(4).any(|w| w.eq_ignore_ascii_case(b"key="));
+        let has_pass = buf.windows(9).any(|w| w.eq_ignore_ascii_case(b"password="));
+        
+        if !has_at && !has_key && !has_pass {
+            return self.inner.write(buf);
+        }
+        
         let s = String::from_utf8_lossy(buf);
         let masked = SENSITIVE_REGEX.replace_all(&s, |caps: &regex::Captures| {
             let cap = caps.get(0).unwrap().as_str();

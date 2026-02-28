@@ -249,7 +249,7 @@ impl ScannerPlugin for WebFuzzer {
                     }
                 }
             })
-            .buffer_unordered(10);
+            .buffer_unordered(self.signatures.len().min(10)); // QA-009: Derive from signature count
             
         let final_findings: Vec<Finding> = findings_stream
             .filter_map(|f| async move { f })

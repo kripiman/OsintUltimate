@@ -65,21 +65,21 @@ impl Orchestrator {
             async move {
                 target.status = TargetStatus::Scanning;
                 
-                // AUDIT-003 FIX: Use Arc to share TargetHost across plugin tasks instead of cloning for each.
-                let mut target_arc = Arc::new(target);
+                // QA-005 FIX: Use Arc only for read-only sharing. Collect findings via JoinSet return values.
+                let target_ref = Arc::new(target);
                 
                 // CRIT-003 & HIGH-009 FIX: Parallel execution + Panic Isolation via tokio::spawn
                 let mut join_set = tokio::task::JoinSet::new();
                 for i in 0..plugins.len() {
                     let plugins_clone = plugins.clone();
-                    let target_clone = target_arc.clone();
+                    let target_clone = target_ref.clone();
                     join_set.spawn(async move {
                         let p = &plugins_clone[i];
                         (p.name(), p.scan(&target_clone).await)
                     });
                 }
 
-                // AUDIT-001 FIX: Collect all findings first to avoid O(N^2) cloning with Arc::make_mut
+                // Collect all findings first via JoinSet results
                 let mut all_findings = Vec::new();
                 let mut plugin_error = false;
 
@@ -91,7 +91,7 @@ impl Orchestrator {
                                     all_findings.append(&mut findings);
                                 }
                                 Err(e) => {
-                                    error!("Plugin {} error on {}: {}", name, target_arc.host, e);
+                                    error!("Plugin {} error on {}: {}", name, target_ref.host, e);
                                     all_findings.push(Finding::new(
                                         FINDING_PLUGIN_ERROR,
                                         Category::Misconfiguration,
@@ -117,15 +117,14 @@ impl Orchestrator {
                     }
                 }
                 
-                // Apply all gathered findings in a single make_mut call
-                let target = Arc::make_mut(&mut target_arc);
+                // QA-005 FIX: All tasks are done, so we are the only Arc holder.
+                // Extract owned target and append findings directly — no clone needed.
+                let mut target = Arc::try_unwrap(target_ref)
+                    .expect("QA-005: All JoinSet tasks completed, Arc must have refcount 1");
                 target.findings.append(&mut all_findings);
                 if plugin_error {
                     target.status = TargetStatus::Error;
                 }
-                
-                // Extract the final target from Arc.
-                let mut target = Arc::try_unwrap(target_arc).unwrap_or_else(|a| (*a).clone()); // Needs refactor to message-passing findings.
 
                 if target.status == TargetStatus::Scanning {
                      target.status = TargetStatus::Scanned;

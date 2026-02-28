@@ -18,17 +18,20 @@ pub struct ProxyManager {
     latency_stats: Arc<DashMap<String, VecDeque<u64>>>,
     blacklist_duration_sec: u64,
     insecure: bool,
+    // QA-007 FIX: Store handle to abort the health checker task on drop
+    _health_checker_handle: Option<tokio::task::AbortHandle>,
 }
 
 impl ProxyManager {
     pub fn new(proxies: Vec<String>, insecure: bool) -> Self {
-        let pm = Self {
+        let mut pm = Self {
             proxies,
             clients: Arc::new(DashMap::new()),
             blacklist: Arc::new(DashMap::new()),
             latency_stats: Arc::new(DashMap::new()),
             blacklist_duration_sec: DEFAULT_BLACKLIST_DURATION,
             insecure,
+            _health_checker_handle: None,
         };
 
         // Start background health checker if there are proxies
@@ -39,11 +42,12 @@ impl ProxyManager {
         pm
     }
 
-    fn start_health_checker(&self) {
+    fn start_health_checker(&mut self) {
         let blacklist = self.blacklist.clone();
         let duration = self.blacklist_duration_sec;
         
-        tokio::spawn(async move {
+        // QA-007 FIX: Store AbortHandle so the task is cancelled when ProxyManager is dropped
+        let handle = tokio::spawn(async move {
             let mut interval = tokio::time::interval(Duration::from_secs(60));
             loop {
                 interval.tick().await;
@@ -62,6 +66,7 @@ impl ProxyManager {
                 }
             }
         });
+        self._health_checker_handle = Some(handle.abort_handle());
     }
 
     /// Internal method to lazily build a reqwest::Client for a specific proxy
@@ -210,6 +215,15 @@ impl ProxyManager {
 
     pub fn is_empty(&self) -> bool {
         self.proxies.is_empty()
+    }
+}
+
+// QA-007 FIX: Abort the background health checker task when ProxyManager is dropped
+impl Drop for ProxyManager {
+    fn drop(&mut self) {
+        if let Some(handle) = self._health_checker_handle.take() {
+            handle.abort();
+        }
     }
 }
 

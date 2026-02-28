@@ -103,7 +103,7 @@ impl DynamicPluginLoader {
             self.loaded_libraries.push(lib_arc.clone());
 
             let wrapped_plugin = Box::new(LoadedPlugin {
-                plugin: Box::new(FFIPluginWrapper { ffi: ffi_plugin }),
+                plugin: Box::new(FFIPluginWrapper::new(ffi_plugin)),
                 _lib: lib_arc,
             });
             

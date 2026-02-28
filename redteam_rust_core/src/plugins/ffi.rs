@@ -23,27 +23,43 @@ pub struct ScannerPluginFFI {
     pub destroy: extern "C" fn(*const ()),
 }
 
+// SAFETY (QA-002): The plugin author MUST guarantee that:
+// 1. `plugin_ptr` points to a thread-safe object (no unsynchronized mutable state).
+// 2. All function pointers (`name`, `scan`, `destroy`) are safe to call from any thread.
+// 3. The plugin was compiled against the exact same engine version (enforced by verify_abi()).
+// Thread-safety violations are the plugin author's responsibility. Document this in the plugin SDK.
 unsafe impl Send for ScannerPluginFFI {}
 unsafe impl Sync for ScannerPluginFFI {}
 
 /// A bridge between the FFI-safe interface and the internal `ScannerPlugin` trait.
+/// QA-001 FIX: Caches the plugin name at construction time to avoid repeated Box::leak() calls.
 pub struct FFIPluginWrapper {
     pub ffi: ScannerPluginFFI,
+    cached_name: &'static str,
+}
+
+impl FFIPluginWrapper {
+    /// Constructs the wrapper, calling the FFI name function once and caching the result.
+    /// The single Box::leak() call here is acceptable because plugins live for the entire process.
+    pub fn new(ffi: ScannerPluginFFI) -> Self {
+        let cached_name = unsafe {
+            let c_str = (ffi.name)(ffi.plugin_ptr);
+            if c_str.is_null() {
+                "unknown"
+            } else {
+                let s = std::ffi::CStr::from_ptr(c_str).to_str().unwrap_or("unknown");
+                Box::leak(s.to_string().into_boxed_str())
+            }
+        };
+        Self { ffi, cached_name }
+    }
 }
 
 #[async_trait::async_trait]
 impl crate::plugins::ScannerPlugin for FFIPluginWrapper {
     fn name(&self) -> &'static str {
-        unsafe {
-            let c_str = (self.ffi.name)(self.ffi.plugin_ptr);
-            if c_str.is_null() {
-                return "unknown";
-            }
-            let s = std::ffi::CStr::from_ptr(c_str).to_str().unwrap_or("unknown");
-            // Leak the string to satisfy 'static lifetime. 
-            // In a real plugin system, we'd have a better ownership model.
-            Box::leak(s.to_string().into_boxed_str()) /* ARCH FIX: Cache FFI strings in struct state constructor */
-        }
+        // QA-001 FIX: Return cached name instead of leaking memory on every call.
+        self.cached_name
     }
 
     async fn scan(&self, target: &TargetHost) -> Result<Vec<Finding>> {

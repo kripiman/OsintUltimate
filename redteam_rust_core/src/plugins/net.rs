@@ -5,8 +5,14 @@ use anyhow::{Result, Context};
 use tracing::{info, error, warn};
 use std::process::Stdio;
 use tokio::process::Command;
+use once_cell::sync::Lazy;
 
 use serde::Deserialize;
+
+// QA-010 FIX: Module-scope Lazy Regexes — compiled once per process, not per-thread.
+static TARGET_HOST_RE: Lazy<regex::Regex> = Lazy::new(|| regex::Regex::new(r"^[a-zA-Z0-9.\-:]+$").unwrap());
+static DECOY_RE: Lazy<regex::Regex> = Lazy::new(|| regex::Regex::new(r"^[a-zA-Z0-9.,_]+$").unwrap());
+static SCRIPT_RE: Lazy<regex::Regex> = Lazy::new(|| regex::Regex::new(r"^[a-zA-Z0-9,-]+$").unwrap());
 
 pub struct NmapScanner {
     nmap_path: String,
@@ -96,11 +102,7 @@ impl ScannerPlugin for NmapScanner {
         info!("NmapScanner: launching scan against {}", target.host);
         
         // Defensive validation: ensure target.host is safe even if CLI parsing missed it
-        thread_local! {
-            static RE: regex::Regex = regex::Regex::new(r"^[a-zA-Z0-9.\-:]+$").unwrap();
-        }
-
-        if !RE.with(|re| re.is_match(&target.host)) || target.host.starts_with('-') {
+        if !TARGET_HOST_RE.is_match(&target.host) || target.host.starts_with('-') {
             warn!("NmapScanner: Skipping invalid/unsafe target: {}", target.host);
             return Ok(Vec::new());
         }
@@ -116,8 +118,19 @@ impl ScannerPlugin for NmapScanner {
 
         if self.stealth {
              args.push("-T2".to_string());
+             // Stealth mode timeout Configuration
+             // We allow max 12 hours (-T2 is very slow), and max 3 retries (to not hang forever on drops)
+             args.push("--host-timeout".to_string());
+             args.push("12h".to_string());
+             args.push("--max-retries".to_string());
+             args.push("3".to_string());
         } else {
              args.push("-T4".to_string());
+             // Normal mode timeout Configuration
+             args.push("--host-timeout".to_string());
+             args.push("4h".to_string());
+             args.push("--max-retries".to_string());
+             args.push("2".to_string());
         }
 
         // P1 & P2 FIXES: Customizable Scan Type, Fragmentation, and Decoys
@@ -129,10 +142,7 @@ impl ScannerPlugin for NmapScanner {
         
         if let Some(decoy) = &self.decoy {
             // Basic validation to prevent arbitrary flag injection via decoy string
-            thread_local! {
-                static DECOY_RE: regex::Regex = regex::Regex::new(r"^[a-zA-Z0-9.,_]+$").unwrap();
-            }
-            if DECOY_RE.with(|re| re.is_match(decoy)) && !decoy.starts_with('-') {
+            if DECOY_RE.is_match(decoy) && !decoy.starts_with('-') {
                 args.push(format!("-D{}", decoy));
             } else {
                 warn!("NmapScanner: Skipping invalid decoy string: {}", decoy);
@@ -145,10 +155,7 @@ impl ScannerPlugin for NmapScanner {
 
         if let Some(scripts) = &self.scripts {
             // Further sanitize scripts input (only allows alphanumeric, comma, hyphen)
-            thread_local! {
-                static SCRIPT_RE: regex::Regex = regex::Regex::new(r"^[a-zA-Z0-9,-]+$").unwrap();
-            }
-            if !SCRIPT_RE.with(|re| re.is_match(scripts)) {
+            if !SCRIPT_RE.is_match(scripts) {
                 warn!("NmapScanner: Skipping unsafe scripts argument: {}", scripts);
             } else {
                 args.push(format!("--script={}", scripts));
@@ -189,11 +196,26 @@ impl ScannerPlugin for NmapScanner {
             Ok(local_findings)
         });
 
-        // Wait for Nmap to exit indefinitely
-        let status = match child.wait().await {
-            Ok(res) => res,
-            Err(e) => {
+        // Determine max duration for the tokio timeout.
+        // It should be slightly higher than the Nmap host-timeout to let Nmap terminate itself gracefully.
+        let max_duration = if self.stealth {
+             std::time::Duration::from_secs(12 * 3600 + 60) // 12 hours + 1 min
+        } else {
+             std::time::Duration::from_secs(4 * 3600 + 60) // 4 hours + 1 min
+        };
+
+        // Wait for Nmap to exit, with a hard tokio timeout as a failsafe
+        let wait_result = tokio::time::timeout(max_duration, child.wait()).await;
+        
+        let status = match wait_result {
+            Ok(Ok(res)) => res,
+            Ok(Err(e)) => {
                 error!("NmapScanner: Failed to wait for process: {}", e);
+                let _ = child.kill().await;
+                return Ok(Vec::new());
+            }
+            Err(_) => {
+                error!("NmapScanner: Process timed out at OS level for target: {}", target.host);
                 let _ = child.kill().await;
                 return Ok(Vec::new());
             }
@@ -270,28 +292,25 @@ fn process_host(host: &Host, findings: &mut Vec<Finding>) {
 // Tests
 #[cfg(test)]
 mod tests {
+    use super::*;
     // None needed here
 
     #[test]
     fn test_nmap_target_validation() {
-        thread_local! {
-            static RE: regex::Regex = regex::Regex::new(r"^[a-zA-Z0-9.\-:]+$").unwrap();
-        }
-        
         // Valid hostnames
-        assert!(RE.with(|re| re.is_match("google.com")));
-        assert!(RE.with(|re| re.is_match("sub.domain.local")));
+        assert!(TARGET_HOST_RE.is_match("google.com"));
+        assert!(TARGET_HOST_RE.is_match("sub.domain.local"));
         
         // Valid IPv4
-        assert!(RE.with(|re| re.is_match("127.0.0.1")));
+        assert!(TARGET_HOST_RE.is_match("127.0.0.1"));
         
         // Valid IPv6
-        assert!(RE.with(|re| re.is_match("2001:db8::1")));
-        assert!(RE.with(|re| re.is_match("::1")));
-        assert!(RE.with(|re| re.is_match("2001:0db8:85a3:0000:0000:8a2e:0370:7334")));
+        assert!(TARGET_HOST_RE.is_match("2001:db8::1"));
+        assert!(TARGET_HOST_RE.is_match("::1"));
+        assert!(TARGET_HOST_RE.is_match("2001:0db8:85a3:0000:0000:8a2e:0370:7334"));
         
         // Invalid characters
-        assert!(!RE.with(|re| re.is_match("google.com; rm -rf /")));
-        assert!(!RE.with(|re| re.is_match("host$name")));
+        assert!(!TARGET_HOST_RE.is_match("google.com; rm -rf /"));
+        assert!(!TARGET_HOST_RE.is_match("host$name"));
     }
 }

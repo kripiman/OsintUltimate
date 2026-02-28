@@ -58,8 +58,9 @@ impl DataSink for JsonlSink {
             .await
             .context("JsonlSink: Failed to write bytes to JSONL file")?;
             
-        // HIGH-001 FIX: Flush immediately to ensure data is written to disk
-        // preventing loss of incremental results on unexpected crashes.
+        // QA-011: Trade-off — flush per-write ensures crash-durability but reduces throughput.
+        // For high-throughput scans, consider a batched-flush strategy (e.g., flush every N writes
+        // or time-based via a background task). Current default prioritizes data safety.
         self.file.flush().await.context("JsonlSink: Failed to flush to disk")?;
             
         Ok(())

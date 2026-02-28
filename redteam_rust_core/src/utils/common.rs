@@ -43,10 +43,22 @@ pub fn get_random_user_agent() -> &'static str {
     REALISTIC_USER_AGENTS.choose(&mut rng).unwrap_or(&REALISTIC_USER_AGENTS[0])
 }
 
-// P1 FIX: Check if we are running as root (simplest proxy for CAP_NET_RAW capability check)
+// QA-008 FIX: Check actual CAP_NET_RAW capability, not just euid == 0
 pub fn check_cap_net_raw() -> bool {
     #[cfg(unix)]
     {
+        // Try reading actual effective capabilities from /proc/self/status
+        if let Ok(status) = std::fs::read_to_string("/proc/self/status") {
+            for line in status.lines() {
+                if let Some(hex_str) = line.strip_prefix("CapEff:") {
+                    let hex_str = hex_str.trim();
+                    if let Ok(caps) = u64::from_str_radix(hex_str, 16) {
+                        return caps & (1 << 13) != 0; // CAP_NET_RAW = bit 13
+                    }
+                }
+            }
+        }
+        // Fallback: euid check if procfs is unavailable (e.g., containers with restricted /proc)
         rustix::process::geteuid().is_root()
     }
     #[cfg(not(unix))]

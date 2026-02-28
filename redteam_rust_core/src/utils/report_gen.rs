@@ -241,8 +241,8 @@ pub async fn generate_report(jsonl_path: &str, output_path: &str) -> Result<()> 
                     ip: target.ip.clone().unwrap_or_default(),
                     status,
                     max_severity: severity_str.to_string(),
-                    has_findings: !target.findings.is_empty(),
-                    findings: target.findings.clone(),
+                    has_findings: !sanitized_findings.is_empty(),
+                    findings: sanitized_findings,
                 };
 
                 let rendered_row = reg.render("row", &target_vm)?;

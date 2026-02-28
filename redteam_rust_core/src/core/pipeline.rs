@@ -45,6 +45,8 @@ impl Pipeline {
         let mut handles = Vec::new();
         
         // --- STAGE 1: Discovery (OSINT & Resolvers) ---
+        // QA-012: For large-scale scans (10k+ domains), consider DashSet<u64> with
+        // pre-hashed domain strings to reduce per-entry memory from ~40B to 8B.
         let seen_domains = Arc::new(dashmap::DashSet::new());
         let discovery_token = self.shutdown_token.clone();
         let discovery_plugins = self.discovery_plugins.clone();
@@ -60,22 +62,39 @@ impl Pipeline {
                     continue;
                 }
 
-                // AUDIT-004 FIX: Run all discovery plugins in parallel
-                let discovery_futures = discovery_plugins.iter().map(|plugin| {
-                    let target_ref = &target;
-                    async move {
-                        (plugin.name(), plugin.discover(target_ref).await)
-                    }
-                });
+                // QA-006 FIX: Stream discovery results as they arrive via JoinSet,
+                // instead of batch-blocking with join_all. This reduces time-to-first-scan.
+                let mut join_set = tokio::task::JoinSet::new();
+                for i in 0..discovery_plugins.len() {
+                    let plugins_clone = discovery_plugins.clone();
+                    let target_snapshot = crate::models::TargetHost {
+                        host: target.host.clone(),
+                        ip: target.ip.clone(),
+                        status: target.status.clone(),
+                        findings: Vec::new(),
+                    };
+                    join_set.spawn(async move {
+                        let plugin = &plugins_clone[i];
+                        let name = plugin.name().to_string();
+                        let result = plugin.discover(&target_snapshot).await;
+                        (name, result)
+                    });
+                }
 
-                let results = futures::future::join_all(discovery_futures).await;
+                // Process results as each plugin completes, forwarding subdomains immediately
+                while let Some(join_res) = join_set.join_next().await {
+                    let (name, res) = match join_res {
+                        Ok(r) => r,
+                        Err(e) => {
+                            warn!("Discovery task panicked: {}", e);
+                            continue;
+                        }
+                    };
 
-                for (name, res) in results {
                     match res {
                         Ok(subdomains) => {
                             for sub in subdomains {
                                 if seen_domains.insert(sub.clone()) {
-                                    // Log as finding on root
                                     target.findings.push(Finding::new(
                                         "DISCOVERED_SUBDOMAIN",
                                         Category::Recon,
