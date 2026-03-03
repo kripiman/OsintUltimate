@@ -111,6 +111,8 @@ impl ScannerPlugin for NmapScanner {
         let mut args = vec![
             "-n".to_string(), 
             "-Pn".to_string(), 
+            "--top-ports".to_string(),
+            "3000".to_string(),
             "--open".to_string(),
             "-oX".to_string(),
             "-".to_string(), // Output to stdout
