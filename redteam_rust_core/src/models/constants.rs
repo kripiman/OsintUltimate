@@ -5,6 +5,8 @@ pub const FINDING_PLUGIN_ERROR: &str = "PLUGIN_ERROR";
 pub const FINDING_PLUGIN_PANIC: &str = "PLUGIN_PANIC";
 pub const FINDING_PORT_OPEN: &str = "PORT-OPEN";
 pub const FINDING_NSE_SCRIPT: &str = "NSE-SCRIPT";
+pub const FINDING_VULN_CRITICAL: &str = "VULN-CRITICAL";
+pub const FINDING_OS_DETECTION: &str = "OS-DETECTION";
 
 // Plugin Names
 pub const PLUGIN_OSINT: &str = "OsintScanner";

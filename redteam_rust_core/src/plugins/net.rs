@@ -22,7 +22,30 @@ pub struct NmapScanner {
     scan_type: String,
     fragment: bool,
     decoy: Option<String>,
+    ports: Option<String>,
+    vuln_scan: bool,
 }
+
+// Known critical vulnerability patterns for severity classification
+static CRITICAL_PATTERNS: Lazy<Vec<&str>> = Lazy::new(|| vec![
+    "ms17-010", "eternalblue", "heartbleed", "shellshock", "bluekeep",
+    "ms08-067", "ms12-020", "cve-2017", "cve-2018", "cve-2019",
+    "cve-2020", "cve-2021", "cve-2022", "cve-2023", "cve-2024",
+    "cve-2025", "cve-2026",
+    "rce", "remote-code-execution", "command-injection",
+    "smb-vuln-ms17", "smb-vuln-cve",
+    "http-vuln-cve",
+]);
+
+static CRITICAL_OUTPUT_PATTERNS: Lazy<Vec<&str>> = Lazy::new(|| vec![
+    "state: vulnerable", "exploitable", "remote code execution",
+    "allows remote attackers", "unauthenticated",
+]);
+
+static MEDIUM_PATTERNS: Lazy<Vec<&str>> = Lazy::new(|| vec![
+    "auth", "brute", "default-credentials", "default-password",
+    "weak-password", "anonymous", "enum", "info-disclosure",
+]);
 
 // Structs for QuickXML parsing
 #[derive(Debug, Deserialize)]
@@ -33,6 +56,20 @@ struct NmapRun {
 #[derive(Debug, Deserialize)]
 struct Host {
     ports: Option<Ports>,
+    os: Option<Os>,
+}
+
+#[derive(Debug, Deserialize)]
+struct Os {
+    osmatch: Option<Vec<OsMatch>>,
+}
+
+#[derive(Debug, Deserialize)]
+struct OsMatch {
+    #[serde(rename = "@name", default)]
+    name: String,
+    #[serde(rename = "@accuracy", default)]
+    accuracy: String,
 }
 
 #[derive(Debug, Deserialize)]
@@ -78,6 +115,8 @@ impl NmapScanner {
         scan_type: String,
         fragment: bool,
         decoy: Option<String>,
+        ports: Option<String>,
+        vuln_scan: bool,
     ) -> Self {
         let path = which::which("nmap").unwrap_or_else(|_| "nmap".into());
         Self {
@@ -88,6 +127,8 @@ impl NmapScanner {
             scan_type,
             fragment,
             decoy,
+            ports,
+            vuln_scan,
         }
     }
 }
@@ -111,24 +152,42 @@ impl ScannerPlugin for NmapScanner {
         let mut args = vec![
             "-n".to_string(), 
             "-Pn".to_string(), 
-            "--top-ports".to_string(),
-            "3000".to_string(),
             "--open".to_string(),
             "-oX".to_string(),
             "-".to_string(), // Output to stdout
         ];
 
+        // If specific ports are provided, use -p; otherwise fallback to top-ports
+        if let Some(ports) = &self.ports {
+            args.push("-p".to_string());
+            args.push(ports.clone());
+        } else if self.vuln_scan {
+            // Vuln hunting: scan 5000 top ports for maximum CVE surface
+            args.push("--top-ports".to_string());
+            args.push("5000".to_string());
+        } else {
+            args.push("--top-ports".to_string());
+            args.push("3000".to_string());
+        }
+
         if self.stealth {
              args.push("-T2".to_string());
-             // Stealth mode timeout Configuration
-             // We allow max 12 hours (-T2 is very slow), and max 3 retries (to not hang forever on drops)
+             // Stealth mode timeout: T2 is very slow, max 3 retries
              args.push("--host-timeout".to_string());
              args.push("12h".to_string());
              args.push("--max-retries".to_string());
              args.push("3".to_string());
+        } else if self.vuln_scan {
+             args.push("-T4".to_string());
+             // Vuln scan timeout: 5000 ports + heavy NSE scripts need very generous limits
+             // 24h host-timeout to ensure deep scans completion (intensity 9 + scripts)
+             args.push("--host-timeout".to_string());
+             args.push("24h".to_string());
+             args.push("--max-retries".to_string());
+             args.push("3".to_string());
         } else {
              args.push("-T4".to_string());
-             // Normal mode timeout Configuration
+             // Normal mode timeout
              args.push("--host-timeout".to_string());
              args.push("4h".to_string());
              args.push("--max-retries".to_string());
@@ -151,16 +210,43 @@ impl ScannerPlugin for NmapScanner {
             }
         }
 
-        if self.service_detection {
+        // --- Vuln Scan Profile: aggressive version + OS detection + NSE suite ---
+        if self.vuln_scan {
+            // Force service detection with max version intensity
             args.push("-sV".to_string());
-        }
+            args.push("--version-intensity".to_string());
+            args.push("9".to_string());
 
-        if let Some(scripts) = &self.scripts {
-            // Further sanitize scripts input (only allows alphanumeric, comma, hyphen)
-            if !SCRIPT_RE.is_match(scripts) {
-                warn!("NmapScanner: Skipping unsafe scripts argument: {}", scripts);
-            } else {
-                args.push(format!("--script={}", scripts));
+            // OS fingerprinting (requires root/CAP_NET_RAW)
+            args.push("-O".to_string());
+            args.push("--osscan-guess".to_string());
+
+            // Comprehensive NSE script suite for vuln hunting
+            // vuln: CVE checks (ssl-heartbleed, smb-vuln-*, http-shellshock, etc.)
+            // exploit: exploitability verification
+            // auth: default credentials, anonymous access
+            // default: general enumeration
+            // discovery: exposed resources and info disclosure
+            args.push("--script=vuln,exploit,auth,default,discovery".to_string());
+
+            // Generous script timeout for heavy scripts like smb-vuln-*
+            args.push("--script-timeout".to_string());
+            args.push("10m".to_string());
+
+            info!("NmapScanner: 🔴 Vuln Scan profile active — OS detection, version-intensity 9, NSE vuln/exploit/auth/default/discovery");
+        } else {
+            // Standard behavior: user-controlled service detection and scripts
+            if self.service_detection {
+                args.push("-sV".to_string());
+            }
+
+            if let Some(scripts) = &self.scripts {
+                // Further sanitize scripts input (only allows alphanumeric, comma, hyphen)
+                if !SCRIPT_RE.is_match(scripts) {
+                    warn!("NmapScanner: Skipping unsafe scripts argument: {}", scripts);
+                } else {
+                    args.push(format!("--script={}", scripts));
+                }
             }
         }
 
@@ -202,6 +288,8 @@ impl ScannerPlugin for NmapScanner {
         // It should be slightly higher than the Nmap host-timeout to let Nmap terminate itself gracefully.
         let max_duration = if self.stealth {
              std::time::Duration::from_secs(12 * 3600 + 60) // 12 hours + 1 min
+        } else if self.vuln_scan {
+             std::time::Duration::from_secs(24 * 3600 + 300) // 24 hours + 5 min
         } else {
              std::time::Duration::from_secs(4 * 3600 + 60) // 4 hours + 1 min
         };
@@ -234,9 +322,90 @@ impl ScannerPlugin for NmapScanner {
     }
 }
 
+/// Classify NSE script severity with professional granularity.
+fn classify_script_severity(script_id: &str, script_output: &str) -> Severity {
+    let id_lower = script_id.to_lowercase();
+    let output_lower = script_output.to_lowercase();
+
+    // Critical: known RCE/wormable CVEs and confirmed exploitable states
+    for pattern in CRITICAL_PATTERNS.iter() {
+        if id_lower.contains(pattern) {
+            return Severity::Critical;
+        }
+    }
+    for pattern in CRITICAL_OUTPUT_PATTERNS.iter() {
+        if output_lower.contains(pattern) {
+            return Severity::Critical;
+        }
+    }
+
+    // High: general vuln/CVE indicators
+    if id_lower.contains("vuln") || id_lower.contains("cve") || output_lower.contains("vulnerable") {
+        return Severity::High;
+    }
+
+    // Medium: auth/credential issues, enumeration
+    for pattern in MEDIUM_PATTERNS.iter() {
+        if id_lower.contains(pattern) {
+            return Severity::Medium;
+        }
+    }
+
+    Severity::Info
+}
+
+/// Generate contextual remediation advice based on the script finding.
+fn suggest_remediation(script_id: &str, severity: &Severity) -> Option<String> {
+    match severity {
+        Severity::Critical => {
+            let id_lower = script_id.to_lowercase();
+            if id_lower.contains("ms17-010") || id_lower.contains("eternalblue") {
+                Some("CRITICAL: Apply MS17-010 patch immediately. Disable SMBv1. Isolate affected hosts.".into())
+            } else if id_lower.contains("heartbleed") {
+                Some("CRITICAL: Upgrade OpenSSL to >= 1.0.1g. Revoke and reissue all TLS certificates.".into())
+            } else if id_lower.contains("shellshock") {
+                Some("CRITICAL: Update Bash to patched version. Review all CGI endpoints.".into())
+            } else if id_lower.contains("bluekeep") {
+                Some("CRITICAL: Apply CVE-2019-0708 patches. Restrict RDP access via firewall.".into())
+            } else {
+                Some("CRITICAL: Apply vendor patches immediately. Isolate the service until remediated.".into())
+            }
+        }
+        Severity::High => {
+            Some("HIGH: Investigate and patch the identified vulnerability. Review vendor advisories.".into())
+        }
+        Severity::Medium => {
+            let id_lower = script_id.to_lowercase();
+            if id_lower.contains("auth") || id_lower.contains("default") || id_lower.contains("brute") {
+                Some("MEDIUM: Change default credentials. Enforce strong password policies and MFA.".into())
+            } else {
+                Some("MEDIUM: Review service configuration. Restrict unnecessary access.".into())
+            }
+        }
+        _ => None,
+    }
+}
+
 // Helper to avoid deep indentation in the async block
 fn process_host(host: &Host, findings: &mut Vec<Finding>) {
-    // Structs are defined in this module, no need to import from crate::models
+    // 0. OS Detection findings
+    if let Some(os) = &host.os {
+        if let Some(os_matches) = &os.osmatch {
+            for os_match in os_matches {
+                findings.push(Finding::new(
+                    crate::models::FINDING_OS_DETECTION,
+                    Category::Recon,
+                    Severity::Info,
+                    &format!("OS Detected: {} (accuracy: {}%)", os_match.name, os_match.accuracy),
+                    serde_json::json!({
+                        "os": os_match.name,
+                        "accuracy": os_match.accuracy
+                    })
+                ));
+            }
+        }
+    }
+
     if let Some(ports) = &host.ports {
 
         if let Some(port_list) = &ports.port {
@@ -258,23 +427,26 @@ fn process_host(host: &Host, findings: &mut Vec<Finding>) {
                     })
                 ));
 
-                // 2. Script Findings
+                // 2. Script Findings — with granular severity classification
                 if let Some(scripts) = &port.script {
                     for script in scripts {
-                         let severity = if script.id.contains("vuln") || script.id.contains("cve") || script.output.to_lowercase().contains("vulnerable") {
-                             Severity::High
-                         } else {
-                             Severity::Info 
-                         };
+                         let severity = classify_script_severity(&script.id, &script.output);
                          
-                         let category = if severity == Severity::High {
-                             Category::Vulnerability
-                         } else {
-                             Category::Misconfiguration 
+                         let category = match severity {
+                             Severity::Critical | Severity::High => Category::Vulnerability,
+                             Severity::Medium => Category::Misconfiguration,
+                             _ => Category::Misconfiguration,
                          };
 
-                         findings.push(Finding::new(
-                             &format!("{}-{}", crate::models::FINDING_NSE_SCRIPT, script.id),
+                         let finding_id = match severity {
+                             Severity::Critical => format!("{}-{}", crate::models::FINDING_VULN_CRITICAL, script.id),
+                             _ => format!("{}-{}", crate::models::FINDING_NSE_SCRIPT, script.id),
+                         };
+
+                         let remediation = suggest_remediation(&script.id, &severity);
+
+                         let mut finding = Finding::new(
+                             &finding_id,
                              category,
                              severity,
                              &format!("NSE Script {}: {}", script.id, script.output.lines().next().unwrap_or("")),
@@ -283,7 +455,13 @@ fn process_host(host: &Host, findings: &mut Vec<Finding>) {
                                  "output": script.output,
                                  "port": port.portid
                              })
-                         ));
+                         );
+
+                         if let Some(rem) = remediation {
+                             finding = finding.with_remediation(&rem);
+                         }
+
+                         findings.push(finding);
                     }
                 }
             }

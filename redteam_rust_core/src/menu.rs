@@ -35,6 +35,8 @@ pub fn show_menu() -> Result<Option<Args>> {
         fragment: false,
         decoy: None,
         doh: false,
+        ports: None,
+        vuln_scan: false,
     };
 
     if std::path::Path::new(&target).exists() {
@@ -47,7 +49,8 @@ pub fn show_menu() -> Result<Option<Args>> {
         "1. Discovery Only (OSINT, Zero Noise)",
         "2. Stealth Audit (Low & Slow, Evasion P1/P2)",
         "3. Aggressive Full Surface (All Scripts, High Concurrency)",
-        "4. Custom Configuration"
+        "4. \u{1F534} Vulnerability Hunter (Max CVE Detection)",
+        "5. Custom Configuration"
     ];
     
     let profile = Select::new("⚙️  Selecciona el Perfil de Escaneo (Playbook):", options.clone()).prompt()?;
@@ -80,6 +83,16 @@ pub fn show_menu() -> Result<Option<Args>> {
         args.scripts = Some("default,vuln,exploit".to_string());
         args.service_detection = true;
         args.concurrency = 150;
+    } else if profile == options[3] {
+        // 🔴 Vulnerability Hunter — professional CVE hunting profile
+        args.vuln_scan = true;
+        args.service_detection = true;
+        args.concurrency = 50;
+        println!("\n  🔴 Vulnerability Hunter activado:");
+        println!("     • OS Detection (-O --osscan-guess)");
+        println!("     • Version Intensity 9 (-sV --version-intensity 9)");
+        println!("     • NSE Suite: vuln, exploit, auth, default, discovery");
+        println!("     • Top 5000 ports · Script timeout: 10min · Host timeout: 24h\n");
     } else {
         // Custom Configuration
         args.stealth = Confirm::new("¿Habilitar Modo Sigiloso (Jitter, Profiling ligero)?")
@@ -100,6 +113,14 @@ pub fn show_menu() -> Result<Option<Args>> {
             
         if !custom_scripts.trim().is_empty() {
              args.scripts = Some(custom_scripts);
+        }
+
+        let custom_ports = Text::new("Puertos a escanear (vacío = top 3000):")
+            .with_help_message("ej: 1-65535, 80,443,8080, o vacío para top-ports")
+            .prompt()?;
+            
+        if !custom_ports.trim().is_empty() {
+             args.ports = Some(custom_ports);
         }
         
         let conc_str = Text::new("Nivel de Concurrencia (Máximos hilos paralelos):")

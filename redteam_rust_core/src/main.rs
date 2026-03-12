@@ -54,6 +54,10 @@ pub struct Args {
     pub decoy: Option<String>,
     #[arg(long, default_value_t = false)]
     pub doh: bool,
+    #[arg(short, long)]
+    pub ports: Option<String>,
+    #[arg(long, default_value_t = false, help = "Activate professional vulnerability hunting profile (OS detection, version-intensity 9, NSE vuln/exploit/auth/default/discovery, 5000 top ports)")]
+    pub vuln_scan: bool,
 }
 
 static TARGET_RE: Lazy<Regex> = Lazy::new(|| {
@@ -133,6 +137,9 @@ async fn main() -> Result<()> {
     if args.scan_type == "sS" && !redteam_rust_core::utils::common::check_cap_net_raw() {
          warn!("🚨 WARNING: Running without root/CAP_NET_RAW privileges. Nmap will silently degrade the stealth SYN scan (-sS) to a highly detectable TCP Connect scan (-sT).");
     }
+    if args.vuln_scan && !redteam_rust_core::utils::common::check_cap_net_raw() {
+         warn!("🚨 WARNING: --vuln-scan requires root/CAP_NET_RAW for OS detection (-O). OS fingerprinting will be skipped by Nmap.");
+    }
 
     // Initialize Stealth Components
     // P0 FIX: Evasion mechanisms (Jitter and Proxies)
@@ -174,6 +181,8 @@ async fn main() -> Result<()> {
             args.scan_type.clone(),
             args.fragment,
             args.decoy.clone(),
+            args.ports.clone(),
+            args.vuln_scan,
         )));
 
     // CRIT-001 FIX: Resolve memory leak by scope-limited loader (ends with main)
