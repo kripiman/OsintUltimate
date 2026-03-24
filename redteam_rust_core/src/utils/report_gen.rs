@@ -1,75 +1,238 @@
 use crate::models::{ScanMetadata, TargetHost, Finding};
-use anyhow::{Context, Result};
+use anyhow::Result;
 use handlebars::Handlebars;
 use serde::{Deserialize, Serialize};
 use tokio::io::{AsyncBufReadExt, BufReader};
 use tokio::fs::File;
 
+
+#[derive(Serialize, Default)]
+struct SummaryStats {
+    total_targets: usize,
+    scanned_targets: usize,
+    critical_count: usize,
+    high_count: usize,
+    medium_count: usize,
+    low_count: usize,
+    info_count: usize,
+    total_findings: usize,
+    ai_summary: Option<String>,
+    avg_cvss: f32,
+    sca_count: usize,
+}
+
 const HTML_TEMPLATE: &str = r#"
 <!doctype html>
-<html>
+<html lang="en">
 <head>
   <meta charset="utf-8">
-  <title>RedTeam Rust Scan Report</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>🛡️ OsintUltimate Professional Report</title>
+  <script src="https://cdn.jsdelivr.net/npm/mermaid/dist/mermaid.min.js"></script>
+  <script>mermaid.initialize({ startOnLoad: true, theme: 'dark' });</script>
   <style>
-    body {font-family: Inter, Roboto, Arial, sans-serif; padding: 20px; background:#f7fafc; color: #1e293b;}
-    h1, h2 { color: #0f172a; }
-    table {border-collapse: collapse; width: 100%; background: white; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1), 0 2px 4px -1px rgba(0,0,0,0.06); border-radius: 8px; overflow: hidden; margin-top: 20px;}
-    th, td {padding: 12px 16px; text-align: left; border-bottom: 1px solid #e2e8f0; font-size: 14px;}
-    th {background: #1e293b; color: #f8fafc; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em;}
-    tr:last-child td {border-bottom: none;}
-    tr:hover {background-color: #f1f5f9;}
+    :root {
+      --primary: #020617;
+      --secondary: #1e293b;
+      --accent: #38bdf8;
+      --critical: #f43f5e;
+      --high: #fb923c;
+      --medium: #fbbf24;
+      --low: #4ade80;
+      --info: #22d3ee;
+      --bg: #0b0f1a;
+      --card-bg: #1e293b;
+      --text: #f1f5f9;
+      --muted: #94a3b8;
+    }
+    body { font-family: 'Outfit', 'Inter', system-ui, -apple-system, sans-serif; padding: 40px; background: var(--bg); color: var(--text); line-height: 1.6; }
+    .container { max-width: 1200px; margin: 0 auto; }
+    header { margin-bottom: 40px; border-bottom: 2px solid #334155; padding-bottom: 24px; }
+    h1 { font-size: 3rem; margin: 0; display: flex; align-items: center; gap: 16px; color: var(--accent); font-weight: 800; }
+    .meta { font-size: 0.9375rem; color: var(--muted); margin-top: 12px; }
     
-    .Critical {background: #fecaca; color: #991b1b;}
-    .High {background: #ffedd5; color: #9a3412;}
-    .Medium {background: #fef08a; color: #854d0e;}
-    .Low {background: #e9f5db; color: #365314;}
-    .Info {background: #e0f2fe; color: #075985;}
+    .summary-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 24px; margin-bottom: 48px; }
+    .stat-card { background: var(--card-bg); padding: 24px; border-radius: 16px; box-shadow: 0 10px 15px -3px rgba(0,0,0,0.3); text-align: center; border: 1px solid #334155; transition: transform 0.2s; }
+    .stat-card:hover { transform: translateY(-5px); }
+    .stat-card.critical { border-top: 4px solid var(--critical); }
+    .stat-card.high { border-top: 4px solid var(--high); }
+    .stat-card.medium { border-top: 4px solid var(--medium); }
+    .stat-value { font-size: 2.5rem; font-weight: 800; display: block; margin-bottom: 4px; }
+    .stat-label { font-size: 0.8125rem; text-transform: uppercase; letter-spacing: 0.1em; color: var(--muted); font-weight: 700; }
+
+    .ai-executive-summary { background: rgba(56, 189, 248, 0.05); color: #f1f5f9; padding: 32px; border-radius: 20px; margin-bottom: 48px; border: 1px solid rgba(56, 189, 248, 0.2); backdrop-filter: blur(8px); }
+    .ai-executive-summary h2 { margin-top: 0; color: var(--accent); font-size: 1.5rem; margin-bottom: 16px; display: flex; align-items: center; gap: 10px; }
+
+    .attack-path { background: #020617; padding: 32px; border-radius: 20px; margin-bottom: 48px; border: 1px solid #334155; }
+    .attack-path h2 { margin-top: 0; color: var(--muted); font-size: 1.25rem; margin-bottom: 24px; }
+
+    table { width: 100%; border-collapse: separate; border-spacing: 0 12px; margin-top: 24px; }
+    th { padding: 16px; text-align: left; font-size: 0.8125rem; text-transform: uppercase; letter-spacing: 0.05em; color: var(--muted); border-bottom: 1px solid #334155; }
+    td { padding: 20px; background: var(--card-bg); vertical-align: top; }
+    tr td:first-child { border-radius: 12px 0 0 12px; }
+    tr td:last-child { border-radius: 0 12px 12px 0; }
     
-    .status-Scanned { color: green; font-weight: bold; }
-    .status-Scanning { color: blue; }
-    .status-Dead { color: gray; }
-    .status-Error { color: red; font-weight: bold; }
-    .status-Pending { color: orange; }
+    .severity-badge { display: inline-flex; align-items: center; justify-content: center; padding: 4px 12px; border-radius: 6px; font-size: 0.75rem; font-weight: 800; text-transform: uppercase; color: #020617; }
+    .severity-Critical { background: var(--critical); color: white; }
+    .severity-High { background: var(--high); }
+    .severity-Medium { background: var(--medium); }
+    .severity-Low { background: var(--low); }
+    .severity-Info { background: var(--info); }
+
+    .cvss-badge { background: #334155; color: var(--accent); padding: 2px 8px; border-radius: 4px; font-size: 0.75rem; font-weight: 700; margin-left: 8px; border: 1px solid var(--accent); }
+
+    .mitre-badge { display: inline-block; padding: 2px 8px; border-radius: 4px; font-size: 0.7rem; font-weight: 600; background: rgba(56, 189, 248, 0.1); color: var(--accent); border: 1px solid rgba(56, 189, 248, 0.2); margin-right: 6px; }
+
+    .finding-item { margin-bottom: 16px; padding: 20px; background: rgba(15, 23, 42, 0.5); border-radius: 12px; border: 1px solid #334155; }
+    .finding-header { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; flex-wrap: wrap; }
+    .finding-description { font-size: 1rem; margin-bottom: 12px; color: #e2e8f0; }
+    .finding-evidence { font-family: 'Fira Code', ui-monospace, monospace; font-size: 0.875rem; background: #020617; color: #38bdf8; padding: 16px; border-radius: 8px; margin-top: 12px; white-space: pre-wrap; word-break: break-all; border: 1px solid #1e293b; }
     
-    .badge {display:inline-block; padding:2px 8px; border-radius:9999px; font-size:11px; font-weight: 600; background: #cbd5e1; color: #334155; margin-right: 4px; margin-bottom: 4px;}
-    .finding-list {margin: 0; padding-left: 20px;}
-    .meta { font-size: 12px; color: #64748b; margin-bottom: 20px; }
+    .remediation-box { background: rgba(74, 222, 128, 0.05); border-left: 4px solid var(--low); padding: 16px; margin-top: 16px; border-radius: 0 8px 8px 0; font-size: 0.9375rem; }
+    .remediation-label { font-weight: 800; color: var(--low); font-size: 0.75rem; text-transform: uppercase; margin-bottom: 8px; display: block; }
+
+    .references-list { margin-top: 12px; font-size: 0.8125rem; color: var(--muted); }
+    .references-list a { color: var(--accent); text-decoration: none; margin-right: 12px; }
+    .references-list a:hover { text-decoration: underline; }
+
+    .ai-analysis { background: rgba(56, 189, 248, 0.08); border-left: 4px solid var(--accent); padding: 16px; margin-top: 16px; border-radius: 0 8px 8px 0; font-size: 0.9375rem; border: 1px solid rgba(56, 189, 248, 0.1); }
+    .ai-label { font-weight: 800; color: var(--accent); font-size: 0.75rem; text-transform: uppercase; margin-bottom: 8px; display: block; }
   </style>
 </head>
 <body>
-  <h1>🛡️ RedTeam Rust Engine - Engagement Report</h1>
-  <div class="meta">
-    <p><strong>Generated:</strong> {{metadata.timestamp}}</p>
-    <p><strong>Tool Version:</strong> {{metadata.version}}</p>
-    <p><strong>Command:</strong> <code>{{metadata.command_line}}</code></p>
+  <div class="container">
+    <header>
+      <h1>🛡️ OsintUltimate Professional Report</h1>
+      <div class="meta">
+        <p><strong>Engagement Date:</strong> {{metadata.timestamp}} | <strong>Version:</strong> {{metadata.version}}</p>
+        <p><strong>Scope / Execution:</strong> <code>{{metadata.command_line}}</code></p>
+      </div>
+    </header>
+
+    {{#if stats.ai_summary}}
+    <div class="ai-executive-summary">
+      <h2>🤖 SENTINEL Executive Summary</h2>
+      <p>{{stats.ai_summary}}</p>
+    </div>
+    <div class="summary-grid">
+      <div class="stat-card">
+        <span class="stat-value">{{stats.total_targets}}</span>
+        <span class="stat-label">Total Assets</span>
+      </div>
+      <div class="stat-card critical">
+        <span class="stat-value" style="color: var(--critical)">{{stats.critical_count}}</span>
+        <span class="stat-label">Critical</span>
+      </div>
+      <div class="stat-card high">
+        <span class="stat-value" style="color: var(--high)">{{stats.high_count}}</span>
+        <span class="stat-label">High Risk</span>
+      </div>
+      <div class="stat-card">
+        <span class="stat-value" style="color: var(--accent)">{{stats.avg_cvss}}</span>
+        <span class="stat-label">Avg CVSS</span>
+      </div>
+      <div class="stat-card">
+        <span class="stat-value" style="color: var(--info)">{{stats.sca_count}}</span>
+        <span class="stat-label">SCA Vulns</span>
+      </div>
+    </div>
+
+    {{#if mermaid_graph}}
+    <div class="attack-path">
+      <h2 style="color: var(--accent); border-bottom: 1px solid #334155; padding-bottom: 12px;">🕸️ Visual Attack Surface & Exposure</h2>
+      <div class="mermaid">
+        {{mermaid_graph}}
+      </div>
+    </div>
+    {{/if}}
+
+    <h2 style="font-size: 1.75rem; margin-bottom: 24px; color: var(--text);">📑 Detailed Security Findings</h2>
+    <table>
+      <thead>
+        <tr>
+          <th style="width: 280px;">Asset / Identity</th>
+          <th>Vulnerabilities & Contextual Analysis</th>
+        </tr>
+      </thead>
+      <tbody>
+        {{#each targets}}
+        <tr>
+          <td>
+            <div style="font-weight: 800; font-size: 1.25rem; color: var(--accent);">{{host}}</div>
+            <div style="color: var(--muted); font-size: 0.875rem; margin-bottom: 12px; font-family: monospace;">{{#if ip}}{{ip}}{{else}}Identity-Based{{/if}}</div>
+            <span class="severity-badge severity-{{max_severity}}">{{max_severity}} Target</span>
+          </td>
+          <td>
+            {{#if has_findings}}
+              {{#each findings}}
+              <div class="finding-item">
+                <div class="finding-header">
+                  <span class="severity-badge severity-{{severity}}">{{severity}}</span>
+                  {{#if cvss_score}}<span class="cvss-badge">CVSS {{cvss_score}}</span>{{/if}}
+                  <span style="font-weight: 700; color: #f1f5f9; text-transform: uppercase; font-size: 0.8125rem;">{{category}}</span>
+                  {{#each mitre_attack}}
+                    <span class="mitre-badge">ATT&CK {{this}}</span>
+                  {{/each}}
+                </div>
+                <div class="finding-description">{{description}}</div>
+                
+                {{#if ai_analysis}}
+                <div class="ai-analysis">
+                  <span class="ai-label">🤖 Sentinel Autonomous Reasoning ({{ai_analysis.model}})</span>
+                  <div><strong>Summary:</strong> {{ai_analysis.summary}}</div>
+                  <div style="margin-top: 8px;"><strong>Exposure Impact:</strong> {{ai_analysis.impact}}</div>
+                  <div style="margin-top: 8px; font-style: italic; color: var(--muted); border-top: 1px solid rgba(56, 189, 248, 0.1); padding-top: 8px;">Stealth Notes: {{ai_analysis.stealth_notes}}</div>
+                </div>
+                {{/if}}
+
+                {{#if remediation}}
+                <div class="remediation-box">
+                  <span class="remediation-label">🛠️ Technical Remediation</span>
+                  <div>{{remediation}}</div>
+                </div>
+                {{/if}}
+
+                {{#if references}}
+                <div class="references-list">
+                  <strong>References:</strong>
+                  {{#each references}}
+                    <a href="{{this}}" target="_blank">🔗 {{this}}</a>
+                  {{/each}}
+                </div>
+                {{/if}}
+
+                {{#if evidence.data}}
+                  <details style="margin-top: 16px;">
+                    <summary style="font-size: 0.75rem; color: var(--muted); cursor: pointer; text-transform: uppercase; font-weight: 700;">View Raw Evidence</summary>
+                    <div class="finding-evidence">{{json_stringify evidence.data}}</div>
+                  </details>
+                {{/if}}
+              </div>
+              {{/each}}
+            {{else}}
+              <div style="padding: 24px; text-align: center; background: rgba(15, 23, 42, 0.3); border-radius: 12px; color: var(--muted); border: 1px dashed #334155;">
+                System clean: No active vulnerabilities discovered for this asset.
+              </div>
+            {{/if}}
+          </td>
+        </tr>
+        {{/each}}
+      </tbody>
+    </table>
   </div>
-
-  <h2>Target Analysis Report</h2>
-  <p>Copy this table directly to Excel/Sheets.</p>
-  
-  <table>
-    <thead>
-      <tr>
-        <th>Host</th>
-        <th>IP Status</th>
-        <th>Top Severity</th>
-        <th>Detailed Findings</th>
-      </tr>
-    </thead>
-"#;
-
-const HTML_FOOTER: &str = r#"
-    </tbody>
-  </table>
 </body>
 </html>
 "#;
 
+
 #[derive(Serialize)]
-struct ReportVM<'a> {
+struct FullReportVM<'a> {
     metadata: &'a ScanMetadata,
+    stats: SummaryStats,
+    targets: Vec<TargetVM>,
+    mermaid_graph: String,
 }
+
 
 #[derive(Serialize)]
 struct TargetVM {
@@ -88,172 +251,119 @@ struct JsonlLine {
 }
 
 pub async fn generate_report(jsonl_path: &str, output_path: &str) -> Result<()> {
-    // P0 FIX: Robust Path Traversal Prevention
     let out_path = std::path::Path::new(output_path);
-    
-    // 1. Resolve parent directory absolute path
-    let parent = out_path.parent()
-        .filter(|p| !p.as_os_str().is_empty())
-        .unwrap_or_else(|| std::path::Path::new("."));
-    
-    // V5 FIX: Ensure directory exists so canonicalize doesn't crash
-    if !parent.exists() {
-        tokio::fs::create_dir_all(parent).await.context("Failed to create report output directory")?;
-    }
-    
-    let absolute_parent = tokio::fs::canonicalize(parent).await
-        .context("Failed to resolve report output directory")?;
-
-    // 2. Ensure we are not writing outside of intended CWD/subdirs? 
-    // Actually, user might want to write to /tmp. 
-    // The critical check is that the filename itself doesn't walk up FROM the parent.
-    // canonicalize(parent) fails if parent doesn't exist.
-    
-    // Better check: If filename contains anything fishy after joining.
-    // But standard practice: Just ensure we can write there.
-    // The previous vulnerability was: user provides "../../etc/cron.d/exploit".
-    // ".." is a component.
-    
     if out_path.components().any(|c| matches!(c, std::path::Component::ParentDir)) {
          anyhow::bail!("Invalid output filename: Traversal (..) detected");
     }
-    
-    // 3. Reconstruct full path with resolved parent (symbolic links resolved)
-    let filename = out_path.file_name().context("Invalid output path: no filename")?;
-    let safe_path = absolute_parent.join(filename);
 
-    let mut out_file = File::create(&safe_path).await?;
     let in_file = File::open(jsonl_path).await?;
     let mut reader = BufReader::new(in_file).lines();
 
-    let mut reg = Handlebars::new();
-    // Split template into header (with metadata), row, and footer to stream output
-    // V7 FIX (MEDIUM-003): HTML_TEMPLATE now safely acts only as the HTML_HEADER to avoid confusion
-    let header_template = HTML_TEMPLATE.to_string() + "<tbody>";
-    let row_template = r#"
-      <tr>
-        <td style="font-weight: 500;">{{host}} <div style="font-size:11px;color:#64748b">{{ip}}</div></td>
-        <td>
-           <span class="status-{{status}}">{{status}}</span>
-        </td>
-        <td class="{{max_severity}}">
-            {{max_severity}}
-        </td>
-        <td>
-            {{#if has_findings}}
-            <ul class="finding-list">
-                {{#each findings}}
-                <li>
-                    <span class="badge">{{severity}}</span> 
-                    <strong>{{category}}:</strong> {{description}}
-                    {{#if evidence}}
-                    <div style="font-size:11px; color:#475569; margin-top:2px; font-family:monospace; background: #f8fafc; padding: 4px; border-radius: 4px; white-space: pre-wrap; word-break: break-all;">
-                        {{evidence}}
-                    </div>
-                    {{/if}}
-                </li>
-                {{/each}}
-            </ul>
-            {{else}}
-            <span style="color:#94a3b8;font-style:italic;">No findings</span>
-            {{/if}}
-        </td>
-      </tr>"#;
-    
-    reg.register_template_string("header", &header_template)?;
-    reg.register_template_string("row", row_template)?;
-    
-    // CRIT-005 FIX: Explicitly ensure Handlebars HTML escaping is enabled (default is true, but we make it explicit)
-    reg.set_strict_mode(true);
-
-    let mut header_written = false;
-    use tokio::io::AsyncWriteExt;
+    let mut metadata = ScanMetadata::new("OsintUltimate");
+    let mut stats = SummaryStats::default();
+    let mut targets = Vec::new();
 
     while let Some(line) = reader.next_line().await? {
         if line.trim().is_empty() { continue; }
         
-        // Peek to see if it's metadata or a target
-        let peek: JsonlLine = match serde_json::from_str(&line) {
-            Ok(p) => p,
-            Err(_) => continue,
-        };
+        let peek: serde_json::Value = serde_json::from_str(&line)?;
 
-        if let Some(metadata) = peek.metadata {
-             // CRIT-005: Sanitize metadata fields
-             let sanitized_command = html_escape::encode_safe(&metadata.command_line).to_string();
-             let mut sanitized_meta = metadata;
-             sanitized_meta.command_line = sanitized_command;
-             
-             let vm = ReportVM { metadata: &sanitized_meta };
-             let rendered_header = reg.render("header", &vm)?;
-             out_file.write_all(rendered_header.as_bytes()).await?;
-             header_written = true;
-        } else if peek.host.is_some() {
-            if !header_written {
-                // Failsafe in case metadata was missing
-                let default_meta = ScanMetadata::new("redteam_rust_core");
-                let vm = ReportVM { metadata: &default_meta };
-                let rendered_header = reg.render("header", &vm)?;
-                out_file.write_all(rendered_header.as_bytes()).await?;
-                header_written = true;
+        if peek.get("metadata").is_some() {
+            metadata = serde_json::from_value(peek.get("metadata").unwrap().clone())?;
+            metadata.command_line = html_escape::encode_safe(&metadata.command_line).to_string();
+        } else if let Ok(target) = serde_json::from_str::<TargetHost>(&line) {
+            stats.total_targets += 1;
+            if target.status == crate::models::TargetStatus::Scanned {
+                stats.scanned_targets += 1;
             }
 
-            if let Ok(target) = serde_json::from_str::<TargetHost>(&line) {
-                // Calculate Max Severity
-                let mut severity_val = 0;
-                let mut severity_str = "Info";
-                
-                for f in &target.findings {
-                    let val = match f.severity {
-                        crate::models::Severity::Critical => 4,
-                        crate::models::Severity::High => 3,
-                        crate::models::Severity::Medium => 2,
-                        crate::models::Severity::Low => 1,
-                        crate::models::Severity::Info => 0,
+            let mut severity_val = 0;
+            let mut severity_str = "Info";
+            let mut total_cvss = 0.0;
+            let mut cvss_count = 0;
+            
+            for f in &target.findings {
+                stats.total_findings += 1;
+                if f.category == crate::models::Category::SCA {
+                    stats.sca_count += 1;
+                }
+                if let Some(score) = f.cvss_score {
+                    total_cvss += score;
+                    cvss_count += 1;
+                }
+                let val = match f.severity {
+                    crate::models::Severity::Critical => { stats.critical_count += 1; 4 },
+                    crate::models::Severity::High => { stats.high_count += 1; 3 },
+                    crate::models::Severity::Medium => { stats.medium_count += 1; 2 },
+                    crate::models::Severity::Low => { stats.low_count += 1; 1 },
+                    crate::models::Severity::Info => { stats.info_count += 1; 0 },
+                };
+                if val > severity_val {
+                    severity_val = val;
+                    severity_str = match val {
+                        4 => "Critical",
+                        3 => "High",
+                        2 => "Medium",
+                        1 => "Low",
+                        _ => "Info"
                     };
-                    if val > severity_val {
-                        severity_val = val;
-                        severity_str = match val {
-                            4 => "Critical",
-                            3 => "High",
-                            2 => "Medium",
-                            1 => "Low",
-                            _ => "Info"
-                        };
-                    }
                 }
-
-                let status = match target.status {
-                    crate::models::TargetStatus::Scanned => "Scanned".to_string(),
-                    crate::models::TargetStatus::Scanning => "Scanning".to_string(),
-                    crate::models::TargetStatus::Dead => "Dead".to_string(),
-                    crate::models::TargetStatus::Error => "Error".to_string(),
-                    crate::models::TargetStatus::Pending => "Pending".to_string(),
-                };
-
-                let mut sanitized_findings = target.findings.clone();
-                for f in &mut sanitized_findings {
-                    f.description = html_escape::encode_safe(&f.description).to_string();
-                }
-
-                let target_vm = TargetVM {
-                    host: html_escape::encode_safe(&target.host).to_string(),
-                    ip: target.ip.clone().unwrap_or_default(),
-                    status,
-                    max_severity: severity_str.to_string(),
-                    has_findings: !sanitized_findings.is_empty(),
-                    findings: sanitized_findings,
-                };
-
-                let rendered_row = reg.render("row", &target_vm)?;
-                out_file.write_all(rendered_row.as_bytes()).await?;
             }
+
+            if cvss_count > 0 {
+                stats.avg_cvss = (stats.avg_cvss * (stats.total_findings as f32 - cvss_count as f32) + total_cvss) / stats.total_findings as f32;
+            }
+
+            targets.push(TargetVM {
+                host: html_escape::encode_safe(&target.host).to_string(),
+                ip: target.ip.clone().unwrap_or_default(),
+                status: format!("{:?}", target.status),
+                max_severity: severity_str.to_string(),
+                has_findings: !target.findings.is_empty(),
+                findings: target.findings.clone(),
+            });
         }
     }
 
-    // Write footer
-    out_file.write_all(HTML_FOOTER.as_bytes()).await?;
+    let mut reg = Handlebars::new();
+    reg.set_strict_mode(true);
+    reg.register_helper("json_stringify", Box::new(|h: &handlebars::Helper, _: &Handlebars, _: &handlebars::Context, _: &mut handlebars::RenderContext, out: &mut dyn handlebars::Output| -> handlebars::HelperResult {
+        let param = h.param(0).ok_or(handlebars::RenderError::new("Missing parameter"))?;
+        out.write(&serde_json::to_string_pretty(param.value()).unwrap_or_default())?;
+        Ok(())
+    }));
+
+    // Generate Mermaid Graph
+    let mut mermaid = String::from("graph LR\n  Start((Start)) --> Targets[Targets]\n");
+    for t in &targets {
+        let host_id = t.host.replace(['.', '-'], "_");
+        mermaid.push_str(&format!("  Targets --> {}\n", host_id));
+        if t.has_findings {
+            for (i, f) in t.findings.iter().enumerate() {
+                let finding_id = format!("{}_f{}", host_id, i);
+                mermaid.push_str(&format!("  {} --> {}[\"{:?}\"]\n", host_id, finding_id, f.category));
+            }
+        }
+    }
     
-    out_file.flush().await?;
+    let vm = FullReportVM {
+        metadata: &metadata,
+        stats,
+        targets,
+        mermaid_graph: mermaid,
+    };
+
+
+    let rendered = reg.render_template(HTML_TEMPLATE, &vm)?;
+    
+    // Ensure directory exists
+    if let Some(parent) = out_path.parent() {
+        if !parent.as_os_str().is_empty() && !parent.exists() {
+            tokio::fs::create_dir_all(parent).await?;
+        }
+    }
+    
+    tokio::fs::write(out_path, rendered).await?;
+    
     Ok(())
 }

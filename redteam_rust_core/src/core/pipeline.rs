@@ -3,21 +3,26 @@ use crate::core::sink::DataSink;
 use crate::models::{TargetHost, TargetStatus, Finding, Category, Severity, ScanMetadata};
 use crate::plugins::{ScannerPlugin, DiscoveryPlugin};
 use crate::utils::liveness::{LivenessChecker, is_safe_ip};
+use crate::core::capability_layer::ScanLayerPolicy;
+use crate::core::approval_gate::ApprovalGate;
 use anyhow::{Context, Result};
 use std::sync::Arc;
 use tokio::sync::mpsc;
 use tokio_util::sync::CancellationToken;
-use tracing::{info, warn, error, debug};
+use tracing::info;
 use futures::stream::StreamExt;
+use serde_json::json; // Added for json! macro
 
 pub struct Pipeline {
     concurrency: usize,
     discovery_plugins: Arc<Vec<Box<dyn DiscoveryPlugin>>>,
-    plugins: Vec<Box<dyn ScannerPlugin>>,
+    plugins: Arc<Vec<Box<dyn ScannerPlugin>>>,
     sink: Box<dyn DataSink>,
     shutdown_token: CancellationToken,
     liveness_checker: LivenessChecker,
     command_line: String,
+    policy: ScanLayerPolicy,
+    approval_gate: Arc<ApprovalGate>,
 }
 
 impl Pipeline {
@@ -29,12 +34,9 @@ impl Pipeline {
     pub async fn run(self, targets: Vec<TargetHost>) -> Result<()> {
         info!("🚀 Starting Pipeline with {} plugins...", self.plugins.len());
         
-        // HIGH-007 FIX: Write metadata as the first line in the sink
         let mut sink = self.sink;
         sink.write_metadata(&ScanMetadata::new(&self.command_line)).await?;
 
-        // CRIT-002 FIX: Implement real backpressure by reducing channel size.
-        // 10,000 was saturating RAM. Now bound by concurrency with a hard cap (AUDIT-004).
         let channel_size = (self.concurrency * 2).clamp(100, 1000);
         
         let (osint_tx, osint_rx) = mpsc::channel::<TargetHost>(channel_size);
@@ -44,9 +46,7 @@ impl Pipeline {
 
         let mut handles = Vec::new();
         
-        // --- STAGE 1: Discovery (OSINT & Resolvers) ---
-        // QA-012: For large-scale scans (10k+ domains), consider DashSet<u64> with
-        // pre-hashed domain strings to reduce per-entry memory from ~40B to 8B.
+        // --- STAGE 1: Discovery ---
         let seen_domains = Arc::new(dashmap::DashSet::new());
         let discovery_token = self.shutdown_token.clone();
         let discovery_plugins = self.discovery_plugins.clone();
@@ -55,24 +55,12 @@ impl Pipeline {
             let mut rx = osint_rx;
             while let Some(mut target) = rx.recv().await {
                 if discovery_token.is_cancelled() { break; }
-                
-                // Track the root target itself and skip if already seen
-                if !seen_domains.insert(target.host.clone()) {
-                    debug!("Skipping already seen root target: {}", target.host);
-                    continue;
-                }
+                if !seen_domains.insert(target.host.clone()) { continue; }
 
-                // QA-006 FIX: Stream discovery results as they arrive via JoinSet,
-                // instead of batch-blocking with join_all. This reduces time-to-first-scan.
                 let mut join_set = tokio::task::JoinSet::new();
                 for i in 0..discovery_plugins.len() {
                     let plugins_clone = discovery_plugins.clone();
-                    let target_snapshot = crate::models::TargetHost {
-                        host: target.host.clone(),
-                        ip: target.ip.clone(),
-                        status: target.status.clone(),
-                        findings: Vec::new(),
-                    };
+                    let target_snapshot = target.clone();
                     join_set.spawn(async move {
                         let plugin = &plugins_clone[i];
                         let name = plugin.name().to_string();
@@ -81,170 +69,141 @@ impl Pipeline {
                     });
                 }
 
-                // Process results as each plugin completes, forwarding subdomains immediately
                 while let Some(join_res) = join_set.join_next().await {
-                    let (name, res) = match join_res {
-                        Ok(r) => r,
-                        Err(e) => {
-                            warn!("Discovery task panicked: {}", e);
-                            continue;
-                        }
-                    };
-
-                    match res {
-                        Ok(subdomains) => {
-                            for sub in subdomains {
-                                if seen_domains.insert(sub.clone()) {
-                                    target.findings.push(Finding::new(
-                                        "DISCOVERED_SUBDOMAIN",
-                                        Category::Recon,
-                                        Severity::Info,
-                                        &format!("Discovered via {}: {}", name, sub),
-                                        serde_json::json!({
-                                            "subdomain": sub.clone(),
-                                            "source": name
-                                        })
-                                    ));
-                                    
-                                    let new_target = TargetHost {
-                                        host: sub,
-                                        ip: None,
-                                        status: TargetStatus::Pending,
-                                        findings: Vec::new(),
-                                    };
-                                    
-                                    if let Err(e) = liveness_tx.send(new_target).await {
-                                        warn!("Failed to inject discovered target into liveness queue: {}", e);
-                                    }
-                                }
+                    if let Ok((name, Ok(subdomains))) = join_res {
+                        for sub in subdomains {
+                            if seen_domains.insert(sub.clone()) {
+                                target.findings.push(Finding::new("DISCOVERED_SUBDOMAIN", Category::Recon, Severity::Info, &format!("Discovered via {}: {}", name, sub), json!({ "subdomain": sub, "source": name })));
+                                let _ = liveness_tx.send(TargetHost { 
+                                    host: sub, 
+                                    ip: None, 
+                                    status: TargetStatus::Pending, 
+                                    target_type: crate::models::TargetType::Web,
+                                    findings: Vec::new() 
+                                }).await;
                             }
-                        }
-                        Err(e) => {
-                            warn!("Discovery plugin {} failed on {}: {}", name, target.host, e);
                         }
                     }
                 }
-                
-                // Forward the enriched root target.
                 let _ = liveness_tx.send(target).await;
             }
         }));
 
-        // Inject initial targets
-        for t in targets {
-            let _ = osint_tx.send(t).await;
-        }
-        drop(osint_tx); // Signals Stage 1 to eventually close
+        for t in targets { let _ = osint_tx.send(t).await; }
+        drop(osint_tx);
 
         // --- STAGE 2: Liveness ---
-        let liveness_checker = self.liveness_checker;
+        let liveness_checker = self.liveness_checker.clone();
         let liveness_token = self.shutdown_token.clone();
         let scan_tx_clone = scan_tx.clone();
         let sink_tx_err = sink_tx.clone();
         let liveness_concurrency = self.concurrency;
-
-        // CRIT-002 FIX: Drop original sender immediately after moving its clone into Stage 2 task,
-        // otherwise `Pipeline::run` holds the sender, and the `Pipeline::run` handle.await loop deadlocks.
         drop(scan_tx);
 
-        let token_for_stream = liveness_token.clone();
-        let token_for_each = liveness_token.clone();
-        
+        let stream_token = liveness_token.clone();
         handles.push(tokio::spawn(async move {
+            let mut rx = liveness_rx;
             let stream = async_stream::stream! {
-                let mut rx = liveness_rx;
-                while let Some(t) = rx.recv().await {
-                    yield t;
-                    if token_for_stream.is_cancelled() { break; }
-                }
+                while let Some(t) = rx.recv().await { yield t; if stream_token.is_cancelled() { break; } }
             };
-
             tokio::pin!(stream);
-
             stream.for_each_concurrent(liveness_concurrency, move |mut target| {
-                let checker = liveness_checker.clone();
-                let scan_tx = scan_tx_clone.clone();
-                let sink_tx = sink_tx_err.clone();
-                let liveness_token_clone = token_for_each.clone();
-                
+                let checker = liveness_checker.clone(); let scan_tx = scan_tx_clone.clone(); let sink_tx = sink_tx_err.clone(); let token = liveness_token.clone();
                 async move {
-                    let ip_opt = tokio::select! {
-                        res = checker.is_live(&target.host) => res,
-                        _ = liveness_token_clone.cancelled() => return,
-                    };
-                    if let Some(ip) = ip_opt {
-                        // HIGH-001 FIX: Enforce SSRF protection in Stage 2 before forwarding
-                        if !is_safe_ip(&ip) {
-                            warn!("⚠️ Blocking SSRF attempt: {} resolved to private IP {}", target.host, ip);
-                            target.status = TargetStatus::Dead;
-                            target.findings.push(Finding::new(
-                                "SSRF_DETECTION",
-                                Category::Vulnerability,
-                                Severity::High,
-                                &format!("Target {} resolved to restricted IP {} and was blocked", target.host, ip),
-                                serde_json::json!({"ip": ip.to_string()})
-                            ));
-                            let _ = sink_tx.send(target).await;
-                            return;
-                        }
-
-                        target.ip = Some(ip.to_string());
-                        let _ = scan_tx.send(target).await;
-                    } else {
-                        target.status = TargetStatus::Dead;
-                        target.findings.push(Finding::new(
-                            "TARGET_UNREACHABLE",
-                            Category::Availability,
-                            Severity::Info,
-                            &format!("Host {} appears to be offline or unreachable", target.host),
-                            serde_json::json!({"host": target.host})
-                        ));
-                        let _ = sink_tx.send(target).await;
-                    }
+                    if let Some(ip) = tokio::select! { res = checker.is_live(&target.host) => res, _ = token.cancelled() => return } {
+                        if !is_safe_ip(&ip) { target.status = TargetStatus::Dead; let _ = sink_tx.send(target).await; return; }
+                        target.ip = Some(ip.to_string()); let _ = scan_tx.send(target).await;
+                    } else { target.status = TargetStatus::Dead; let _ = sink_tx.send(target).await; }
                 }
             }).await;
         }));
 
-        // --- STAGE 3: Scanning (Orchestrator) ---
-        let mut orchestrator = Orchestrator::new(self.concurrency);
-        for plugin in self.plugins.into_iter() {
-            orchestrator.register_plugin(plugin);
-        }
+        // --- STAGE 3: Scanning ---
+        let orchestrator = Orchestrator::new(
+            self.plugins.clone(), 
+            self.concurrency,
+            self.policy,
+            self.approval_gate.clone(),
+        );
         let scan_token = self.shutdown_token.clone();
         let sink_tx_stage3 = sink_tx.clone();
         handles.push(tokio::spawn(async move {
             orchestrator.run(scan_rx, sink_tx_stage3, scan_token).await;
         }));
-        
         drop(sink_tx);
 
         // --- STAGE 4: Sink ---
-        // let mut sink = self.sink; // Already moved above for metadata
-        let _sink_token = self.shutdown_token.clone();
-        let sink_handle = tokio::spawn(async move {
-            let mut count = 0;
-            while let Some(target) = sink_rx.recv().await {
-                if let Err(e) = sink.write(&target).await {
-                    error!("Sink failed to write target {}: {}", target.host, e);
-                }
-                count += 1;
-            }
-            if let Err(e) = sink.close().await {
-                error!("Sink failed to close properly: {}", e);
-            }
-            info!("📦 Sink closed. Total written: {}", count);
-        });
-        handles.push(sink_handle);
+        let mut final_sink = sink;
+        let mut final_sink_rx = sink_rx;
+        handles.push(tokio::spawn(async move {
+            while let Some(target) = final_sink_rx.recv().await { let _ = final_sink.write(&target).await; }
+            let _ = final_sink.close().await;
+        }));
 
-        // Wait for all stages
-        for handle in handles {
-            let _ = handle.await;
-        }
-        
-        info!("✅ Pipeline execution complete.");
+        for h in handles { let _ = h.await; }
         Ok(())
     }
+
+    pub async fn run_discovery(&self, target: &TargetHost, tx: mpsc::Sender<Finding>) -> Result<()> {
+        info!("Pipeline: Running discovery for {}", target.host);
+        let discovery_plugins = self.discovery_plugins.clone();
+        let mut join_set = tokio::task::JoinSet::new();
+        for i in 0..discovery_plugins.len() {
+            let plugins_clone = discovery_plugins.clone(); let target_snapshot = target.clone();
+            join_set.spawn(async move { (plugins_clone[i].name().to_string(), plugins_clone[i].discover(&target_snapshot).await) });
+        }
+        while let Some(res) = join_set.join_next().await {
+            if let Ok((name, Ok(subdomains))) = res {
+                for sub in subdomains { tx.send(Finding::new("DISCOVERED_SUBDOMAIN", Category::Recon, Severity::Info, &format!("via {}", name), json!({"sub":sub}))).await?; }
+            }
+        }
+        Ok(())
+    }
+
+    pub async fn run_scanning(&self, target: &TargetHost) -> Result<Vec<Finding>> {
+        info!("Pipeline: Running active scans for {}", target.host);
+        let (tx, rx) = mpsc::channel(1);
+        let (out_tx, mut out_rx) = mpsc::channel(1);
+        let orchestrator = Orchestrator::new(
+            self.plugins.clone(), 
+            self.concurrency,
+            self.policy,
+            self.approval_gate.clone(),
+        );
+        let token = self.shutdown_token.clone();
+        
+        let target_clone = target.clone();
+        let tx_clone = tx.clone();
+        tokio::spawn(async move { let _ = tx_clone.send(target_clone).await; });
+        drop(tx);
+
+        orchestrator.run(rx, out_tx, token).await;
+        
+        if let Some(res) = out_rx.recv().await {
+            Ok(res.findings)
+        } else {
+            Ok(Vec::new())
+        }
+    }
+
+    pub fn get_plugin_names(&self) -> Vec<String> {
+        self.plugins.iter().map(|p| p.name().to_string()).collect()
+    }
+
+    pub fn get_plugin_metadata(&self) -> Vec<crate::plugins::PluginMetadata> {
+        self.plugins.iter().map(|p| p.metadata()).collect()
+    }
+
+    pub async fn run_specific_plugin(&self, plugin_name: &str, target: &TargetHost) -> Result<Vec<Finding>> {
+        info!("Pipeline: Running specific plugin '{}' for {}", plugin_name, target.host);
+        if let Some(plugin) = self.plugins.iter().find(|p| p.name() == plugin_name) {
+            plugin.scan(target).await
+        } else {
+            anyhow::bail!("Plugin '{}' not found", plugin_name)
+        }
+    }
 }
+
 
 pub struct PipelineBuilder {
     concurrency: usize,
@@ -254,13 +213,11 @@ pub struct PipelineBuilder {
     shutdown_token: CancellationToken,
     liveness_checker: Option<LivenessChecker>,
     command_line: String,
+    policy: Option<ScanLayerPolicy>,
+    approval_gate: Option<Arc<ApprovalGate>>,
 }
 
-impl Default for PipelineBuilder {
-    fn default() -> Self {
-        Self::new()
-    }
-}
+impl Default for PipelineBuilder { fn default() -> Self { Self::new() } }
 
 impl PipelineBuilder {
     pub fn new() -> Self {
@@ -272,55 +229,38 @@ impl PipelineBuilder {
             shutdown_token: CancellationToken::new(),
             liveness_checker: None,
             command_line: "OsintUltimate".to_string(),
+            policy: None,
+            approval_gate: None,
         }
     }
 
-    pub fn liveness_checker(mut self, checker: LivenessChecker) -> Self {
-        self.liveness_checker = Some(checker);
-        self
-    }
+    pub fn policy(mut self, policy: ScanLayerPolicy) -> Self { self.policy = Some(policy); self }
+    pub fn approval_gate(mut self, gate: Arc<ApprovalGate>) -> Self { self.approval_gate = Some(gate); self }
 
-    pub fn concurrency(mut self, c: usize) -> Self {
-        self.concurrency = c;
-        self
-    }
-
-    pub fn with_discovery(mut self, plugin: Box<dyn DiscoveryPlugin>) -> Self {
-        self.discovery_plugins.push(plugin);
-        self
-    }
-
-    pub fn with_plugin(mut self, plugin: Box<dyn ScannerPlugin>) -> Self {
-        self.plugins.push(plugin);
-        self
-    }
-
-    pub fn with_sink(mut self, sink: Box<dyn DataSink>) -> Self {
-        self.sink = Some(sink);
-        self
-    }
-
-    pub fn shutdown_token(mut self, token: CancellationToken) -> Self {
-        self.shutdown_token = token;
-        self
-    }
-
-    pub fn command_line(mut self, cmd: String) -> Self {
-        self.command_line = cmd;
-        self
-    }
+    pub fn liveness_checker(mut self, checker: LivenessChecker) -> Self { self.liveness_checker = Some(checker); self }
+    pub fn concurrency(mut self, c: usize) -> Self { self.concurrency = c; self }
+    pub fn with_discovery(mut self, plugin: Box<dyn DiscoveryPlugin>) -> Self { self.discovery_plugins.push(plugin); self }
+    pub fn with_plugin(mut self, plugin: Box<dyn ScannerPlugin>) -> Self { self.plugins.push(plugin); self }
+    pub fn with_sink(mut self, sink: Box<dyn DataSink>) -> Self { self.sink = Some(sink); self }
+    pub fn shutdown_token(mut self, token: CancellationToken) -> Self { self.shutdown_token = token; self }
+    pub fn command_line(mut self, cmd: String) -> Self { self.command_line = cmd; self }
 
     pub fn build(self) -> Result<Pipeline> {
         let sink = self.sink.context("Pipeline requires a configured sink")?;
         let liveness_checker = self.liveness_checker.context("Pipeline requires a configured liveness checker")?;
+        let policy = self.policy.unwrap_or(ScanLayerPolicy::preset_audit());
+        let approval_gate = self.approval_gate.unwrap_or(Arc::new(ApprovalGate::for_red_team()));
+
         Ok(Pipeline {
             concurrency: self.concurrency,
             discovery_plugins: Arc::new(self.discovery_plugins),
-            plugins: self.plugins,
+            plugins: Arc::new(self.plugins),
             sink,
             shutdown_token: self.shutdown_token,
             liveness_checker,
             command_line: self.command_line,
+            policy,
+            approval_gate,
         })
     }
 }

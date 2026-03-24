@@ -1,0 +1,95 @@
+use crate::plugins::{ScannerPlugin, Capability, PluginMetadata, RiskLevel};
+use crate::models::{TargetHost, Finding, Severity, Category, TargetType, PLUGIN_GF, FINDING_GF_PATTERN};
+use async_trait::async_trait;
+use anyhow::{Result, Context};
+use tracing::{info, warn};
+use std::process::Stdio;
+use tokio::process::Command;
+
+pub struct GfScanner {
+    binary_path: String,
+}
+
+impl GfScanner {
+    pub fn new() -> Self {
+        let path = which::which("gf").unwrap_or_else(|_| "gf".into());
+        Self {
+            binary_path: path.to_string_lossy().to_string(),
+        }
+    }
+}
+
+#[async_trait]
+impl ScannerPlugin for GfScanner {
+    fn name(&self) -> &'static str {
+        PLUGIN_GF
+    }
+
+    fn metadata(&self) -> PluginMetadata {
+        PluginMetadata {
+            name: self.name(),
+            description: "Grep-based pattern discovery for security audits (SSRF, LFI, RCE, Credentials).",
+            target_type: TargetType::Web,
+            risk_level: RiskLevel::Safe,
+            layer: crate::core::capability_layer::ScanLayer::Scanning,
+            expected_duration: std::time::Duration::from_secs(30),
+            capabilities: self.capabilities(),
+            cost: 1,
+            category: "Enumeration",
+            mitre_attacks: vec![],
+            remediation_difficulty: crate::plugins::RiskLevel::Medium,
+        }
+    }
+
+    fn capabilities(&self) -> Vec<Capability> {
+        vec![Capability::SecurityAuditing, Capability::OsintDiscovery]
+    }
+
+    async fn check_dependencies(&self) -> Result<bool> {
+        Ok(which::which("gf").is_ok())
+    }
+
+    async fn scan(&self, target: &TargetHost) -> Result<Vec<Finding>> {
+        info!("GfScanner: searching patterns for {}", target.host);
+
+        // Gf usually works on files or stdin.
+        // For professional reconnaissance, we'll scan various patterns if they are available.
+        let patterns = vec!["ssrf", "sqli", "lfi", "rce", "debug-pages", "idors", "interestingparams"];
+        let mut findings = Vec::new();
+
+        for pattern in patterns {
+            // In a real scenario, we might have a file of URLs gathered by Gau/Wayback.
+            // For now, we'll simulate the execution. If we had a discovery-aggregator, we'd use it.
+            // Professional approach: gf is better used as a post-discovery hook.
+            // Here we just implement the wrapper.
+            
+            let mut cmd = Command::new(&self.binary_path);
+            cmd.arg(pattern)
+               .stdin(Stdio::null())
+               .stdout(Stdio::piped())
+               .stderr(Stdio::null());
+
+            // Since we don't have a "gathered_urls" file yet in this context, 
+            // the plugin will be safe but potentially empty until discovery runs.
+            let output = cmd.output().await.context("Failed to execute gf")?;
+            
+            let stdout = String::from_utf8_lossy(&output.stdout);
+            for line in stdout.lines() {
+                if line.trim().is_empty() { continue; }
+                
+                findings.push(Finding::new(
+                    FINDING_GF_PATTERN,
+                    Category::Recon,
+                    Severity::Info,
+                    &format!("Interesting pattern '{}' found: {}", pattern, line),
+                    serde_json::json!({
+                        "pattern": pattern,
+                        "line": line
+                    })
+                ));
+            }
+        }
+
+        Ok(findings)
+    }
+}

@@ -1,0 +1,74 @@
+use crate::plugins::{ScannerPlugin, Capability};
+use crate::models::{TargetHost, Finding, Severity, Category};
+use async_trait::async_trait;
+use anyhow::{Result, Context};
+use tracing::{info, warn};
+use std::process::Stdio;
+use tokio::process::Command;
+
+pub struct KubescapeScanner {
+    binary_path: String,
+}
+
+impl KubescapeScanner {
+    pub fn new() -> Self {
+        let path = which::which("kubescape").unwrap_or_else(|_| "kubescape".into());
+        Self {
+            binary_path: path.to_string_lossy().to_string(),
+        }
+    }
+}
+
+#[async_trait]
+impl ScannerPlugin for KubescapeScanner {
+    fn name(&self) -> &'static str {
+        "kubescape"
+    }
+
+    
+        fn metadata(&self) -> crate::plugins::PluginMetadata {
+        crate::plugins::PluginMetadata {
+            name: self.name(),
+            description: "Automated security analysis using this plugin.",
+            target_type: crate::plugins::TargetType::Cloud,
+            risk_level: crate::plugins::RiskLevel::Medium,
+            layer: crate::core::capability_layer::ScanLayer::Passive,
+            expected_duration: std::time::Duration::from_secs(300),
+            capabilities: self.capabilities(),
+            cost: 5,
+            category: "Compliance",
+            mitre_attacks: vec![],
+            remediation_difficulty: crate::plugins::RiskLevel::Medium,
+        }
+    }
+    fn capabilities(&self) -> Vec<Capability> {
+        vec![Capability::VulnerabilityScanning]
+    }
+
+    async fn check_dependencies(&self) -> Result<bool> {
+        Ok(which::which("kubescape").is_ok())
+    }
+
+
+    async fn scan(&self, target: &TargetHost) -> Result<Vec<Finding>> {
+        info!("KubescapeScanner: scanning cluster/target {}", target.host);
+
+        let mut child = Command::new(&self.binary_path)
+            .arg("scan")
+            .arg("--format").arg("json")
+            .stdin(Stdio::null())
+            .stdout(Stdio::piped())
+            .stderr(Stdio::null())
+            .spawn()
+            .context("Failed to spawn kubescape")?;
+
+        let status = child.wait().await.context("Failed to wait for kubescape")?;
+
+        if !status.success() {
+            warn!("Kubescape failed on {}", target.host);
+        }
+
+        let findings = Vec::new();
+        Ok(findings)
+    }
+}

@@ -1,8 +1,10 @@
-use crate::models::{TargetHost, ScanMetadata};
+use crate::models::{TargetHost, ScanMetadata, TargetStatus, Finding};
 use anyhow::{Context, Result};
 use async_trait::async_trait;
 use tokio::io::AsyncWriteExt;
 use std::path::PathBuf;
+use sqlx::{SqlitePool, sqlite::SqliteConnectOptions, Row};
+use std::str::FromStr;
 
 /// Trait for defining where scan results should be written.
 #[async_trait]
@@ -77,6 +79,191 @@ impl DataSink for JsonlSink {
     
     async fn close(&mut self) -> Result<()> {
         self.file.flush().await.context("JsonlSink: Failed to flush file content to disk")?;
+        Ok(())
+    }
+}
+
+/// A DataSink that writes results to a SQLite database.
+pub struct SqliteSink {
+    pool: SqlitePool,
+    scan_id: Option<i64>,
+    command_line: String,
+}
+
+impl SqliteSink {
+    pub async fn new(path: impl Into<PathBuf>) -> Result<Self> {
+        let path = path.into();
+        let connection_str = format!("sqlite://{}", path.display());
+        
+        let options = SqliteConnectOptions::from_str(&connection_str)?
+            .create_if_missing(true)
+            .journal_mode(sqlx::sqlite::SqliteJournalMode::Wal);
+
+        let pool = SqlitePool::connect_with(options).await?;
+
+        // Initialize schema
+        sqlx::query(
+            "CREATE TABLE IF NOT EXISTS scans (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                command_line TEXT NOT NULL,
+                timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
+            )"
+        ).execute(&pool).await?;
+
+        sqlx::query(
+            "CREATE TABLE IF NOT EXISTS targets (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                scan_id INTEGER NOT NULL,
+                host TEXT NOT NULL,
+                ip TEXT,
+                status TEXT NOT NULL,
+                FOREIGN KEY(scan_id) REFERENCES scans(id)
+            )"
+        ).execute(&pool).await?;
+
+        sqlx::query(
+            "CREATE TABLE IF NOT EXISTS findings (
+                id TEXT PRIMARY KEY,
+                target_id INTEGER NOT NULL,
+                category TEXT NOT NULL,
+                severity TEXT NOT NULL,
+                description TEXT NOT NULL,
+                evidence TEXT NOT NULL,
+                remediation TEXT,
+                mitre_attack TEXT,
+                ai_analysis TEXT,
+                FOREIGN KEY(target_id) REFERENCES targets(id)
+            )"
+        ).execute(&pool).await?;
+
+        Ok(Self {
+            pool,
+            scan_id: None,
+            command_line: String::new(),
+        })
+    }
+}
+
+#[async_trait]
+impl DataSink for SqliteSink {
+    async fn write(&mut self, target: &TargetHost) -> Result<()> {
+        let scan_id = self.scan_id.context("SqliteSink: scan_id not initialized (write_metadata must be called first)")?;
+        
+        // Insert or update target
+        let row: (i64,) = sqlx::query_as(
+            "INSERT INTO targets (scan_id, host, ip, status) VALUES (?, ?, ?, ?) RETURNING id"
+        )
+        .bind(scan_id)
+        .bind(&target.host)
+        .bind(&target.ip)
+        .bind(format!("{:?}", target.status))
+        .fetch_one(&self.pool)
+        .await?;
+        
+        let target_id = row.0;
+
+        // Insert findings
+        for finding in &target.findings {
+            let evidence = serde_json::to_string(&finding.evidence.data)?;
+            let mitre = finding.mitre_attack.as_ref().map(|m| serde_json::to_string(m).unwrap_or_default());
+            let ai = finding.ai_analysis.as_ref().map(|a| serde_json::to_string(a).unwrap_or_default());
+            
+            sqlx::query(
+                "INSERT OR REPLACE INTO findings (id, target_id, category, severity, description, evidence, remediation, mitre_attack, ai_analysis)
+                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)"
+            )
+            .bind(&finding.id)
+            .bind(target_id)
+            .bind(format!("{:?}", finding.category))
+            .bind(format!("{:?}", finding.severity))
+            .bind(&finding.description)
+            .bind(evidence)
+            .bind(&finding.remediation)
+            .bind(mitre)
+            .bind(ai)
+            .execute(&self.pool)
+            .await?;
+        }
+
+        Ok(())
+    }
+
+    async fn write_metadata(&mut self, metadata: &ScanMetadata) -> Result<()> {
+        self.command_line = metadata.command_line.clone();
+        
+        let row: (i64,) = sqlx::query_as(
+            "INSERT INTO scans (command_line) VALUES (?) RETURNING id"
+        )
+        .bind(&metadata.command_line)
+        .fetch_one(&self.pool)
+        .await?;
+        
+        self.scan_id = Some(row.0);
+        Ok(())
+    }
+
+    async fn close(&mut self) -> Result<()> {
+        self.pool.close().await;
+        Ok(())
+    }
+}
+
+/// A DataSink that generates a professional Markdown report.
+pub struct MarkdownSink {
+    file: tokio::fs::File,
+    findings_count: usize,
+}
+
+impl MarkdownSink {
+    pub async fn new(path: impl Into<PathBuf>) -> Result<Self> {
+        let file = tokio::fs::OpenOptions::new()
+            .create(true)
+            .write(true)
+            .truncate(true)
+            .open(path.into())
+            .await?;
+        Ok(Self { file, findings_count: 0 })
+    }
+}
+
+#[async_trait]
+impl DataSink for MarkdownSink {
+    async fn write(&mut self, target: &TargetHost) -> Result<()> {
+        let mut report = format!("\n## Target: {} (IP: {})\n", target.host, target.ip.as_deref().unwrap_or("Unknown"));
+        report.push_str("| ID | Severity | Category | Description |\n");
+        report.push_str("|----|----------|----------|-------------|\n");
+        
+        for f in &target.findings {
+            self.findings_count += 1;
+            report.push_str(&format!("| {} | **{:?}** | {:?} | {} |\n", f.id, f.severity, f.category, f.description));
+            
+            if let Some(ai) = &f.ai_analysis {
+                report.push_str(&format!("\n> ### AI Analysis (Model: {})\n", ai.model));
+                report.push_str(&format!("> **Summary:** {}\n", ai.summary));
+                report.push_str(&format!("> **Impact:** {}\n", ai.impact));
+                report.push_str(&format!("> **Remediation:** {}\n", ai.remediation));
+                if let Some(mitre) = &ai.mitre_attack {
+                    report.push_str(&format!("> **MITRE ATT&CK:** {}\n", mitre.join(", ")));
+                }
+            }
+        }
+        
+        self.file.write_all(report.as_bytes()).await?;
+        Ok(())
+    }
+
+    async fn write_metadata(&mut self, metadata: &ScanMetadata) -> Result<()> {
+        let header = format!("# OSINT ULTIMATE - Professional Pentest Report\n\n- **Date:** {}\n- **Command:** `{}`\n\n---\n", 
+            chrono::Local::now().format("%Y-%m-%d %H:%M:%S"),
+            metadata.command_line);
+        self.file.write_all(header.as_bytes()).await?;
+        Ok(())
+    }
+
+    async fn close(&mut self) -> Result<()> {
+        let footer = format!("\n---\n**Total Findings:** {}\n*Generated by OsintUltimate Sentinel Agent*", self.findings_count);
+        self.file.write_all(footer.as_bytes()).await?;
+        self.file.flush().await?;
         Ok(())
     }
 }

@@ -1,0 +1,124 @@
+use crate::plugins::{ScannerPlugin, Capability};
+use crate::models::{TargetHost, Finding, Severity, Category, PLUGIN_TSUNAMI, FINDING_TSUNAMI_VULN};
+use async_trait::async_trait;
+use anyhow::{Result, Context};
+use tracing::{info, warn};
+use std::process::Stdio;
+use tokio::process::Command;
+use serde::Deserialize;
+
+#[derive(Debug, Deserialize)]
+struct TsunamiReport {
+    #[serde(default)]
+    scan_findings: Vec<TsunamiFinding>,
+}
+
+#[derive(Debug, Deserialize)]
+struct TsunamiFinding {
+    #[serde(rename = "vulnerability")]
+    vulnerability: TsunamiVulnerability,
+}
+
+#[derive(Debug, Deserialize)]
+struct TsunamiVulnerability {
+    #[serde(rename = "title")]
+    title: String,
+    #[serde(rename = "description")]
+    description: String,
+    #[serde(rename = "severity")]
+    severity: String,
+}
+
+pub struct TsunamiScanner {
+    binary_path: String,
+}
+
+impl TsunamiScanner {
+    pub fn new() -> Self {
+        let path = which::which("tsunami").unwrap_or_else(|_| "tsunami".into());
+        Self {
+            binary_path: path.to_string_lossy().to_string(),
+        }
+    }
+}
+
+#[async_trait]
+impl ScannerPlugin for TsunamiScanner {
+    fn name(&self) -> &'static str {
+        PLUGIN_TSUNAMI
+    }
+
+    
+        fn metadata(&self) -> crate::plugins::PluginMetadata {
+        crate::plugins::PluginMetadata {
+            name: self.name(),
+            description: "Automated security analysis using this plugin.",
+            target_type: crate::plugins::TargetType::Host,
+            risk_level: crate::plugins::RiskLevel::Medium,
+            layer: crate::core::capability_layer::ScanLayer::Scanning,
+            expected_duration: std::time::Duration::from_secs(300),
+            capabilities: self.capabilities(),
+            cost: 5,
+            category: "Enumeration",
+            mitre_attacks: vec![],
+            remediation_difficulty: crate::plugins::RiskLevel::Medium,
+        }
+    }
+    fn capabilities(&self) -> Vec<Capability> {
+        vec![Capability::VulnerabilityScanning]
+    }
+
+    async fn check_dependencies(&self) -> Result<bool> {
+        Ok(which::which("tsunami").is_ok())
+    }
+
+
+    async fn scan(&self, target: &TargetHost) -> Result<Vec<Finding>> {
+        info!("TsunamiScanner: launching network scan against {}", target.host);
+
+        let temp_file = tempfile::NamedTempFile::new().context("Failed to create temp file for Tsunami")?;
+        let temp_path = temp_file.path().to_string_lossy().to_string();
+
+        let mut cmd = Command::new(&self.binary_path);
+        cmd.arg(format!("--ip-v4-target={}", target.host))
+           .arg("--scan-results-local-output-format=JSON")
+           .arg(format!("--scan-results-local-output-path={}", temp_path))
+           .stdin(Stdio::null())
+           .stdout(Stdio::null())
+           .stderr(Stdio::null());
+
+        let status = cmd.spawn()?.wait().await.context("Failed to wait for tsunami")?;
+
+        let mut findings = Vec::new();
+
+        if status.success() {
+            if let Ok(content) = tokio::fs::read_to_string(&temp_path).await {
+                if let Ok(report) = serde_json::from_str::<TsunamiReport>(&content) {
+                    for f in report.scan_findings {
+                        let severity = match f.vulnerability.severity.to_uppercase().as_str() {
+                            "CRITICAL" => Severity::Critical,
+                            "HIGH" => Severity::High,
+                            "MEDIUM" => Severity::Medium,
+                            _ => Severity::Low,
+                        };
+
+                        findings.push(Finding::new(
+                            FINDING_TSUNAMI_VULN,
+                            Category::Vulnerability,
+                            severity,
+                            &format!("Tsunami: {}", f.vulnerability.title),
+                            serde_json::json!({
+                                "description": f.vulnerability.description,
+                                "raw_severity": f.vulnerability.severity
+                            })
+                        ));
+                    }
+                }
+            }
+        } else {
+            warn!("Tsunami failed on {} with status {:?}", target.host, status.code());
+        }
+
+        Ok(findings)
+    }
+}

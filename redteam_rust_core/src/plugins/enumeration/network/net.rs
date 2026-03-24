@@ -1,4 +1,4 @@
-use crate::plugins::ScannerPlugin;
+use crate::plugins::{ScannerPlugin, Capability};
 use crate::models::{TargetHost, Finding, Severity, Category};
 use async_trait::async_trait;
 use anyhow::{Result, Context};
@@ -138,6 +138,30 @@ impl ScannerPlugin for NmapScanner {
     fn name(&self) -> &'static str {
         crate::models::PLUGIN_NMAP
     }
+
+        fn metadata(&self) -> crate::plugins::PluginMetadata {
+        crate::plugins::PluginMetadata {
+            name: self.name(),
+            description: "Port scanning, service detection, and OS fingerprinting using Nmap. Essential for initial network discovery.",
+            target_type: crate::plugins::TargetType::Network,
+            risk_level: crate::plugins::RiskLevel::Medium,
+            layer: crate::core::capability_layer::ScanLayer::Scanning,
+            expected_duration: std::time::Duration::from_secs(300),
+            capabilities: self.capabilities(),
+            cost: 5,
+            category: "Enumeration",
+            mitre_attacks: vec![],
+            remediation_difficulty: crate::plugins::RiskLevel::Medium,
+        }
+    }
+    fn capabilities(&self) -> Vec<Capability> {
+        vec![Capability::VulnerabilityScanning]
+    }
+
+    async fn check_dependencies(&self) -> Result<bool> {
+        Ok(which::which("nmap").is_ok())
+    }
+
 
     async fn scan(&self, target: &TargetHost) -> Result<Vec<Finding>> {
         info!("NmapScanner: launching scan against {}", target.host);

@@ -28,12 +28,27 @@ pub enum Category {
     NetworkPort,
     Recon,
     Availability,
+    SCA,
+    Compliance,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Evidence {
     #[serde(flatten)]
     pub data: serde_json::Value,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AIAnalysis {
+    pub summary: String,
+    pub impact: String,
+    pub stealth_notes: String,
+    pub risk_score: u8,
+    pub confidence: f32,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub mitre_attack: Option<Vec<String>>,
+    pub remediation: String,
+    pub model: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -45,6 +60,16 @@ pub struct Finding {
     pub evidence: Evidence,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub remediation: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub parent_id: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub ai_analysis: Option<AIAnalysis>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub mitre_attack: Option<Vec<String>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub cvss_score: Option<f32>,
+    #[serde(skip_serializing_if = "Vec::is_empty", default)]
+    pub references: Vec<String>,
 }
 
 impl Finding {
@@ -62,11 +87,41 @@ impl Finding {
             description: description.to_string(),
             evidence: Evidence { data: evidence },
             remediation: None,
+            parent_id: None,
+            ai_analysis: None,
+            mitre_attack: None,
+            cvss_score: None,
+            references: Vec::new(),
         }
     }
 
     pub fn with_remediation(mut self, remediation: &str) -> Self {
         self.remediation = Some(remediation.to_string());
+        self
+    }
+
+    pub fn with_parent(mut self, parent_id: &str) -> Self {
+        self.parent_id = Some(parent_id.to_string());
+        self
+    }
+
+    pub fn with_ai_analysis(mut self, analysis: AIAnalysis) -> Self {
+        self.ai_analysis = Some(analysis);
+        self
+    }
+
+    pub fn with_mitre_attack(mut self, tags: Vec<String>) -> Self {
+        self.mitre_attack = Some(tags);
+        self
+    }
+
+    pub fn with_cvss(mut self, score: f32) -> Self {
+        self.cvss_score = Some(score);
+        self
+    }
+
+    pub fn with_references(mut self, refs: Vec<String>) -> Self {
+        self.references = refs;
         self
     }
 }

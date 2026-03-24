@@ -1,4 +1,4 @@
-use crate::plugins::DiscoveryPlugin;
+use crate::plugins::{DiscoveryPlugin, Capability};
 use crate::models::TargetHost;
 use async_trait::async_trait;
 use anyhow::Result;
@@ -100,6 +100,30 @@ impl DiscoveryPlugin for OsintScanner {
     fn name(&self) -> &'static str {
         "OsintScanner"
     }
+
+        fn metadata(&self) -> crate::plugins::PluginMetadata {
+        crate::plugins::PluginMetadata {
+            name: self.name(),
+            description: "Passive subdomain discovery using crt.sh and Shodan APIs.",
+            target_type: crate::plugins::TargetType::Osint,
+            risk_level: crate::plugins::RiskLevel::Safe,
+            layer: crate::core::capability_layer::ScanLayer::Passive,
+            expected_duration: std::time::Duration::from_secs(300),
+            capabilities: self.capabilities(),
+            cost: 5,
+            category: "Reconnaissance",
+            mitre_attacks: vec![],
+            remediation_difficulty: crate::plugins::RiskLevel::Medium,
+        }
+    }
+    fn capabilities(&self) -> Vec<Capability> {
+        vec![Capability::VulnerabilityScanning]
+    }
+
+    async fn check_dependencies(&self) -> Result<bool> {
+        Ok(which::which("osint").is_ok())
+    }
+
 
     async fn discover(&self, target: &TargetHost) -> Result<Vec<String>> {
         info!("OsintScanner: enumerating subdomains for {}", target.host);

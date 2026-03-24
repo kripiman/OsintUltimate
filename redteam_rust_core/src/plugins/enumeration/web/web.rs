@@ -1,4 +1,4 @@
-use crate::plugins::ScannerPlugin;
+use crate::plugins::{ScannerPlugin, Capability};
 use crate::models::{TargetHost, Finding, Severity, Category};
 use async_trait::async_trait;
 use anyhow::{Result, Context};
@@ -184,6 +184,30 @@ impl ScannerPlugin for WebFuzzer {
     fn name(&self) -> &'static str {
         crate::models::PLUGIN_WEB
     }
+
+        fn metadata(&self) -> crate::plugins::PluginMetadata {
+        crate::plugins::PluginMetadata {
+            name: self.name(),
+            description: "Fast web fuzzing for sensitive files (.env, .git, etc.) with jitter and proxy support.",
+            target_type: crate::plugins::TargetType::Web,
+            risk_level: crate::plugins::RiskLevel::Medium,
+            layer: crate::core::capability_layer::ScanLayer::Scanning, // ← NUEVO
+            expected_duration: std::time::Duration::from_secs(300),
+            capabilities: self.capabilities(),
+            cost: 5,
+            category: "Enumeration",
+            mitre_attacks: vec![],
+            remediation_difficulty: crate::plugins::RiskLevel::Medium,
+        }
+    }
+    fn capabilities(&self) -> Vec<Capability> {
+        vec![Capability::VulnerabilityScanning]
+    }
+
+    async fn check_dependencies(&self) -> Result<bool> {
+        Ok(which::which("web").is_ok())
+    }
+
 
     async fn scan(&self, target: &TargetHost) -> Result<Vec<Finding>> {
         info!("WebFuzzer analysis started for {}", target.host);

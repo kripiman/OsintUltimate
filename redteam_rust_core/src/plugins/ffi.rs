@@ -62,6 +62,30 @@ impl crate::plugins::ScannerPlugin for FFIPluginWrapper {
         self.cached_name
     }
 
+    fn metadata(&self) -> crate::plugins::PluginMetadata {
+        crate::plugins::PluginMetadata {
+            name: self.name(),
+            description: "Dynamic plugin loaded via FFI.",
+            target_type: crate::plugins::TargetType::Host, // Default for FFI
+            risk_level: crate::plugins::RiskLevel::Medium,
+            layer: crate::core::capability_layer::ScanLayer::Scanning,
+            expected_duration: std::time::Duration::from_secs(300),
+            capabilities: self.capabilities(),
+            cost: 5,
+            category: "General",
+            mitre_attacks: vec![],
+            remediation_difficulty: crate::plugins::RiskLevel::Medium,
+        }
+    }
+    fn capabilities(&self) -> Vec<crate::plugins::Capability> {
+        vec![crate::plugins::Capability::VulnerabilityScanning]
+    }
+
+    async fn check_dependencies(&self) -> Result<bool> {
+        Ok(which::which("ffi").is_ok())
+    }
+
+
     async fn scan(&self, target: &TargetHost) -> Result<Vec<Finding>> {
         unsafe {
             let findings_ptr = (self.ffi.scan)(self.ffi.plugin_ptr, target);

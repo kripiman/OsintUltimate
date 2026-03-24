@@ -24,6 +24,18 @@ impl ScannerPlugin for LoadedPlugin {
         self.plugin.name()
     }
 
+    fn metadata(&self) -> crate::plugins::PluginMetadata {
+        self.plugin.metadata()
+    }
+
+    fn capabilities(&self) -> Vec<crate::plugins::Capability> {
+        self.plugin.capabilities()
+    }
+
+    async fn check_dependencies(&self) -> Result<bool> {
+        self.plugin.check_dependencies().await
+    }
+
     async fn scan(&self, target: &TargetHost) -> Result<Vec<Finding>> {
         self.plugin.scan(target).await
     }

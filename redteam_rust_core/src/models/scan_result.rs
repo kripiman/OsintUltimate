@@ -31,11 +31,25 @@ pub enum TargetStatus {
     Error,
 }
 
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+pub enum TargetType {
+    Network,
+    Web,
+    Cloud,
+    Host,
+    Osint,
+    Container,
+    ActiveDirectory,
+    Windows,
+    Linux,
+}
+
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct TargetHost {
     pub host: String,
     pub ip: Option<String>,
     pub status: TargetStatus,
+    pub target_type: TargetType,
     pub findings: Vec<Finding>,
 }
 

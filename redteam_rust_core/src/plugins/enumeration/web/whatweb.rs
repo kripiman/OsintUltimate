@@ -1,0 +1,110 @@
+use crate::plugins::{ScannerPlugin, Capability};
+use crate::models::{TargetHost, Finding, Severity, Category};
+use async_trait::async_trait;
+use anyhow::{Result, Context};
+use tracing::{info, error, warn};
+use std::process::Stdio;
+use tokio::process::Command;
+use serde::Deserialize;
+
+#[derive(Debug, Deserialize)]
+struct WhatWebResult {
+    target: String,
+    plugins: serde_json::Value,
+}
+
+pub struct WhatWebScanner {
+    binary_path: String,
+}
+
+impl WhatWebScanner {
+    pub fn new() -> Self {
+        let path = which::which("whatweb").unwrap_or_else(|_| "whatweb".into());
+        Self {
+            binary_path: path.to_string_lossy().to_string(),
+        }
+    }
+}
+
+#[async_trait]
+impl ScannerPlugin for WhatWebScanner {
+    fn name(&self) -> &'static str {
+        crate::models::PLUGIN_WHATWEB
+    }
+
+        fn metadata(&self) -> crate::plugins::PluginMetadata {
+        crate::plugins::PluginMetadata {
+            name: self.name(),
+            description: "Technology stack fingerprinter using WhatWeb.",
+            target_type: crate::plugins::TargetType::Web,
+            risk_level: crate::plugins::RiskLevel::Medium,
+            layer: crate::core::capability_layer::ScanLayer::Discovery,
+            expected_duration: std::time::Duration::from_secs(300),
+            capabilities: self.capabilities(),
+            cost: 5,
+            category: "Enumeration",
+            mitre_attacks: vec![],
+            remediation_difficulty: crate::plugins::RiskLevel::Medium,
+        }
+    }
+    fn capabilities(&self) -> Vec<Capability> {
+        vec![Capability::VulnerabilityScanning]
+    }
+
+    async fn check_dependencies(&self) -> Result<bool> {
+        Ok(which::which("whatweb").is_ok())
+    }
+
+
+    async fn scan(&self, target: &TargetHost) -> Result<Vec<Finding>> {
+        info!("WhatWebScanner: launching scan against {}", target.host);
+
+        let url = if target.host.starts_with("http") {
+            target.host.clone()
+        } else {
+            format!("http://{}", target.host)
+        };
+
+        // We use a temporary file because some versions of WhatWeb don't support --log-json=- 
+        let temp_file = tempfile::NamedTempFile::new().context("Failed to create temp file for WhatWeb")?;
+        let temp_path = temp_file.path().to_string_lossy().to_string();
+        
+        let mut child = Command::new(&self.binary_path)
+            .arg("--color=never")
+            .arg(format!("--log-json={}", temp_path))
+            .arg(&url)
+            .stdin(Stdio::null())
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .spawn()
+            .context("Failed to spawn whatweb")?;
+
+        let status = child.wait().await.context("Failed to wait for WhatWeb")?;
+
+        if !status.success() {
+            warn!("WhatWeb failed on {}", target.host);
+            return Ok(Vec::new());
+        }
+
+        let content = tokio::fs::read_to_string(&temp_path).await.context("Failed to read WhatWeb output")?;
+
+        let results: Vec<WhatWebResult> = serde_json::from_str(&content).unwrap_or_default();
+        
+        let mut findings = Vec::new();
+
+        for res in results {
+            findings.push(Finding::new(
+                crate::models::FINDING_TECH_STACK,
+                Category::TechnologyStack,
+                Severity::Info,
+                &format!("Technology stack discovered for {}", res.target),
+                serde_json::json!({
+                    "target": res.target,
+                    "plugins": res.plugins,
+                })
+            ));
+        }
+
+        Ok(findings)
+    }
+}

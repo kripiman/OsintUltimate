@@ -1,0 +1,16 @@
+pub mod web;
+pub mod ffuf;
+pub mod feroxbuster;
+pub mod arjun;
+pub mod katana;
+pub mod crlfuzz;
+pub mod gf;
+pub mod snallygaster;
+pub mod nikto;
+pub mod wpsec;
+pub mod gowitness;
+pub mod kiterunner;
+pub mod whatweb;
+pub mod gauplus;
+pub mod interactsh;
+pub mod tsunami;

@@ -2,36 +2,40 @@ use crate::models::{TargetHost, Finding, Severity, Category, TargetStatus, FINDI
 use crate::plugins::ScannerPlugin;
 use std::sync::Arc;
 use futures::stream::StreamExt;
-use tracing::{info, error};
+use tracing::{info, error, warn};
+use crate::core::capability_layer::ScanLayerPolicy;
+use crate::core::approval_gate::ApprovalGate;
 
 pub struct Orchestrator {
-    plugins: Vec<Box<dyn ScannerPlugin>>,
+    plugins: Arc<Vec<Box<dyn ScannerPlugin>>>,
     concurrency: usize,
+    policy: ScanLayerPolicy,
+    approval_gate: Arc<ApprovalGate>,
 }
 
 impl Orchestrator {
-    pub fn new(concurrency: usize) -> Self {
+    pub fn new(
+        plugins: Arc<Vec<Box<dyn ScannerPlugin>>>, 
+        concurrency: usize,
+        policy: ScanLayerPolicy,
+        approval_gate: Arc<ApprovalGate>,
+    ) -> Self {
         Self {
-            plugins: Vec::new(),
+            plugins,
             concurrency,
+            policy,
+            approval_gate,
         }
     }
 
-    pub fn register_plugin(&mut self, plugin: Box<dyn ScannerPlugin>) {
-        self.plugins.push(plugin);
-    }
-
-    // V5 FIX: Allow channel to drain rather than aborting abruptly on trace
-    // The previous implementation dropped mid-air targets by returning None immediately.
-    // Now, we will always listen on rx.recv() until it naturally returns None (meaning previous stage dropped sender).
     pub async fn run(
-        self, // Consumes self to fix plugins list (CRIT-004)
+        self,
         input_rx: tokio::sync::mpsc::Receiver<TargetHost>,
         output_tx: tokio::sync::mpsc::Sender<TargetHost>,
         shutdown_token: tokio_util::sync::CancellationToken, 
     ) {
         info!("Orchestrator started. Concurrency: {}", self.concurrency);
-        let plugins = Arc::new(self.plugins); // Share among concurrent target tasks
+        let plugins = self.plugins; 
 
         let output_tx_clone = output_tx.clone();
         let stream = futures::stream::unfold((input_rx, shutdown_token.clone(), output_tx_clone), |(mut rx, token, out_tx)| async move {
@@ -71,11 +75,48 @@ impl Orchestrator {
                 // CRIT-003 & HIGH-009 FIX: Parallel execution + Panic Isolation via tokio::spawn
                 let mut join_set = tokio::task::JoinSet::new();
                 for i in 0..plugins.len() {
+                    let p = &plugins[i];
+                    
+                // ARCH-EXT: Context-aware filtering
+                if p.metadata().target_type != target_ref.target_type {
+                    continue;
+                }
+
                     let plugins_clone = plugins.clone();
                     let target_clone = target_ref.clone();
+                    let policy = self.policy;
+                    let approval_gate = self.approval_gate.clone();
+
                     join_set.spawn(async move {
                         let p = &plugins_clone[i];
-                        (p.name(), p.scan(&target_clone).await)
+                        let meta = p.metadata();
+                        
+                        // ARCH-EXT: Context-aware filtering
+                        if meta.target_type != target_clone.target_type {
+                            return (p.name(), Ok(Vec::new()));
+                        }
+
+                        // NEW: ScanLayer Policy Enforcement
+                        if !policy.is_plugin_allowed(meta.layer) {
+                            return (p.name(), Ok(Vec::new()));
+                        }
+
+                        // NEW: Approval Gate Enforcement
+                        if policy.needs_approval(meta.layer) {
+                            // En una implementación real, esto podría ser interactivo.
+                            // Aquí simulamos la verificación de aprobación previa.
+                            if !approval_gate.is_approved(p.name()).await {
+                                warn!("Skipping {} - Requires approval and none found.", p.name());
+                                return (p.name(), Ok(Vec::new()));
+                            }
+                        }
+                        
+                        // ARCH-EXT: Auto-dependency check
+                        match p.check_dependencies().await {
+                            Ok(true) => (p.name(), p.scan(&target_clone).await),
+                            Ok(false) => (p.name(), Ok(Vec::new())), // Skip if deps missing
+                            Err(e) => (p.name(), Err(e)),
+                        }
                     });
                 }
 

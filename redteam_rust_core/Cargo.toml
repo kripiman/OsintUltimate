@@ -15,6 +15,7 @@ async-trait = "0.1"
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 chrono = { version = "0.4", features = ["serde"] }
+uuid = { version = "1.4", features = ["v4", "serde"] }
 url = "2.4"
 regex = "1.9"
 rand = "0.8"
@@ -53,6 +54,7 @@ libc = "0.2.182"
 async-stream = "0.3.6"
 dotenv = "0.15.0"
 libloading = "0.9.0"
+sqlx = { version = "0.7", features = ["runtime-tokio-rustls", "sqlite", "chrono", "macros", "json"] }
 
 [profile.release]
 opt-level = 3

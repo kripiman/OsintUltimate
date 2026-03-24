@@ -1,0 +1,94 @@
+use crate::plugins::{ScannerPlugin, Capability, PluginMetadata, RiskLevel};
+use crate::models::{TargetHost, Finding, Severity, Category, TargetType, PLUGIN_CRLF};
+use async_trait::async_trait;
+use anyhow::{Result, Context};
+use tracing::{info, warn};
+use std::process::Stdio;
+use tokio::process::Command;
+use std::io::{BufRead, BufReader};
+
+pub struct CRLFScanner {
+    binary_path: String,
+}
+
+impl CRLFScanner {
+    pub fn new() -> Self {
+        let path = which::which("crlfuzz").unwrap_or_else(|_| "crlfuzz".into());
+        Self {
+            binary_path: path.to_string_lossy().to_string(),
+        }
+    }
+}
+
+#[async_trait]
+impl ScannerPlugin for CRLFScanner {
+    fn name(&self) -> &'static str {
+        PLUGIN_CRLF
+    }
+
+    fn metadata(&self) -> PluginMetadata {
+        PluginMetadata {
+            name: self.name(),
+            description: "Fast tool for CRLF injection vulnerability scanning.",
+            target_type: TargetType::Web,
+            risk_level: RiskLevel::Low,
+            layer: crate::core::capability_layer::ScanLayer::Scanning,
+            expected_duration: std::time::Duration::from_secs(120),
+            capabilities: self.capabilities(),
+            cost: 3,
+            category: "Enumeration",
+            mitre_attacks: vec![],
+            remediation_difficulty: crate::plugins::RiskLevel::Medium,
+        }
+    }
+
+    fn capabilities(&self) -> Vec<Capability> {
+        vec![Capability::VulnerabilityScanning, Capability::WebFuzzing]
+    }
+
+    async fn check_dependencies(&self) -> Result<bool> {
+        Ok(which::which("crlfuzz").is_ok())
+    }
+
+    async fn scan(&self, target: &TargetHost) -> Result<Vec<Finding>> {
+        info!("CRLFScanner: launching scan against {}", target.host);
+
+        // CRLFuzz expects a URL.
+        let url = if target.host.starts_with("http") {
+            target.host.clone()
+        } else {
+            format!("http://{}", target.host)
+        };
+
+        let mut cmd = Command::new(&self.binary_path);
+        cmd.arg("-u").arg(&url)
+           .arg("-s") // silent
+           .stdin(Stdio::null())
+           .stdout(Stdio::piped())
+           .stderr(Stdio::null());
+
+        let output = cmd.output().await.context("Failed to execute crlfuzz")?;
+
+        let mut findings = Vec::new();
+
+        // CRLFuzz outputs vulnerable URLs to stdout if found.
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        for line in stdout.lines() {
+            if line.trim().is_empty() { continue; }
+            
+            findings.push(Finding::new(
+                crate::models::FINDING_CRLF_INJECTION,
+                Category::Vulnerability,
+                Severity::Medium,
+                &format!("Possible CRLF injection vulnerability found at {}", line),
+                serde_json::json!({
+                    "url": line,
+                    "type": "CRLF Injection",
+                    "payload": "Various (detected by crlfuzz)"
+                })
+            ).with_remediation("Sanitize user input and headers to prevent injection of carriage return and line feed characters."));
+        }
+
+        Ok(findings)
+    }
+}

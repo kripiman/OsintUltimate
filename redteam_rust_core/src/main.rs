@@ -3,10 +3,8 @@
 pub mod menu;
 
 use clap::Parser;
+use std::sync::Arc;
 use redteam_rust_core::models::{TargetHost, TargetStatus};
-use redteam_rust_core::plugins::net::NmapScanner;
-use redteam_rust_core::plugins::osint::OsintScanner;
-use redteam_rust_core::plugins::web::WebFuzzer;
 use redteam_rust_core::core::plugin_loader::DynamicPluginLoader;
 use redteam_rust_core::utils::LivenessChecker; 
 use tracing::{info, error, warn};
@@ -15,6 +13,8 @@ use regex::Regex;
 use anyhow::{Context, Result};
 use once_cell::sync::Lazy;
 use tokio_util::sync::CancellationToken;
+use redteam_rust_core::core::capability_layer::{ScanLayer, ScanLayerPolicy};
+use redteam_rust_core::core::approval_gate::ApprovalGate;
 
 #[derive(Parser, Debug, Clone)]
 #[command(author, version, about, long_about = None)]
@@ -26,6 +26,8 @@ pub struct Args {
     pub jsonl_output: String,
     #[arg(long, default_value = "scan_report.html")]
     pub html_output: String,
+    #[arg(long)]
+    pub sqlite_output: Option<String>,
     #[arg(short, long, default_value_t = 10)]
     pub concurrency: usize,
     #[arg(long)]
@@ -58,6 +60,12 @@ pub struct Args {
     pub ports: Option<String>,
     #[arg(long, default_value_t = false, help = "Activate professional vulnerability hunting profile (OS detection, version-intensity 9, NSE vuln/exploit/auth/default/discovery, 5000 top ports)")]
     pub vuln_scan: bool,
+    #[arg(long, default_value_t = false, help = "Activate Autonomous AI Agent (Sentinel)")]
+    pub autonomous: bool,
+    #[arg(long, default_value = "http://localhost:11434")]
+    pub ollama_url: String,
+    #[arg(long, default_value = "Scanning")]
+    pub max_layer: String,
 }
 
 static TARGET_RE: Lazy<Regex> = Lazy::new(|| {
@@ -160,30 +168,68 @@ async fn main() -> Result<()> {
     });
 
     // --- PIPELINE SETUP ---
-    let sink = Box::new(redteam_rust_core::core::JsonlSink::new(&args.jsonl_output).await?);
+    let sink: Box<dyn redteam_rust_core::core::DataSink> = if let Some(ref db_path) = args.sqlite_output {
+        info!("🗄️ Using SQLite persistence at {}", db_path);
+        Box::new(redteam_rust_core::core::SqliteSink::new(db_path).await?)
+    } else {
+        Box::new(redteam_rust_core::core::JsonlSink::new(&args.jsonl_output).await?)
+    };
 
     let mut builder = redteam_rust_core::core::Pipeline::builder()
         .concurrency(args.concurrency)
         .shutdown_token(shutdown_token)
         .liveness_checker(liveness_checker.clone())
         .command_line(command_line)
-        .with_sink(sink)
-        .with_discovery(Box::new(OsintScanner::new()))
-        .with_plugin(Box::new(WebFuzzer::new(
-            args.insecure, 
-            jitter.clone(),
-            proxy_manager.clone()
-        )))
-        .with_plugin(Box::new(NmapScanner::new(
-            args.scripts.clone(),
-            args.stealth,
-            args.service_detection,
-            args.scan_type.clone(),
-            args.fragment,
-            args.decoy.clone(),
-            args.ports.clone(),
-            args.vuln_scan,
-        )));
+        .with_sink(sink);
+
+    // Initialize Capability Layer Policy
+    let max_layer = match args.max_layer.to_lowercase().as_str() {
+        "passive" => ScanLayer::Passive,
+        "discovery" => ScanLayer::Discovery,
+        "scanning" => ScanLayer::Scanning,
+        "verification" => ScanLayer::Verification,
+        "exploitation" => ScanLayer::Exploitation,
+        "post-exploitation" | "post-exp" => ScanLayer::PostExploitation,
+        _ => {
+            warn!("Invalid --max-layer '{}', defaulting to Scanning", args.max_layer);
+            ScanLayer::Scanning
+        }
+    };
+
+    let policy = ScanLayerPolicy {
+        max_layer,
+        require_approval_for_layer_3_plus: true, 
+        require_approval_for_layer_4_plus: true,
+        require_approval_for_layer_5: true,
+    };
+    
+    let approval_gate = Arc::new(ApprovalGate::for_red_team());
+    
+    builder = builder.policy(policy).approval_gate(approval_gate);
+
+    for p in redteam_rust_core::plugins::get_all_discovery() {
+        builder = builder.with_discovery(p);
+    }
+
+    let config = redteam_rust_core::plugins::GlobalConfig {
+        insecure: args.insecure,
+        jitter: jitter.clone(),
+        proxy_manager: proxy_manager.clone(),
+        nmap_options: redteam_rust_core::plugins::NmapOptions {
+            scripts: args.scripts.clone(),
+            stealth: args.stealth,
+            service_detection: args.service_detection,
+            scan_type: args.scan_type.clone(),
+            fragment: args.fragment,
+            decoy: args.decoy.clone(),
+            ports: args.ports.clone(),
+            vuln_scan: args.vuln_scan,
+        },
+    };
+
+    for p in redteam_rust_core::plugins::get_all_scanners(config) {
+        builder = builder.with_plugin(p);
+    }
 
     // CRIT-001 FIX: Resolve memory leak by scope-limited loader (ends with main)
     let mut loader = DynamicPluginLoader::new();
@@ -196,16 +242,50 @@ async fn main() -> Result<()> {
     }
 
     let pipeline = builder.build()?;
+    let target_hosts: Vec<TargetHost> = valid_targets.into_iter().map(|t| {
+        let target_type = if t.contains("://") || t.contains('.') {
+            redteam_rust_core::models::TargetType::Web
+        } else if t.contains(':') && t.chars().filter(|&c| c == ':').count() > 1 {
+            redteam_rust_core::models::TargetType::Network // IPv6
+        } else if t.split('.').all(|s| s.parse::<u8>().is_ok()) && t.split('.').count() == 4 {
+            redteam_rust_core::models::TargetType::Network // IPv4
+        } else {
+            redteam_rust_core::models::TargetType::Host
+        };
 
-    let target_hosts = valid_targets.into_iter().map(|t| TargetHost {
-        host: t,
-        ip: None,
-        status: TargetStatus::Pending,
-        findings: Vec::new(),
+        TargetHost {
+            host: t,
+            ip: None,
+            status: TargetStatus::Pending,
+            target_type,
+            findings: Vec::new(),
+        }
     }).collect();
 
-    if let Err(e) = pipeline.run(target_hosts).await {
-        error!("Pipeline execution returned error: {}", e);
+    if args.autonomous {
+        info!("🤖 SENTINEL: Activating Autonomous Agent...");
+        let pipeline_arc = Arc::new(pipeline);
+        
+        // Initialize LLM Client (Ollama for now)
+        let llm = Arc::new(redteam_rust_core::core::agent::OllamaClient::new(
+            args.ollama_url.clone(),
+            "qwen2.5-coder:7b".to_string()
+        ));
+
+        let agent = redteam_rust_core::core::agent::AutonomousAgent::new(
+            llm,
+            pipeline_arc
+        );
+        for target in target_hosts {
+            if let Err(e) = agent.run_autopilot(target).await {
+                error!("Autonomous agent failed on target: {}", e);
+            }
+        }
+    } else {
+
+        if let Err(e) = pipeline.run(target_hosts).await {
+            error!("Pipeline execution returned error: {}", e);
+        }
     }
 
     
