@@ -1,5 +1,6 @@
 use crate::plugins::{ScannerPlugin, Capability};
 use crate::models::{TargetHost, Finding, Severity, Category};
+use crate::utils::tool_detection::detect_tool;
 use async_trait::async_trait;
 use anyhow::{Result, Context};
 use tracing::{info, error, warn};
@@ -18,7 +19,7 @@ pub struct ArjunScanner {
 
 impl ArjunScanner {
     pub fn new() -> Self {
-        let path = which::which("arjun").unwrap_or_else(|_| "arjun".into());
+        let path = detect_tool("arjun");
         Self {
             binary_path: path.to_string_lossy().to_string(),
         }
@@ -52,7 +53,7 @@ impl ScannerPlugin for ArjunScanner {
     }
 
     async fn check_dependencies(&self) -> Result<bool> {
-        Ok(which::which("arjun").is_ok())
+        Ok(crate::utils::check_tool_availability("arjun").await)
     }
 
 

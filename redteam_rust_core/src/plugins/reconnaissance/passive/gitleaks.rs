@@ -1,5 +1,6 @@
 use crate::plugins::{ScannerPlugin, Capability};
 use crate::models::{TargetHost, Finding, Severity, Category, PLUGIN_GITLEAKS, FINDING_GITLEAKS_SECRET};
+use crate::utils::tool_detection::detect_tool;
 use async_trait::async_trait;
 use anyhow::{Result, Context};
 use tracing::{info, warn};
@@ -27,7 +28,7 @@ pub struct GitleaksScanner {
 
 impl GitleaksScanner {
     pub fn new() -> Self {
-        let path = which::which("gitleaks").unwrap_or_else(|_| "gitleaks".into());
+        let path = detect_tool("gitleaks");
         Self {
             binary_path: path.to_string_lossy().to_string(),
         }
@@ -61,7 +62,7 @@ impl ScannerPlugin for GitleaksScanner {
     }
 
     async fn check_dependencies(&self) -> Result<bool> {
-        Ok(which::which("gitleaks").is_ok())
+        Ok(crate::utils::check_tool_availability("gitleaks").await)
     }
 
 

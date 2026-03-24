@@ -56,7 +56,22 @@ cat << 'EOF'
                                       ↓
 ┌──────────────────────────────────────────────────────────────────────────────┐
 │                      🔌 PLUGIN SYSTEM (80+ Plugins)                          │
+│                   ⚡ BlackArch System Tools Integration (NEW)                │
 ├──────────────────────────────────────────────────────────────────────────────┤
+│                                                                              │
+│  🎯 BLACKARCH COMPATIBILITY:                                                 │
+│  ├─ Auto-Detection: Detects pre-installed BlackArch tools via `which`       │
+│  ├─ System Priority: Uses system binaries for maximum efficiency            │
+│  ├─ Fallback Mode: Embedded binaries as automatic failover                  │
+│  ├─ Integrated Tools: 35+ tools across all plugin categories                │
+│  │  ├─ Web: ffuf, nuclei, sqlmap, arjun, dalfox, jwt_tool, wapiti          │
+│  │  ├─ Network: rustscan, hydra, netexec, coercer, responder               │
+│  │  ├─ Cloud: cloudfox, pacu, cloudenum, cloudbrute                        │
+│  │  ├─ Recon: dnsx, httpx, naabu, wayback, uncover                         │
+│  │  ├─ Intelligence: jaeles, searchsploit                                  │
+│  │  ├─ Compliance: kubescape, trivy                                        │
+│  │  └─ Advanced: bloodhound, ligolo, sliver, havoc, certipy               │
+│  └─ Version Compatibility: Auto-checks tool versions on startup             │
 │                                                                              │
 │  RECONNAISSANCE/ (12 plugins)          ENUMERATION/ (20 plugins)            │
 │  ├─ osint/                             ├─ web/                              │

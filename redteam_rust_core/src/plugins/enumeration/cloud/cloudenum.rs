@@ -1,34 +1,29 @@
 use crate::plugins::{ScannerPlugin, Capability};
 use crate::models::{TargetHost, Finding, Severity, Category};
+use crate::utils::tool_detection::detect_tool;
 use async_trait::async_trait;
 use anyhow::{Result, Context};
 use tracing::{info, warn};
 use std::process::Stdio;
 use tokio::process::Command;
-
 pub struct CloudEnumScanner {
     binary_path: String,
 }
-
 impl CloudEnumScanner {
     pub fn new() -> Self {
         let path = which::which("cloud_enum")
             .or_else(|_| which::which("cloudenum"))
             .unwrap_or_else(|_| "cloud_enum.py".into());
-            
         Self {
             binary_path: path.to_string_lossy().to_string(),
         }
     }
 }
-
 #[async_trait]
 impl ScannerPlugin for CloudEnumScanner {
     fn name(&self) -> &'static str {
         crate::models::PLUGIN_CLOUD_ENUM
     }
-
-    
         fn metadata(&self) -> crate::plugins::PluginMetadata {
         crate::plugins::PluginMetadata {
             name: self.name(),
@@ -47,15 +42,11 @@ impl ScannerPlugin for CloudEnumScanner {
     fn capabilities(&self) -> Vec<Capability> {
         vec![Capability::CloudAudit]
     }
-
     async fn check_dependencies(&self) -> Result<bool> {
-        Ok(which::which("cloudenum").is_ok())
+        Ok(crate::utils::check_tool_availability("cloudenum").await)
     }
-
-
     async fn scan(&self, target: &TargetHost) -> Result<Vec<Finding>> {
         info!("CloudEnumScanner: enumerating cloud assets for {}", target.host);
-
         // CloudEnum execution
         let child = Command::new(&self.binary_path)
             .arg("-k")
@@ -65,12 +56,9 @@ impl ScannerPlugin for CloudEnumScanner {
             .stderr(Stdio::null())
             .spawn()
             .context("Failed to spawn cloud_enum")?;
-
         let output = child.wait_with_output().await.context("Failed to wait for CloudEnum")?;
-
         let mut findings = Vec::new();
         let content = String::from_utf8_lossy(&output.stdout);
-        
         if content.contains("Found") || content.contains("http") {
             findings.push(Finding::new(
                 "CLOUD-ASSET-DISCOVERED",
@@ -80,7 +68,6 @@ impl ScannerPlugin for CloudEnumScanner {
                 serde_json::json!({ "output": content.trim() })
             ));
         }
-
         Ok(findings)
     }
 }

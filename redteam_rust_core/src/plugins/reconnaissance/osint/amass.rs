@@ -1,5 +1,6 @@
 use crate::plugins::{DiscoveryPlugin, Capability};
 use crate::models::TargetHost;
+use crate::utils::tool_detection::detect_tool;
 use async_trait::async_trait;
 use anyhow::{Result, Context};
 use tracing::{info, warn};
@@ -12,7 +13,7 @@ pub struct AmassScanner {
 
 impl AmassScanner {
     pub fn new() -> Self {
-        let path = which::which("amass").unwrap_or_else(|_| "amass".into());
+        let path = detect_tool("amass");
         Self {
             binary_path: path.to_string_lossy().to_string(),
         }
@@ -45,7 +46,7 @@ impl DiscoveryPlugin for AmassScanner {
     }
 
     async fn check_dependencies(&self) -> Result<bool> {
-        Ok(which::which("amass").is_ok())
+        Ok(crate::utils::check_tool_availability("amass").await)
     }
 
 

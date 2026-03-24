@@ -1,5 +1,6 @@
 use crate::plugins::{ScannerPlugin, Capability};
 use crate::models::{TargetHost, Finding, Severity, Category};
+use crate::utils::tool_detection::detect_tool;
 use async_trait::async_trait;
 use anyhow::{Result, Context};
 use tracing::{info, warn};
@@ -205,7 +206,7 @@ impl ScannerPlugin for WebFuzzer {
     }
 
     async fn check_dependencies(&self) -> Result<bool> {
-        Ok(which::which("web").is_ok())
+        Ok(crate::utils::check_tool_availability("web").await)
     }
 
 

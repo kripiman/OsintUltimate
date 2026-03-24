@@ -3,7 +3,7 @@ use anyhow::Result;
 use inquire::{Select, Text, Confirm};
 
 pub fn show_menu() -> Result<Option<Args>> {
-    println!("🛡️  Bienvenido a OsintUltimate v2 - Interactive Setup");
+    println!("🛡️  Bienvenido a OsintUltimate v3.0 - Interactive Setup");
     println!("====================================================\n");
     
     let target = Text::new("🎯 Introduce el objetivo (ej. example.com):")

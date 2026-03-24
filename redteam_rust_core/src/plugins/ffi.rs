@@ -1,4 +1,5 @@
 use std::os::raw::c_char;
+use crate::utils::tool_detection::detect_tool;
 use crate::models::{TargetHost, Finding};
 use anyhow::Result;
 
@@ -82,7 +83,7 @@ impl crate::plugins::ScannerPlugin for FFIPluginWrapper {
     }
 
     async fn check_dependencies(&self) -> Result<bool> {
-        Ok(which::which("ffi").is_ok())
+        Ok(crate::utils::check_tool_availability("ffi").await)
     }
 
 

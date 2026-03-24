@@ -1,5 +1,6 @@
 use crate::plugins::{ScannerPlugin, Capability, PluginMetadata, RiskLevel};
 use crate::models::{TargetHost, Finding, Severity, Category, TargetType};
+use crate::utils::tool_detection::detect_tool;
 use async_trait::async_trait;
 use anyhow::{Result, Context};
 use tracing::{info, warn};
@@ -46,7 +47,7 @@ pub struct OSVScanner {
 
 impl OSVScanner {
     pub fn new() -> Self {
-        let path = which::which("osv-scanner").unwrap_or_else(|_| "osv-scanner".into());
+        let path = detect_tool("osv-scanner");
         Self {
             binary_path: path.to_string_lossy().to_string(),
         }
@@ -80,7 +81,7 @@ impl ScannerPlugin for OSVScanner {
     }
 
     async fn check_dependencies(&self) -> Result<bool> {
-        Ok(which::which("osv-scanner").is_ok())
+        Ok(crate::utils::check_tool_availability("osv-scanner").await)
     }
 
     async fn scan(&self, target: &TargetHost) -> Result<Vec<Finding>> {

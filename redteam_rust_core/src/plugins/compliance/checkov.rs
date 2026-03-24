@@ -1,5 +1,6 @@
 use crate::plugins::{ScannerPlugin, Capability};
 use crate::models::{TargetHost, Finding, Severity, Category, PLUGIN_CHECKOV, FINDING_CHECKOV_MISCONFIG};
+use crate::utils::tool_detection::detect_tool;
 use async_trait::async_trait;
 use anyhow::{Result, Context};
 use tracing::{info, warn};
@@ -31,7 +32,7 @@ pub struct CheckovScanner {
 
 impl CheckovScanner {
     pub fn new() -> Self {
-        let path = which::which("checkov").unwrap_or_else(|_| "checkov".into());
+        let path = detect_tool("checkov");
         Self {
             binary_path: path.to_string_lossy().to_string(),
         }
@@ -65,7 +66,7 @@ impl ScannerPlugin for CheckovScanner {
     }
 
     async fn check_dependencies(&self) -> Result<bool> {
-        Ok(which::which("checkov").is_ok())
+        Ok(crate::utils::check_tool_availability("checkov").await)
     }
 
 

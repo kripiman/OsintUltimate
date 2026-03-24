@@ -1,33 +1,28 @@
 use crate::plugins::{ScannerPlugin, Capability};
 use crate::models::{TargetHost, Finding, Severity, Category};
+use crate::utils::tool_detection::detect_tool;
 use async_trait::async_trait;
 use anyhow::{Result, Context};
 use tracing::{info, warn};
 use std::process::Stdio;
 use tokio::process::Command;
-
 pub struct CloudBruteScanner {
     binary_path: String,
 }
-
 impl CloudBruteScanner {
     pub fn new() -> Self {
         let path = which::which("cloudbrute")
             .unwrap_or_else(|_| "cloudbrute".into());
-            
         Self {
             binary_path: path.to_string_lossy().to_string(),
         }
     }
 }
-
 #[async_trait]
 impl ScannerPlugin for CloudBruteScanner {
     fn name(&self) -> &'static str {
         "cloudbrute"
     }
-
-    
         fn metadata(&self) -> crate::plugins::PluginMetadata {
         crate::plugins::PluginMetadata {
             name: self.name(),
@@ -46,20 +41,15 @@ impl ScannerPlugin for CloudBruteScanner {
     fn capabilities(&self) -> Vec<Capability> {
         vec![Capability::VulnerabilityScanning]
     }
-
     async fn check_dependencies(&self) -> Result<bool> {
-        Ok(which::which("cloudbrute").is_ok())
+        Ok(crate::utils::check_tool_availability("cloudbrute").await)
     }
-
-
     async fn scan(&self, target: &TargetHost) -> Result<Vec<Finding>> {
         info!("CloudBruteScanner: scanning for cloud assets for {}", target.host);
-
         // cloudbrute execution
         // -d: domain
         // -k: keyword (usually domain without TLD)
         let keyword = target.host.split('.').next().unwrap_or(&target.host);
-
         let mut child = Command::new(&self.binary_path)
             .arg("-d")
             .arg(&target.host)
@@ -71,12 +61,9 @@ impl ScannerPlugin for CloudBruteScanner {
             .stderr(Stdio::null())
             .spawn()
             .context("Failed to spawn cloudbrute")?;
-
         let output = child.wait_with_output().await.context("Failed to wait for cloudbrute")?;
-
         let mut findings = Vec::new();
         let content = String::from_utf8_lossy(&output.stdout);
-        
         for line in content.lines() {
             if line.is_empty() { continue; }
             findings.push(Finding::new(
@@ -87,7 +74,6 @@ impl ScannerPlugin for CloudBruteScanner {
                 serde_json::json!({ "asset": line.trim() })
             ).with_remediation("Investigate the discovered cloud asset for sensitive content or misconfigurations."));
         }
-
         Ok(findings)
     }
 }

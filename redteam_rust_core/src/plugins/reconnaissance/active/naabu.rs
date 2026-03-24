@@ -1,33 +1,28 @@
 use crate::plugins::{ScannerPlugin, Capability};
 use crate::models::{TargetHost, Finding, Severity, Category};
+use crate::utils::tool_detection::detect_tool;
 use async_trait::async_trait;
 use anyhow::{Result, Context};
 use tracing::{info, warn};
 use std::process::Stdio;
 use tokio::process::Command;
-
 pub struct NaabuScanner {
     binary_path: String,
 }
-
 impl NaabuScanner {
     pub fn new() -> Self {
         let path = which::which("naabu")
             .unwrap_or_else(|_| "naabu".into());
-            
         Self {
             binary_path: path.to_string_lossy().to_string(),
         }
     }
 }
-
 #[async_trait]
 impl ScannerPlugin for NaabuScanner {
     fn name(&self) -> &'static str {
         crate::models::PLUGIN_NAABU
     }
-
-    
         fn metadata(&self) -> crate::plugins::PluginMetadata {
         crate::plugins::PluginMetadata {
             name: self.name(),
@@ -46,15 +41,11 @@ impl ScannerPlugin for NaabuScanner {
     fn capabilities(&self) -> Vec<Capability> {
         vec![Capability::VulnerabilityScanning]
     }
-
     async fn check_dependencies(&self) -> Result<bool> {
-        Ok(which::which("naabu").is_ok())
+        Ok(crate::utils::check_tool_availability("naabu").await)
     }
-
-
     async fn scan(&self, target: &TargetHost) -> Result<Vec<Finding>> {
         info!("NaabuScanner: high-speed port scanning for {}", target.host);
-
         // naabu execution
         let child = Command::new(&self.binary_path)
             .arg("-host")
@@ -66,12 +57,9 @@ impl ScannerPlugin for NaabuScanner {
             .stderr(Stdio::null())
             .spawn()
             .context("Failed to spawn naabu")?;
-
         let output = child.wait_with_output().await.context("Failed to wait for naabu")?;
-
         let mut findings = Vec::new();
         let content = String::from_utf8_lossy(&output.stdout);
-        
         if !content.is_empty() {
             findings.push(Finding::new(
                 "NAABU-PORT-DISCOVERY",
@@ -81,7 +69,6 @@ impl ScannerPlugin for NaabuScanner {
                 serde_json::json!({ "output": content.trim() })
             ));
         }
-
         Ok(findings)
     }
 }

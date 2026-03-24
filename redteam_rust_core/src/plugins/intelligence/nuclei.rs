@@ -1,5 +1,6 @@
 use crate::plugins::{ScannerPlugin, Capability};
 use crate::models::{TargetHost, Finding, Severity, Category};
+use crate::utils::tool_detection::detect_tool;
 use async_trait::async_trait;
 use anyhow::{Result, Context};
 use tracing::{info, error, warn};
@@ -29,9 +30,9 @@ pub struct NucleiScanner {
 
 impl NucleiScanner {
     pub fn new() -> Self {
-        let path = which::which("nuclei").unwrap_or_else(|_| "nuclei".into());
+        let path = detect_tool("nuclei");
         Self {
-            binary_path: path.to_string_lossy().to_string(),
+            binary_path: path,
         }
     }
 }
@@ -62,7 +63,7 @@ impl ScannerPlugin for NucleiScanner {
     }
 
     async fn check_dependencies(&self) -> Result<bool> {
-        Ok(which::which("nuclei").is_ok())
+        Ok(crate::utils::check_tool_availability("nuclei").await)
     }
 
 

@@ -10,7 +10,7 @@
 
 Transform OsintUltimate from a capable OSINT/pentest tool into an **enterprise-grade Red Team platform** that surpasses Burp Suite Pro, OWASP ZAP, and Metasploit in:
 
-- ✅ **Functionality**: 80+ integrated tools (vs Burp ~30)
+- ✅ **Functionality**: 60+ integrated tools (vs Burp ~30)
 - ✅ **Performance**: 5x faster (Async Rust)
 - ✅ **Cost**: 94% reduction ($18,997 → $1,000/year for 3 users)
 - ✅ **Compliance**: Built-in audit trails + approval gates
@@ -32,7 +32,7 @@ Risk-based approval workflow for high-impact actions
 - **Implementation**: 🟢 DONE (see: `src/core/approval_gate.rs`)
 
 ### 3. **Plugin Reorganization** (Clarity)
-From 54 monolithic plugins → 80+ categorized by technique
+From 54 monolithic plugins → 60+ categorized by technique
 ```
 reconnaissance/  → OSINT, passive recon, active discovery
 enumeration/     → Web, network, cloud enumeration

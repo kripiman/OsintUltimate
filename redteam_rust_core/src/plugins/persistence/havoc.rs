@@ -1,33 +1,28 @@
 use crate::plugins::{ScannerPlugin, Capability};
 use crate::models::{TargetHost, Finding, Severity, Category};
+use crate::utils::tool_detection::detect_tool;
 use async_trait::async_trait;
 use anyhow::{Result, Context};
 use tracing::{info, warn};
 use std::process::Stdio;
 use tokio::process::Command;
-
 pub struct HavocScanner {
     binary_path: String,
 }
-
 impl HavocScanner {
     pub fn new() -> Self {
         let path = which::which("havoc")
             .unwrap_or_else(|_| "havoc".into());
-            
         Self {
             binary_path: path.to_string_lossy().to_string(),
         }
     }
 }
-
 #[async_trait]
 impl ScannerPlugin for HavocScanner {
     fn name(&self) -> &'static str {
         crate::models::PLUGIN_HAVOC
     }
-
-    
         fn metadata(&self) -> crate::plugins::PluginMetadata {
         crate::plugins::PluginMetadata {
             name: self.name(),
@@ -46,15 +41,11 @@ impl ScannerPlugin for HavocScanner {
     fn capabilities(&self) -> Vec<Capability> {
         vec![Capability::VulnerabilityScanning]
     }
-
     async fn check_dependencies(&self) -> Result<bool> {
-        Ok(which::which("havoc").is_ok())
+        Ok(crate::utils::check_tool_availability("havoc").await)
     }
-
-
     async fn scan(&self, target: &TargetHost) -> Result<Vec<Finding>> {
         info!("HavocScanner: checking target for C2 compatibility: {}", target.host);
-
         // Havoc usually involves generating a demon and deploying it.
         // For the scanner, we might check if the target is a known teamserver or if we can generate a payload.
         // Here we implement a generic check/execution wrapper.
@@ -67,12 +58,9 @@ impl ScannerPlugin for HavocScanner {
             .stderr(Stdio::null())
             .spawn()
             .context("Failed to spawn havoc")?;
-
         let output = child.wait_with_output().await.context("Failed to wait for havoc")?;
-
         let mut findings = Vec::new();
         let content = String::from_utf8_lossy(&output.stdout);
-        
         if content.contains("Connected") || content.contains("Success") {
             findings.push(Finding::new(
                 "HAVOC-C2-SUCCESS",
@@ -82,7 +70,6 @@ impl ScannerPlugin for HavocScanner {
                 serde_json::json!({ "output": content.trim() })
             ));
         }
-
         Ok(findings)
     }
 }
