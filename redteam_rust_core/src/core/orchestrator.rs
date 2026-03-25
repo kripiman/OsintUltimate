@@ -11,6 +11,7 @@ pub struct Orchestrator {
     concurrency: usize,
     policy: ScanLayerPolicy,
     approval_gate: Arc<ApprovalGate>,
+    blackarch_bridge: Arc<crate::core::blackarch::BlackArchBridge>, // NUEVO
 }
 
 impl Orchestrator {
@@ -19,12 +20,14 @@ impl Orchestrator {
         concurrency: usize,
         policy: ScanLayerPolicy,
         approval_gate: Arc<ApprovalGate>,
+        blackarch_bridge: Arc<crate::core::blackarch::BlackArchBridge>,
     ) -> Self {
         Self {
             plugins,
             concurrency,
             policy,
             approval_gate,
+            blackarch_bridge,
         }
     }
 
@@ -35,7 +38,12 @@ impl Orchestrator {
         shutdown_token: tokio_util::sync::CancellationToken, 
     ) {
         info!("Orchestrator started. Concurrency: {}", self.concurrency);
-        let plugins = self.plugins; 
+        
+        let available_ba_tools: Vec<String> = self.blackarch_bridge.get_available_tools()
+            .iter().map(|t| t.name.clone()).collect();
+        info!("BlackArch Intelligence: {} tools available ({}).", available_ba_tools.len(), available_ba_tools.join(", "));
+        
+        let plugins = self.plugins;
 
         let output_tx_clone = output_tx.clone();
         let stream = futures::stream::unfold((input_rx, shutdown_token.clone(), output_tx_clone), |(mut rx, token, out_tx)| async move {
@@ -64,8 +72,15 @@ impl Orchestrator {
         tokio::pin!(stream);
 
         // Process concurrently up to `concurrency` limit
-        let mut processed_stream = stream.map(|mut target| {
+        let policy = self.policy;
+        let approval_gate = self.approval_gate.clone();
+        let blackarch_bridge = self.blackarch_bridge.clone();
+
+        let mut processed_stream = stream.map(move |mut target| {
             let plugins = plugins.clone();
+            let policy = policy;
+            let approval_gate = approval_gate.clone();
+            let blackarch_bridge = blackarch_bridge.clone();
             async move {
                 target.status = TargetStatus::Scanning;
                 
@@ -84,8 +99,7 @@ impl Orchestrator {
 
                     let plugins_clone = plugins.clone();
                     let target_clone = target_ref.clone();
-                    let policy = self.policy;
-                    let approval_gate = self.approval_gate.clone();
+                    let approval_gate = approval_gate.clone();
 
                     join_set.spawn(async move {
                         let p = &plugins_clone[i];
@@ -163,6 +177,32 @@ impl Orchestrator {
                 let mut target = Arc::try_unwrap(target_ref)
                     .expect("QA-005: All JoinSet tasks completed, Arc must have refcount 1");
                 target.findings.append(&mut all_findings);
+                // --- NEW: BlackArch Dynamic Tool Suggestion ---
+                let mut suggestions = Vec::new();
+                for finding in &target.findings {
+                    if finding.severity == Severity::High || finding.severity == Severity::Critical {
+                        // Mapear categorías de hallazgos a capacidades
+                        let capability = match finding.category {
+                            Category::Vulnerability => Some(crate::plugins::Capability::VulnerabilityScanning),
+                            Category::NetworkPort => Some(crate::plugins::Capability::ServiceDiscovery),
+                            _ => None,
+                        };
+
+                        if let Some(cap) = capability {
+                            let suggested = blackarch_bridge.suggest_tools_for_capability(cap);
+                            for tool in suggested {
+                                if !suggestions.contains(&tool.name) {
+                                    suggestions.push(tool.name.clone());
+                                }
+                            }
+                        }
+                    }
+                }
+
+                if !suggestions.is_empty() {
+                    target.tool_suggestions.extend(suggestions);
+                }
+
                 if plugin_error {
                     target.status = TargetStatus::Error;
                 }

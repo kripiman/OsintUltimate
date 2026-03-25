@@ -5,6 +5,8 @@ pub mod sink;
 pub mod plugin_loader;
 pub mod capability_layer;
 pub mod approval_gate;
+pub mod blackarch;
+pub mod ai_cascade;
 
 pub use orchestrator::Orchestrator;
 pub use pipeline::{Pipeline, PipelineBuilder};

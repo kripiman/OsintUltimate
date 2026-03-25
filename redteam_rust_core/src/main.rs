@@ -15,6 +15,8 @@ use once_cell::sync::Lazy;
 use tokio_util::sync::CancellationToken;
 use redteam_rust_core::core::capability_layer::{ScanLayer, ScanLayerPolicy};
 use redteam_rust_core::core::approval_gate::ApprovalGate;
+use redteam_rust_core::core::ai_cascade::{TieredAIRouter, RouteLevel};
+use redteam_rust_core::core::agent::{OllamaClient, GeminiClient};
 
 #[derive(Parser, Debug, Clone)]
 #[command(author, version, about, long_about = None)]
@@ -205,7 +207,7 @@ async fn main() -> Result<()> {
     
     let approval_gate = Arc::new(ApprovalGate::for_red_team());
     
-    builder = builder.policy(policy).approval_gate(approval_gate);
+    builder = builder.policy(policy).approval_gate(approval_gate.clone());
 
     for p in redteam_rust_core::plugins::get_all_discovery() {
         builder = builder.with_discovery(p);
@@ -259,22 +261,39 @@ async fn main() -> Result<()> {
             status: TargetStatus::Pending,
             target_type,
             findings: Vec::new(),
+            tool_suggestions: Vec::new(),
+            extra_data: serde_json::json!({}),
         }
     }).collect();
 
     if args.autonomous {
-        info!("🤖 SENTINEL: Activating Autonomous Agent...");
+        info!("🤖 SENTINEL: Activating Autonomous Agent with Native AI Cascade...");
         let pipeline_arc = Arc::new(pipeline);
         
-        // Initialize LLM Client (Ollama for now)
-        let llm = Arc::new(redteam_rust_core::core::agent::OllamaClient::new(
+        // Initialize Tiered AI Router (Native Cascade)
+        let mut router = TieredAIRouter::new();
+        
+        // Tier 0: Local (Ollama)
+        router.add_client(RouteLevel::Local, Arc::new(OllamaClient::new(
             args.ollama_url.clone(),
             "qwen2.5-coder:7b".to_string()
-        ));
+        )));
+
+        // Tier 2: Premium (Gemini) - Requires GEMINI_API_KEY in .env
+        if let Ok(key) = std::env::var("GEMINI_API_KEY") {
+            info!("  - Premium Tier enabled (Gemini 1.5 Pro)");
+            router.add_client(RouteLevel::Premium, Arc::new(GeminiClient::new(
+                key, 
+                "gemini-1.5-pro".to_string()
+            )));
+        } else {
+            warn!("  - Premium Tier DISABLED (GEMINI_API_KEY not found). All tasks will default to Local tier.");
+        }
 
         let agent = redteam_rust_core::core::agent::AutonomousAgent::new(
-            llm,
-            pipeline_arc
+            Arc::new(router),
+            pipeline_arc,
+            approval_gate
         );
         for target in target_hosts {
             if let Err(e) = agent.run_autopilot(target).await {
