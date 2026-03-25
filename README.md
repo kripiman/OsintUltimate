@@ -1,15 +1,18 @@
-# 🛡️ OsintUltimate (RedTeam Rust Core v2.1)
+# 🛡️ OsintUltimate (RedTeam Rust Core v3.0)
 
 > **Motor de Evaluación de Red Team de Alto Rendimiento y Asíncrono**
 > 
 > *Precisión Binaria. Seguridad Atómica. Concurrencia Masiva.*
-> *Ahora con Escaneo Inteligente en 2 Fases: Descubrimiento + Expansión de Superficie de Ataque*
+> *Ahora con Capas de Capacidad, Puertas de Aprobación y Flujo de Trabajo Inteligente en 2 Fases: Descubrimiento + Expansión de Superficie de Ataque*
 
 ## 🚀 Vista General
 
 **OsintUltimate** ha sido re-arquitecturado desde cero en **Rust** para proporcionar una plataforma de evaluación de seguridad de grado empresarial. Reemplaza los scripts legados de Python con un único binario compilado estáticamente capaz de manejar miles de objetivos concurrentes con cero problemas de seguridad de memoria.
 
-**Nuevo en v2.1**: Un flujo de trabajo de **Escaneo en Dos Fases** meticuloso que descubre subdominios automáticamente y los alimenta sin problemas en la fase de escaneo activo.
+**Nuevo en v3.0**: 
+- **Capas de Capacidad (Capability Layers)**: Control granular sobre la profundidad de escaneo (Descubrimiento, Escaneo, Explotación, Post-Explotación).
+- **Puertas de Aprobación (Approval Gates)**: Sistema de control de riesgos con umbrales configurables y auditoría completa.
+- **Flujo de Trabajo en Dos Fases**: Descubrimiento automático de subdominios que se alimenta sin problemas en la fase de escaneo activo.
 
 ### 🔥 Características Principales
 
@@ -30,6 +33,15 @@
 *   **🔒 Seguridad de Memoria y ABI**:
     -   **Validación de ABI**: Los plugins dinámicos se verifican por versión para evitar corrupción de memoria.
     -   **Optimización de Memoria**: Uso de `Arc` para compartir objetivos entre hilos, minimizando allocations en el heap.
+*   **🛡️ Capas de Capacidad**: Control de profundidad de escaneo con políticas configurables (Passive, Discovery, Scanning, Exploitation, Post-Exploitation).
+*   **🚪 Puertas de Aprobación**: Sistema de gestión de riesgos con umbrales de aprobación, auditoría y roles de usuario.
+
+### 🆕 Nuevas Características en v3.0
+
+*   **Capas de Capacidad (Capability Layers)**: Define límites estrictos en la profundidad de los escaneos para evitar daños accidentales o legales.
+*   **Puertas de Aprobación (Approval Gates)**: Requiere aprobación explícita para operaciones de alto riesgo, con registro completo de auditoría.
+*   **Roles de Usuario**: Soporte para diferentes niveles de acceso (Analyst, Red Team Basic, Red Team Full, Administrator).
+*   **Modo Interactivo Mejorado**: Menú TUI con configuración guiada y validaciones de seguridad.
 
 ---
 
@@ -73,17 +85,109 @@ El cerebro de la operación. Gestiona la concurrencia a través de `Semaphores` 
 *   **Compresión de Contexto**: Minimiza el consumo de tokens mediante la optimización de registros de evidencia antes del análisis.
 *   **Autonomía**: Decide las próximas acciones tácticas sin intervención manual.
 
-### 3. **OsintScanner** (Fase de Descubrimiento)
+### 3. **Capas de Capacidad** (`CapabilityLayer`)
+Define políticas de escaneo con capas progresivas: Passive (solo OSINT), Discovery (enumeración), Scanning (análisis activo), Exploitation (explotación), Post-Exploitation (movimiento lateral/persistencia).
+
+### 4. **Puertas de Aprobación** (`ApprovalGate`)
+Sistema de control de riesgos que requiere aprobación para capas avanzadas. Registra todas las acciones con usuario, timestamp y justificación.
+
+### 5. **OsintScanner** (Fase de Descubrimiento)
 *   **Descubrimiento de Subdominios**: Consulta logs de Transparencia de Certificados (`crt.sh`) para encontrar activos ocultos.
 *   **Verificación Activa**: Utiliza `hickory-resolver` (DNS asíncrono nativo) para validar subdominios en milisegundos.
 
-### 4. **WebFuzzer** (Fase de Escaneo)
-*   **Coincidencia de Firmas**: Detecta exposiciones de archivos sensibles (`.env`, `.git/config`).
-*   **Resiliencia**: Implementa reintentos con **Exponencial Backoff**.
+### 6. **WebFuzzer** (Fase de Escaneo)
+*   **Coincidencia de Firmas**: Detecta exposiciones de archivos sensibles (`.env`, `.git/config`, `wp-config.php.bak`).
+*   **Resiliencia**: Implementa reintentos con **Exponencial Backoff** para manejar redes inestables.
+*   **Controles de Salud**: Valida proactivamente los proxies antes de su uso.
 
-### 5. **NmapScanner** (Fase de Escaneo)
+### 7. **NmapScanner** (Fase de Escaneo)
 *   **Parseo Robusto**: Utiliza `quick-xml` para parsear la salida de Nmap de forma segura.
 *   **Soporte de Scripting**: Soporta scripts estándar de Nmap (NSE).
+
+### 8. **Plugins Disponibles**
+
+OsintUltimate incluye más de 60 herramientas integradas, organizadas por categorías:
+
+#### **Reconocimiento (Discovery)**
+- **OsintScanner**: Descubrimiento de subdominios via crt.sh y DNS.
+- **SubfinderScanner**: Enumeración de subdominios.
+- **AmassScanner**: Herramienta avanzada de enumeración OSINT.
+- **UncoverScanner**: Descubrimiento de activos expuestos.
+
+#### **Enumeración Web**
+- **WebFuzzer**: Fuzzing de directorios y archivos sensibles.
+- **FfufScanner**: Fuzzing rápido de contenido web.
+- **FeroxbusterScanner**: Escaneo de directorios agresivo.
+- **ArjunScanner**: Descubrimiento de parámetros HTTP.
+- **KatanaScanner**: Crawling web con JavaScript.
+- **NiktoScanner**: Escaneo de vulnerabilidades web.
+- **WPScanner**: Auditoría de WordPress.
+- **SnallygasterScanner**: Descubrimiento de archivos sensibles.
+- **KiterunnerScanner**: Escaneo de APIs.
+- **TsunamiScanner**: Escaneo de vulnerabilidades web.
+- **GoWitnessScanner**: Captura de screenshots.
+- **InteractshScanner**: Interacción con servidores OOB.
+- **CRLFScanner**: Detección de inyección CRLF.
+- **GfScanner**: Patrón matching avanzado.
+- **GauPlusScanner**: Recolección de URLs históricas.
+
+#### **Enumeración de Red**
+- **NmapScanner**: Escaneo de puertos y servicios.
+- **RustScanScanner**: Escaneo ultra-rápido de puertos.
+- **NaabuScanner**: Escaneo de puertos pasivo.
+- **HttpxScanner**: Identificación de servicios web.
+- **DnsxScanner**: Resolución DNS masiva.
+
+#### **Enumeración Cloud**
+- **PacuScanner**: Herramienta de pentesting AWS.
+- **CloudEnumScanner**: Enumeración de recursos cloud.
+- **CloudFoxScanner**: Análisis de permisos AWS.
+- **CloudBruteScanner**: Fuerza bruta de nombres cloud.
+- **ProwlerScanner**: Auditoría de seguridad cloud.
+- **KubeBenchScanner**: Benchmarking de Kubernetes.
+
+#### **Explotación Web**
+- **SqlMapScanner**: Explotación de SQL injection.
+- **DalfoxScanner**: XSS testing avanzado.
+- **WapitiScanner**: Escaneo de vulnerabilidades web.
+- **CommixScanner**: Command injection testing.
+- **JwtToolScanner**: Manipulación de JWT.
+- **GraphQLCopScanner**: Auditoría de GraphQL.
+
+#### **Explotación de Red**
+- **HydraScanner**: Fuerza bruta de autenticación.
+- **NetExecScanner**: Ejecución remota en redes Windows.
+- **ImpacketScanner**: Herramientas de protocolo Windows.
+- **ResponderScanner**: Poisoning LLMNR/NBT-NS.
+- **PetitPotamScanner**: Coerción NTLM.
+- **CoercerScanner**: Coerción de autenticación.
+
+#### **Movimiento Lateral**
+- **BloodHoundScanner**: Análisis de Active Directory.
+- **SliverScanner**: Framework C2.
+- **LigoloScanner**: Tunneling de red.
+
+#### **Escalada de Privilegios**
+- **CertipyScanner**: Explotación de certificados AD.
+- **PrivescHunterScanner**: Caza de vulnerabilidades de privesc.
+
+#### **Persistencia**
+- **HavocScanner**: Framework C2 avanzado.
+
+#### **Inteligencia y Vulnerabilidades**
+- **NucleiScanner**: Escaneo con templates.
+- **JaelesScanner**: Fuzzing de APIs.
+- **SearchsploitScanner**: Búsqueda en Exploit-DB.
+
+#### **Verificación**
+- **ZapScanner**: OWASP ZAP integration.
+- **BurpScanner**: Burp Suite integration.
+
+#### **Cumplimiento y SCA**
+- **CheckovScanner**: Análisis de configuración IaC.
+- **KubescapeScanner**: Seguridad de Kubernetes.
+- **TrivyScanner**: Escaneo de vulnerabilidades en contenedores.
+- **OSVScanner**: Base de datos de vulnerabilidades.
 
 ---
 
@@ -160,17 +264,19 @@ El motor genera dos artefactos por ejecución:
 
 ```mermaid
 graph TD
-    A[Entrada CLI] --> B(Orchestrator - Fase 1)
-    B --> C[OsintScanner]
-    C -- Subdominios Descubiertos --> D{Expansión de Objetivos}
-    D --> E(Orchestrator - Fase 2)
-    E --> F[WebFuzzer]
-    E --> G[NmapScanner]
-    C --> H[Mezclador de Resultados]
-    F --> H
-    G --> H
-    H --> I[scan_result.jsonl]
-    H --> J[scan_report.html]
+    A[Entrada CLI / TUI] --> B(Capability Layer Policy)
+    B --> C(Approval Gate Check)
+    C --> D(Orchestrator - Fase 1)
+    D --> E[OsintScanner]
+    E -- Subdominios Descubiertos --> F{Expansión de Objetivos}
+    F --> G(Orchestrator - Fase 2)
+    G --> H[WebFuzzer]
+    G --> I[NmapScanner]
+    E --> J[Mezclador de Resultados]
+    H --> J
+    I --> J
+    J --> K[scan_result.jsonl]
+    J --> L[scan_report.html]
 ```
 
 ---

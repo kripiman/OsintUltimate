@@ -1,5 +1,6 @@
 use crate::plugins::{DiscoveryPlugin, Capability};
 use crate::models::TargetHost;
+use crate::utils::tool_detection::detect_tool;
 use async_trait::async_trait;
 use anyhow::Result;
 use tracing::{info, warn, debug};
@@ -124,7 +125,7 @@ impl DiscoveryPlugin for OsintScanner {
     }
 
     async fn check_dependencies(&self) -> Result<bool> {
-        Ok(which::which("osint").is_ok())
+        Ok(crate::utils::check_tool_availability("osint").await)
     }
 
 

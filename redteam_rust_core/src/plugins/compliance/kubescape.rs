@@ -1,5 +1,6 @@
 use crate::plugins::{ScannerPlugin, Capability};
 use crate::models::{TargetHost, Finding, Severity, Category};
+use crate::utils::tool_detection::detect_tool;
 use async_trait::async_trait;
 use anyhow::{Result, Context};
 use tracing::{info, warn};
@@ -12,7 +13,7 @@ pub struct KubescapeScanner {
 
 impl KubescapeScanner {
     pub fn new() -> Self {
-        let path = which::which("kubescape").unwrap_or_else(|_| "kubescape".into());
+        let path = detect_tool("kubescape");
         Self {
             binary_path: path.to_string_lossy().to_string(),
         }
@@ -49,7 +50,7 @@ impl ScannerPlugin for KubescapeScanner {
     }
 
     async fn check_dependencies(&self) -> Result<bool> {
-        Ok(which::which("kubescape").is_ok())
+        Ok(crate::utils::check_tool_availability("kubescape").await)
     }
 
 

@@ -1,5 +1,6 @@
 use crate::plugins::{ScannerPlugin, Capability, PluginMetadata, TargetType, RiskLevel};
 use crate::models::{TargetHost, Finding, Severity, Category};
+use crate::utils::tool_detection::detect_tool;
 use async_trait::async_trait;
 use anyhow::{Result, Context};
 use tracing::{info, error, warn};
@@ -13,7 +14,7 @@ pub struct NiktoScanner {
 
 impl NiktoScanner {
     pub fn new() -> Self {
-        let path = which::which("nikto").unwrap_or_else(|_| "nikto".into());
+        let path = detect_tool("nikto");
         Self {
             binary_path: path.to_string_lossy().to_string(),
         }
@@ -50,7 +51,7 @@ impl ScannerPlugin for NiktoScanner {
     }
 
     async fn check_dependencies(&self) -> Result<bool> {
-        Ok(which::which(&self.binary_path).is_ok())
+        Ok(crate::utils::check_tool_availability(&self.binary_path).await)
     }
 
     async fn scan(&self, target: &TargetHost) -> Result<Vec<Finding>> {

@@ -1,5 +1,6 @@
 use crate::plugins::{ScannerPlugin, Capability};
 use crate::models::{TargetHost, Finding, Severity, Category};
+use crate::utils::tool_detection::detect_tool;
 use async_trait::async_trait;
 use anyhow::{Result, Context};
 use tracing::{info, error, warn};
@@ -104,7 +105,7 @@ impl NmapScanner {
         ports: Option<String>,
         vuln_scan: bool,
     ) -> Self {
-        let path = which::which("nmap").unwrap_or_else(|_| "nmap".into());
+        let path = detect_tool("nmap");
         Self {
             nmap_path: path.to_string_lossy().to_string(),
             scripts,
@@ -148,7 +149,7 @@ impl ScannerPlugin for NmapScanner {
     }
 
     async fn check_dependencies(&self) -> Result<bool> {
-        Ok(which::which("nmap").is_ok())
+        Ok(crate::utils::check_tool_availability("nmap").await)
     }
 
 

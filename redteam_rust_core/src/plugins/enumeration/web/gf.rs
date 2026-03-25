@@ -1,5 +1,6 @@
 use crate::plugins::{ScannerPlugin, Capability, PluginMetadata, RiskLevel};
 use crate::models::{TargetHost, Finding, Severity, Category, TargetType, PLUGIN_GF, FINDING_GF_PATTERN};
+use crate::utils::tool_detection::detect_tool;
 use async_trait::async_trait;
 use anyhow::{Result, Context};
 use tracing::{info, warn};
@@ -12,7 +13,7 @@ pub struct GfScanner {
 
 impl GfScanner {
     pub fn new() -> Self {
-        let path = which::which("gf").unwrap_or_else(|_| "gf".into());
+        let path = detect_tool("gf");
         Self {
             binary_path: path.to_string_lossy().to_string(),
         }
@@ -49,7 +50,7 @@ impl ScannerPlugin for GfScanner {
     }
 
     async fn check_dependencies(&self) -> Result<bool> {
-        Ok(which::which("gf").is_ok())
+        Ok(crate::utils::check_tool_availability("gf").await)
     }
 
     async fn scan(&self, target: &TargetHost) -> Result<Vec<Finding>> {

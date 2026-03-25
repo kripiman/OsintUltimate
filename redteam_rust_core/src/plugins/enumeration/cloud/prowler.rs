@@ -1,5 +1,6 @@
 use crate::plugins::{ScannerPlugin, Capability, PluginMetadata, TargetType, RiskLevel};
 use crate::models::{TargetHost, Finding, Severity, Category, PLUGIN_PROWLER};
+use crate::utils::tool_detection::detect_tool;
 use async_trait::async_trait;
 use anyhow::{Result, Context};
 use tracing::{info, error};
@@ -13,7 +14,7 @@ pub struct ProwlerScanner {
 
 impl ProwlerScanner {
     pub fn new() -> Self {
-        let path = which::which("prowler").unwrap_or_else(|_| "prowler".into());
+        let path = detect_tool("prowler");
         Self {
             binary_path: path.to_string_lossy().to_string(),
         }
@@ -50,7 +51,7 @@ impl ScannerPlugin for ProwlerScanner {
     }
 
     async fn check_dependencies(&self) -> Result<bool> {
-        Ok(which::which("prowler").is_ok())
+        Ok(crate::utils::check_tool_availability("prowler").await)
     }
 
     async fn scan(&self, target: &TargetHost) -> Result<Vec<Finding>> {

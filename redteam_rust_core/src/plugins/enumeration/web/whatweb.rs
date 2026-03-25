@@ -1,5 +1,6 @@
 use crate::plugins::{ScannerPlugin, Capability};
 use crate::models::{TargetHost, Finding, Severity, Category};
+use crate::utils::tool_detection::detect_tool;
 use async_trait::async_trait;
 use anyhow::{Result, Context};
 use tracing::{info, error, warn};
@@ -19,7 +20,7 @@ pub struct WhatWebScanner {
 
 impl WhatWebScanner {
     pub fn new() -> Self {
-        let path = which::which("whatweb").unwrap_or_else(|_| "whatweb".into());
+        let path = detect_tool("whatweb");
         Self {
             binary_path: path.to_string_lossy().to_string(),
         }
@@ -55,7 +56,7 @@ impl ScannerPlugin for WhatWebScanner {
     }
 
     async fn check_dependencies(&self) -> Result<bool> {
-        Ok(which::which("whatweb").is_ok())
+        Ok(crate::utils::check_tool_availability("whatweb").await)
     }
 
 

@@ -1,5 +1,6 @@
 use crate::plugins::{ScannerPlugin, Capability, PluginMetadata, TargetType, RiskLevel};
 use crate::models::{TargetHost, Finding, Severity, Category, PLUGIN_KUBE_BENCH};
+use crate::utils::tool_detection::detect_tool;
 use async_trait::async_trait;
 use anyhow::{Result, Context};
 use tracing::{info, error};
@@ -13,7 +14,7 @@ pub struct KubeBenchScanner {
 
 impl KubeBenchScanner {
     pub fn new() -> Self {
-        let path = which::which("kube-bench").unwrap_or_else(|_| "kube-bench".into());
+        let path = detect_tool("kube-bench");
         Self {
             binary_path: path.to_string_lossy().to_string(),
         }
@@ -50,7 +51,7 @@ impl ScannerPlugin for KubeBenchScanner {
     }
 
     async fn check_dependencies(&self) -> Result<bool> {
-        Ok(which::which("kube-bench").is_ok())
+        Ok(crate::utils::check_tool_availability("kube-bench").await)
     }
 
     async fn scan(&self, _target: &TargetHost) -> Result<Vec<Finding>> {

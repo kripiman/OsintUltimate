@@ -1,33 +1,28 @@
 use crate::plugins::{ScannerPlugin, Capability};
 use crate::models::{TargetHost, Finding, Severity, Category};
+use crate::utils::tool_detection::detect_tool;
 use async_trait::async_trait;
 use anyhow::{Result, Context};
 use tracing::{info, error};
 use std::process::Stdio;
 use tokio::process::Command;
-
 pub struct TrivyScanner {
     binary_path: String,
 }
-
 impl TrivyScanner {
     pub fn new() -> Self {
         let path = which::which("trivy")
             .unwrap_or_else(|_| "trivy".into());
-            
         Self {
             binary_path: path.to_string_lossy().to_string(),
         }
     }
 }
-
 #[async_trait]
 impl ScannerPlugin for TrivyScanner {
     fn name(&self) -> &'static str {
         "trivy"
     }
-
-    
         fn metadata(&self) -> crate::plugins::PluginMetadata {
         crate::plugins::PluginMetadata {
             name: self.name().to_string(),
@@ -49,15 +44,11 @@ impl ScannerPlugin for TrivyScanner {
     fn capabilities(&self) -> Vec<Capability> {
         vec![Capability::VulnerabilityScanning]
     }
-
     async fn check_dependencies(&self) -> Result<bool> {
-        Ok(which::which("trivy").is_ok())
+        Ok(crate::utils::check_tool_availability("trivy").await)
     }
-
-
     async fn scan(&self, target: &TargetHost) -> Result<Vec<Finding>> {
         info!("TrivyScanner: scanning {} for container/cloud vulnerabilities", target.host);
-
         // Trivy can scan many things. Here we try a generic "config" scan or "vm" scan if applicable.
         // For a general target host, we might scan its filesystem or container images if we find them.
         let child = Command::new(&self.binary_path)
@@ -69,7 +60,6 @@ impl ScannerPlugin for TrivyScanner {
             .stdout(Stdio::piped())
             .stderr(Stdio::null())
             .spawn();
-
         let mut findings = Vec::new();
         match child {
             Ok(c) => {
@@ -91,7 +81,6 @@ impl ScannerPlugin for TrivyScanner {
                 error!("TrivyScanner failed to spawn: {}", e);
             }
         }
-
         Ok(findings)
     }
 }

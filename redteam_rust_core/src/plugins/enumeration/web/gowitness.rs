@@ -1,33 +1,28 @@
 use crate::plugins::{ScannerPlugin, Capability};
 use crate::models::{TargetHost, Finding, Severity, Category};
+use crate::utils::tool_detection::detect_tool;
 use async_trait::async_trait;
 use anyhow::{Result, Context};
 use tracing::{info, error};
 use std::process::Stdio;
 use tokio::process::Command;
-
 pub struct GoWitnessScanner {
     binary_path: String,
 }
-
 impl GoWitnessScanner {
     pub fn new() -> Self {
         let path = which::which("gowitness")
             .unwrap_or_else(|_| "gowitness".into());
-            
         Self {
             binary_path: path.to_string_lossy().to_string(),
         }
     }
 }
-
 #[async_trait]
 impl ScannerPlugin for GoWitnessScanner {
     fn name(&self) -> &'static str {
         "gowitness"
     }
-
-    
         fn metadata(&self) -> crate::plugins::PluginMetadata {
         crate::plugins::PluginMetadata {
             name: self.name().to_string(),
@@ -49,15 +44,11 @@ impl ScannerPlugin for GoWitnessScanner {
     fn capabilities(&self) -> Vec<Capability> {
         vec![Capability::VulnerabilityScanning]
     }
-
     async fn check_dependencies(&self) -> Result<bool> {
-        Ok(which::which("gowitness").is_ok())
+        Ok(crate::utils::check_tool_availability("gowitness").await)
     }
-
-
     async fn scan(&self, target: &TargetHost) -> Result<Vec<Finding>> {
         info!("GoWitnessScanner: starting visual discovery for {}", target.host);
-
         // gowitness scan single host
         // We use --screenshot-path to define where to save it, but gowitness usually uses a db.
         // For simplicity, we'll try to capture a single screenshot if possible or just run a scan.
@@ -70,7 +61,6 @@ impl ScannerPlugin for GoWitnessScanner {
             .stdout(Stdio::piped())
             .stderr(Stdio::piped())
             .spawn();
-
         let mut findings = Vec::new();
         match child {
             Ok(c) => {
@@ -89,7 +79,6 @@ impl ScannerPlugin for GoWitnessScanner {
                 error!("GoWitnessScanner failed to spawn: {}", e);
             }
         }
-
         Ok(findings)
     }
 }

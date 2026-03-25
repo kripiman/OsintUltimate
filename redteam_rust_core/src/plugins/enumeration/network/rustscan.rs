@@ -1,5 +1,6 @@
 use crate::plugins::{ScannerPlugin, Capability};
 use crate::models::{TargetHost, Finding, Severity, Category, Evidence};
+use crate::utils::tool_detection::detect_tool;
 use async_trait::async_trait;
 use anyhow::{Result, Context};
 use tracing::{info, warn};
@@ -12,9 +13,9 @@ pub struct RustScanScanner {
 
 impl RustScanScanner {
     pub fn new() -> Self {
-        let path = which::which("rustscan").unwrap_or_else(|_| "rustscan".into());
+        let path = detect_tool("rustscan");
         Self {
-            binary_path: path.to_string_lossy().to_string(),
+            binary_path: path,
         }
     }
 }
@@ -49,7 +50,7 @@ impl ScannerPlugin for RustScanScanner {
     }
 
     async fn check_dependencies(&self) -> Result<bool> {
-        Ok(which::which("rustscan").is_ok())
+        Ok(crate::utils::check_tool_availability("rustscan").await)
     }
 
 

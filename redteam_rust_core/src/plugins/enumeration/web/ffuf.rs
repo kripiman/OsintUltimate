@@ -1,5 +1,6 @@
 use crate::plugins::{ScannerPlugin, Capability, RiskLevel};
 use crate::models::{TargetHost, Finding, Severity, Category};
+use crate::utils::tool_detection::detect_tool;
 use async_trait::async_trait;
 use anyhow::{Result, Context};
 use tracing::{info, error, warn};
@@ -27,9 +28,9 @@ pub struct FfufScanner {
 
 impl FfufScanner {
     pub fn new(wordlist: Option<String>) -> Self {
-        let path = which::which("ffuf").unwrap_or_else(|_| "ffuf".into());
+        let path = detect_tool("ffuf");
         Self {
-            binary_path: path.to_string_lossy().to_string(),
+            binary_path: path,
             wordlist: wordlist.unwrap_or_else(|| "/usr/share/wordlists/dirb/common.txt".into()),
         }
     }
@@ -65,7 +66,7 @@ impl ScannerPlugin for FfufScanner {
     }
 
     async fn check_dependencies(&self) -> Result<bool> {
-        Ok(which::which("ffuf").is_ok())
+        Ok(crate::utils::check_tool_availability("ffuf").await)
     }
 
 

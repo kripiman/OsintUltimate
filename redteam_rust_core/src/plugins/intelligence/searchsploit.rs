@@ -1,33 +1,28 @@
 use crate::plugins::{ScannerPlugin, Capability};
 use crate::models::{TargetHost, Finding, Severity, Category};
+use crate::utils::tool_detection::detect_tool;
 use async_trait::async_trait;
 use anyhow::{Result, Context};
 use tracing::{info, error};
 use std::process::Stdio;
 use tokio::process::Command;
-
 pub struct SearchsploitScanner {
     binary_path: String,
 }
-
 impl SearchsploitScanner {
     pub fn new() -> Self {
         let path = which::which("searchsploit")
             .unwrap_or_else(|_| "searchsploit".into());
-            
         Self {
             binary_path: path.to_string_lossy().to_string(),
         }
     }
 }
-
 #[async_trait]
 impl ScannerPlugin for SearchsploitScanner {
     fn name(&self) -> &'static str {
         "searchsploit"
     }
-
-    
         fn metadata(&self) -> crate::plugins::PluginMetadata {
         crate::plugins::PluginMetadata {
             name: self.name().to_string(),
@@ -49,15 +44,11 @@ impl ScannerPlugin for SearchsploitScanner {
     fn capabilities(&self) -> Vec<Capability> {
         vec![Capability::VulnerabilityScanning]
     }
-
     async fn check_dependencies(&self) -> Result<bool> {
-        Ok(which::which("searchsploit").is_ok())
+        Ok(crate::utils::check_tool_availability("searchsploit").await)
     }
-
-
     async fn scan(&self, target: &TargetHost) -> Result<Vec<Finding>> {
         let mut findings = Vec::new();
-        
         // Searchsploit identifies exploits based on service versions found in other findings
         // We iterate through existing findings to find software versions
         for finding in &target.findings {
@@ -69,7 +60,6 @@ impl ScannerPlugin for SearchsploitScanner {
                 } else {
                     finding.description.clone()
                 };
-
                 if query.len() > 3 {
                     info!("SearchsploitScanner: searching exploits for '{}'", query);
                     let child = Command::new(&self.binary_path)
@@ -79,7 +69,6 @@ impl ScannerPlugin for SearchsploitScanner {
                         .stdout(Stdio::piped())
                         .stderr(Stdio::null())
                         .spawn();
-
                     if let Ok(c) = child {
                         let output = c.wait_with_output().await.context("Failed to wait for searchsploit")?;
                         let content = String::from_utf8_lossy(&output.stdout);
@@ -102,7 +91,6 @@ impl ScannerPlugin for SearchsploitScanner {
                 }
             }
         }
-
         Ok(findings)
     }
 }

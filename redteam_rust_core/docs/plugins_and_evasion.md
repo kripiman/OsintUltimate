@@ -15,6 +15,44 @@ Existen dos tipos principales de interfaces (`traits`):
 *   **WebFuzzer**: Usado para descubrimiento agresivo de configuraciones mal empaquetadas o ficheros por defecto expuestos. Implementa un motor HTTP asíncrono por encima de `reqwest`.
 *   **NmapScanner**: Un wrapper dinámico y seguro sobre los binarios binarios Nmap de la máquina host. Compone asincrónicamente los comandos Nmap, redirige el stdout y parsea nativamente los resultados XML, incluyendo de la máquina de scripting de Nmap (`NSE`).
 
+### Plugins Disponibles por Categoría
+
+#### Reconocimiento
+- OsintScanner, SubfinderScanner, AmassScanner, UncoverScanner, WaybackScanner, GitleaksScanner, TruffleHogScanner
+
+#### Enumeración Web
+- WebFuzzer, FfufScanner, FeroxbusterScanner, ArjunScanner, KatanaScanner, NiktoScanner, WPScanner, SnallygasterScanner, KiterunnerScanner, TsunamiScanner, GoWitnessScanner, InteractshScanner, CRLFScanner, GfScanner, GauPlusScanner
+
+#### Enumeración de Red
+- NmapScanner, RustScanScanner, NaabuScanner, HttpxScanner, DnsxScanner
+
+#### Enumeración Cloud
+- PacuScanner, CloudEnumScanner, CloudFoxScanner, CloudBruteScanner, ProwlerScanner, KubeBenchScanner
+
+#### Explotación Web
+- SqlMapScanner, DalfoxScanner, WapitiScanner, CommixScanner, JwtToolScanner, GraphQLCopScanner
+
+#### Explotación de Red
+- HydraScanner, NetExecScanner, ImpacketScanner, ResponderScanner, PetitPotamScanner, CoercerScanner
+
+#### Movimiento Lateral
+- BloodHoundScanner, SliverScanner, LigoloScanner
+
+#### Escalada de Privilegios
+- CertipyScanner, PrivescHunterScanner
+
+#### Persistencia
+- HavocScanner
+
+#### Inteligencia
+- NucleiScanner, JaelesScanner, SearchsploitScanner
+
+#### Verificación
+- ZapScanner, BurpScanner
+
+#### Cumplimiento
+- CheckovScanner, KubescapeScanner, TrivyScanner, OSVScanner
+
 ### Plugins Dinámicos (`DynamicPluginLoader`)
 OsintUltimate soporta Hot-Reload e inyección de plugins dinámicos. Puedes escribir plugins en Rust, compilarlos como bibliotecas dinámicas (`.so` / `.dylib`), y pasarlas por el parámetro `--plugins-dir`. El loader valida las versiones de C ABI por seguridad antes de ejecutarlos.
 

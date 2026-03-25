@@ -1,4 +1,5 @@
 use std::os::raw::c_char;
+use crate::utils::tool_detection::detect_tool;
 use crate::models::{TargetHost, Finding};
 use anyhow::Result;
 use std::panic::{catch_unwind, AssertUnwindSafe};
@@ -89,8 +90,7 @@ impl crate::plugins::ScannerPlugin for FFIPluginWrapper {
     }
 
     async fn check_dependencies(&self) -> Result<bool> {
-        // En un sistema real, el plugin FFI debería exponer su propio chequeo de dependencias
-        Ok(true) 
+        Ok(crate::utils::check_tool_availability("ffi").await)
     }
 
     async fn scan(&self, target: &TargetHost) -> Result<Vec<Finding>> {

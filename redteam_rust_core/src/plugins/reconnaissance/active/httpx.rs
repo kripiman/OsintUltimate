@@ -1,33 +1,28 @@
 use crate::plugins::{ScannerPlugin, Capability};
 use crate::models::{TargetHost, Finding, Severity, Category};
+use crate::utils::tool_detection::detect_tool;
 use async_trait::async_trait;
 use anyhow::{Result, Context};
 use tracing::{info, warn};
 use std::process::Stdio;
 use tokio::process::Command;
-
 pub struct HttpxScanner {
     binary_path: String,
 }
-
 impl HttpxScanner {
     pub fn new() -> Self {
         let path = which::which("httpx")
             .unwrap_or_else(|_| "httpx".into());
-            
         Self {
             binary_path: path.to_string_lossy().to_string(),
         }
     }
 }
-
 #[async_trait]
 impl ScannerPlugin for HttpxScanner {
     fn name(&self) -> &'static str {
         crate::models::PLUGIN_HTTPX
     }
-
-    
         fn metadata(&self) -> crate::plugins::PluginMetadata {
         crate::plugins::PluginMetadata {
             name: self.name().to_string(),
@@ -49,15 +44,11 @@ impl ScannerPlugin for HttpxScanner {
     fn capabilities(&self) -> Vec<Capability> {
         vec![Capability::VulnerabilityScanning]
     }
-
     async fn check_dependencies(&self) -> Result<bool> {
-        Ok(which::which("httpx").is_ok())
+        Ok(crate::utils::check_tool_availability("httpx").await)
     }
-
-
     async fn scan(&self, target: &TargetHost) -> Result<Vec<Finding>> {
         info!("HttpxScanner: probing HTTP for {}", target.host);
-
         // httpx execution
         let child = Command::new(&self.binary_path)
             .arg("-u")
@@ -70,12 +61,9 @@ impl ScannerPlugin for HttpxScanner {
             .stderr(Stdio::null())
             .spawn()
             .context("Failed to spawn httpx")?;
-
         let output = child.wait_with_output().await.context("Failed to wait for httpx")?;
-
         let mut findings = Vec::new();
         let content = String::from_utf8_lossy(&output.stdout);
-        
         if !content.is_empty() {
             findings.push(Finding::new(
                 "HTTP-PROBE-SUCCESS",
@@ -85,7 +73,6 @@ impl ScannerPlugin for HttpxScanner {
                 serde_json::json!({ "output": content.trim() })
             ));
         }
-
         Ok(findings)
     }
 }

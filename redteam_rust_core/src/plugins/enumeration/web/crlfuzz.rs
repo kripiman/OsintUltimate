@@ -1,5 +1,6 @@
 use crate::plugins::{ScannerPlugin, Capability, PluginMetadata, RiskLevel};
 use crate::models::{TargetHost, Finding, Severity, Category, TargetType, PLUGIN_CRLF};
+use crate::utils::tool_detection::detect_tool;
 use async_trait::async_trait;
 use anyhow::{Result, Context};
 use tracing::{info, warn};
@@ -13,7 +14,7 @@ pub struct CRLFScanner {
 
 impl CRLFScanner {
     pub fn new() -> Self {
-        let path = which::which("crlfuzz").unwrap_or_else(|_| "crlfuzz".into());
+        let path = detect_tool("crlfuzz");
         Self {
             binary_path: path.to_string_lossy().to_string(),
         }
@@ -50,7 +51,7 @@ impl ScannerPlugin for CRLFScanner {
     }
 
     async fn check_dependencies(&self) -> Result<bool> {
-        Ok(which::which("crlfuzz").is_ok())
+        Ok(crate::utils::check_tool_availability("crlfuzz").await)
     }
 
     async fn scan(&self, target: &TargetHost) -> Result<Vec<Finding>> {

@@ -1,5 +1,6 @@
 use crate::plugins::{DiscoveryPlugin, Capability};
 use crate::models::TargetHost;
+use crate::utils::tool_detection::detect_tool;
 use async_trait::async_trait;
 use anyhow::{Result, Context};
 use tracing::{info, error, warn};
@@ -12,7 +13,7 @@ pub struct SubfinderScanner {
 
 impl SubfinderScanner {
     pub fn new() -> Self {
-        let path = which::which("subfinder").unwrap_or_else(|_| "subfinder".into());
+        let path = detect_tool("subfinder");
         Self {
             binary_path: path.to_string_lossy().to_string(),
         }
@@ -48,7 +49,7 @@ impl DiscoveryPlugin for SubfinderScanner {
     }
 
     async fn check_dependencies(&self) -> Result<bool> {
-        Ok(which::which("subfinder").is_ok())
+        Ok(crate::utils::check_tool_availability("subfinder").await)
     }
 
 

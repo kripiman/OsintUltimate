@@ -124,3 +124,163 @@ Pasa la ruta durante el inicio:
 ```bash
 cargo run --release -- --target example.com --plugins-dir ./external_plugins/target/release/
 ```
+
+## 🎯 Integración con BlackArch (Sistema de Herramientas)
+
+A partir de v4.0, OsintUltimate detecta automáticamente herramientas de BlackArch instaladas en el sistema y las utiliza en lugar de binarios embebidos. Esto proporciona:
+
+- **Eficiencia**: Reutiliza binarios del sistema en lugar de embeddings
+- **Compatibilidad**: Soporte automático para distribuciones especializadas (BlackArch, Kali, Parrot)
+- **Fallback seguro**: Usa binarios embebidos si no se encuentra la herramienta
+
+### Sistema de Detección Automática
+
+La detección de herramientas se realiza mediante el módulo `utils::tool_detection`:
+
+```rust
+use crate::utils::tool_detection::{detect_tool, check_tool_availability, verify_tool_version};
+
+// 1. Detección simple
+let ffuf_path = detect_tool("ffuf"); // Returns String (path or tool name as fallback)
+
+// 2. Verificación asíncrona de disponibilidad
+if check_tool_availability("nuclei").await {
+    println!("nuclei está disponible y es ejecutable");
+}
+
+// 3. Validación de versión (opcional)
+if verify_tool_version("sqlmap", Some("1.5")).await? {
+    println!("sqlmap meet minimum version requirement");
+}
+```
+
+### Herramientas Soportadas Actualmente
+
+| Herramienta | Plugin | Módulo | Estado |
+|-------------|--------|--------|--------|
+| ffuf | FfufScanner | enumeration/web | ✅ Integrado |
+| nuclei | NucleiScanner | intelligence | ✅ Integrado |
+| sqlmap | SqlMapScanner | exploitation/web | ✅ Integrado |
+| rustscan | RustScanScanner | enumeration/network | ✅ Integrado |
+| arjun | ArjunScanner | enumeration/web | ✅ Integrado |
+| jaeles | JaelesScanner | intelligence | ✅ Integrado |
+| kubescape | KubescapeScanner | compliance | ✅ Integrado |
+| searchsploit | SearchsploitScanner | intelligence | ✅ Integrado |
+| certipy | CertipyScanner | privilege_escalation | ✅ Integrado |
+| netexec | NetExecScanner | exploitation/network | ✅ Integrado |
+| coercer | CoercerScanner | exploitation/network | ✅ Integrado |
+| dalfox | DalfoxScanner | exploitation/web | ✅ Integrado |
+| graphql_cop | GraphQLCopScanner | exploitation/web | ✅ Integrado |
+| wapiti | WapitiScanner | exploitation/web | ✅ Integrado |
+| jwt_tool | JWTToolScanner | exploitation/web | ✅ Integrado |
+| hydra | HydraScanner | exploitation/network | ✅ Integrado |
+| responder | ResponderScanner | exploitation/network | ✅ Integrado |
+| petitpotam | PetitPotamScanner | exploitation/network | ✅ Integrado |
+| bloodhound | BloodHoundScanner | lateral_movement | ✅ Integrado |
+| ligolo | LigoloScanner | lateral_movement | ✅ Integrado |
+| sliver | SliverScanner | lateral_movement | ✅ Integrado |
+| havoc | HavocScanner | persistence | ✅ Integrado |
+| dnsx | DNSXScanner | reconnaissance/active | ✅ Integrado |
+| httpx | HTTPXScanner | reconnaissance/active | ✅ Integrado |
+| naabu | NaabuScanner | reconnaissance/active | ✅ Integrado |
+| wayback | WaybackScanner | reconnaissance/passive | ✅ Integrado |
+| uncover | UncoverScanner | reconnaissance/osint | ✅ Integrado |
+| gauplus | GauPlusScanner | enumeration/web | ✅ Integrado |
+| interactsh | InteractshScanner | enumeration/web | ✅ Integrado |
+| feroxbuster | FeroxbusterScanner | enumeration/web | ✅ Integrado |
+| gowitness | GoWitnessScanner | enumeration/web | ✅ Integrado |
+| cloudenum | CloudEnumScanner | enumeration/cloud | ✅ Integrado |
+| cloudbrute | CloudBruteScanner | enumeration/cloud | ✅ Integrado |
+| cloudfox | CloudFoxScanner | enumeration/cloud | ✅ Integrado |
+| pacu | PacuScanner | enumeration/cloud | ✅ Integrado |
+| trivy | TrivyScanner | compliance | ✅ Integrado |
+
+**Total integrado: 35+ plugins** | **Estado: ✅ BlackArch Ready**
+
+### Cómo Integrar una Nueva Herramienta
+
+1. **En tu plugin** (ej., `src/plugins/enumeration/web/my_tool.rs`):
+```rust
+use crate::utils::tool_detection::detect_tool;
+
+pub struct MyToolScanner {
+    binary_path: String,
+}
+
+impl MyToolScanner {
+    pub fn new() -> Self {
+        let path = detect_tool("my_tool"); // Auto-detects system binary
+        Self { binary_path: path }
+    }
+}
+
+#[async_trait]
+impl ScannerPlugin for MyToolScanner {
+    async fn check_dependencies(&self) -> Result<bool> {
+        Ok(crate::utils::check_tool_availability("my_tool").await)
+    }
+    
+    async fn scan(&self, target: &TargetHost) -> Result<Vec<Finding>> {
+        // Use self.binary_path to execute the tool
+        Command::new(&self.binary_path)
+            .arg("--target")
+            .arg(&target.host)
+            .spawn()?
+            // ... rest of implementation
+    }
+}
+```
+
+2. **Archivos relacionados a actualizar**:
+   - `src/utils/tool_detection.rs` - Agregar soporte específico si es necesario
+   - `docs/PLUGIN_DEVELOPMENT.md` - Documentar la integración
+   - `ARCHITECTURE_VISUALIZATION.sh` - Listar la herramienta en la matriz de compatibilidad
+
+### Comportamiento de Fallback
+
+Si una herramienta no se encuentra en el sistema:
+1. El plugin cae en el nombre de la herramienta como fallback
+2. Sistema intenta ejecutar desde PATH (caso muy poco probable)
+3. Si falla completamente, se registra en telemetría y el plugin marca la dependencia como no disponible
+4. El orquestador puede saltear este plugin o usar un sustituto
+
+### Telemetría y Logging
+
+Todas las detecciones se registran con `tracing`:
+
+```rust
+info!("Tool 'ffuf' detected at: /usr/bin/ffuf");
+warn!("Tool 'nuclei' not found in system PATH");
+debug!("Attempting to detect tool: sqlmap");
+```
+
+Revisa el archivo de logs con:
+```bash
+RUST_LOG=debug cargo run -- --target example.com
+```
+
+### Instalación de Herramientas (para pruebas)
+
+En BlackArch o Kali:
+```bash
+# Instalar herramientas individuales
+sudo pacman -S ffuf nuclei sqlmap rustscan
+
+# O instalar la suite de categoría
+sudo pacman -S blackarch-webapp
+```
+
+En Debian/Ubuntu:
+```bash
+# FFuf
+sudo apt-get install ffuf
+
+# Nuclei
+go install -v github.com/projectdiscovery/nuclei/v2/cmd/nuclei@latest
+
+# SQLMap
+sudo apt-get install sqlmap
+
+# RustScan
+cargo install rustscan
+```
