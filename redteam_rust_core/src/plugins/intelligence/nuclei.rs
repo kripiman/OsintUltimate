@@ -44,17 +44,20 @@ impl ScannerPlugin for NucleiScanner {
 
         fn metadata(&self) -> crate::plugins::PluginMetadata {
         crate::plugins::PluginMetadata {
-            name: self.name(),
-            description: "Template-based vulnerability scanning using Nuclei. Highly effective for detecting misconfigurations and known CVEs.",
+            name: self.name().to_string(),
+            description: "Template-based vulnerability scanning using Nuclei. Highly effective for detecting misconfigurations and known CVEs.".to_string(),
             target_type: crate::plugins::TargetType::Host,
             risk_level: crate::plugins::RiskLevel::Medium,
             layer: crate::core::capability_layer::ScanLayer::Scanning,
             expected_duration: std::time::Duration::from_secs(300),
             capabilities: self.capabilities(),
             cost: 5,
-            category: "Intelligence",
-            mitre_attacks: vec![],
+            category: "Intelligence".to_string(),
+            mitre_attacks: vec!["T1595".to_string(), "T1190".to_string()],
             remediation_difficulty: crate::plugins::RiskLevel::Medium,
+            blackarch_category: Some("scanner".to_string()),
+            is_destructive: false,
+            poc_mode: true,
         }
     }
     fn capabilities(&self) -> Vec<Capability> {

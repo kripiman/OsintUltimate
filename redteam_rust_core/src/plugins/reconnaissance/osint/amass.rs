@@ -27,17 +27,20 @@ impl DiscoveryPlugin for AmassScanner {
 
     fn metadata(&self) -> crate::plugins::PluginMetadata {
         crate::plugins::PluginMetadata {
-            name: self.name(),
-            description: "Discovery of subdomains using passive OSINT techniques through Amass.",
+            name: self.name().to_string(),
+            description: "Discovery of subdomains using passive OSINT techniques through Amass.".to_string(),
             target_type: crate::plugins::TargetType::Osint,
             risk_level: crate::plugins::RiskLevel::Safe,
             layer: crate::core::capability_layer::ScanLayer::Passive,
             expected_duration: std::time::Duration::from_secs(60),
             capabilities: self.capabilities(),
             cost: 5,
-            category: "Reconnaissance",
+            category: "Reconnaissance".to_string(),
             mitre_attacks: vec![],
             remediation_difficulty: crate::plugins::RiskLevel::Medium,
+            blackarch_category: None,
+            is_destructive: false,
+            poc_mode: false,
         }
     }
     fn capabilities(&self) -> Vec<Capability> {

@@ -41,19 +41,12 @@ impl ScannerPlugin for GitleaksScanner {
     }
 
     
-        fn metadata(&self) -> crate::plugins::PluginMetadata {
+    fn metadata(&self) -> crate::plugins::PluginMetadata {
         crate::plugins::PluginMetadata {
-            name: self.name(),
-            description: "Automated security analysis using this plugin.",
-            target_type: crate::plugins::TargetType::Host,
-            risk_level: crate::plugins::RiskLevel::Medium,
-            layer: crate::core::capability_layer::ScanLayer::Passive,
-            expected_duration: std::time::Duration::from_secs(300),
-            capabilities: self.capabilities(),
-            cost: 5,
-            category: "Reconnaissance",
-            mitre_attacks: vec![],
-            remediation_difficulty: crate::plugins::RiskLevel::Medium,
+            name: self.name().to_string(),
+            description: "Automated secret scanning using Gitleaks.".to_string(),
+            category: "Reconnaissance".to_string(),
+            ..crate::plugins::PluginMetadata::default()
         }
     }
     fn capabilities(&self) -> Vec<Capability> {

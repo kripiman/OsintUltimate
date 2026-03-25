@@ -28,17 +28,20 @@ impl ScannerPlugin for SnallygasterScanner {
 
     fn metadata(&self) -> PluginMetadata {
         PluginMetadata {
-            name: self.name(),
-            description: "Finds secret files on HTTP servers (e.g., .env, .git, config files, backups).",
+            name: self.name().to_string(),
+            description: "Finds secret files on HTTP servers (e.g., .env, .git, config files, backups).".to_string(),
             target_type: TargetType::Web,
             risk_level: RiskLevel::Low,
             layer: crate::core::capability_layer::ScanLayer::Scanning,
             expected_duration: Duration::from_secs(60),
             capabilities: self.capabilities(),
             cost: 5,
-            category: "Enumeration",
+            category: "Enumeration".to_string(),
             mitre_attacks: vec![],
             remediation_difficulty: crate::plugins::RiskLevel::Medium,
+            blackarch_category: None,
+            is_destructive: false,
+            poc_mode: false,
         }
     }
 

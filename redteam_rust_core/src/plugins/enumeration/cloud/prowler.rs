@@ -28,17 +28,20 @@ impl ScannerPlugin for ProwlerScanner {
 
     fn metadata(&self) -> PluginMetadata {
         PluginMetadata {
-            name: self.name(),
-            description: "Prowler is an Open Source security tool to perform AWS security best practices assessments, audits, incident response, continuous monitoring, hardening and forensics readiness.",
+            name: self.name().to_string(),
+            description: "Prowler is an Open Source security tool to perform AWS security best practices assessments, audits, incident response, continuous monitoring, hardening and forensics readiness.".to_string(),
             target_type: TargetType::Cloud,
             risk_level: RiskLevel::Safe,
             layer: crate::core::capability_layer::ScanLayer::Passive,
             expected_duration: Duration::from_secs(600),
             capabilities: self.capabilities(),
             cost: 7,
-            category: "Enumeration",
+            category: "Enumeration".to_string(),
             mitre_attacks: vec![],
             remediation_difficulty: crate::plugins::RiskLevel::Medium,
+            blackarch_category: None,
+            is_destructive: false,
+            poc_mode: false,
         }
     }
 

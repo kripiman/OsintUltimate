@@ -28,17 +28,20 @@ impl ScannerPlugin for NiktoScanner {
 
     fn metadata(&self) -> PluginMetadata {
         PluginMetadata {
-            name: self.name(),
-            description: "Classic web server scanner that performs comprehensive tests against web servers for multiple items, including over 6700 potentially dangerous files/programs.",
+            name: self.name().to_string(),
+            description: "Classic web server scanner that performs comprehensive tests against web servers for multiple items, including over 6700 potentially dangerous files/programs.".to_string(),
             target_type: TargetType::Web,
             risk_level: RiskLevel::Medium,
             layer: crate::core::capability_layer::ScanLayer::Scanning,
             expected_duration: Duration::from_secs(600),
             capabilities: self.capabilities(),
             cost: 5,
-            category: "Enumeration",
+            category: "Enumeration".to_string(),
             mitre_attacks: vec![],
             remediation_difficulty: crate::plugins::RiskLevel::Medium,
+            blackarch_category: None,
+            is_destructive: false,
+            poc_mode: false,
         }
     }
 

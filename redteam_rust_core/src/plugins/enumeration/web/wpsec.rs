@@ -28,17 +28,20 @@ impl ScannerPlugin for WPScanner {
 
     fn metadata(&self) -> PluginMetadata {
         PluginMetadata {
-            name: self.name(),
-            description: "WordPress Security Scanner (wpscan integration). Identifies vulnerable plugins, themes, and core versions.",
+            name: self.name().to_string(),
+            description: "WordPress Security Scanner (wpscan integration). Identifies vulnerable plugins, themes, and core versions.".to_string(),
             target_type: TargetType::Web,
             risk_level: RiskLevel::Medium,
             layer: crate::core::capability_layer::ScanLayer::Scanning,
             expected_duration: Duration::from_secs(300),
             capabilities: self.capabilities(),
             cost: 5,
-            category: "Enumeration",
+            category: "Enumeration".to_string(),
             mitre_attacks: vec![],
             remediation_difficulty: crate::plugins::RiskLevel::Medium,
+            blackarch_category: None,
+            is_destructive: false,
+            poc_mode: false,
         }
     }
 

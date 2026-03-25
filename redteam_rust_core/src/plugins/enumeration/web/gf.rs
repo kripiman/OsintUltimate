@@ -27,17 +27,20 @@ impl ScannerPlugin for GfScanner {
 
     fn metadata(&self) -> PluginMetadata {
         PluginMetadata {
-            name: self.name(),
-            description: "Grep-based pattern discovery for security audits (SSRF, LFI, RCE, Credentials).",
+            name: self.name().to_string(),
+            description: "Grep-based pattern discovery for security audits (SSRF, LFI, RCE, Credentials).".to_string(),
             target_type: TargetType::Web,
             risk_level: RiskLevel::Safe,
             layer: crate::core::capability_layer::ScanLayer::Scanning,
             expected_duration: std::time::Duration::from_secs(30),
             capabilities: self.capabilities(),
             cost: 1,
-            category: "Enumeration",
+            category: "Enumeration".to_string(),
             mitre_attacks: vec![],
             remediation_difficulty: crate::plugins::RiskLevel::Medium,
+            blackarch_category: None,
+            is_destructive: false,
+            poc_mode: false,
         }
     }
 
@@ -54,7 +57,7 @@ impl ScannerPlugin for GfScanner {
 
         // Gf usually works on files or stdin.
         // For professional reconnaissance, we'll scan various patterns if they are available.
-        let patterns = vec!["ssrf", "sqli", "lfi", "rce", "debug-pages", "idors", "interestingparams"];
+        let patterns = vec!["ssrf".to_string(), "sqli".to_string(), "lfi".to_string(), "rce".to_string(), "debug-pages".to_string(), "idors".to_string(), "interestingparams".to_string()];
         let mut findings = Vec::new();
 
         for pattern in patterns {
@@ -64,7 +67,7 @@ impl ScannerPlugin for GfScanner {
             // Here we just implement the wrapper.
             
             let mut cmd = Command::new(&self.binary_path);
-            cmd.arg(pattern)
+            cmd.arg(&pattern)
                .stdin(Stdio::null())
                .stdout(Stdio::piped())
                .stderr(Stdio::null());
@@ -83,7 +86,7 @@ impl ScannerPlugin for GfScanner {
                     Severity::Info,
                     &format!("Interesting pattern '{}' found: {}", pattern, line),
                     serde_json::json!({
-                        "pattern": pattern,
+                        "pattern": pattern.clone(),
                         "line": line
                     })
                 ));

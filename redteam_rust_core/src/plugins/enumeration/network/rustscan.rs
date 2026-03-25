@@ -28,17 +28,20 @@ impl ScannerPlugin for RustScanScanner {
     
         fn metadata(&self) -> crate::plugins::PluginMetadata {
         crate::plugins::PluginMetadata {
-            name: self.name(),
-            description: "Automated security analysis using this plugin.",
+            name: self.name().to_string(),
+            description: "Automated security analysis using this plugin.".to_string(),
             target_type: crate::plugins::TargetType::Network,
             risk_level: crate::plugins::RiskLevel::Medium,
             layer: crate::core::capability_layer::ScanLayer::Discovery,
             expected_duration: std::time::Duration::from_secs(300),
             capabilities: self.capabilities(),
             cost: 5,
-            category: "Enumeration",
-            mitre_attacks: vec![],
-            remediation_difficulty: crate::plugins::RiskLevel::Medium,
+            category: "Enumeration".to_string(),
+            mitre_attacks: vec!["T1046".to_string()],
+            remediation_difficulty: crate::plugins::RiskLevel::Low,
+            blackarch_category: Some("scanner".to_string()),
+            is_destructive: false,
+            poc_mode: true,
         }
     }
     fn capabilities(&self) -> Vec<Capability> {

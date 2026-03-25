@@ -29,17 +29,20 @@ impl ScannerPlugin for ZapScanner {
 
         fn metadata(&self) -> crate::plugins::PluginMetadata {
         crate::plugins::PluginMetadata {
-            name: self.name(),
-            description: "OWASP ZAP automated web application security scanner.",
+            name: self.name().to_string(),
+            description: "OWASP ZAP automated web application security scanner.".to_string(),
             target_type: crate::plugins::TargetType::Web,
             risk_level: crate::plugins::RiskLevel::Medium,
             layer: crate::core::capability_layer::ScanLayer::Exploitation,
             expected_duration: std::time::Duration::from_secs(300),
             capabilities: self.capabilities(),
             cost: 5,
-            category: "Verification",
+            category: "Verification".to_string(),
             mitre_attacks: vec![],
             remediation_difficulty: crate::plugins::RiskLevel::Medium,
+            blackarch_category: None,
+            is_destructive: false,
+            poc_mode: true,
         }
     }
     fn capabilities(&self) -> Vec<Capability> {

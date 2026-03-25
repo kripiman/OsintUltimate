@@ -1,4 +1,4 @@
-use crate::plugins::{ScannerPlugin, Capability};
+use crate::plugins::{ScannerPlugin, Capability, TargetType, RiskLevel};
 use crate::models::{TargetHost, Finding, Severity, Category};
 use async_trait::async_trait;
 use anyhow::{Result, Context};
@@ -34,17 +34,20 @@ impl ScannerPlugin for ArjunScanner {
     
         fn metadata(&self) -> crate::plugins::PluginMetadata {
         crate::plugins::PluginMetadata {
-            name: self.name(),
-            description: "Automated security analysis using this plugin.",
-            target_type: crate::plugins::TargetType::Web,
-            risk_level: crate::plugins::RiskLevel::Medium,
+            name: self.name().to_string(),
+            description: "Automated security analysis using this plugin.".to_string(),
+            target_type: TargetType::Web,
+            risk_level: RiskLevel::Medium,
             layer: crate::core::capability_layer::ScanLayer::Scanning,
             expected_duration: std::time::Duration::from_secs(300),
             capabilities: self.capabilities(),
             cost: 5,
-            category: "Enumeration",
-            mitre_attacks: vec![],
-            remediation_difficulty: crate::plugins::RiskLevel::Medium,
+            category: "Enumeration".to_string(),
+            mitre_attacks: vec!["T1595".to_string()],
+            remediation_difficulty: RiskLevel::Low,
+            blackarch_category: Some("webapp".to_string()),
+            is_destructive: false,
+            poc_mode: true,
         }
     }
     fn capabilities(&self) -> Vec<Capability> {

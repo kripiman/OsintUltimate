@@ -28,17 +28,20 @@ impl ScannerPlugin for JaelesScanner {
 
     fn metadata(&self) -> PluginMetadata {
         PluginMetadata {
-            name: self.name(),
-            description: "Go-based automation tool for scanning vulnerabilities. Supports custom signatures and high-speed execution.",
+            name: self.name().to_string(),
+            description: "Go-based automation tool for scanning vulnerabilities. Supports custom signatures and high-speed execution.".to_string(),
             target_type: TargetType::Web,
             risk_level: RiskLevel::Medium,
             layer: crate::core::capability_layer::ScanLayer::Scanning,
             expected_duration: Duration::from_secs(300),
             capabilities: self.capabilities(),
             cost: 5,
-            category: "Intelligence",
+            category: "Intelligence".to_string(),
             mitre_attacks: vec![],
             remediation_difficulty: crate::plugins::RiskLevel::Medium,
+            blackarch_category: None,
+            is_destructive: false,
+            poc_mode: false,
         }
     }
 

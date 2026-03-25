@@ -28,17 +28,20 @@ impl ScannerPlugin for CRLFScanner {
 
     fn metadata(&self) -> PluginMetadata {
         PluginMetadata {
-            name: self.name(),
-            description: "Fast tool for CRLF injection vulnerability scanning.",
+            name: self.name().to_string(),
+            description: "Fast tool for CRLF injection vulnerability scanning.".to_string(),
             target_type: TargetType::Web,
             risk_level: RiskLevel::Low,
             layer: crate::core::capability_layer::ScanLayer::Scanning,
             expected_duration: std::time::Duration::from_secs(120),
             capabilities: self.capabilities(),
             cost: 3,
-            category: "Enumeration",
+            category: "Enumeration".to_string(),
             mitre_attacks: vec![],
             remediation_difficulty: crate::plugins::RiskLevel::Medium,
+            blackarch_category: None,
+            is_destructive: false,
+            poc_mode: false,
         }
     }
 

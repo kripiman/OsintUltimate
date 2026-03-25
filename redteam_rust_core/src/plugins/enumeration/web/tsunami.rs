@@ -49,19 +49,12 @@ impl ScannerPlugin for TsunamiScanner {
     }
 
     
-        fn metadata(&self) -> crate::plugins::PluginMetadata {
+    fn metadata(&self) -> crate::plugins::PluginMetadata {
         crate::plugins::PluginMetadata {
-            name: self.name(),
-            description: "Automated security analysis using this plugin.",
-            target_type: crate::plugins::TargetType::Host,
-            risk_level: crate::plugins::RiskLevel::Medium,
-            layer: crate::core::capability_layer::ScanLayer::Scanning,
-            expected_duration: std::time::Duration::from_secs(300),
-            capabilities: self.capabilities(),
-            cost: 5,
-            category: "Enumeration",
-            mitre_attacks: vec![],
-            remediation_difficulty: crate::plugins::RiskLevel::Medium,
+            name: self.name().to_string(),
+            description: "Automated network security analysis using Tsunami.".to_string(),
+            category: "Enumeration".to_string(),
+            ..crate::plugins::PluginMetadata::default()
         }
     }
     fn capabilities(&self) -> Vec<Capability> {

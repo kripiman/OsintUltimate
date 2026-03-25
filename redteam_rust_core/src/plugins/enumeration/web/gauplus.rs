@@ -30,17 +30,20 @@ impl ScannerPlugin for GauPlusScanner {
     
         fn metadata(&self) -> crate::plugins::PluginMetadata {
         crate::plugins::PluginMetadata {
-            name: self.name(),
-            description: "Automated security analysis using this plugin.",
+            name: self.name().to_string(),
+            description: "Automated security analysis using this plugin.".to_string(),
             target_type: crate::plugins::TargetType::Host,
             risk_level: crate::plugins::RiskLevel::Medium,
             layer: crate::core::capability_layer::ScanLayer::Scanning,
             expected_duration: std::time::Duration::from_secs(300),
             capabilities: self.capabilities(),
             cost: 5,
-            category: "General",
+            category: "General".to_string(),
             mitre_attacks: vec![],
             remediation_difficulty: crate::plugins::RiskLevel::Medium,
+            blackarch_category: None,
+            is_destructive: false,
+            poc_mode: false,
         }
     }
     fn capabilities(&self) -> Vec<Capability> {

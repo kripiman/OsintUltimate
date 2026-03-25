@@ -61,17 +61,20 @@ impl ScannerPlugin for OSVScanner {
 
     fn metadata(&self) -> PluginMetadata {
         PluginMetadata {
-            name: self.name(),
-            description: "Google's OSV-Scanner for identifying vulnerabilities in project dependencies (SCA).",
+            name: self.name().to_string(),
+            description: "Google's OSV-Scanner for identifying vulnerabilities in project dependencies (SCA).".to_string(),
             target_type: TargetType::Host, // Can be used on a host where code resides
             risk_level: RiskLevel::Safe,
             layer: crate::core::capability_layer::ScanLayer::Passive,
             expected_duration: std::time::Duration::from_secs(60),
             capabilities: self.capabilities(),
             cost: 2,
-            category: "Compliance",
+            category: "Compliance".to_string(),
             mitre_attacks: vec![],
             remediation_difficulty: crate::plugins::RiskLevel::Medium,
+            blackarch_category: None,
+            is_destructive: false,
+            poc_mode: false,
         }
     }
 

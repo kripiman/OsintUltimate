@@ -22,32 +22,15 @@ struct WebSignature {
 
 impl WebSignature {
     fn load_default() -> Vec<Self> {
-        vec![
-            Self { 
-                title: "Git Repository Exposed".into(), 
-                severity: Severity::High, 
-                path: "/.git/HEAD".into(), 
-                keyword: "refs/heads".into() 
-            },
-            Self { 
-                title: "Environment File Exposed".into(), 
-                severity: Severity::Critical, 
-                path: "/.env".into(), 
-                keyword: "DB_PASSWORD".into() 
-            },
-            Self { 
-                title: "DS_Store File Exposed".into(), 
-                severity: Severity::Low, 
-                path: "/.DS_Store".into(), 
-                keyword: "Bud1".into() 
-            },
-            Self { 
-                title: "PHP Info Page".into(), 
-                severity: Severity::Medium, 
-                path: "/phpinfo.php".into(), 
-                keyword: "PHP Version".into() 
-            },
-        ]
+        vec![Self { 
+                title: "Git Repository Exposed".into(), severity: Severity::High, path: "/.git/HEAD".into(), keyword: "refs/heads".into() 
+            }, Self { 
+                title: "Environment File Exposed".into(), severity: Severity::Critical, path: "/.env".into(), keyword: "DB_PASSWORD".into() 
+            }, Self { 
+                title: "DS_Store File Exposed".into(), severity: Severity::Low, path: "/.DS_Store".into(), keyword: "Bud1".into() 
+            }, Self { 
+                title: "PHP Info Page".into(), severity: Severity::Medium, path: "/phpinfo.php".into(), keyword: "PHP Version".into() 
+            }, ]
     }
 }
 
@@ -81,7 +64,7 @@ impl WebFuzzer {
                 }
             } else {
                 warn!("WebFuzzer: Failed to parse target IP {} for pinning", target_ip);
-                if let Some((url, client)) = pm.get_client() {
+                if let Some((url, client)) = pm.get_client(target_host) {
                     return (Some(url), client);
                 }
             }
@@ -105,11 +88,15 @@ impl WebFuzzer {
                 let is_https = proto == "https";
                 let (proxy_url, client) = self.get_target_client(target_host, target_ip, is_https, http_pinned, https_pinned).await;
                 
-                // HIGH-002: Dynamic User-Agent rotation per request
+                // RT-Identity: If proxy is used, we rely on the Client's internal bonded UA.
+                // Otherwise, we can still use random UA for direct connections (or keep it consistent if preferred).
+                let mut request = client.get(&url);
                 let start_time = std::time::Instant::now();
-                let res = client.get(&url)
-                    .header(reqwest::header::USER_AGENT, crate::utils::common::get_random_user_agent())
-                    .send().await;
+                if proxy_url.is_none() {
+                    request = request.header(reqwest::header::USER_AGENT, crate::utils::common::get_random_user_agent());
+                }
+                
+                let res = request.send().await;
                 
                 let duration = start_time.elapsed().as_millis() as u64;
 
@@ -187,17 +174,20 @@ impl ScannerPlugin for WebFuzzer {
 
         fn metadata(&self) -> crate::plugins::PluginMetadata {
         crate::plugins::PluginMetadata {
-            name: self.name(),
-            description: "Fast web fuzzing for sensitive files (.env, .git, etc.) with jitter and proxy support.",
+            name: self.name().to_string(),
+            description: "Fast web fuzzing for sensitive files (.env, .git, etc.) with jitter and proxy support.".to_string(),
             target_type: crate::plugins::TargetType::Web,
             risk_level: crate::plugins::RiskLevel::Medium,
             layer: crate::core::capability_layer::ScanLayer::Scanning, // ← NUEVO
             expected_duration: std::time::Duration::from_secs(300),
             capabilities: self.capabilities(),
             cost: 5,
-            category: "Enumeration",
+            category: "Enumeration".to_string(),
             mitre_attacks: vec![],
             remediation_difficulty: crate::plugins::RiskLevel::Medium,
+            blackarch_category: None,
+            is_destructive: false,
+            poc_mode: false,
         }
     }
     fn capabilities(&self) -> Vec<Capability> {

@@ -27,25 +27,11 @@ pub struct NmapScanner {
 }
 
 // Known critical vulnerability patterns for severity classification
-static CRITICAL_PATTERNS: Lazy<Vec<&str>> = Lazy::new(|| vec![
-    "ms17-010", "eternalblue", "heartbleed", "shellshock", "bluekeep",
-    "ms08-067", "ms12-020", "cve-2017", "cve-2018", "cve-2019",
-    "cve-2020", "cve-2021", "cve-2022", "cve-2023", "cve-2024",
-    "cve-2025", "cve-2026",
-    "rce", "remote-code-execution", "command-injection",
-    "smb-vuln-ms17", "smb-vuln-cve",
-    "http-vuln-cve",
-]);
+static CRITICAL_PATTERNS: Lazy<Vec<&str>> = Lazy::new(|| vec!["ms17-010", "eternalblue", "heartbleed", "shellshock", "bluekeep", "ms08-067", "ms12-020", "cve-2017", "cve-2018", "cve-2019", "cve-2020", "cve-2021", "cve-2022", "cve-2023", "cve-2024", "cve-2025", "cve-2026", "rce", "remote-code-execution", "command-injection", "smb-vuln-ms17", "smb-vuln-cve", "http-vuln-cve", ]);
 
-static CRITICAL_OUTPUT_PATTERNS: Lazy<Vec<&str>> = Lazy::new(|| vec![
-    "state: vulnerable", "exploitable", "remote code execution",
-    "allows remote attackers", "unauthenticated",
-]);
+static CRITICAL_OUTPUT_PATTERNS: Lazy<Vec<&str>> = Lazy::new(|| vec!["state: vulnerable", "exploitable", "remote code execution", "allows remote attackers", "unauthenticated", ]);
 
-static MEDIUM_PATTERNS: Lazy<Vec<&str>> = Lazy::new(|| vec![
-    "auth", "brute", "default-credentials", "default-password",
-    "weak-password", "anonymous", "enum", "info-disclosure",
-]);
+static MEDIUM_PATTERNS: Lazy<Vec<&str>> = Lazy::new(|| vec!["auth", "brute", "default-credentials", "default-password", "weak-password", "anonymous", "enum", "info-disclosure", ]);
 
 // Structs for QuickXML parsing
 #[derive(Debug, Deserialize)]
@@ -141,17 +127,20 @@ impl ScannerPlugin for NmapScanner {
 
         fn metadata(&self) -> crate::plugins::PluginMetadata {
         crate::plugins::PluginMetadata {
-            name: self.name(),
-            description: "Port scanning, service detection, and OS fingerprinting using Nmap. Essential for initial network discovery.",
+            name: self.name().to_string(),
+            description: "Port scanning, service detection, and OS fingerprinting using Nmap. Essential for initial network discovery.".to_string(),
             target_type: crate::plugins::TargetType::Network,
             risk_level: crate::plugins::RiskLevel::Medium,
             layer: crate::core::capability_layer::ScanLayer::Scanning,
             expected_duration: std::time::Duration::from_secs(300),
             capabilities: self.capabilities(),
             cost: 5,
-            category: "Enumeration",
-            mitre_attacks: vec![],
-            remediation_difficulty: crate::plugins::RiskLevel::Medium,
+            category: "Enumeration".to_string(),
+            mitre_attacks: vec!["T1046".to_string()],
+            remediation_difficulty: crate::plugins::RiskLevel::Low,
+            blackarch_category: Some("scanner".to_string()),
+            is_destructive: false,
+            poc_mode: true,
         }
     }
     fn capabilities(&self) -> Vec<Capability> {
@@ -173,13 +162,7 @@ impl ScannerPlugin for NmapScanner {
         }
 
         // P1 FIX: Hardened argument array to prevent command/flag injection
-        let mut args = vec![
-            "-n".to_string(), 
-            "-Pn".to_string(), 
-            "--open".to_string(),
-            "-oX".to_string(),
-            "-".to_string(), // Output to stdout
-        ];
+        let mut args = vec!["-n".to_string(), "-Pn".to_string(), "--open".to_string(), "-oX".to_string(), "-".to_string()]; // Output to stdout
 
         // If specific ports are provided, use -p; otherwise fallback to top-ports
         if let Some(ports) = &self.ports {

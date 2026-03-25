@@ -34,17 +34,20 @@ impl ScannerPlugin for WaybackScanner {
 
     fn metadata(&self) -> PluginMetadata {
         PluginMetadata {
-            name: self.name(),
-            description: "Fetches historical URLs from Wayback Machine, AlienVault, and Common Crawl using waybackurls and gau.",
+            name: self.name().to_string(),
+            description: "Fetches historical URLs from Wayback Machine, AlienVault, and Common Crawl using waybackurls and gau.".to_string(),
             target_type: TargetType::Web,
             risk_level: RiskLevel::Safe,
             layer: crate::core::capability_layer::ScanLayer::Passive,
             expected_duration: Duration::from_secs(60),
             capabilities: self.capabilities(),
             cost: 2,
-            category: "Reconnaissance",
+            category: "Reconnaissance".to_string(),
             mitre_attacks: vec![],
             remediation_difficulty: crate::plugins::RiskLevel::Medium,
+            blackarch_category: None,
+            is_destructive: false,
+            poc_mode: false,
         }
     }
 

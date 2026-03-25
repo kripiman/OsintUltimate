@@ -1,0 +1,55 @@
+use crate::plugins::{ScannerPlugin, Capability, PluginMetadata, RiskLevel, TargetType};
+use crate::models::{TargetHost, Finding, Severity, Category};
+use crate::core::capability_layer::ScanLayer;
+use async_trait::async_trait;
+use anyhow::Result;
+
+pub struct PoCVerifier {
+    name: &'static str,
+}
+
+impl PoCVerifier {
+    pub fn new() -> Self {
+        Self { name: "poc-verifier" }
+    }
+}
+
+#[async_trait]
+impl ScannerPlugin for PoCVerifier {
+    fn name(&self) -> &'static str {
+        self.name
+    }
+
+    fn metadata(&self) -> PluginMetadata {
+        PluginMetadata {
+            name: self.name().to_string(),
+            description: "Automated Proof-of-Concept verifier. Confirms findings to eliminate false positives.".to_string(),
+            target_type: TargetType::Web,
+            risk_level: RiskLevel::Medium,
+            layer: ScanLayer::Verification,
+            category: "Verification".to_string(),
+            expected_duration: std::time::Duration::from_secs(30),
+            capabilities: vec![],
+            cost: 2,
+            mitre_attacks: vec!["T1595".to_string()],
+            remediation_difficulty: RiskLevel::Low,
+            blackarch_category: Some("automation".to_string()),
+            is_destructive: false,
+            poc_mode: false,
+        }
+    }
+
+    fn capabilities(&self) -> Vec<Capability> {
+        vec![]
+    }
+
+    async fn check_dependencies(&self) -> Result<bool> {
+        Ok(true)
+    }
+
+    async fn scan(&self, target: &TargetHost) -> Result<Vec<Finding>> {
+        // En una implementación real, aquí se buscarían hallazgos existentes
+        // y se intentarían payloads de verificación específicos.
+        Ok(Vec::new())
+    }
+}

@@ -28,17 +28,20 @@ impl ScannerPlugin for KubeBenchScanner {
 
     fn metadata(&self) -> PluginMetadata {
         PluginMetadata {
-            name: self.name(),
-            description: "kube-bench is a tool that checks whether Kubernetes is deployed securely by running the checks documented in the CIS Kubernetes Benchmark.",
+            name: self.name().to_string(),
+            description: "kube-bench is a tool that checks whether Kubernetes is deployed securely by running the checks documented in the CIS Kubernetes Benchmark.".to_string(),
             target_type: TargetType::Container,
             risk_level: RiskLevel::Safe,
             layer: crate::core::capability_layer::ScanLayer::Passive,
             expected_duration: Duration::from_secs(120),
             capabilities: self.capabilities(),
             cost: 3,
-            category: "Enumeration",
+            category: "Enumeration".to_string(),
             mitre_attacks: vec![],
             remediation_difficulty: crate::plugins::RiskLevel::Medium,
+            blackarch_category: None,
+            is_destructive: false,
+            poc_mode: false,
         }
     }
 
