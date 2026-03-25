@@ -1,5 +1,6 @@
 use crate::models::{Finding, AIAnalysis, TargetHost};
 use crate::core::pipeline::Pipeline;
+use crate::core::ai_cascade::ContextCompressor;
 use anyhow::{Result, Context};
 use serde_json::json;
 use std::sync::Arc;
@@ -10,7 +11,18 @@ use async_trait::async_trait;
 #[async_trait]
 pub trait LlmClient: Send + Sync {
     async fn analyze(&self, finding: &Finding) -> Result<AIAnalysis>;
-    async fn decide_action(&self, finding: &Finding, plugins: &[crate::plugins::PluginMetadata]) -> Result<Option<String>>;
+    async fn decide_action(
+        &self, 
+        finding: &Finding, 
+        plugins: &[crate::plugins::PluginMetadata],
+        gap: Option<&CapabilityGap>
+    ) -> Result<Option<String>>;
+}
+
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct CapabilityGap {
+    pub covered_capabilities: std::collections::HashSet<crate::plugins::Capability>,
+    pub recommended_capabilities: Vec<crate::plugins::Capability>,
 }
 
 pub struct OllamaClient {
@@ -28,14 +40,13 @@ impl OllamaClient {
 impl LlmClient for OllamaClient {
     async fn analyze(&self, finding: &Finding) -> Result<AIAnalysis> {
         let client = reqwest::Client::new();
+        let compressed = ContextCompressor::compress_finding(finding);
         let prompt = format!(
             "### PROFESSIONAL RED TEAM ANALYSIS ###\n\
             Analyze this finding from an architectural and modern pentesting perspective. Provide a deep analysis in JSON.\n\n\
-            Finding: {}\n\
-            Description: {}\n\
-            Evidencia: {:?}\n\n\
+            Finding (Minified): {}\n\n\
             JSON Schema: {{ \"summary\": \"...\", \"impact\": \"...\", \"stealth_notes\": \"...\", \"risk_score\": 1-10, \"confidence\": 0.0-1.0, \"mitre_attack\": [\"T1234\", ...], \"remediation\": \"Clear architectural fix\", \"model\": \"{}\" }}",
-            finding.id, finding.description, finding.evidence.data, self.model
+            serde_json::to_string_pretty(&compressed)?, self.model
         );
 
         let res = client.post(format!("{}/api/generate", self.url))
@@ -56,14 +67,31 @@ impl LlmClient for OllamaClient {
         Ok(analysis)
     }
 
-    async fn decide_action(&self, finding: &Finding, plugins: &[crate::plugins::PluginMetadata]) -> Result<Option<String>> {
+    async fn decide_action(
+        &self, 
+        finding: &Finding, 
+        plugins: &[crate::plugins::PluginMetadata],
+        gap: Option<&CapabilityGap>
+    ) -> Result<Option<String>> {
         let client = reqwest::Client::new();
-        let plugins_json = serde_json::to_string(plugins)?;
+        let compressed_finding = ContextCompressor::compress_finding(finding);
+        let compressed_plugins = ContextCompressor::compress_plugins(plugins);
+        let gap_json = if let Some(g) = gap {
+            serde_json::to_string(g)?
+        } else {
+            "{}".to_string()
+        };
+
         let prompt = format!(
-            "Basado en este hallazgo, ¿cuál es el mejor siguiente paso? Plugins disponibles (JSON): {}\n\
-            Hallazgo: {}\n\
+            "### SENTINEL ORCHESTRATOR ###\n\
+            Basado en este hallazgo y el estado actual del escaneo, ¿cuál es el mejor siguiente paso?\n\n\
+            Estado del Escaneo (Gaps): {}\n\
+            Hallazgo Actual (Minified): {}\n\
+            Plugins disponibles (Metadata): {}\n\n\
             Responde SOLO con el nombre del plugin or 'none' en formato JSON: {{ \"action\": \"plugin_name\" }}",
-            plugins_json, finding.description
+            gap_json, 
+            serde_json::to_string(&compressed_finding)?, 
+            serde_json::to_string(&compressed_plugins)?
         );
 
         let res = client.post(format!("{}/api/generate", self.url))
@@ -105,14 +133,11 @@ impl GeminiClient {
 impl LlmClient for GeminiClient {
     async fn analyze(&self, finding: &Finding) -> Result<AIAnalysis> {
         let client = reqwest::Client::new();
+        let compressed = ContextCompressor::compress_finding(finding);
         let prompt = format!(
             "### PROFESSIONAL RED TEAM ANALYSIS ###\n\
             Analyze this finding from an architectural and modern pentesting perspective. Provide a deep analysis in JSON.\n\n\
-            Finding: {}\n\
-            Category: {:?}\n\
-            Severity: {:?}\n\
-            Description: {}\n\
-            Evidence: {:?}\n\n\
+            Finding (Minified): {}\n\n\
             JSON Schema: {{\n\
                 \"summary\": \"Brief executive summary\",\n\
                 \"impact\": \"Detailed business and technical impact\",\n\
@@ -123,7 +148,7 @@ impl LlmClient for GeminiClient {
                 \"remediation\": \"Clear architectural fix recommendation\",\n\
                 \"model\": \"{}\"\n\
             }}",
-            finding.id, finding.category, finding.severity, finding.description, finding.evidence.data, self.model
+            serde_json::to_string_pretty(&compressed)?, self.model
         );
 
         let url = format!("https://generativelanguage.googleapis.com/v1beta/models/{}:generateContent?key={}", self.model, self.key);
@@ -143,16 +168,31 @@ impl LlmClient for GeminiClient {
         Ok(analysis)
     }
 
-    async fn decide_action(&self, finding: &Finding, plugins: &[crate::plugins::PluginMetadata]) -> Result<Option<String>> {
+    async fn decide_action(
+        &self, 
+        finding: &Finding, 
+        plugins: &[crate::plugins::PluginMetadata],
+        gap: Option<&CapabilityGap>
+    ) -> Result<Option<String>> {
         let client = reqwest::Client::new();
-        let plugins_json = serde_json::to_string(plugins)?;
+        let compressed_finding = ContextCompressor::compress_finding(finding);
+        let compressed_plugins = ContextCompressor::compress_plugins(plugins);
+        let gap_json = if let Some(g) = gap {
+            serde_json::to_string(g)?
+        } else {
+            "{}".to_string()
+        };
+
         let prompt = format!(
             "### SENTINEL ORCHESTRATOR LOOP ###\n\
-            Based on the current finding, decide which tool to execute next. Favor tools that fulfill missing capabilities.\n\n\
-            Finding: {}\n\
-            Plugins Available (Metadata & Capabilities): {}\n\n\
+            Based on the current finding and scan state, decide which tool to execute next. Favor tools that fulfill missing capabilities.\n\n\
+            Scan Gaps/Context: {}\n\
+            Current Finding (Minified): {}\n\
+            Plugins Available (Minified): {}\n\n\
             Respond ONLY with the name of the plugin or 'none' in JSON: {{ \"action\": \"plugin_name\" }}",
-            finding.description, plugins_json
+            gap_json, 
+            serde_json::to_string(&compressed_finding)?, 
+            serde_json::to_string(&compressed_plugins)?
         );
 
         let url = format!("https://generativelanguage.googleapis.com/v1beta/models/{}:generateContent?key={}", self.model, self.key);
@@ -180,13 +220,26 @@ impl LlmClient for GeminiClient {
 }
 
 pub struct AutonomousAgent {
-    llm: Arc<dyn LlmClient>,
+    router: Arc<crate::core::ai_cascade::TieredAIRouter>,
     pipeline: Arc<Pipeline>,
+    approval_gate: Arc<crate::core::approval_gate::ApprovalGate>,
+    operator: crate::core::approval_gate::User,
 }
 
 impl AutonomousAgent {
-    pub fn new(llm: Arc<dyn LlmClient>, pipeline: Arc<Pipeline>) -> Self {
-        Self { llm, pipeline }
+    pub fn new(
+        router: Arc<crate::core::ai_cascade::TieredAIRouter>, 
+        pipeline: Arc<Pipeline>, 
+        approval_gate: Arc<crate::core::approval_gate::ApprovalGate>
+    ) -> Self {
+        let operator = crate::core::approval_gate::User {
+            id: "sentinel-agent".to_string(),
+            name: "Sentinel-AI".to_string(),
+            role: crate::core::approval_gate::UserRole::RedTeamFull,
+            authorized_at: chrono::Utc::now(),
+        };
+
+        Self { router, pipeline, approval_gate, operator }
     }
 
     pub async fn run_autopilot(&self, initial_target: TargetHost) -> Result<Vec<Finding>> {
@@ -207,8 +260,8 @@ impl AutonomousAgent {
         while let Some(finding) = rx.recv().await {
             info!("Sentinel: Observando hallazgo: {}", finding.id);
             
-            // Pensar: Análisis profundo
-            let analysis = self.llm.analyze(&finding).await?;
+            // Pensar: Análisis profundo vía Tiered Router
+            let analysis = self.router.analyze(&finding).await?;
             let mut finding = finding.with_ai_analysis(analysis.clone())
                                    .with_remediation(&analysis.remediation);
             if let Some(tags) = analysis.mitre_attack {
@@ -216,12 +269,14 @@ impl AutonomousAgent {
             }
             all_findings.push(finding.clone());
 
-            // Decidir: Orquestación dinámica
-            // Obtenemos metadatos de plugins disponibles para que la IA elija con contexto
+            // Decidir: Orquestación dinámica basada en Gaps de capacidades
             let available_metadata = self.pipeline.get_plugin_metadata(); 
             
-            if let Some(next_action) = self.llm.decide_action(&finding, &available_metadata).await? {
-                info!("Sentinel: IA decidió ejecutar acción: {}", next_action);
+            // ARCH-1 Improvement: Calculate capability gap to prompt better decisions
+            let gap = self.calculate_capability_gap(&all_findings);
+            
+            if let Some(next_action) = self.router.decide_action(&finding, &available_metadata).await? {
+                info!("Sentinel: IA decidió ejecutar acción: {} para cubrir gaps: {:?}", next_action, gap.recommended_capabilities);
                 
                 if self.request_operator_approval(&next_action).await {
                     // Aquí ejecutamos el plugin específico decidido por la IA
@@ -238,10 +293,67 @@ impl AutonomousAgent {
         Ok(all_findings)
     }
 
+    fn calculate_capability_gap(&self, current_findings: &[Finding]) -> CapabilityGap {
+        use std::collections::HashSet;
+        let mut covered = HashSet::new();
+        
+        // Categorías de hallazgos que inferencialmente cubren capacidades
+        for f in current_findings {
+            match f.category {
+                crate::models::Category::Vulnerability => { covered.insert(crate::plugins::Capability::VulnerabilityScanning); }
+                crate::models::Category::NetworkPort => { covered.insert(crate::plugins::Capability::PortScanning); }
+                crate::models::Category::Misconfiguration => { 
+                    covered.insert(crate::plugins::Capability::ConfigAudit);
+                    covered.insert(crate::plugins::Capability::SecurityAuditing);
+                }
+                _ => {}
+            }
+        }
+
+        // Recomendaciones tácticas
+        let mut recommended = Vec::new();
+        if !covered.contains(&crate::plugins::Capability::VulnerabilityScanning) {
+            recommended.push(crate::plugins::Capability::VulnerabilityScanning);
+        }
+        if !covered.contains(&crate::plugins::Capability::ServiceDiscovery) {
+            recommended.push(crate::plugins::Capability::ServiceDiscovery);
+        }
+
+        CapabilityGap {
+            covered_capabilities: covered,
+            recommended_capabilities: recommended,
+        }
+    }
+
     async fn request_operator_approval(&self, action: &str) -> bool {
-        info!("Sentinel: Solicitando aprobación para {}", action);
-        // En un entorno profesional real, esto esperaría interacción humana vía TUI/Web
-        true 
+        info!("🤖 Sentinel: Requesting risk approval for action: {}", action);
+
+        // Check if already approved (e.g. by a previous manual bypass or higher policy)
+        if self.approval_gate.is_approved(action).await {
+            return true;
+        }
+
+        // Logic: All autonomous exploitation actions (layer 4+) should be routed to the Gate.
+        // We use a risk score of 85 by default for tactical AI decisions.
+        match self.approval_gate.request_approval(
+            action, 
+            85, 
+            &self.operator, 
+            "Autonomous Red Team Orchestration Loop"
+        ).await {
+            Ok(approved) => {
+                if approved {
+                    info!("✅ Approval granted for {}", action);
+                } else {
+                    warn!("⏳ Action {} is PENDING approval in the Gate.", action);
+                }
+                approved
+            }
+            Err(e) => {
+                error!("❌ Approval system error: {}", e);
+                false
+            }
+        }
     }
 }
 

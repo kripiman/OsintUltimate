@@ -30,13 +30,21 @@ pub enum Category {
     Availability,
     SCA,
     Compliance,
+    Windows,
+    Linux,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Evidence {
     #[serde(flatten)]
     pub data: serde_json::Value,
+    #[serde(default = "default_confidence")]
+    pub confidence: f32,
+    #[serde(default)]
+    pub verified: bool,
 }
+
+fn default_confidence() -> f32 { 0.5 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AIAnalysis {
@@ -56,6 +64,7 @@ pub struct Finding {
     pub id: String,
     pub category: Category,
     pub severity: Severity,
+    pub title: String,
     pub description: String,
     pub evidence: Evidence,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -66,10 +75,15 @@ pub struct Finding {
     pub ai_analysis: Option<AIAnalysis>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub mitre_attack: Option<Vec<String>>,
+    #[serde(skip_serializing_if = "Vec::is_empty", default)]
+    pub mitre_tags: Vec<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub cvss_score: Option<f32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub blackarch_category: Option<String>,
     #[serde(skip_serializing_if = "Vec::is_empty", default)]
     pub references: Vec<String>,
+    pub timestamps: chrono::DateTime<chrono::Utc>,
 }
 
 impl Finding {
@@ -83,15 +97,23 @@ impl Finding {
         Self {
             id: id.to_string(),
             category,
-            severity,
+            severity: severity.clone(),
+            title: description.to_string(), // Default title to description
             description: description.to_string(),
-            evidence: Evidence { data: evidence },
+            evidence: Evidence { 
+                data: evidence,
+                confidence: 0.5,
+                verified: false,
+            },
             remediation: None,
             parent_id: None,
             ai_analysis: None,
             mitre_attack: None,
-            cvss_score: None,
+            mitre_tags: Vec::new(),
+            cvss_score: Some(crate::utils::cvss::Cvss40::calculate(&severity, 0.5)),
+            blackarch_category: None,
             references: Vec::new(),
+            timestamps: chrono::Utc::now(),
         }
     }
 
@@ -122,6 +144,11 @@ impl Finding {
 
     pub fn with_references(mut self, refs: Vec<String>) -> Self {
         self.references = refs;
+        self
+    }
+
+    pub fn with_blackarch_category(mut self, category: &str) -> Self {
+        self.blackarch_category = Some(category.to_string());
         self
     }
 }

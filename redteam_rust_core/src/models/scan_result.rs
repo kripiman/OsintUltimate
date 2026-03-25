@@ -51,6 +51,8 @@ pub struct TargetHost {
     pub status: TargetStatus,
     pub target_type: TargetType,
     pub findings: Vec<Finding>,
+    pub tool_suggestions: Vec<String>,
+    pub extra_data: serde_json::Value,
 }
 
 

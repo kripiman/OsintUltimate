@@ -114,6 +114,8 @@ impl DynamicPluginLoader {
             let lib_arc = Arc::new(lib);
             self.loaded_libraries.push(lib_arc.clone());
 
+            // PFC-002: El cargador ahora envuelve el plugin en LoadedPlugin que garantiza 
+            // que la librería se mantenga cargada mientras el plugin exista (vía Arc).
             let wrapped_plugin = Box::new(LoadedPlugin {
                 plugin: Box::new(FFIPluginWrapper::new(ffi_plugin)),
                 _lib: lib_arc,
@@ -124,7 +126,7 @@ impl DynamicPluginLoader {
     }
 
     /// Verifies that the plugin was compiled with a compatible version of the core engine.
-    /// Rust lacks a stable ABI, so mismatching versions or dependencies can cause memory corruption.
+    /// AUDIT-002: Además de la versión, podríamos verificar un hash del ABI o features activas.
     fn verify_abi(lib: &Library) -> Result<()> {
         unsafe {
             let version_sym: Symbol<fn() -> &'static str> = lib.get(b"plugin_version\0")
@@ -136,10 +138,12 @@ impl DynamicPluginLoader {
             if plugin_version != host_version {
                 anyhow::bail!(
                     "Plugin ABI version mismatch! Plugin: {}, Host: {}. \
-                    Plugins must be compiled against the exact same engine version.",
+                    Plugins must be compiled against the exact same engine version to avoid memory corruption.",
                     plugin_version, host_version
                 );
             }
+            
+            // TODO: Añadir verificación de 'magic number' o hash de estructuras críticas (TargetHost, Finding)
         }
         Ok(())
     }

@@ -23,6 +23,7 @@ pub struct Pipeline {
     command_line: String,
     policy: ScanLayerPolicy,
     approval_gate: Arc<ApprovalGate>,
+    blackarch_bridge: Arc<crate::core::blackarch::BlackArchBridge>, // NUEVO
 }
 
 impl Pipeline {
@@ -79,7 +80,9 @@ impl Pipeline {
                                     ip: None, 
                                     status: TargetStatus::Pending, 
                                     target_type: crate::models::TargetType::Web,
-                                    findings: Vec::new() 
+                                    findings: Vec::new(),
+                                    tool_suggestions: Vec::new(),
+                                    extra_data: serde_json::json!({}),
                                 }).await;
                             }
                         }
@@ -119,15 +122,22 @@ impl Pipeline {
         }));
 
         // --- STAGE 3: Scanning ---
-        let orchestrator = Orchestrator::new(
-            self.plugins.clone(), 
-            self.concurrency,
-            self.policy,
-            self.approval_gate.clone(),
-        );
-        let scan_token = self.shutdown_token.clone();
+        let plugins = self.plugins.clone();
+        let concurrency = self.concurrency;
+        let policy = self.policy;
+        let approval_gate = self.approval_gate.clone();
+        let blackarch_bridge = self.blackarch_bridge.clone();
+        let scan_rx = scan_rx;
         let sink_tx_stage3 = sink_tx.clone();
+        let scan_token = self.shutdown_token.clone();
         handles.push(tokio::spawn(async move {
+            let orchestrator = Orchestrator::new(
+                plugins, 
+                concurrency,
+                policy,
+                approval_gate,
+                blackarch_bridge,
+            );
             orchestrator.run(scan_rx, sink_tx_stage3, scan_token).await;
         }));
         drop(sink_tx);
@@ -169,6 +179,7 @@ impl Pipeline {
             self.concurrency,
             self.policy,
             self.approval_gate.clone(),
+            self.blackarch_bridge.clone(),
         );
         let token = self.shutdown_token.clone();
         
@@ -250,6 +261,7 @@ impl PipelineBuilder {
         let liveness_checker = self.liveness_checker.context("Pipeline requires a configured liveness checker")?;
         let policy = self.policy.unwrap_or(ScanLayerPolicy::preset_audit());
         let approval_gate = self.approval_gate.unwrap_or(Arc::new(ApprovalGate::for_red_team()));
+        let blackarch_bridge = Arc::new(crate::core::blackarch::BlackArchBridge::new());
 
         Ok(Pipeline {
             concurrency: self.concurrency,
@@ -261,6 +273,7 @@ impl PipelineBuilder {
             command_line: self.command_line,
             policy,
             approval_gate,
+            blackarch_bridge,
         })
     }
 }
