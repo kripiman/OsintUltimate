@@ -11,10 +11,9 @@ pub struct DnsxScanner {
 }
 impl DnsxScanner {
     pub fn new() -> Self {
-        let path = which::which("dnsx")
-            .unwrap_or_else(|_| "dnsx".into());
+        let path = detect_tool("dnsx");
         Self {
-            binary_path: path.to_string_lossy().to_string(),
+            binary_path: path,
         }
     }
 }

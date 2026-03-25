@@ -107,7 +107,7 @@ impl NmapScanner {
     ) -> Self {
         let path = detect_tool("nmap");
         Self {
-            nmap_path: path.to_string_lossy().to_string(),
+            nmap_path: path,
             scripts,
             stealth,
             service_detection,

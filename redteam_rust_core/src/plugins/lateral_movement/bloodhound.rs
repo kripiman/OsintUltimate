@@ -11,10 +11,9 @@ pub struct BloodHoundScanner {
 }
 impl BloodHoundScanner {
     pub fn new() -> Self {
-        let path = which::which("bloodhound-python")
-            .unwrap_or_else(|_| "bloodhound-python".into());
+        let path = detect_tool("bloodhound-python");
         Self {
-            binary_path: path.to_string_lossy().to_string(),
+            binary_path: path,
         }
     }
 }

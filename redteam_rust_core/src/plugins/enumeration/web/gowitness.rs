@@ -11,10 +11,9 @@ pub struct GoWitnessScanner {
 }
 impl GoWitnessScanner {
     pub fn new() -> Self {
-        let path = which::which("gowitness")
-            .unwrap_or_else(|_| "gowitness".into());
+        let path = detect_tool("gowitness");
         Self {
-            binary_path: path.to_string_lossy().to_string(),
+            binary_path: path,
         }
     }
 }

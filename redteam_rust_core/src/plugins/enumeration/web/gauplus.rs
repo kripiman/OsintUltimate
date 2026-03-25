@@ -11,10 +11,9 @@ pub struct GauPlusScanner {
 }
 impl GauPlusScanner {
     pub fn new() -> Self {
-        let path = which::which("gauplus")
-            .unwrap_or_else(|_| "gauplus".into());
+        let path = detect_tool("gauplus");
         Self {
-            binary_path: path.to_string_lossy().to_string(),
+            binary_path: path,
         }
     }
 }

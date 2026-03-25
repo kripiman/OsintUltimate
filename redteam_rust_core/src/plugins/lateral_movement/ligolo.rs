@@ -11,11 +11,9 @@ pub struct LigoloScanner {
 }
 impl LigoloScanner {
     pub fn new() -> Self {
-        let path = which::which("ligolo-proxy")
-            .or_else(|_| which::which("ligolo"))
-            .unwrap_or_else(|_| "ligolo-proxy".into());
+        let path = detect_tool("ligolo-proxy");
         Self {
-            binary_path: path.to_string_lossy().to_string(),
+            binary_path: path,
         }
     }
 }

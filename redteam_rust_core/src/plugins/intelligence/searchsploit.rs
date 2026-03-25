@@ -11,10 +11,9 @@ pub struct SearchsploitScanner {
 }
 impl SearchsploitScanner {
     pub fn new() -> Self {
-        let path = which::which("searchsploit")
-            .unwrap_or_else(|_| "searchsploit".into());
+        let path = detect_tool("searchsploit");
         Self {
-            binary_path: path.to_string_lossy().to_string(),
+            binary_path: path,
         }
     }
 }

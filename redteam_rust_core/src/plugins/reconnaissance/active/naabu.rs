@@ -11,10 +11,9 @@ pub struct NaabuScanner {
 }
 impl NaabuScanner {
     pub fn new() -> Self {
-        let path = which::which("naabu")
-            .unwrap_or_else(|_| "naabu".into());
+        let path = detect_tool("naabu");
         Self {
-            binary_path: path.to_string_lossy().to_string(),
+            binary_path: path,
         }
     }
 }

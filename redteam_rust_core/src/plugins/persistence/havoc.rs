@@ -11,10 +11,9 @@ pub struct HavocScanner {
 }
 impl HavocScanner {
     pub fn new() -> Self {
-        let path = which::which("havoc")
-            .unwrap_or_else(|_| "havoc".into());
+        let path = detect_tool("havoc");
         Self {
-            binary_path: path.to_string_lossy().to_string(),
+            binary_path: path,
         }
     }
 }

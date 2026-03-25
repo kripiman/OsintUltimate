@@ -11,10 +11,9 @@ pub struct PacuScanner {
 }
 impl PacuScanner {
     pub fn new() -> Self {
-        let path = which::which("pacu")
-            .unwrap_or_else(|_| "pacu".into());
+        let path = detect_tool("pacu");
         Self {
-            binary_path: path.to_string_lossy().to_string(),
+            binary_path: path,
         }
     }
 }

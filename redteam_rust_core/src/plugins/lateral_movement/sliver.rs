@@ -11,11 +11,9 @@ pub struct SliverScanner {
 }
 impl SliverScanner {
     pub fn new() -> Self {
-        let path = which::which("sliver-server")
-            .or_else(|_| which::which("sliver"))
-            .unwrap_or_else(|_| "sliver-server".into());
+        let path = detect_tool("sliver-server");
         Self {
-            binary_path: path.to_string_lossy().to_string(),
+            binary_path: path,
         }
     }
 }

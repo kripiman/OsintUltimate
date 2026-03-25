@@ -30,7 +30,7 @@ impl GitleaksScanner {
     pub fn new() -> Self {
         let path = detect_tool("gitleaks");
         Self {
-            binary_path: path.to_string_lossy().to_string(),
+            binary_path: path,
         }
     }
 }

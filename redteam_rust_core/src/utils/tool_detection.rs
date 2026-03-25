@@ -1,6 +1,8 @@
 use anyhow::{Context, Result};
 use std::path::PathBuf;
 use std::process::Command;
+#[cfg(unix)]
+use std::os::unix::fs::PermissionsExt;
 use tracing::{info, warn, debug};
 
 /// Detects if a tool is available in the system PATH using the `which` command.

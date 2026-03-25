@@ -11,10 +11,9 @@ pub struct TrivyScanner {
 }
 impl TrivyScanner {
     pub fn new() -> Self {
-        let path = which::which("trivy")
-            .unwrap_or_else(|_| "trivy".into());
+        let path = detect_tool("trivy");
         Self {
-            binary_path: path.to_string_lossy().to_string(),
+            binary_path: path,
         }
     }
 }

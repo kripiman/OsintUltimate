@@ -11,10 +11,9 @@ pub struct InteractshScanner {
 }
 impl InteractshScanner {
     pub fn new() -> Self {
-        let path = which::which("interactsh-client")
-            .unwrap_or_else(|_| "interactsh-client".into());
+        let path = detect_tool("interactsh-client");
         Self {
-            binary_path: path.to_string_lossy().to_string(),
+            binary_path: path,
         }
     }
 }

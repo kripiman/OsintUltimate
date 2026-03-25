@@ -16,7 +16,7 @@ impl WPScanner {
     pub fn new() -> Self {
         let path = detect_tool("wpscan");
         Self {
-            binary_path: path.to_string_lossy().to_string(),
+            binary_path: path,
         }
     }
 }

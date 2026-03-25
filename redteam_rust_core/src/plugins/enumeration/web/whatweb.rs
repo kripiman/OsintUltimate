@@ -22,7 +22,7 @@ impl WhatWebScanner {
     pub fn new() -> Self {
         let path = detect_tool("whatweb");
         Self {
-            binary_path: path.to_string_lossy().to_string(),
+            binary_path: path,
         }
     }
 }

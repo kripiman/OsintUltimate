@@ -13,13 +13,11 @@ pub struct WaybackScanner {
 }
 impl WaybackScanner {
     pub fn new() -> Self {
-        let wayback_path = which::which("waybackurls")
-            .unwrap_or_else(|_| "waybackurls".into());
-        let gau_path = which::which("gau")
-            .unwrap_or_else(|_| "gau".into());
+        let wayback_path = detect_tool("waybackurls");
+        let gau_path = detect_tool("gau");
         Self {
-            wayback_path: wayback_path.to_string_lossy().to_string(),
-            gau_path: gau_path.to_string_lossy().to_string(),
+            wayback_path: wayback_path,
+            gau_path: gau_path,
         }
     }
 }

@@ -11,10 +11,9 @@ pub struct FeroxbusterScanner {
 }
 impl FeroxbusterScanner {
     pub fn new() -> Self {
-        let path = which::which("feroxbuster")
-            .unwrap_or_else(|_| "feroxbuster".into());
+        let path = detect_tool("feroxbuster");
         Self {
-            binary_path: path.to_string_lossy().to_string(),
+            binary_path: path,
         }
     }
 }

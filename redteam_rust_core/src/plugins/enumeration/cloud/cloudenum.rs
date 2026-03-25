@@ -11,11 +11,9 @@ pub struct CloudEnumScanner {
 }
 impl CloudEnumScanner {
     pub fn new() -> Self {
-        let path = which::which("cloud_enum")
-            .or_else(|_| which::which("cloudenum"))
-            .unwrap_or_else(|_| "cloud_enum.py".into());
+        let path = detect_tool("cloud_enum");
         Self {
-            binary_path: path.to_string_lossy().to_string(),
+            binary_path: path,
         }
     }
 }

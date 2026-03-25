@@ -11,10 +11,9 @@ pub struct CloudFoxScanner {
 }
 impl CloudFoxScanner {
     pub fn new() -> Self {
-        let path = which::which("cloudfox")
-            .unwrap_or_else(|_| "cloudfox".into());
+        let path = detect_tool("cloudfox");
         Self {
-            binary_path: path.to_string_lossy().to_string(),
+            binary_path: path,
         }
     }
 }

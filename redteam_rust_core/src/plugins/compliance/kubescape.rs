@@ -15,7 +15,7 @@ impl KubescapeScanner {
     pub fn new() -> Self {
         let path = detect_tool("kubescape");
         Self {
-            binary_path: path.to_string_lossy().to_string(),
+            binary_path: path,
         }
     }
 }
