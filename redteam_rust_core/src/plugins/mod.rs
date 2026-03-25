@@ -18,7 +18,7 @@ use anyhow::Result;
 use serde::{Deserialize, Serialize};
 use crate::core::capability_layer::ScanLayer;
 
-#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Hash)]
 pub enum Capability {
     PortScanning,
     ServiceDiscovery,
@@ -35,12 +35,17 @@ pub enum Capability {
     IAMAssessment,
     SCA,
     SecurityAuditing,
-    GraphQL, // NUEVO
-    ApiSecurity, // NUEVO
-    K8sAudit, // NUEVO
-    ContainerSecurity, // NUEVO
-    AdCoercion, // NUEVO
-    PrivilegeEscalation, // NUEVO
+    GraphQL,
+    ApiSecurity,
+    K8sAudit,
+    ContainerSecurity,
+    AdCoercion,
+    PrivilegeEscalation,
+    BruteForce,         // NUEVO
+    CommandInjection,    // NUEVO
+    XssScanning,         // NUEVO
+    SqlInjection,        // NUEVO
+    DirectoryBruteForce, // NUEVO
 }
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, PartialOrd, Ord)]
@@ -54,17 +59,41 @@ pub enum RiskLevel {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PluginMetadata {
-    pub name: &'static str,
-    pub description: &'static str,
+    pub name: String,
+    pub description: String,
     pub target_type: TargetType,
     pub risk_level: RiskLevel,
     pub layer: ScanLayer,
-    pub category: &'static str, // E.g., "Web", "Network", "Cloud"
+    pub category: String, // E.g., "Web", "Network", "Cloud"
     pub expected_duration: std::time::Duration,
     pub capabilities: Vec<Capability>,
     pub cost: u32,
-    pub mitre_attacks: Vec<&'static str>, // E.g., ["T1110", "T1046"]
-    pub remediation_difficulty: RiskLevel, // Reusing RiskLevel for simplicity: Low=Easy, etc.
+    pub mitre_attacks: Vec<String>, // E.g., ["T1110", "T1046"]
+    pub remediation_difficulty: RiskLevel,
+    pub blackarch_category: Option<String>, // NUEVO: Categoría oficial de BlackArch
+    pub is_destructive: bool, // NUEVO: Indica si la acción puede alterar el estado o causar DoS
+    pub poc_mode: bool,       // NUEVO: Indica si el plugin tiene un modo de prueba no intrusivo
+}
+
+impl Default for PluginMetadata {
+    fn default() -> Self {
+        Self {
+            name: "Unknown Plugin".to_string(),
+            description: "No description provided.".to_string(),
+            target_type: TargetType::Host,
+            risk_level: RiskLevel::Medium,
+            layer: ScanLayer::Scanning,
+            category: "General".to_string(),
+            expected_duration: std::time::Duration::from_secs(60),
+            capabilities: Vec::new(),
+            cost: 1,
+            mitre_attacks: Vec::new(),
+            remediation_difficulty: RiskLevel::Medium,
+            blackarch_category: None,
+            is_destructive: false,
+            poc_mode: true,
+        }
+    }
 }
 
 #[async_trait]
@@ -200,74 +229,8 @@ pub fn get_all_scanners(config: GlobalConfig) -> Vec<Box<dyn ScannerPlugin>> {
     use crate::plugins::exploitation::web::graphql_cop::GraphQLCopScanner; // NUEVO
     use crate::plugins::exploitation::network::coercer::CoercerScanner; // NUEVO
 
-    vec![
-        Box::new(WebFuzzer::new(config.insecure, config.jitter.clone(), config.proxy_manager.clone())),
-        Box::new(NmapScanner::new(
-            config.nmap_options.scripts,
-            config.nmap_options.stealth,
-            config.nmap_options.service_detection,
-            config.nmap_options.scan_type,
-            config.nmap_options.fragment,
-            config.nmap_options.decoy,
-            config.nmap_options.ports,
-            config.nmap_options.vuln_scan,
-        )),
-        Box::new(WhatWebScanner::new()),
-        Box::new(SqlMapScanner::new()),
-        Box::new(HydraScanner::new(None, None, None)),
-        Box::new(WapitiScanner::new()),
-        Box::new(ZapScanner::new(None, None, None)),
-        Box::new(BurpScanner::new(None, None)),
-        Box::new(NucleiScanner::new()),
-        Box::new(FfufScanner::new(None)),
-        Box::new(ArjunScanner::new()),
-        Box::new(RustScanScanner::new()),
-        Box::new(NetExecScanner::new()),
-        Box::new(TruffleHogScanner::new()),
-        Box::new(DalfoxScanner::new()),
-        Box::new(KatanaScanner::new()),
-        Box::new(BloodHoundScanner::new()),
-        Box::new(ResponderScanner::new()),
-        Box::new(ImpacketScanner::new()),
-        Box::new(CertipyScanner::new()),
-        Box::new(PetitPotamScanner::new()),
-        Box::new(SliverScanner::new()),
-        Box::new(LigoloScanner::new()),
-        Box::new(PacuScanner::new()),
-        Box::new(CloudEnumScanner::new()),
-        Box::new(HttpxScanner::new()),
-        Box::new(NaabuScanner::new()),
-        Box::new(InteractshScanner::new()),
-        Box::new(HavocScanner::new()),
-        Box::new(CloudFoxScanner::new()),
-        Box::new(KiterunnerScanner::new()),
-        Box::new(KubescapeScanner::new()),
-        Box::new(GitleaksScanner::new()),
-        Box::new(TsunamiScanner::new()),
-        Box::new(CheckovScanner::new()),
-        Box::new(JwtToolScanner::new()),
-        Box::new(GoWitnessScanner::new()),
-        Box::new(SearchsploitScanner::new()),
-        Box::new(TrivyScanner::new()),
-        Box::new(FeroxbusterScanner::new()),
-        Box::new(GauPlusScanner::new()),
-        Box::new(DnsxScanner::new()),
-        Box::new(CloudBruteScanner::new()),
-        Box::new(NiktoScanner::new()),
-        Box::new(WPScanner::new()),
-        Box::new(SnallygasterScanner::new()),
-        Box::new(WaybackScanner::new()),
-        Box::new(JaelesScanner::new()),
-        Box::new(ProwlerScanner::new()),
-        Box::new(KubeBenchScanner::new()),
-        Box::new(OSVScanner::new()),
-        Box::new(CRLFScanner::new()),
-        Box::new(GfScanner::new()),
-        Box::new(CommixScanner::new()),
-        Box::new(PrivescHunterScanner::new(PrivescCheckLevel::Moderate)),
-        Box::new(GraphQLCopScanner::new()),
-        Box::new(CoercerScanner::new()),
-    ]
+    vec![Box::new(WebFuzzer::new(config.insecure, config.jitter.clone(), config.proxy_manager.clone())), Box::new(NmapScanner::new(
+            config.nmap_options.scripts, config.nmap_options.stealth, config.nmap_options.service_detection, config.nmap_options.scan_type, config.nmap_options.fragment, config.nmap_options.decoy, config.nmap_options.ports, config.nmap_options.vuln_scan, )), Box::new(WhatWebScanner::new()), Box::new(SqlMapScanner::new()), Box::new(HydraScanner::new(None, None, None)), Box::new(WapitiScanner::new()), Box::new(ZapScanner::new(None, None, None)), Box::new(BurpScanner::new(None, None)), Box::new(NucleiScanner::new()), Box::new(FfufScanner::new(None)), Box::new(ArjunScanner::new()), Box::new(RustScanScanner::new()), Box::new(NetExecScanner::new()), Box::new(TruffleHogScanner::new()), Box::new(DalfoxScanner::new()), Box::new(KatanaScanner::new()), Box::new(BloodHoundScanner::new()), Box::new(ResponderScanner::new()), Box::new(ImpacketScanner::new()), Box::new(CertipyScanner::new()), Box::new(PetitPotamScanner::new()), Box::new(SliverScanner::new()), Box::new(LigoloScanner::new()), Box::new(PacuScanner::new()), Box::new(CloudEnumScanner::new()), Box::new(HttpxScanner::new()), Box::new(NaabuScanner::new()), Box::new(InteractshScanner::new()), Box::new(HavocScanner::new()), Box::new(CloudFoxScanner::new()), Box::new(KiterunnerScanner::new()), Box::new(KubescapeScanner::new()), Box::new(GitleaksScanner::new()), Box::new(TsunamiScanner::new()), Box::new(CheckovScanner::new()), Box::new(JwtToolScanner::new()), Box::new(GoWitnessScanner::new()), Box::new(SearchsploitScanner::new()), Box::new(TrivyScanner::new()), Box::new(FeroxbusterScanner::new()), Box::new(GauPlusScanner::new()), Box::new(DnsxScanner::new()), Box::new(CloudBruteScanner::new()), Box::new(NiktoScanner::new()), Box::new(WPScanner::new()), Box::new(SnallygasterScanner::new()), Box::new(WaybackScanner::new()), Box::new(JaelesScanner::new()), Box::new(ProwlerScanner::new()), Box::new(KubeBenchScanner::new()), Box::new(OSVScanner::new()), Box::new(CRLFScanner::new()), Box::new(GfScanner::new()), Box::new(CommixScanner::new()), Box::new(PrivescHunterScanner::new(PrivescCheckLevel::Moderate)), Box::new(GraphQLCopScanner::new()), Box::new(CoercerScanner::new()), ]
 }
 
 pub fn get_all_discovery() -> Vec<Box<dyn DiscoveryPlugin>> {
@@ -276,12 +239,7 @@ pub fn get_all_discovery() -> Vec<Box<dyn DiscoveryPlugin>> {
     use crate::plugins::reconnaissance::osint::amass::AmassScanner;
     use crate::plugins::reconnaissance::osint::uncover::UncoverScanner;
 
-    vec![
-        Box::new(OsintScanner::new()),
-        Box::new(SubfinderScanner::new()),
-        Box::new(AmassScanner::new()),
-        Box::new(UncoverScanner::new()),
-    ]
+    vec![Box::new(OsintScanner::new()), Box::new(SubfinderScanner::new()), Box::new(AmassScanner::new()), Box::new(UncoverScanner::new()), ]
 }
 
 pub fn get_registry(config: GlobalConfig) -> PluginRegistry {
