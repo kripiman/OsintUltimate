@@ -40,6 +40,7 @@ pub fn show_menu() -> Result<Option<Args>> {
         vuln_scan: false,
         autonomous: false,
         ollama_url: "http://localhost:11434".to_string(),
+        max_layer: "Scanning".to_string(),
     };
 
     if std::path::Path::new(&target).exists() {

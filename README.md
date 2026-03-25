@@ -1,7 +1,3 @@
-<<<<<<< Updated upstream
-# OsintUltimate
- 
-=======
 # 🛡️ OsintUltimate (RedTeam Rust Core v2.1)
 
 > **Motor de Evaluación de Red Team de Alto Rendimiento y Asíncrono**
@@ -35,6 +31,28 @@
     -   **Validación de ABI**: Los plugins dinámicos se verifican por versión para evitar corrupción de memoria.
     -   **Optimización de Memoria**: Uso de `Arc` para compartir objetivos entre hilos, minimizando allocations en el heap.
 
+---
+
+## 💻 Requisitos del Sistema
+
+Para garantizar un rendimiento óptimo, se recomiendan las siguientes especificaciones:
+
+### Hardware
+| Recurso | Mínimo | Recomendado |
+| :--- | :--- | :--- |
+| **CPU** | Dual-core (x86_64/ARM64) | Quad-core o superior |
+| **RAM** | 1 GB | 4 GB+ |
+| **Disco** | 500 MB | 2 GB+ (para logs y resultados) |
+| **Red** | 10 Mbps | 100 Mbps+ (Baja latencia) |
+
+### Software (Dependencias)
+- **Sistema Operativo**: Linux (Kernel 5.4+)
+- **Compilador**: Rust 1.75+ (para construcción desde código fuente)
+- **Herramientas de Red**: 
+    - `nmap` (Requerido para escaneo de puertos y servicios)
+    - `sqlmap`, `commix`, `nuclei` (Opcionales, recomendados para mayor cobertura)
+- **Entorno de IA**: Conectividad a APIs (Gemini Pro/Flash) u Ollama local para el `TieredAIRouter`.
+
 ## 📚 Documentación Técnica
 
 Para conocer de forma profunda el funcionamiento interno, arquitecturas concurrenciales y manuales de evasión, consulta los siguientes documentos:
@@ -48,32 +66,28 @@ Para conocer de forma profunda el funcionamiento interno, arquitecturas concurre
 ## 🛠️ Módulos
 
 ### 1. **Motor Central** (`Orchestrator`)
-El cerebro de la operación. Gestiona la concurrencia a través de `Semaphores` y `RwLock`, distribuyendo tareas a través de un pool de trabajadores sin bloqueos. Ahora orquestando ejecuciones multi-fase.
+El cerebro de la operación. Gestiona la concurrencia a través de `Semaphores` y `RwLock`, distribuyendo tareas a través de un pool de trabajadores sin bloqueos. Ahora orquestando ejecuciones multi-fase e integrando el `TieredAIRouter` para decisiones autónomas.
 
-### 2. **OsintScanner** (Fase de Descubrimiento)
+### 2. **TieredAIRouter** (Orquestación de IA Nativa)
+*   **Decisión Dinámica**: Selecciona el modelo de IA adecuado (Local, Flash, Pro) según la criticidad del hallazgo.
+*   **Compresión de Contexto**: Minimiza el consumo de tokens mediante la optimización de registros de evidencia antes del análisis.
+*   **Autonomía**: Decide las próximas acciones tácticas sin intervención manual.
+
+### 3. **OsintScanner** (Fase de Descubrimiento)
 *   **Descubrimiento de Subdominios**: Consulta logs de Transparencia de Certificados (`crt.sh`) para encontrar activos ocultos.
 *   **Verificación Activa**: Utiliza `hickory-resolver` (DNS asíncrono nativo) para validar subdominios en milisegundos.
-*   **Resultado**: Expande la lista de objetivos para la fase de escaneo subsiguiente.
 
-### 3. **WebFuzzer** (Fase de Escaneo)
-*   **Coincidencia de Firmas**: Detecta exposiciones de archivos sensibles (`.env`, `.git/config`, `wp-config.php.bak`).
-*   **Resiliencia**: Implementa reintentos con **Exponencial Backoff** para manejar redes inestables.
-*   **Controles de Salud**: Valida proactivamente los proxies antes de su uso.
+### 4. **WebFuzzer** (Fase de Escaneo)
+*   **Coincidencia de Firmas**: Detecta exposiciones de archivos sensibles (`.env`, `.git/config`).
+*   **Resiliencia**: Implementa reintentos con **Exponencial Backoff**.
 
-### 4. **NmapScanner** (Fase de Escaneo)
+### 5. **NmapScanner** (Fase de Escaneo)
 *   **Parseo Robusto**: Utiliza `quick-xml` para parsear la salida de Nmap de forma segura.
-*   **Eficiencia**: Envuelve los procesos de Nmap puramente para el escaneo de puertos, delegando la lógica a Rust.
-*   **Soporte de Scripting**: Soporta scripts estándar de Nmap (NSE) para la detección de vulnerabilidades.
+*   **Soporte de Scripting**: Soporta scripts estándar de Nmap (NSE).
 
 ---
 
-## 📦 Instalación y Uso
-
-### Prerrequisitos
-*   Rust (última versión estable)
-*   Nmap (para el módulo de escaneo de red)
-
-### Construcción
+### Instalación y Construcción
 ```bash
 git clone https://github.com/kripiman/OsintUltimate
 cd OsintUltimate/redteam_rust_core
@@ -172,4 +186,3 @@ graph TD
 ## 📜 Licencia
 
 Privado y Confidencial - Solo para uso interno del Red Team.
->>>>>>> Stashed changes
