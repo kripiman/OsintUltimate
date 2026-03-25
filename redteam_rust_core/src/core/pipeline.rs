@@ -2,7 +2,8 @@ use crate::core::orchestrator::Orchestrator;
 use crate::core::sink::DataSink;
 use crate::models::{TargetHost, TargetStatus, Finding, Category, Severity, ScanMetadata};
 use crate::plugins::{ScannerPlugin, DiscoveryPlugin};
-use crate::utils::liveness::{LivenessChecker, is_safe_ip};
+use crate::utils::{LivenessChecker, JitterSleep};
+use crate::utils::liveness::is_safe_ip;
 use crate::core::capability_layer::ScanLayerPolicy;
 use crate::core::approval_gate::ApprovalGate;
 use anyhow::{Context, Result};
@@ -11,19 +12,21 @@ use tokio::sync::mpsc;
 use tokio_util::sync::CancellationToken;
 use tracing::info;
 use futures::stream::StreamExt;
-use serde_json::json; // Added for json! macro
+use serde_json::json;
+use bloomfilter::Bloom;
 
 pub struct Pipeline {
     concurrency: usize,
     discovery_plugins: Arc<Vec<Box<dyn DiscoveryPlugin>>>,
     plugins: Arc<Vec<Box<dyn ScannerPlugin>>>,
-    sink: Box<dyn DataSink>,
+    sink: Option<Box<dyn DataSink>>,
     shutdown_token: CancellationToken,
     liveness_checker: LivenessChecker,
     command_line: String,
     policy: ScanLayerPolicy,
     approval_gate: Arc<ApprovalGate>,
-    blackarch_bridge: Arc<crate::core::blackarch::BlackArchBridge>, // NUEVO
+    blackarch_bridge: Arc<crate::core::blackarch::BlackArchBridge>,
+    jitter: Option<JitterSleep>,
 }
 
 impl Pipeline {
@@ -32,13 +35,13 @@ impl Pipeline {
     }
 
     /// Runs the 4-stage pipeline: Discovery -> Liveness -> Scanning -> Sink
-    pub async fn run(self, targets: Vec<TargetHost>) -> Result<()> {
+    pub async fn run(mut self, targets: Vec<TargetHost>) -> Result<()> {
         info!("🚀 Starting Pipeline with {} plugins...", self.plugins.len());
         
-        let mut sink = self.sink;
+        let mut sink = self.sink.take().context("Pipeline: Sink already taken")?;
         sink.write_metadata(&ScanMetadata::new(&self.command_line)).await?;
 
-        let channel_size = (self.concurrency * 2).clamp(100, 1000);
+        let channel_size = (self.concurrency * 2).clamp(4, 32);
         
         let (osint_tx, osint_rx) = mpsc::channel::<TargetHost>(channel_size);
         let (liveness_tx, liveness_rx) = mpsc::channel::<TargetHost>(channel_size);
@@ -48,7 +51,7 @@ impl Pipeline {
         let mut handles = Vec::new();
         
         // --- STAGE 1: Discovery ---
-        let seen_domains = Arc::new(dashmap::DashSet::new());
+        let mut seen_domains = Bloom::new_for_fp_rate(1_000_000, 0.01);
         let discovery_token = self.shutdown_token.clone();
         let discovery_plugins = self.discovery_plugins.clone();
         
@@ -56,7 +59,14 @@ impl Pipeline {
             let mut rx = osint_rx;
             while let Some(mut target) = rx.recv().await {
                 if discovery_token.is_cancelled() { break; }
-                if !seen_domains.insert(target.host.clone()) { continue; }
+                
+                // Apply jitter if configured for stealth scanning
+                if let Some(ref jitter) = self.jitter {
+                    jitter.apply().await;
+                }
+
+                if seen_domains.check(&target.host) { continue; }
+                seen_domains.set(&target.host);
 
                 let mut join_set = tokio::task::JoinSet::new();
                 for i in 0..discovery_plugins.len() {
@@ -73,7 +83,8 @@ impl Pipeline {
                 while let Some(join_res) = join_set.join_next().await {
                     if let Ok((name, Ok(subdomains))) = join_res {
                         for sub in subdomains {
-                            if seen_domains.insert(sub.clone()) {
+                            if !seen_domains.check(&sub) {
+                                seen_domains.set(&sub);
                                 target.findings.push(Finding::new("DISCOVERED_SUBDOMAIN", Category::Recon, Severity::Info, &format!("Discovered via {}: {}", name, sub), json!({ "subdomain": sub, "source": name })));
                                 let _ = liveness_tx.send(TargetHost { 
                                     host: sub, 
@@ -82,6 +93,7 @@ impl Pipeline {
                                     target_type: crate::models::TargetType::Web,
                                     findings: Vec::new(),
                                     tool_suggestions: Vec::new(),
+                                    tactical_context: serde_json::json!({}),
                                     extra_data: serde_json::json!({}),
                                 }).await;
                             }
@@ -152,6 +164,22 @@ impl Pipeline {
 
         for h in handles { let _ = h.await; }
         Ok(())
+    }
+
+    /// Starts ONLY the sink stage and returns a sender. Useful for Autonomous mode.
+    pub async fn start_sink_stage(&mut self) -> Result<(mpsc::Sender<TargetHost>, tokio::task::JoinHandle<()>)> {
+        let mut sink = self.sink.take().context("Pipeline: Sink already taken")?;
+        sink.write_metadata(&ScanMetadata::new(&self.command_line)).await?;
+        
+        let (tx, mut rx) = mpsc::channel(100);
+        let handle = tokio::spawn(async move {
+            while let Some(target) = rx.recv().await {
+                let _ = sink.write(&target).await;
+            }
+            let _ = sink.close().await;
+        });
+
+        Ok((tx, handle))
     }
 
     pub async fn run_discovery(&self, target: &TargetHost, tx: mpsc::Sender<Finding>) -> Result<()> {
@@ -226,6 +254,7 @@ pub struct PipelineBuilder {
     command_line: String,
     policy: Option<ScanLayerPolicy>,
     approval_gate: Option<Arc<ApprovalGate>>,
+    jitter: Option<JitterSleep>,
 }
 
 impl Default for PipelineBuilder { fn default() -> Self { Self::new() } }
@@ -242,7 +271,13 @@ impl PipelineBuilder {
             command_line: "OsintUltimate".to_string(),
             policy: None,
             approval_gate: None,
+            jitter: None,
         }
+    }
+
+    pub fn with_jitter(mut self, jitter: Option<JitterSleep>) -> Self {
+        self.jitter = jitter;
+        self 
     }
 
     pub fn policy(mut self, policy: ScanLayerPolicy) -> Self { self.policy = Some(policy); self }
@@ -267,13 +302,14 @@ impl PipelineBuilder {
             concurrency: self.concurrency,
             discovery_plugins: Arc::new(self.discovery_plugins),
             plugins: Arc::new(self.plugins),
-            sink,
+            sink: Some(sink),
             shutdown_token: self.shutdown_token,
             liveness_checker,
             command_line: self.command_line,
             policy,
             approval_gate,
             blackarch_bridge,
+            jitter: self.jitter,
         })
     }
 }

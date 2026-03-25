@@ -2,7 +2,7 @@
 // 🚪 Risk Approval Gate - Control de acciones de alto riesgo
 // 🔐 Garantiza conformidad y rastro de auditoría
 
-use tokio::sync::RwLock;
+use dashmap::DashMap;
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
@@ -47,9 +47,9 @@ pub enum ApprovalStatus {
 /// Gate que controla acciones de alto riesgo
 pub struct ApprovalGate {
     risk_threshold: u8,
-    pending_approvals: Arc<RwLock<Vec<ApprovalRequest>>>,
-    approval_cache: Arc<RwLock<std::collections::HashMap<String, ApprovalStatus>>>,
-    audit_log: Arc<RwLock<Vec<AuditLogEntry>>>,
+    pending_approvals: Arc<DashMap<String, ApprovalRequest>>,
+    approval_cache: Arc<DashMap<String, ApprovalStatus>>,
+    audit_log: Arc<DashMap<DateTime<Utc>, AuditLogEntry>>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -65,9 +65,9 @@ impl ApprovalGate {
     pub fn new(risk_threshold: u8) -> Self {
         Self {
             risk_threshold,
-            pending_approvals: Arc::new(RwLock::new(Vec::new())),
-            approval_cache: Arc::new(RwLock::new(std::collections::HashMap::new())),
-            audit_log: Arc::new(RwLock::new(Vec::new())),
+            pending_approvals: Arc::new(DashMap::new()),
+            approval_cache: Arc::new(DashMap::new()),
+            audit_log: Arc::new(DashMap::new()),
         }
     }
     
@@ -117,7 +117,7 @@ impl ApprovalGate {
             action, risk_level, user.name
         );
         
-        self.pending_approvals.write().await.push(request.clone());
+        self.pending_approvals.insert(request.id.clone(), request.clone());
         
         self.log_action(
             user.name.clone(),
@@ -147,7 +147,8 @@ impl ApprovalGate {
             reason: reason.to_string(),
         };
         
-        self.approval_cache.write().await.insert(request_id.to_string(), status);
+        self.approval_cache.insert(request_id.to_string(), status);
+        self.pending_approvals.remove(request_id);
         
         info!("Request {} approved by {}", request_id, approver.name);
         
@@ -178,7 +179,8 @@ impl ApprovalGate {
             reason: reason.to_string(),
         };
         
-        self.approval_cache.write().await.insert(request_id.to_string(), status);
+        self.approval_cache.insert(request_id.to_string(), status);
+        self.pending_approvals.remove(request_id);
         
         error!("Request {} rejected by {}", request_id, rejector.name);
         
@@ -194,8 +196,8 @@ impl ApprovalGate {
     
     /// Verifica si una acción ya fue aprobada
     pub async fn is_approved(&self, action_id: &str) -> bool {
-        if let Some(ApprovalStatus::Approved { .. }) = self.approval_cache.read().await.get(action_id) {
-            return true;
+        if let Some(status) = self.approval_cache.get(action_id) {
+            return matches!(*status, ApprovalStatus::Approved { .. });
         }
         false
     }
@@ -207,20 +209,23 @@ impl ApprovalGate {
         result: String,
         details: serde_json::Value,
     ) {
+        let timestamp = Utc::now();
         let entry = AuditLogEntry {
-            timestamp: Utc::now(),
+            timestamp,
             user,
             action,
             result,
             details,
         };
         
-        self.audit_log.write().await.push(entry);
+        self.audit_log.insert(timestamp, entry);
     }
     
     /// Exporta el audit log
     pub async fn get_audit_log(&self) -> Vec<AuditLogEntry> {
-        self.audit_log.read().await.clone()
+        let mut logs: Vec<_> = self.audit_log.iter().map(|kv| kv.value().clone()).collect();
+        logs.sort_by_key(|l| l.timestamp);
+        logs
     }
 }
 

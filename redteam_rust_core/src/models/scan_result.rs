@@ -52,7 +52,13 @@ pub struct TargetHost {
     pub target_type: TargetType,
     pub findings: Vec<Finding>,
     pub tool_suggestions: Vec<String>,
+    #[serde(default = "default_tactical_context")]
+    pub tactical_context: serde_json::Value,
     pub extra_data: serde_json::Value,
+}
+
+fn default_tactical_context() -> serde_json::Value {
+    serde_json::json!({})
 }
 
 

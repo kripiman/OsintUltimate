@@ -48,30 +48,42 @@ impl ScannerPlugin for HttpxScanner {
     }
     async fn scan(&self, target: &TargetHost) -> Result<Vec<Finding>> {
         info!("HttpxScanner: probing HTTP for {}", target.host);
-        // httpx execution
-        let child = Command::new(&self.binary_path)
-            .arg("-u")
+        
+        // --- STEALTH-003: Using tactical command wrapper ---
+        let mut child = crate::utils::common::stealth_command(&self.binary_path);
+        child.arg("-u")
             .arg(&target.host)
             .arg("-title")
             .arg("-tech-detect")
             .arg("-status-code")
             .stdin(Stdio::null())
             .stdout(Stdio::piped())
-            .stderr(Stdio::null())
-            .spawn()
-            .context("Failed to spawn httpx")?;
-        let output = child.wait_with_output().await.context("Failed to wait for httpx")?;
+            .stderr(Stdio::null());
+
+        let mut spawned = child.spawn().context("Failed to spawn httpx")?;
+        
+        let stdout = spawned.stdout.take().context("Failed to capture httpx stdout")?;
+        use tokio::io::AsyncBufReadExt;
+        let mut reader = tokio::io::BufReader::new(stdout).lines();
+        
         let mut findings = Vec::new();
-        let content = String::from_utf8_lossy(&output.stdout);
-        if !content.is_empty() {
-            findings.push(Finding::new(
-                "HTTP-PROBE-SUCCESS",
-                Category::Recon,
-                Severity::Info,
-                &format!("HTTP probe successful for {} via httpx.", target.host),
-                serde_json::json!({ "output": content.trim() })
-            ));
+        
+        // --- MEM-001: Streaming output processing instead of buffering entire output ---
+        while let Some(line) = reader.next_line().await? {
+            if !line.is_empty() {
+                findings.push(Finding::new(
+                    "HTTP-PROBE-SUCCESS",
+                    Category::Recon,
+                    Severity::Info,
+                    &format!("HTTP-alive: {}", target.host),
+                    serde_json::json!({ "output": line.trim() })
+                ));
+            }
         }
+
+        // Wait for process to finish (kill_on_drop(true) in stealth_command handle reaping)
+        let _ = spawned.wait().await?;
+        
         Ok(findings)
     }
 }

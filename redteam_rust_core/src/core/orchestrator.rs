@@ -11,23 +11,30 @@ pub struct Orchestrator {
     concurrency: usize,
     policy: ScanLayerPolicy,
     approval_gate: Arc<ApprovalGate>,
-    blackarch_bridge: Arc<crate::core::blackarch::BlackArchBridge>, // NUEVO
+    blackarch_bridge: Arc<crate::core::blackarch::BlackArchBridge>,
+    memory_semaphore: Arc<tokio::sync::Semaphore>,
+    memory_monitor: Arc<crate::utils::memory_monitor::MemoryMonitor>,
 }
 
 impl Orchestrator {
     pub fn new(
-        plugins: Arc<Vec<Box<dyn ScannerPlugin>>>, 
+        plugins: Arc<Vec<Box<dyn ScannerPlugin>>>,
         concurrency: usize,
         policy: ScanLayerPolicy,
         approval_gate: Arc<ApprovalGate>,
         blackarch_bridge: Arc<crate::core::blackarch::BlackArchBridge>,
     ) -> Self {
+        let memory_semaphore = Arc::new(tokio::sync::Semaphore::new(800)); // 800MB Global RAM limit for plugins
+        let memory_monitor = Arc::new(crate::utils::memory_monitor::MemoryMonitor::new(700, 850));
+
         Self {
             plugins,
             concurrency,
             policy,
             approval_gate,
             blackarch_bridge,
+            memory_semaphore,
+            memory_monitor,
         }
     }
 
@@ -75,13 +82,29 @@ impl Orchestrator {
         let policy = self.policy;
         let approval_gate = self.approval_gate.clone();
         let blackarch_bridge = self.blackarch_bridge.clone();
+        let memory_semaphore = self.memory_semaphore.clone();
+        let memory_monitor = self.memory_monitor.clone();
 
         let mut processed_stream = stream.map(move |mut target| {
             let plugins = plugins.clone();
             let policy = policy;
             let approval_gate = approval_gate.clone();
             let blackarch_bridge = blackarch_bridge.clone();
+            let memory_semaphore = memory_semaphore.clone();
+            let memory_monitor = memory_monitor.clone();
+            
             async move {
+                // MEMORY-BACKPRESSURE: Wait if memory is critical 
+                if memory_monitor.is_critical() {
+                    warn!("MEMORY CRITICAL [{}MB]: Throttling scan for {}", memory_monitor.current_mb(), target.host);
+                    while memory_monitor.is_critical() {
+                        tokio::time::sleep(std::time::Duration::from_secs(2)).await;
+                    }
+                } else if memory_monitor.should_trigger_backpressure() {
+                    // Soft throttle: small delay
+                    tokio::time::sleep(std::time::Duration::from_millis(500)).await;
+                }
+
                 target.status = TargetStatus::Scanning;
                 
                 // QA-005 FIX: Use Arc only for read-only sharing. Collect findings via JoinSet return values.
@@ -92,44 +115,60 @@ impl Orchestrator {
                 for i in 0..plugins.len() {
                     let p = &plugins[i];
                     
-                // ARCH-EXT: Context-aware filtering
-                if p.metadata().target_type != target_ref.target_type {
-                    continue;
-                }
+                    // ARCH-EXT: Context-aware filtering
+                    if p.metadata().target_type != target_ref.target_type {
+                        continue;
+                    }
 
-                    let plugins_clone = plugins.clone();
-                    let target_clone = target_ref.clone();
-                    let approval_gate = approval_gate.clone();
+                    let plugins_clone = Arc::clone(&plugins);
+                    // Create a scan snapshot to avoid Arc contention on the full TargetHost
+                    let target_snapshot = TargetHost {
+                        host: target_ref.host.clone(),
+                        ip: target_ref.ip.clone(),
+                        target_type: target_ref.target_type,
+                        status: TargetStatus::Scanning,
+                        findings: Vec::new(),
+                        tool_suggestions: Vec::new(),
+                        tactical_context: target_ref.tactical_context.clone(), // V10: Pass the advice!
+                        extra_data: target_ref.extra_data.clone(),
+                    };
+                    let policy = policy;
+                    let approval_gate = Arc::clone(&approval_gate);
+                    let memory_semaphore_clone = memory_semaphore.clone();
+                    let memory_monitor_clone = memory_monitor.clone();
 
                     join_set.spawn(async move {
                         let p = &plugins_clone[i];
                         let meta = p.metadata();
                         
-                        // ARCH-EXT: Context-aware filtering
-                        if meta.target_type != target_clone.target_type {
-                            return (p.name(), Ok(Vec::new()));
-                        }
-
-                        // NEW: ScanLayer Policy Enforcement
                         if !policy.is_plugin_allowed(meta.layer) {
-                            return (p.name(), Ok(Vec::new()));
+                            return (p.name().to_string(), Ok(Vec::new()));
                         }
 
-                        // NEW: Approval Gate Enforcement
                         if policy.needs_approval(meta.layer) {
-                            // En una implementación real, esto podría ser interactivo.
-                            // Aquí simulamos la verificación de aprobación previa.
                             if !approval_gate.is_approved(p.name()).await {
-                                warn!("Skipping {} - Requires approval and none found.", p.name());
-                                return (p.name(), Ok(Vec::new()));
+                                return (p.name().to_string(), Ok(Vec::new()));
                             }
                         }
                         
-                        // ARCH-EXT: Auto-dependency check
+                        // ARCH-10: Dynamic Memory Permit Scaling
+                        // If memory is tight, we increase the 'virtual cost' to throttle new heavy plugins.
+                        let multiplier = if memory_monitor_clone.should_trigger_backpressure() {
+                            2.0 
+                        } else {
+                            1.0
+                        };
+                        
+                        let total_capacity = 800; // Total 800MB limit
+                        let base_permits = (meta.cost as u32).max(1) * 80;
+                        let permits_needed = ((base_permits as f32 * multiplier) as u32).min(total_capacity - 1);
+                        
+                        let _permit = memory_semaphore_clone.acquire_many(permits_needed).await;
+                        
                         match p.check_dependencies().await {
-                            Ok(true) => (p.name(), p.scan(&target_clone).await),
-                            Ok(false) => (p.name(), Ok(Vec::new())), // Skip if deps missing
-                            Err(e) => (p.name(), Err(e)),
+                            Ok(true) => (p.name().to_string(), p.scan(&target_snapshot).await),
+                            Ok(false) => (p.name().to_string(), Ok(Vec::new())),
+                            Err(e) => (p.name().to_string(), Err(e)),
                         }
                     });
                 }
@@ -174,8 +213,9 @@ impl Orchestrator {
                 
                 // QA-005 FIX: All tasks are done, so we are the only Arc holder.
                 // Extract owned target and append findings directly — no clone needed.
+                // QA-005 FIX: Attempt to extract owned target. Fallback to clone if other references exist (safe side).
                 let mut target = Arc::try_unwrap(target_ref)
-                    .expect("QA-005: All JoinSet tasks completed, Arc must have refcount 1");
+                    .unwrap_or_else(|arc| (*arc).clone());
                 target.findings.append(&mut all_findings);
                 // --- NEW: BlackArch Dynamic Tool Suggestion ---
                 let mut suggestions = Vec::new();

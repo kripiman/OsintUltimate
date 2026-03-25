@@ -267,7 +267,7 @@ impl ScannerPlugin for NmapScanner {
              args.push(target.host.clone());
         }
 
-        let mut child = Command::new(&self.nmap_path)
+        let mut child = crate::utils::common::stealth_command(&self.nmap_path)
             .args(&args)
             .stdin(Stdio::null())
             .stdout(Stdio::piped())
@@ -275,19 +275,145 @@ impl ScannerPlugin for NmapScanner {
             .spawn()
             .context("Failed to spawn nmap")?;
 
+        let child_pid = child.id().context("Failed to get nmap PID")?;
         let stdout = child.stdout.take().context("Failed to capture nmap stdout")?;
         let std_stdout = tokio_util::io::SyncIoBridge::new(stdout);
         
         let findings_handle = tokio::task::spawn_blocking(move || -> Result<Vec<Finding>> {
-            use quick_xml::de::from_reader; 
-            let reader = std::io::BufReader::new(std_stdout);
-            let run: NmapRun = from_reader(reader)?;
+            use quick_xml::reader::Reader;
+            use quick_xml::events::Event;
+            
+            let mut reader = Reader::from_reader(std::io::BufReader::new(std_stdout));
+            reader.trim_text(true);
             
             let mut local_findings = Vec::new();
-            if let Some(hosts) = run.host {
-                 for host in hosts {
-                      process_host(&host, &mut local_findings);
-                 }
+            let mut buf = Vec::new();
+            const MAX_FINDINGS: usize = 1000; // RAM-FIX: Cap findings to avoid OOM on 1GB VPS
+            
+            // Streaming parsing state
+            let mut current_port: Option<u16> = None;
+            let mut current_protocol: String = String::new();
+            let mut current_service: Service = Service { name: "unknown".into(), product: "".into(), version: "".into() };
+
+            loop {
+                if local_findings.len() >= MAX_FINDINGS {
+                    warn!("NmapScanner: Maximum findings limit ({}) reached. Truncating to prevent OOM.", MAX_FINDINGS);
+                    break;
+                }
+                match reader.read_event_into(&mut buf) {
+                    Ok(Event::Start(ref e)) => {
+                        match e.name().as_ref() {
+                            b"port" => {
+                                for attr in e.attributes() {
+                                    if let Ok(attr) = attr {
+                                        if attr.key.as_ref() == b"portid" {
+                                            current_port = attr.unescape_value().ok().and_then(|v| v.parse().ok());
+                                        } else if attr.key.as_ref() == b"protocol" {
+                                            current_protocol = attr.unescape_value().map(|v| v.to_string()).unwrap_or_default();
+                                        }
+                                    }
+                                }
+                            }
+                            b"service" => {
+                                for attr in e.attributes() {
+                                    if let Ok(attr) = attr {
+                                        match attr.key.as_ref() {
+                                            b"name" => current_service.name = attr.unescape_value().map(|v| v.to_string()).unwrap_or_default(),
+                                            b"product" => current_service.product = attr.unescape_value().map(|v| v.to_string()).unwrap_or_default(),
+                                            b"version" => current_service.version = attr.unescape_value().map(|v| v.to_string()).unwrap_or_default(),
+                                            _ => {}
+                                        }
+                                    }
+                                }
+                            }
+                            b"script" => {
+                                let mut id = String::new();
+                                let mut output = String::new();
+                                for attr in e.attributes() {
+                                    if let Ok(attr) = attr {
+                                        if attr.key.as_ref() == b"id" {
+                                            id = attr.unescape_value().map(|v| v.to_string()).unwrap_or_default();
+                                        } else if attr.key.as_ref() == b"output" {
+                                            output = attr.unescape_value().map(|v| v.to_string()).unwrap_or_default();
+                                        }
+                                    }
+                                }
+                                
+                                if let Some(portid) = current_port {
+                                    let severity = classify_script_severity(&id, &output);
+                                    let category = match severity {
+                                        Severity::Critical | Severity::High => Category::Vulnerability,
+                                        _ => Category::Misconfiguration,
+                                    };
+                                    let finding_id = match severity {
+                                        Severity::Critical => format!("{}-{}", crate::models::FINDING_VULN_CRITICAL, id),
+                                        _ => format!("{}-{}", crate::models::FINDING_NSE_SCRIPT, id),
+                                    };
+                                    
+                                    let mut finding = Finding::new(
+                                        &finding_id,
+                                        category,
+                                        severity.clone(),
+                                        &format!("NSE Script {}: {}", id, output.lines().next().unwrap_or("")),
+                                        serde_json::json!({ "script_id": id, "output": output, "port": portid })
+                                    );
+                                    if let Some(rem) = suggest_remediation(&id, &severity) {
+                                        finding = finding.with_remediation(&rem);
+                                    }
+                                    local_findings.push(finding);
+                                }
+                            }
+                            b"osmatch" => {
+                                let mut name = String::new();
+                                let mut accuracy = String::new();
+                                for attr in e.attributes() {
+                                    if let Ok(attr) = attr {
+                                        if attr.key.as_ref() == b"name" {
+                                            name = attr.unescape_value().map(|v| v.to_string()).unwrap_or_default();
+                                        } else if attr.key.as_ref() == b"accuracy" {
+                                            accuracy = attr.unescape_value().map(|v| v.to_string()).unwrap_or_default();
+                                        }
+                                    }
+                                }
+                                local_findings.push(Finding::new(
+                                    crate::models::FINDING_OS_DETECTION,
+                                    Category::Recon,
+                                    Severity::Info,
+                                    &format!("OS Detected: {} (accuracy: {}%)", name, accuracy),
+                                    serde_json::json!({ "os": name, "accuracy": accuracy })
+                                ));
+                            }
+                            _ => {}
+                        }
+                    }
+                    Ok(Event::End(ref e)) => {
+                        if e.name().as_ref() == b"port" {
+                            if let Some(portid) = current_port {
+                                // Emit the open port finding now that we collected service info
+                                local_findings.push(Finding::new(
+                                    &format!("{}-{}-{}", crate::models::FINDING_PORT_OPEN, current_protocol, portid),
+                                    Category::NetworkPort,
+                                    Severity::Info,
+                                    &format!("Open Port {}/{}: {} {} {}", portid, current_protocol, current_service.name, current_service.product, current_service.version),
+                                    serde_json::json!({
+                                        "port": portid,
+                                        "protocol": current_protocol,
+                                        "service": current_service.name,
+                                        "banner": format!("{} {}", current_service.product, current_service.version)
+                                    })
+                                ));
+                            }
+                            // Reset per-port state
+                            current_port = None;
+                            current_protocol.clear();
+                            current_service = Service { name: "unknown".into(), product: "".into(), version: "".into() };
+                        }
+                    }
+                    Ok(Event::Eof) => break,
+                    Err(e) => return Err(e.into()),
+                    _ => {}
+                }
+                buf.clear();
             }
             Ok(local_findings)
         });
@@ -309,12 +435,12 @@ impl ScannerPlugin for NmapScanner {
             Ok(Ok(res)) => res,
             Ok(Err(e)) => {
                 error!("NmapScanner: Failed to wait for process: {}", e);
-                let _ = child.kill().await;
+                let _ = crate::utils::common::kill_pgid(child_pid).await;
                 return Ok(Vec::new());
             }
             Err(_) => {
                 error!("NmapScanner: Process timed out at OS level for target: {}", target.host);
-                let _ = child.kill().await;
+                let _ = crate::utils::common::kill_pgid(child_pid).await;
                 return Ok(Vec::new());
             }
         };

@@ -1,34 +1,53 @@
-# Casos de Uso y Combinaciones (Playbooks)
+# 🎯 Casos de Uso y Combinaciones (Playbooks) v3.0
 
-A nivel arquitectónico, la ventaja de utilizar OsintUltimate es que permite modelar múltiples Vectores y Escenarios de Operación según el grado de "ruido" aceptable. A continuación se presentan las combinaciones profesionales más eficientes (que ahora están embebidas lógicamente en el TUI/Menú Interactivo).
-
-## 1. Perfil A: Discovery "Zero Noise" 
-**Propósito**: Obtener el footprinting completo de la organización sin enviar un solo paquete a la infraestructura objetivo.
-
-*   **Flags Recomendados**: Ninguno predeterminado soporta el modo puro-off aún desde CLI, pero el uso estructural requiere resolver DoH de dominios externos.
-*   **Estrategia**: Depende 100% de `OsintScanner` y resuelve pasivamente todo vía Cloudflare DoH o Google DoH.
-
-## 2. Perfil B: Stealth Audit ("Low & Slow")
-**Propósito**: Realizar un escaneo a través del fuego cruzado de WAFs avanzados como Cloudflare o Akamai sin emitir alertas SOC. El escaneo dura más pero no levanta bloqueos temporales.
-
-*   `--stealth`: Aplica distribución Log-Normal (`HumanJitter`)
-*   `--scan-type sS`: Escaneo SYN, no establece un hand-shake 3-way en los sockets del destino.
-*   `--fragment`: Cruza inspecciones SPI rudimentarias.
-*   `--concurrency 5`: Disminuye deliberadamente el "fan-out" para mantener los Request/Second bajos en total.
-*   `--proxies "socks5://10.x...,http://8.x..."`: Salta de IP para despistar el token tracking.
-*   `--doh`: Encripta telemetría DNS.
-*   **CLI**: `./redteam_rust_core -t mercadolibre.com --stealth --concurrency 5 --doh --scan-type "sS" --fragment`
-
-## 3. Perfil C: Aggressive Full Surface Enumeration
-**Propósito**: Usualmente tras horas de oficina o en White-Box Pentesting. Obtener la mayor cantidad de información y explotaciones automáticas asumiendo que el cliente aprobó el ruido.
-
-*   `--scripts "default,vuln,exploit"`: Dispara todos los Nmap Scripting Engines en un pool distribuido.
-*   `--service-detection`: Cifra las cabeceras exactas (ej. IIS 10.0 vs 8.5) al precio de múltiples round-trips de sondeo (-sV).
-*   `--concurrency 500`: Agota literalmente los sockets disponibles pero acorta el tiempo horas -> minutos en redes internas 10GbE.
-*   **CLI**: `./redteam_rust_core -t internal.network.local --concurrency 500 --service-detection --scripts "vuln,auth"`
+OsintUltimate v3.0 permite modelar vectores de ataque específicos ajustando la agresividad, el sigilo y la profundidad del escaneo. Estos "Playbooks" están diseñados para escenarios reales de Red Team.
 
 ---
 
-## Panel de Reportes
+## 🚀 Perfil A: Reconocimiento Pasivo (Zero Noise)
+**Propósito**: Obtener el footprinting completo de la organización sin enviar paquetes directos a la infraestructura objetivo.
 
-Una vez generados los payloads, toda combinación concluye en `scan_report.html`. Un aspecto crítico de la seguridad OPSEC es nunca subir el output JSON directamente a motores públicos; este framework compila el HTML Off-line incrustado, previniendo fuga de los findings vía telemetría externa.
+*   **Flags**: `--max-layer passive --doh`
+*   **Estrategia**: Depende 100% de `OsintScanner` y fuentes externas (`crt.sh`, Shodan).
+*   **Sigilo**: Máximo. No hay interacción con el objetivo.
+
+## 🕵️ Perfil B: Auditoría Sigilosa (Low & Slow)
+**Propósito**: Evadir WAFs avanzados (Cloudflare, Akamai) y no levantar alertas en el SOC.
+
+*   **Flags**: `--stealth --max-layer scanning --concurrency 5 --doh --proxies "http://pool:8080"`
+*   **Mecanismos**: 
+    - `HumanJitter`: Distribución Log-Normal para imitar clics humanos.
+    - `Rotación de Proxies`: Cambia de IP en cada plugin.
+    - `UA Rotation`: Cambia el User-Agent por cada petición.
+*   **Uso**: `./redteam_rust_core -t objetivo.com --stealth --concurrency 5 --doh`
+
+## 🔥 Perfil C: Enumeración Agresiva de Superficie
+**Propósito**: White-Box Pentesting o escaneos internos en redes de alta velocidad (10GbE).
+
+*   **Flags**: `--max-layer verification --concurrency 100 --service-detection --scripts "default,vuln"`
+*   **Mecanismos**:
+    - `Concurrency 100`: Explota el runtime asíncrono para escanear miles de servicios en minutos.
+    - `Service Detection (-sV)`: Identificación precisa de versiones.
+*   **Uso**: `./redteam_rust_core -t red.interna.local --concurrency 100 --service-detection --scripts "vuln"`
+
+## 🤖 Perfil D: Agente Autónomo (Sentinel)
+**Propósito**: Evaluación autónoma total. La IA decide qué hacer basándose en los hallazgos.
+
+*   **Flags**: `--autonomous --max-layer exploitation --interactive`
+*   **Mecanismos**:
+    - `TieredAIRouter`: Análisis en cascada (Local -> Mid -> Premium).
+    - `Autonomous Execution`: Si la IA detecta una vulnerabilidad, sugiere y ejecuta el siguiente plugin (ej. lanza sqlmap si encuentra un parámetro sospechoso).
+    - `Approval Gate`: Solo ejecuta acciones de explotación si el usuario las aprueba interactivamente.
+*   **Uso**: `./redteam_rust_core -t objetivo.com --autonomous --max-layer exploitation --interactive`
+
+---
+
+## 📊 Panel de Reportes
+
+Toda ejecución concluye con la generación de `scan_report.html`. 
+- **Privacidad**: El reporte se compila **offline**, incrustando todos los datos necesarios para evitar fugas de información a servidores de telemetría externos.
+- **Formato**: JSONL (para procesamiento posterior) y HTML (para presentación ejecutiva).
+
+---
+
+© 2026 RedTeam Lab | OsintUltimate v3.0 Documentation

@@ -214,24 +214,18 @@ impl ScannerPlugin for WebFuzzer {
         let ip: IpAddr = ip_str.parse().context("Failed to parse target IP")?;
 
         // SSRF FIX: Build host-pinned clients to prevent DNS rebinding for both HTTP and HTTPS
-        // reqwest's resolve() is port-specific, so we need two clients if we want to pin both.
-        let pinned_http = Client::builder()
-            .danger_accept_invalid_certs(self.insecure)
-            .redirect(reqwest::redirect::Policy::limited(3))
-            .timeout(std::time::Duration::from_secs(10))
-            .user_agent(get_random_user_agent())
-            .resolve(&target.host, SocketAddr::new(ip, 80))
-            .build()
-            .context("Failed to build pinned WebFuzzer client (HTTP)")?;
+        // Use StealthClientBuilder to apply tactical context (AI bypass suggestions)
+        let pinned_http = crate::utils::stealth_http::StealthClientBuilder::build_pinned(
+            target, 
+            &target.host, 
+            SocketAddr::new(ip, 80)
+        ).context("Failed to build tactical pinned client (HTTP)")?;
 
-        let pinned_https = Client::builder()
-            .danger_accept_invalid_certs(self.insecure)
-            .redirect(reqwest::redirect::Policy::limited(3))
-            .timeout(std::time::Duration::from_secs(10))
-            .user_agent(get_random_user_agent())
-            .resolve(&target.host, SocketAddr::new(ip, 443))
-            .build()
-            .context("Failed to build pinned WebFuzzer client (HTTPS)")?;
+        let pinned_https = crate::utils::stealth_http::StealthClientBuilder::build_pinned(
+            target, 
+            &target.host, 
+            SocketAddr::new(ip, 443)
+        ).context("Failed to build tactical pinned client (HTTPS)")?;
 
         // P0 FIX: Strict Randomize signature traversal order
         let mut indices: Vec<usize> = (0..self.signatures.len()).collect();

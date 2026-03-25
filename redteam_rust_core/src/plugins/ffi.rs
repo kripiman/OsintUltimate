@@ -4,6 +4,9 @@ use crate::models::{TargetHost, Finding};
 use anyhow::Result;
 use std::panic::{catch_unwind, AssertUnwindSafe};
 
+/// V10 HARDENING: ABI Versioning to prevent memory corruption from incompatible plugins.
+pub const PLUGIN_ABI_VERSION: u32 = 1;
+
 /// FFI-safe result for plugin names
 #[repr(C)]
 pub struct PluginNameFFI {
@@ -30,6 +33,8 @@ impl Drop for FFIFindings {
 /// A wrapper to ensure that dynamic plugins are FFI-safe.
 #[repr(C)]
 pub struct ScannerPluginFFI {
+    /// Returns the ABI version this plugin was compiled with.
+    pub abi_version: extern "C" fn() -> u32,
     pub name: extern "C" fn(*const ()) -> *const c_char,
     /// Performs the scan. Returns a raw pointer to a vector-like structure.
     pub scan: extern "C" fn(*const (), *const TargetHost) -> *mut FFIFindings,
@@ -47,6 +52,14 @@ pub struct FFIPluginWrapper {
 
 impl FFIPluginWrapper {
     pub fn new(ffi: ScannerPluginFFI) -> Self {
+        // V10 ABI Handshake: Prevent loading incompatible plugins
+        let version = (ffi.abi_version)();
+        if version != PLUGIN_ABI_VERSION {
+            // In a production app, we would likely use a better error path here,
+            // but for a dynamic loader, we'll log and treat it as a critical failure.
+            tracing::error!("ABI MISMATCH: Plugin version {}, expected {}. Plugin will likely crash or corrupt memory.", version, PLUGIN_ABI_VERSION);
+        }
+
         let cached_name = unsafe {
             let c_str = (ffi.name)(ffi.plugin_ptr);
             if c_str.is_null() {

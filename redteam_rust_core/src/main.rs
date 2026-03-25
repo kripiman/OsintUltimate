@@ -97,18 +97,24 @@ async fn main() -> Result<()> {
     redteam_rust_core::utils::init_telemetry(args.otel_endpoint.clone(), args.json_logs)
         .context("Failed to initialize telemetry")?;
 
+    // Initialize Memory Monitor for 1GB RAM environments (Soft: 600MB, Hard: 900MB)
+    let memory_monitor = redteam_rust_core::utils::MemoryMonitor::new(600, 900);
+    memory_monitor.start_logging();
+
     // 1. Determine Initial Targets
     let initial_targets: Vec<String> = if let Some(input_path) = args.input.clone() {
-        use std::fs::File;
-        use std::io::{BufRead, BufReader};
-        let file = File::open(&input_path)
+        use tokio::fs::File;
+        use tokio::io::{BufReader, AsyncBufReadExt};
+        let file = File::open(&input_path).await
             .with_context(|| format!("Failed to open input file: {}", input_path))?;
-        BufReader::new(file)
-            .lines()
-            .collect::<std::result::Result<Vec<_>, _>>()?
-            .into_iter()
-            .filter(|l| !l.trim().is_empty())
-            .collect()
+        let mut reader = BufReader::new(file).lines();
+        let mut targets = Vec::new();
+        while let Some(line) = reader.next_line().await? {
+            if !line.trim().is_empty() {
+                targets.push(line);
+            }
+        }
+        targets
     } else if let Some(target) = args.target.clone() {
         vec![target]
     } else {
@@ -132,9 +138,9 @@ async fn main() -> Result<()> {
 
     // V9 FIX (CRIT-010): Regex must accept 2-char scan types like "sS" (the default).
     // Format: 's' prefix + one valid Nmap scan type character.
-    static SCAN_TYPE_RE: Lazy<Regex> = Lazy::new(|| Regex::new(r"^s[STAUYNFXW]$").unwrap());
+    static SCAN_TYPE_RE: Lazy<Regex> = Lazy::new(|| Regex::new(r"^s[STAUYNFXW]$").expect("SCAN_TYPE_RE must be valid"));
     if !SCAN_TYPE_RE.is_match(&args.scan_type) {
-        anyhow::bail!("Invalid --scan-type parameter. Must be a valid Nmap scan type (e.g., sS, sT, sU, sA).");
+        anyhow::bail!("Invalid --scan-type parameter '{}'. Must be a valid Nmap scan type (e.g., sS, sT, sU, sA).", args.scan_type);
     }
 
     // Initialize Shared LivenessChecker with DoH support
@@ -170,11 +176,28 @@ async fn main() -> Result<()> {
     });
 
     // --- PIPELINE SETUP ---
-    let sink: Box<dyn redteam_rust_core::core::DataSink> = if let Some(ref db_path) = args.sqlite_output {
+    let mut multi_sink = redteam_rust_core::core::sink::MultiSink::new();
+
+    if let Some(ref db_path) = args.sqlite_output {
         info!("🗄️ Using SQLite persistence at {}", db_path);
-        Box::new(redteam_rust_core::core::SqliteSink::new(db_path).await?)
+        multi_sink.add(Box::new(redteam_rust_core::core::SqliteSink::new(db_path).await?));
     } else {
-        Box::new(redteam_rust_core::core::JsonlSink::new(&args.jsonl_output).await?)
+        multi_sink.add(Box::new(redteam_rust_core::core::JsonlSink::new(&args.jsonl_output).await?));
+    }
+
+    // V10 C2 Bridge: Check for Webhook exfiltration
+    if let Ok(c2_url) = std::env::var("C2_URL") {
+        let c2_token = std::env::var("C2_TOKEN").ok();
+        info!("📡 C2 READY: Tactical Webhook exfiltration enabled to {}", c2_url);
+        multi_sink.add(Box::new(redteam_rust_core::core::sink::TacticalWebhookSink::new(c2_url, c2_token)));
+    }
+
+    let sink: Box<dyn redteam_rust_core::core::DataSink> = Box::new(multi_sink);
+
+    let stealth_jitter = if args.stealth {
+        Some(redteam_rust_core::utils::JitterSleep::for_stealth())
+    } else {
+        None
     };
 
     let mut builder = redteam_rust_core::core::Pipeline::builder()
@@ -182,7 +205,8 @@ async fn main() -> Result<()> {
         .shutdown_token(shutdown_token)
         .liveness_checker(liveness_checker.clone())
         .command_line(command_line)
-        .with_sink(sink);
+        .with_sink(sink)
+        .with_jitter(stealth_jitter);
 
     // Initialize Capability Layer Policy
     let max_layer = match args.max_layer.to_lowercase().as_str() {
@@ -236,14 +260,20 @@ async fn main() -> Result<()> {
     // CRIT-001 FIX: Resolve memory leak by scope-limited loader (ends with main)
     let mut loader = DynamicPluginLoader::new();
     if let Some(ref dir) = args.plugins_dir {
-        let dynamic_plugins = loader.load_plugins_from_dir(std::path::Path::new(dir))?;
-        for plugin in dynamic_plugins {
-            info!("Injecting dynamic plugin from {}: {}", dir, plugin.name());
-            builder = builder.with_plugin(plugin);
+        match loader.load_plugins_from_dir(std::path::Path::new(dir)) {
+            Ok(dynamic_plugins) => {
+                for plugin in dynamic_plugins {
+                    info!("Injecting dynamic plugin from {}: {}", dir, plugin.name());
+                    builder = builder.with_plugin(plugin);
+                }
+            }
+            Err(e) => {
+                error!("⚠️ Failed to load dynamic plugins from {}: {}. Continuing without them.", dir, e);
+            }
         }
     }
 
-    let pipeline = builder.build()?;
+    let mut pipeline = builder.build()?;
     let target_hosts: Vec<TargetHost> = valid_targets.into_iter().map(|t| {
         let target_type = if t.contains("://") || t.contains('.') {
             redteam_rust_core::models::TargetType::Web
@@ -262,32 +292,60 @@ async fn main() -> Result<()> {
             target_type,
             findings: Vec::new(),
             tool_suggestions: Vec::new(),
+            tactical_context: serde_json::json!({}),
             extra_data: serde_json::json!({}),
         }
     }).collect();
 
     if args.autonomous {
         info!("🤖 SENTINEL: Activating Autonomous Agent with Native AI Cascade...");
+        
+        // Start standalone sink for Autonomous streaming
+        let (sink_tx, sink_handle) = pipeline.start_sink_stage().await?;
         let pipeline_arc = Arc::new(pipeline);
         
         // Initialize Tiered AI Router (Native Cascade)
         let mut router = TieredAIRouter::new();
         
-        // Tier 0: Local (Ollama)
-        router.add_client(RouteLevel::Local, Arc::new(OllamaClient::new(
-            args.ollama_url.clone(),
-            "qwen2.5-coder:7b".to_string()
-        )));
+        // Tier 0: Local (Ollama) - Multi-model Redundancy
+        let local_models = vec!["qwen2.5-coder:7b", "kimi-k2.5:cloud", "minimax-m2.5:cloud"];
+        for model in local_models {
+            router.add_client(RouteLevel::Local, Arc::new(OllamaClient::new(
+                args.ollama_url.clone(),
+                model.to_string()
+            )?));
+        }
 
-        // Tier 2: Premium (Gemini) - Requires GEMINI_API_KEY in .env
-        if let Ok(key) = std::env::var("GEMINI_API_KEY") {
-            info!("  - Premium Tier enabled (Gemini 1.5 Pro)");
+        // Tier 1: Mid (Azure OpenAI) - Optimized for student credits
+        if let (Ok(endpoint), Ok(key)) = (std::env::var("AZURE_OPENAI_ENDPOINT"), std::env::var("AZURE_OPENAI_KEY")) {
+            info!("  - Mid Tier enabled (Azure OpenAI gpt-4o-mini)");
+            router.add_client(RouteLevel::Mid, Arc::new(redteam_rust_core::core::agent::AzureOpenAIClient::new(
+                endpoint,
+                key,
+                "gpt-4o-mini".to_string(),
+                "2024-02-01".to_string()
+            )?));
+        }
+
+        // Tier 2: Premium (Gemini) - Multi-key Redundancy
+        if let Ok(keys_str) = std::env::var("GEMINI_API_KEYS") {
+            let keys: Vec<String> = keys_str.split(',').map(|k| k.trim().to_string()).filter(|k| !k.is_empty()).collect();
+            if !keys.is_empty() {
+                info!("  - Premium Tier enabled with {} API keys", keys.len());
+                router.add_client(RouteLevel::Premium, Arc::new(GeminiClient::new(
+                    keys, 
+                    "gemini-1.5-pro".to_string()
+                )?));
+            }
+        } else if let Ok(key) = std::env::var("GEMINI_API_KEY") {
+            // Fallback to single key if only GEMINI_API_KEY is present
+            info!("  - Premium Tier enabled (Single Key)");
             router.add_client(RouteLevel::Premium, Arc::new(GeminiClient::new(
-                key, 
+                vec![key], 
                 "gemini-1.5-pro".to_string()
-            )));
+            )?));
         } else {
-            warn!("  - Premium Tier DISABLED (GEMINI_API_KEY not found). All tasks will default to Local tier.");
+            warn!("  - Premium Tier DISABLED (GEMINI_API_KEYS/GEMINI_API_KEY not found). Fallback to Local/Mid tiers.");
         }
 
         let agent = redteam_rust_core::core::agent::AutonomousAgent::new(
@@ -296,12 +354,13 @@ async fn main() -> Result<()> {
             approval_gate
         );
         for target in target_hosts {
-            if let Err(e) = agent.run_autopilot(target).await {
+            if let Err(e) = agent.run_autopilot(target, sink_tx.clone()).await {
                 error!("Autonomous agent failed on target: {}", e);
             }
         }
+        drop(sink_tx);
+        let _ = sink_handle.await;
     } else {
-
         if let Err(e) = pipeline.run(target_hosts).await {
             error!("Pipeline execution returned error: {}", e);
         }

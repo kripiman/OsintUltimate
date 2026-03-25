@@ -1,31 +1,44 @@
 # 🗺️ Hoja de Ruta de Desarrollo: OsintUltimate v3.0
 
-Esta hoja de ruta está diseñada para transicionar el proyecto de un "reemplazo de scripts" a una "Plataforma de Grado Empresarial".
+Esta hoja de ruta detalla la evolución de OsintUltimate de un motor asíncrono básico a una **Plataforma de Operaciones de Red Team Autónoma y Profesional**.
 
-## 📅 Fase 1: Fortalecimiento (Semanas 1-2)
-*Enfoque: Estabilidad, Pruebas y Gestión de Recursos*
+---
 
-- [x] **Corregir Modelo de Concurrencia**: Refactorizar el `Orchestrator` para usar contrapresión basada en `Stream` en lugar de saturación con `tokio::spawn`. (V9/V10 Fixes)
-- [x] **Añadir Pruebas Unitarias**: Cobertura básica para módulos centrales (`orchestrator.rs`, `utils/liveness.rs`). (Verificado en V10)
-- [x] **Implementar Salida de Streaming**: Escribir hallazgos en `scan_result.jsonl` (JSON Delimitado por Líneas) en tiempo real. (ARCH-004 + V10 fixes)
-- [x] **Enum TargetStatus**: Reemplazar el estado basado en strings con Enums estrictos. (V6)
+## ✅ Fase 1: Estabilización y Rendimiento (Completado)
+*Enfoque: Arquitectura asíncrona y seguridad de memoria.*
 
-## 🚀 Fase 2: Evolución de la Arquitectura (Semanas 3-4)
-*Enfoque: Modularidad y Características Avanzadas*
+- [x] **Motor Asíncrono Puro**: `Tokio` + `Futures` (Sustitución total de Python).
+- [x] **Streaming Persistence**: Escritura `JSONL` línea a línea para evitar OOM.
+- [x] **Liveness & SSRF Shield**: Resolución DNS masiva con protección de red interna.
+- [x] **Capability Layers**: Sistema de capas de riesgo (Passive, Discovery, Scanning, etc.).
 
-- [x] **Patrón de Pipeline**: Abstraer la lógica multi-fase (Descubrimiento -> Liveness -> Ataque) en una estructura `Pipeline` configurable. (Completado en auditoría P2)
-- [ ] **Carga Dinámica de Plugins**: Permitir la carga de plugins externos `.so` o `.dylib` (opcional, crea una extensibilidad extrema).
-- [~] **Integración de Base de Datos**: *Cancelado por restricciones de RAM en el entorno de ejecución.* Mantendremos de forma exclusiva el formato JSONL de streaming nativo para máxima eficiencia.
+## ✅ Fase 2: Profesionalización y Sigilo (Completado)
+*Enfoque: Evasión (OPSEC) y Control de Recursos.*
 
-## 🛡️ Fase 3: Sigilo y Evasión (Semanas 5-6)
-*Enfoque: Capacidades Específicas de Red Team*
+- [x] **Human Jitter**: Distribución LogNormal para evadir detección de WAF.
+- [x] **PGID Sandboxing**: Gestión segura de procesos externos (`ProcessGuard`).
+- [x] **Memory Monitoring**: Backpressure y control de RAM en VPS de 1GB.
+- [x] **Approval Gates**: Flujo de trabajo con autorización multinivel y auditoría.
+- [x] **Soporte SQLite**: Persistencia relacional además de JSONL.
 
-- [x] **Rotación Inteligente de Proxies**: Integrar la lógica de rotación más profundamente en el middleware de `reqwest` en lugar de solo en el pool de clientes.
-- [x] **Modelado de Tráfico**: Implementar "Jitter" a nivel detallado de paquete/solicitud dentro del Orchestrator.
-- [x] **Expansión de Reconocimiento Pasivo**: Añadir integración con APIs de Shodan/Censys en el `OsintScanner`.
+## 🧠 Fase 3: Inteligencia y Autonomía (v3.1 - En curso)
+*Enfoque: IA Generativa y Agentes Autónomos.*
 
-## 📦 Fase 4: Distribución
-*Enfoque: Usabilidad*
+- [x] **Tiered AIRouter**: Orquestación de IA (Ollama / Flash / Pro) con caché táctica.
+- [x] **Sentinel AI Agent**: Modo autónomo (`--autonomous`) para toma de decisiones tácticas.
+- [x] **Context Compression**: Optimización de evidencia para ahorro masivo de tokens.
+- [ ] **Attack Graph Correlation**: Correlación automática de hallazgos para identificar cadenas de ataque complejas.
+- [ ] **ML-based False Positive Filter**: Clasificador local para reducir ruido en reportes.
 
-- [ ] **Dockerización**: `Dockerfile` optimizado (distroless/cc).
-- [ ] **CI/CD**: GitHub Actions para `cargo test`, `cargo clippy` y construcciones de Release.
+## 📦 Fase 4: Ecosistema y Despliegue (Próximamente)
+*Enfoque: Extensibilidad y DevOps.*
+
+- [x] **Dynamic Plugin Loader**: Carga de plugins `.so` / `.dylib` en caliente.
+- [x] **BlackArch Integration**: Detección y uso automático de herramientas del sistema.
+- [ ] **Dockerization**: Imagen optimizada (`distroless`) con todas las dependencias.
+- [ ] **CI/CD Integration**: Templates para GitHub Actions y Azure DevOps (SARIF export).
+- [ ] **Web Dashboard**: Interfaz en tiempo real para monitoreo de escaneos masivos.
+
+---
+
+© 2026 RedTeam Lab | OsintUltimate v3.0 Roadmap

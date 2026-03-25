@@ -7,6 +7,8 @@ pub mod capability_layer;
 pub mod approval_gate;
 pub mod blackarch;
 pub mod ai_cascade;
+#[cfg(test)]
+pub mod tests;
 
 pub use orchestrator::Orchestrator;
 pub use pipeline::{Pipeline, PipelineBuilder};

@@ -98,6 +98,20 @@ impl ProxyManager {
         let client = reqwest::Client::builder()
             .proxy(proxy)
             .user_agent(user_agent)
+            .default_headers({
+                let mut h = reqwest::header::HeaderMap::new();
+                h.insert("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8".parse().unwrap());
+                h.insert("Accept-Language", "en-US,en;q=0.9".parse().unwrap());
+                h.insert("Sec-Ch-Ua", "\"Not A(Brand\";v=\"99\", \"Google Chrome\";v=\"122\", \"Chromium\";v=\"122\"".parse().unwrap());
+                h.insert("Sec-Ch-Ua-Mobile", "?0".parse().unwrap());
+                h.insert("Sec-Ch-Ua-Platform", "\"Windows\"".parse().unwrap());
+                h.insert("Sec-Fetch-Dest", "document".parse().unwrap());
+                h.insert("Sec-Fetch-Mode", "navigate".parse().unwrap());
+                h.insert("Sec-Fetch-Site", "none".parse().unwrap());
+                h.insert("Sec-Fetch-User", "?1".parse().unwrap());
+                h.insert("Upgrade-Insecure-Requests", "1".parse().unwrap());
+                h
+            })
             .danger_accept_invalid_certs(self.insecure)
             .timeout(Duration::from_secs(15))
             .build()
@@ -113,6 +127,20 @@ impl ProxyManager {
         let client = reqwest::Client::builder()
             .proxy(proxy)
             .user_agent(user_agent)
+            .default_headers({
+                let mut h = reqwest::header::HeaderMap::new();
+                h.insert("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8".parse().unwrap());
+                h.insert("Accept-Language", "en-US,en;q=0.9".parse().unwrap());
+                h.insert("Sec-Ch-Ua", "\"Not A(Brand\";v=\"99\", \"Google Chrome\";v=\"122\", \"Chromium\";v=\"122\"".parse().unwrap());
+                h.insert("Sec-Ch-Ua-Mobile", "?0".parse().unwrap());
+                h.insert("Sec-Ch-Ua-Platform", "\"Windows\"".parse().unwrap());
+                h.insert("Sec-Fetch-Dest", "document".parse().unwrap());
+                h.insert("Sec-Fetch-Mode", "navigate".parse().unwrap());
+                h.insert("Sec-Fetch-Site", "none".parse().unwrap());
+                h.insert("Sec-Fetch-User", "?1".parse().unwrap());
+                h.insert("Upgrade-Insecure-Requests", "1".parse().unwrap());
+                h
+            })
             .resolve(host, SocketAddr::new(ip, port))
             .danger_accept_invalid_certs(self.insecure)
             .timeout(Duration::from_secs(15))
@@ -153,8 +181,8 @@ impl ProxyManager {
         
         let available_proxies: Vec<String> = self.proxies.iter()
             .filter(|p| {
-                if let Some(ts) = self.blacklist.get(*p) {
-                    if now - *ts < self.blacklist_duration_sec {
+                if let Some(entry) = self.blacklist.get(*p) {
+                    if now < *entry.value() {
                         return false;
                     }
                 }
@@ -245,13 +273,13 @@ impl ProxyManager {
 
     pub fn blacklist_proxy(&self, proxy: &str) {
         let now = SystemTime::now().duration_since(UNIX_EPOCH).unwrap_or_default().as_secs();
-        
-        // RT-2: Behavioral jitter - randomize blacklist duration (+/- 20%)
+        // Fixed jitter for blacklist: base 300s + rand 0..300
         let mut rng = rand::thread_rng();
-        let jitter = rand::Rng::gen_range(&mut rng, 0.8..1.2);
-        let duration = (self.blacklist_duration_sec as f64 * jitter) as u64;
-        
-        self.blacklist.insert(proxy.to_string(), now + duration - self.blacklist_duration_sec);
+        let jitter_max = if self.blacklist_duration_sec < 10 { 1 } else { 300 };
+        let duration = self.blacklist_duration_sec + rand::Rng::gen_range(&mut rng, 0..jitter_max);
+
+        // Insert the UNTIL timestamp
+        self.blacklist.insert(proxy.to_string(), now + duration);
         warn!("Proxy temporarily blacklisted (jittered: {}s): {}", duration, proxy);
         
         // Penalize latency stats on blacklist

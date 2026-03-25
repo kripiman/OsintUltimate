@@ -43,7 +43,7 @@ pub fn get_random_user_agent() -> &'static str {
     REALISTIC_USER_AGENTS.choose(&mut rng).unwrap_or(&REALISTIC_USER_AGENTS[0])
 }
 
-// QA-008 FIX: Check actual CAP_NET_RAW capability, not just euid == 0
+/// QA-008 FIX: Check actual CAP_NET_RAW capability, not just euid == 0
 pub fn check_cap_net_raw() -> bool {
     #[cfg(unix)]
     {
@@ -65,6 +65,92 @@ pub fn check_cap_net_raw() -> bool {
     {
         // On non-Unix, assume true and let nmap handle permission errors
         true
+    }
+}
+
+/// STEALTH-003: Tactical Command Wrapper
+/// 1. env_clear(): Strips RUST_*, CARGO_*, and other parent env vars.
+/// 2. setsid/process_group: Decouples from the parent's process tree signaling.
+/// 3. Resource Limits: Enforces virtual memory constraints to protect the 1GB RAM host.
+pub fn stealth_command(binary: &str) -> tokio::process::Command {
+    let mut cmd = tokio::process::Command::new(binary);
+    
+    cmd.env_clear()
+       .env("PATH", "/usr/local/bin:/usr/bin:/bin")
+       .env("HOME", "/tmp")
+       .kill_on_drop(true);
+
+    #[cfg(unix)]
+    {
+        use std::os::unix::process::CommandExt;
+        // Setsid / process group 0 to prevent Ctrl-C or parent signals from killing children
+        // independently of our orchestrator's explicit management.
+        unsafe {
+            cmd.pre_exec(|| {
+                // 1. New Session/PGID
+                libc::setsid();
+                
+                // 2. Memory Limits (Hard limit 512MB for any single tool)
+                // This prevents a single nmap/hydra from OOMing the 1GB VPS.
+                let mem_limit_val = 512 * 1024 * 1024; // 512 MB
+                let mem_rlimit = libc::rlimit {
+                    rlim_cur: mem_limit_val,
+                    rlim_max: mem_limit_val,
+                };
+                libc::setrlimit(libc::RLIMIT_AS, &mem_rlimit);
+                
+                // 3. CPU Time Limit (300s CPU time max to prevent runaway processes)
+                let cpu_rlimit = libc::rlimit {
+                    rlim_cur: 300,
+                    rlim_max: 300,
+                };
+                libc::setrlimit(libc::RLIMIT_CPU, &cpu_rlimit);
+
+                // 4. Process Count Limit (Max 64 children to prevent fork bombs/runaway threads)
+                let nproc_rlimit = libc::rlimit {
+                    rlim_cur: 64,
+                    rlim_max: 64,
+                };
+                libc::setrlimit(libc::RLIMIT_NPROC, &nproc_rlimit);
+                
+                Ok(())
+            });
+        }
+    }
+
+    cmd
+}
+
+pub async fn kill_pgid(pid: u32) {
+    #[cfg(unix)]
+    {
+        // Sending signal to -pid sends it to the whole process group.
+        unsafe {
+            libc::kill(-(pid as i32), libc::SIGKILL);
+        }
+    }
+}
+
+pub fn kill_pgid_sync(pid: u32) {
+    #[cfg(unix)]
+    {
+        unsafe {
+            libc::kill(-(pid as i32), libc::SIGKILL);
+        }
+    }
+}
+
+pub struct PgidKillGuard {
+    pub pgid: u32,
+}
+
+impl PgidKillGuard {
+    pub fn new(pgid: u32) -> Self { Self { pgid } }
+}
+
+impl Drop for PgidKillGuard {
+    fn drop(&mut self) {
+        kill_pgid_sync(self.pgid);
     }
 }
 

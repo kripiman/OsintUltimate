@@ -1,92 +1,99 @@
-# 🏗️ Arquitectura del Sistema OsintUltimate
+# 🏗️ Arquitectura Técnica OsintUltimate v3.0
 
-Este documento proporciona una visión profunda del diseño técnico, las estructuras de datos y la lógica del pipeline del **RedTeam Rust Core (v2.1)**.
+> **Motor de Evaluación de Red Team de Alto Rendimiento, Asíncrono y Autónomo**
 
-## 1. Filosofía Central
-El motor está diseñado para una **Concurrencia Masiva con Seguridad**. Utiliza un "Pipeline basado en Etapas" donde cada etapa está aislada por canales asíncronos (`tokio::sync::mpsc`).
-
-### Restricciones Clave:
-*   **Streams de Costo Cero en Memoria**: Los datos se procesan a medida que llegan, evitando la necesidad de cargar miles de objetivos en RAM.
-*   **Lógica No Bloqueante**: Todos los plugins deben ser `async`. La E/S bloqueante se delega a `spawn_blocking`.
-*   **Sigilo por Diseño**: El jitter y la rotación de proxies están integrados en el núcleo, no son añadidos posteriormente.
+Este documento detalla el diseño interno, los flujos de datos y las garantías de seguridad del núcleo de **OsintUltimate v3.0**, re-arquitecturado íntegramente en Rust para máxima eficiencia y sigilo.
 
 ---
 
-## 2. El Pipeline de 4 Etapas
+## 1. Filosofía de Diseño: "Atomicidad y Concurrencia"
+
+OsintUltimate v3.0 no es solo un escáner; es un **orquestador de inteligencia**. Se basa en tres pilares:
+1.  **Costo Cero de Memoria**: Procesamiento de flujos (streaming) mediante `tokio::sync::mpsc` y `JSONL`, permitiendo miles de objetivos en hardware de 1GB RAM.
+2.  **Aislamiento de Seguridad**: Cada herramienta externa se ejecuta en un grupo de procesos (`PGID`) propio, con límites de recursos (`rlimit`) y limpieza automática.
+3.  **Decisión Autónoma**: Un sistema de IA en cascada (`TieredAIRouter`) elige el mejor modelo (Local, Flash, Pro) según la criticidad del hallazgo.
+
+---
+
+## 2. El Pipeline Circular de 4 Fases
+
+A diferencia de los escáneres lineales, OsintUltimate utiliza un pipeline circular que expande dinámicamente la superficie de ataque.
 
 ```mermaid
-graph LR
-    subgraph "Etapa 1: Descubrimiento"
-        D[OsintScanner]
-    end
-    subgraph "Etapa 2: Liveness"
-        L[LivenessChecker]
-    end
-    subgraph "Etapa 3: Escaneo"
-        S1[WebFuzzer]
-        S2[NmapScanner]
-    end
-    subgraph "Etapa 4: Sink"
-        C[Colector JSONL]
-    end
-
-    Input --> D
-    D --> L
-    L --> S1
-    L --> S2
-    S1 --> C
-    S2 --> C
+graph TD
+    A[CLI/TUI Input] --> B(Capability Layer Policy)
+    B --> C(Approval Gate Check)
+    C --> D{Orchestrator}
+    D --> E[Fase 1: Descubrimiento OSINT]
+    E -- Nuevos Subdominios --> D
+    D --> F[Fase 2: Liveness & SSRF Protection]
+    F --> G[Fase 3: Escaneo Activo & Explotación]
+    G --> H[Fase 4: Data Sink & AI Analysis]
+    H -- Acciones Sugeridas --> D
+    H --> I[JSONL / HTML Report]
 ```
 
-### Etapa 1: Descubrimiento (OSINT)
-*   **Entrada**: Objetivos iniciales proporcionados a través de la CLI.
-*   **Lógica**: Utiliza `OsintScanner` (logs de Transparencia de Certificados) para expandir la superficie de ataque.
-*   **Backpressure**: Implementado mediante un límite rígido en el tamaño de los canales (`clamp(100, 1000)`), evitando que la memoria se sature si la entrada es masiva.
-*   **Deduplicación**: Utiliza un `DashSet` global para evitar re-escanear el mismo subdominio descubierto múltiples veces.
+### Fase 1: Descubrimiento (Expansion)
+*   **Plugins**: `OsintScanner`, `Subfinder`, `Amass`.
+*   **Deduplicación**: Implementada mediante `Bloom Filters` y `DashSet` globales para evitar ciclos infinitos.
+*   **Velocidad**: Resolución DNS asíncrona nativa (`hickory-resolver`) capaz de 10k+ QPS.
 
-### Etapa 2: Liveness (Verificación)
-*   **Lógica**: Verifica si el host se resuelve a una IP pública.
-*   **Seguridad**: Implementa una protección estricta contra SSRF. Bloquea rangos privados (RFC1918), CGNAT y rangos de metadatos Cloud.
-*   **Eficiencia**: Utiliza un `hickory-resolver` compartido para DNS asíncrono de alta velocidad.
+### Fase 2: Liveness & Seguridad
+*   **SSRF Shield**: Bloqueo estricto de IPs privadas (`RFC1918`), `CGNAT`, `169.254.x.x` y metadatos cloud.
+*   **Verificación Híbrida**: Ping ICMP + TCP Syn + DNS Over HTTPS (DoH) para validar hosts sin dejar rastro en logs de red local.
 
-### Etapa 3: Escaneo (Superficie de Ataque)
-*   **Lógica**: Ejecución paralela de las implementaciones registradas de `ScannerPlugin`.
-*   **Optimización de Memoria**: Utiliza `Arc` para compartir el objeto `TargetHost` entre múltiples plugins concurrentes, eliminando clones innecesarios en el hot path.
-*   **Concurrencia**: Controlada por el `Orchestrator` utilizando `StreamExt::buffer_unordered(N)`.
-*   **Evasión**: El jitter se aplica matemáticamente utilizando una **distribución LogNormal** para imitar los patrones de clic humanos.
+### Fase 3: Escaneo y Explotación (Capability Layers)
+El sistema organiza los plugins en capas de riesgo:
+1.  **Passive**: Solo fuentes externas.
+2.  **Discovery**: Enumeración ligera.
+3.  **Scanning**: Análisis de vulnerabilidades.
+4.  **Verification**: Confirmación de hallazgos (Burp/Zap).
+5.  **Exploitation**: Ejecución de exploits (SqlMap/Commix).
+6.  **Post-Exploitation**: Movimiento lateral y persistencia.
 
-### Etapa 4: Sink (Colector)
-*   **Formato**: JSON Lines (`.jsonl`).
-*   **Fiabilidad**: Se vuelca a disco cada 10 resultados para sobrevivir a fallos del sistema o interrupciones manuales (`SIGINT`).
-*   **Generación de Reportes**: Al finalizar, activa un motor de plantillas HTML basado en Handlebars para generar un reporte visual.
-
----
-
-## 3. Modelo de Concurrencia (`Orchestrator`)
-El `Orchestrator` utiliza `futures::stream::unfold` para extraer de un canal y `buffer_unordered` para procesar en paralelo.
-
-### Cierre Elegante (Graceful Shutdown)
-Cuando se recibe una señal de apagado:
-1.  El stream `unfold` deja de extraer nuevos elementos.
-2.  El canal se cierra.
-3.  Cualquier elemento actualmente "en tránsito" (almacenado en el canal pero aún no procesado) es extraído y marcado como `TargetStatus::Dead` con un hallazgo `SHUTDOWN_ABORT`, asegurando que no haya pérdida de datos.
-4.  El colector termina de escribir todos los elementos antes de salir.
+### Fase 4: Data Sink & AI Cascade
+*   **Streaming Persistence**: Los resultados se escriben línea a línea en disco como `JSONL`, evitando picos de RAM.
+*   **Análisis Tiered**:
+    *   **Local (Ollama)**: Análisis rápido de hallazgos informativos.
+    *   **Mid (Azure Flash)**: Triaje de vulnerabilidades medianas.
+    *   **Premium (Gemini Pro)**: Análisis profundo de cadenas de ataque críticas.
 
 ---
 
-## 4. Mecanismos de Seguridad y Sigilo
+## 3. Componentes del Núcleo
 
-### Protección SSRF (`liveness.rs`)
-El sistema impone una política de "Buscar pero no Tocar" para la infraestructura interna. Cualquier IP que se resuelva a los siguientes rangos es descartada inmediatamente:
-*   `10.0.0.0/8`, `172.16.0.0/12`, `192.168.0.0/16` (Privado)
-*   `127.0.0.0/8` (Loopback)
-*   `100.64.0.0/10` (CGNAT - evita el acceso a metadatos de GCP/AWS)
-*   `169.254.0.0/16` (Enlace Local)
+### `Orchestrator`
+Gestiona la concurrencia a través de `Semaphores` y `RwLock`. Utiliza `StreamExt::buffer_unordered` para maximizar el rendimiento de la red sin saturar la CPU.
 
-### Jitter Humano (`common.rs`)
-Utilizamos una distribución LogNormal porque los tiempos de reacción humanos no son lineales. La estructura `HumanJitter` calcula una duración de sueño que se agrupa alrededor de una media pero permite "colas largas", haciendo que la detección automatizada sea significativamente más difícil.
+### `TieredAIRouter`
+Implementa una caché táctica supervisada (`moka`) que evita el consumo excesivo de tokens de IA al recordar análisis de hallazgos similares. Comprime el contexto eliminando headers ruidosos y truncando cuerpos HTTP antes del envío al LLM.
+
+### `ExternalToolGuard`
+Envuelve herramientas como `nmap` o `sqlmap`. 
+- **Sandboxing**: Limpia variables de entorno y utiliza `setsid`.
+- **Resource Control**: Limita la RAM vurtual a 512MB por subproceso.
+- **Zombie Prevention**: Mata el `PGID` completo si hay un timeout.
+
+### `MemoryMonitor`
+Hilo de fondo que vigila `/proc/self/status`. Implementa **Backpressure**: si el consumo de RAM supera el límite suave, el orquestador pausa la ingesta de nuevos objetivos hasta que la memoria se libere.
 
 ---
 
-## 5. Guía de Desarrollo
-Consulte [PLUGIN_DEVELOPMENT.md](./PLUGIN_DEVELOPMENT.md) para obtener instrucciones sobre cómo extender las capacidades de escaneo.
+## 4. Evasión y Sigilo (OPSEC)
+
+1.  **Jitter LogNormal**: En lugar de pausas constantes, utiliza una distribución matemática que imita el comportamiento humano.
+2.  **Rotación de Proxies**: Pool de clientes `DashMap` que garantiza una rotación de IP efectiva por cada plugin.
+3.  **UA Randomization**: Rotación de User-Agents de navegadores modernos y reales.
+4.  **Behavioral Jitter**: Pequeñas variaciones en el orden de los escaneos y tiempos entre peticiones.
+
+---
+
+## 5. Salidas y Reportes
+
+*   **JSONL**: Formato base para procesamiento masivo y estabilidad.
+*   **HTML Visual**: Reporte tipo semáforo con tablas interactivas y clasificación CVSS.
+*   **Audit Log**: Registro inmutable de cada acción, quién la aprobó y por qué (esencial para cumplimiento normativo).
+
+---
+
+© 2026 RedTeam Lab | OsintUltimate v3.0 Documentation

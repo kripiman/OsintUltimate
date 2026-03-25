@@ -65,44 +65,34 @@ Para garantizar un rendimiento óptimo, se recomiendan las siguientes especifica
     - `sqlmap`, `commix`, `nuclei` (Opcionales, recomendados para mayor cobertura)
 - **Entorno de IA**: Conectividad a APIs (Gemini Pro/Flash) u Ollama local para el `TieredAIRouter`.
 
-## 📚 Documentación Técnica
+## 📚 Documentación Técnica (v3.0)
 
-Para conocer de forma profunda el funcionamiento interno, arquitecturas concurrenciales y manuales de evasión, consulta los siguientes documentos:
+Consulta los siguientes documentos para profundizar en el motor y tácticas de campo:
 
-*   [Arquitectura y Motor Asíncrono](redteam_rust_core/docs/architecture.md)
-*   [Plugins y Evasión (Stealth)](redteam_rust_core/docs/plugins_and_evasion.md)
-*   [Playbooks y Combinaciones de Uso](redteam_rust_core/docs/usage_combinations.md)
+*   [🏗️ Arquitectura y Pipeline](redteam_rust_core/docs/ARCHITECTURE.md): Diseño asíncrono, fases de ejecución y flujo de datos.
+*   [🧠 Orquestación de IA (Sentinel)](redteam_rust_core/docs/AI_ORCHESTRATION.md): Tiered AI Router, análisis en cascada y toma de decisiones autónoma.
+*   [🛡️ Hardening y OPSEC (Sigilo)](redteam_rust_core/docs/HARDENING_AND_OPSEC.md): Protección de memoria (1GB RAM), sandboxing de procesos, Jitter y Evasión.
+*   [🧩 Desarrollo de Plugins](redteam_rust_core/docs/PLUGIN_DEVELOPMENT.md): Guía para extender las capacidades del núcleo.
+*   [🔄 Combinaciones de Uso](redteam_rust_core/docs/usage_combinations.md): Playbooks y ejemplos de ejecución complejos.
 
 ---
 
-## 🛠️ Módulos
+## 🛠️ Módulos Principales
 
-### 1. **Motor Central** (`Orchestrator`)
-El cerebro de la operación. Gestiona la concurrencia a través de `Semaphores` y `RwLock`, distribuyendo tareas a través de un pool de trabajadores sin bloqueos. Ahora orquestando ejecuciones multi-fase e integrando el `TieredAIRouter` para decisiones autónomas.
+### 1. **Orquestador Central** (`Orchestrator`)
+Coordina las fases de escaneo, gestiona la concurrencia asíncrona y orquestra la ejecución multi-fase integrando el **TieredAIRouter**.
 
-### 2. **TieredAIRouter** (Orquestación de IA Nativa)
-*   **Decisión Dinámica**: Selecciona el modelo de IA adecuado (Local, Flash, Pro) según la criticidad del hallazgo.
-*   **Compresión de Contexto**: Minimiza el consumo de tokens mediante la optimización de registros de evidencia antes del análisis.
-*   **Autonomía**: Decide las próximas acciones tácticas sin intervención manual.
+### 2. **TieredAIRouter** (IA en Cascada)
+Selecciona dinámicamente el mejor modelo de IA (Local, Flash, Pro) según la criticidad, aplicando **compresión de contexto** para máxima eficiencia.
 
 ### 3. **Capas de Capacidad** (`CapabilityLayer`)
-Define políticas de escaneo con capas progresivas: Passive (solo OSINT), Discovery (enumeración), Scanning (análisis activo), Exploitation (explotación), Post-Exploitation (movimiento lateral/persistencia).
+Define el "scope" de la operación: Passive (OSINT), Discovery, Scanning, Verification, Exploitation y Post-Exploitation.
 
 ### 4. **Puertas de Aprobación** (`ApprovalGate`)
-Sistema de control de riesgos que requiere aprobación para capas avanzadas. Registra todas las acciones con usuario, timestamp y justificación.
+Gestión de riesgos que requiere confirmación explícita para acciones de nivel 3 o superior, manteniendo un rastro de auditoría inmutable.
 
-### 5. **OsintScanner** (Fase de Descubrimiento)
-*   **Descubrimiento de Subdominios**: Consulta logs de Transparencia de Certificados (`crt.sh`) para encontrar activos ocultos.
-*   **Verificación Activa**: Utiliza `hickory-resolver` (DNS asíncrono nativo) para validar subdominios en milisegundos.
-
-### 6. **WebFuzzer** (Fase de Escaneo)
-*   **Coincidencia de Firmas**: Detecta exposiciones de archivos sensibles (`.env`, `.git/config`, `wp-config.php.bak`).
-*   **Resiliencia**: Implementa reintentos con **Exponencial Backoff** para manejar redes inestables.
-*   **Controles de Salud**: Valida proactivamente los proxies antes de su uso.
-
-### 7. **NmapScanner** (Fase de Escaneo)
-*   **Parseo Robusto**: Utiliza `quick-xml` para parsear la salida de Nmap de forma segura.
-*   **Soporte de Scripting**: Soporta scripts estándar de Nmap (NSE).
+### 5. **Motores de Evasión (OPSEC)**
+Implementa **Human Jitter** (LogNormal), rotación inteligente de proxies y sandboxing de herramientas (`ProcessGuard`) con límites de RAM.
 
 ### 8. **Plugins Disponibles**
 

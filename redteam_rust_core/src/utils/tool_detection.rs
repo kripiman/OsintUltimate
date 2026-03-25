@@ -4,6 +4,7 @@ use std::process::Command;
 #[cfg(unix)]
 use std::os::unix::fs::PermissionsExt;
 use tracing::{info, warn, debug};
+use std::borrow::Cow;
 
 /// Detects if a tool is available in the system PATH using the `which` command.
 /// 
@@ -64,6 +65,15 @@ pub fn detect_tool(tool_name: &str) -> String {
             warn!("Error detecting tool '{}': {}; using tool name as fallback", tool_name, e);
             tool_name.to_string()
         }
+    }
+}
+
+/// Optimized version using Cow for callers that can avoid allocation.
+pub fn detect_tool_cow<'a>(tool_name: &'a str) -> Cow<'a, str> {
+    match detect_tool_system(tool_name) {
+        Ok(Some(path)) => Cow::Owned(path.to_string_lossy().to_string()),
+        Ok(None) => Cow::Borrowed(tool_name),
+        Err(_) => Cow::Borrowed(tool_name),
     }
 }
 

@@ -59,7 +59,7 @@ impl DiscoveryPlugin for SubfinderScanner {
         let temp_file = tempfile::NamedTempFile::new().context("Failed to create temp file for Subfinder")?;
         let temp_path = temp_file.path().to_string_lossy().to_string();
 
-        let mut child = Command::new(&self.binary_path)
+        let mut child = crate::utils::common::stealth_command(&self.binary_path)
             .arg("-d").arg(&target.host)
             .arg("-silent")
             .arg("-o").arg(&temp_path)
@@ -77,8 +77,11 @@ impl DiscoveryPlugin for SubfinderScanner {
 
         let mut discovered = Vec::new();
 
-        if let Ok(content) = tokio::fs::read_to_string(&temp_path).await {
-            for line in content.lines() {
+        // RAM-FIX: Read line-by-line to avoid loading massive files (e.g. 100k subdomains) into memory at once
+        if let Ok(file) = tokio::fs::File::open(&temp_path).await {
+            use tokio::io::{AsyncBufReadExt, BufReader};
+            let mut lines = BufReader::new(file).lines();
+            while let Some(line) = lines.next_line().await? {
                 let domain = line.trim().to_string();
                 if !domain.is_empty() {
                     discovered.push(domain);

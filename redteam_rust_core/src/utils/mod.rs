@@ -5,9 +5,16 @@ pub mod telemetry;
 pub mod proxy;
 pub mod cvss;
 pub mod tool_detection;
+pub mod memory_monitor;
+pub mod jitter;
+pub mod process_guard;
+pub mod stealth_http;
 
 pub use liveness::LivenessChecker;
 pub use report_gen::generate_report;
 pub use telemetry::{init_telemetry, shutdown_telemetry};
 pub use proxy::ProxyManager;
+pub use memory_monitor::MemoryMonitor;
+pub use jitter::JitterSleep;
+pub use process_guard::ExternalToolGuard;
 pub use tool_detection::{detect_tool, detect_tool_system, check_tool_availability, verify_tool_version};

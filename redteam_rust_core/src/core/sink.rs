@@ -19,6 +19,94 @@ pub trait DataSink: Send + Sync {
     async fn close(&mut self) -> Result<()>;
 }
 
+/// A DataSink that broadcasts to multiple other sinks.
+pub struct MultiSink {
+    sinks: Vec<Box<dyn DataSink>>,
+}
+
+impl MultiSink {
+    pub fn new() -> Self {
+        Self { sinks: Vec::new() }
+    }
+
+    pub fn add(&mut self, sink: Box<dyn DataSink>) {
+        self.sinks.push(sink);
+    }
+}
+
+#[async_trait]
+impl DataSink for MultiSink {
+    async fn write(&mut self, target: &TargetHost) -> Result<()> {
+        for sink in &mut self.sinks {
+            sink.write(target).await?;
+        }
+        Ok(())
+    }
+
+    async fn write_metadata(&mut self, metadata: &ScanMetadata) -> Result<()> {
+        for sink in &mut self.sinks {
+            sink.write_metadata(metadata).await?;
+        }
+        Ok(())
+    }
+
+    async fn close(&mut self) -> Result<()> {
+        for sink in &mut self.sinks {
+            sink.close().await?;
+        }
+        Ok(())
+    }
+}
+
+/// V10 HARDENING: Tactical Webhook Sink for C2/Exfiltration.
+/// Uses reqwest to send results to a remote endpoint in real-time.
+pub struct TacticalWebhookSink {
+    client: reqwest::Client,
+    url: String,
+    auth_token: Option<String>,
+}
+
+impl TacticalWebhookSink {
+    pub fn new(url: String, auth_token: Option<String>) -> Self {
+        Self {
+            client: reqwest::Client::new(),
+            url,
+            auth_token,
+        }
+    }
+}
+
+#[async_trait]
+impl DataSink for TacticalWebhookSink {
+    async fn write(&mut self, target: &TargetHost) -> Result<()> {
+        let mut request = self.client.post(&self.url)
+            .json(target);
+        
+        if let Some(token) = &self.auth_token {
+            request = request.header("Authorization", format!("Bearer {}", token));
+        }
+
+        request.send().await.context("TacticalWebhookSink: Failed to send result to C2")?;
+        Ok(())
+    }
+
+    async fn write_metadata(&mut self, metadata: &ScanMetadata) -> Result<()> {
+        let mut request = self.client.post(&format!("{}/metadata", self.url))
+            .json(metadata);
+            
+        if let Some(token) = &self.auth_token {
+            request = request.header("Authorization", format!("Bearer {}", token));
+        }
+
+        request.send().await.context("TacticalWebhookSink: Failed to send metadata to C2")?;
+        Ok(())
+    }
+
+    async fn close(&mut self) -> Result<()> {
+        Ok(())
+    }
+}
+
 /// A DataSink that writes results as JSON Lines to a file.
 /// This guarantees O(1) memory usage by flushing results as they arrive.
 pub struct JsonlSink {

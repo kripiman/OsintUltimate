@@ -1,13 +1,13 @@
 use crate::Args;
 use anyhow::Result;
-use inquire::{Select, Text, Confirm};
+use inquire::{Select, Text, Confirm, MultiSelect, validator::Validation};
 
 pub fn show_menu() -> Result<Option<Args>> {
-    println!("🛡️  Bienvenido a OsintUltimate v3.0 - Interactive Setup");
-    println!("====================================================\n");
+    println!("🛡️  Bienvenido a OsintUltimate v3.0 - Unified Wizard");
+    println!("=================================================\n");
     
-    let target = Text::new("🎯 Introduce el objetivo (ej. example.com):")
-        .with_help_message("Domínio base, IP o ruta local a un archivo de targets")
+    let target = Text::new("🎯 Introduce el objetivo (ej. example.com o targets.txt):")
+        .with_help_message("Dominio base, IP o ruta local a un archivo de targets")
         .prompt()?;
         
     if target.trim().is_empty() {
@@ -15,7 +15,7 @@ pub fn show_menu() -> Result<Option<Args>> {
         return Ok(None);
     }
     
-    // Default struct parameters corresponding to the CLI defaults
+    // Default struct parameters
     let mut args = Args {
         target: None,
         input: None,
@@ -49,91 +49,94 @@ pub fn show_menu() -> Result<Option<Args>> {
         args.target = Some(target.clone());
     }
     
-    let options = vec![
-        "1. Discovery Only (OSINT, Zero Noise)",
-        "2. Stealth Audit (Low & Slow, Evasion P1/P2)",
-        "3. Aggressive Full Surface (All Scripts, High Concurrency)",
-        "4. \u{1F534} Vulnerability Hunter (Max CVE Detection)",
-        "5. Custom Configuration"
+    let features = vec![
+        "🕵️  Discovery & OSINT (Reconocimiento pasivo/DNS)",
+        "🥷  Modo Sigilo (Evasión P1/P2, Jitter real, Fragmentación)",
+        "🔴 Detección de Vulnerabilidades (CVEs, NSE Vuln/Exploit)",
+        "🤖 IA Autónoma (Sentinel Autopilot - Decisión en tiempo real)",
+        "🚀 Modo Agresivo (Alta concurrencia, Scripts invasivos)",
+        "🛡️  Hardening & Compliance (Trivy, Kubescape, Gitleaks)",
     ];
-    
-    let profile = Select::new("⚙️  Selecciona el Perfil de Escaneo (Playbook):", options.clone()).prompt()?;
 
-    if profile == options[0] {
-        // Discovery Only
-        args.doh = true;
-    } else if profile == options[1] {
-        // Stealth Audit
-        args.stealth = true;
-        args.scan_type = "sS".to_string();
-        args.fragment = true;
-        args.concurrency = 5;
-        args.doh = true;
-        
-        let use_proxies = Confirm::new("🔄 ¿Deseas configurar Proxies rotativos (Recomendado para Stealth)?")
-            .with_default(false)
+    let selected_features = MultiSelect::new("⚙️  Selecciona las capacidades para este operativo (espacio para marcar):", features.clone())
+        .with_validator(|selected: &[&str]| {
+            let has_stealth = selected.iter().any(|&f| f.contains("Sigilo"));
+            let has_aggressive = selected.iter().any(|&f| f.contains("Agresivo"));
+            if has_stealth && has_aggressive {
+                Ok(Validation::Invalid("No puedes combinar 'Sigilo' y 'Agresivo' en una misma misión.".into()))
+            } else if selected.is_empty() {
+                Ok(Validation::Invalid("Debes seleccionar al menos una capacidad.".into()))
+            } else {
+                Ok(Validation::Valid)
+            }
+        })
+        .prompt()?;
+
+    for feature in selected_features {
+        if feature == features[0] {
+            // Discovery
+            args.doh = true;
+            if args.max_layer == "Scanning" { args.max_layer = "Discovery".to_string(); }
+        } else if feature == features[1] {
+            // Stealth
+            args.stealth = true;
+            args.scan_type = "sS".to_string();
+            args.fragment = true;
+            args.concurrency = 5;
+            args.doh = true;
+        } else if feature == features[2] {
+            // Vuln Scan
+            args.vuln_scan = true;
+            args.service_detection = true;
+            if args.concurrency < 50 { args.concurrency = 50; }
+        } else if feature == features[3] {
+            // Autonomous
+            args.autonomous = true;
+        } else if feature == features[4] {
+            // Aggressive
+            args.scripts = Some("default,vuln,exploit,brute".to_string());
+            args.service_detection = true;
+            args.concurrency = 150;
+            args.scan_type = "sT".to_string(); // TCP Connect is faster for aggressive
+        } else if feature == features[5] {
+            // Hardening
+            args.max_layer = "Verification".to_string();
+        }
+    }
+
+    // Configuración de infraestructura si es necesario
+    if args.stealth || Confirm::new("¿Deseas configurar proxies o DNS personalizados?").with_default(false).prompt()? {
+        let use_proxies = Confirm::new("🔄 ¿Configurar Proxies rotativos (http/socks5)?")
+            .with_default(args.stealth)
             .prompt()?;
             
         if use_proxies {
-            let px = Text::new("   Lista de proxies (http/socks5) separados por coma:")
-                .with_help_message("ej: socks5://127.0.0.1:9050,http://proxy:8080")
+            let px = Text::new("   Lista de proxies (ej: socks5://127.0.0.1:9050,http://proxy:8080):")
                 .prompt()?;
             if !px.trim().is_empty() {
                 args.proxies = Some(px);
             }
         }
-    } else if profile == options[2] {
-        // Aggressive
-        args.scripts = Some("default,vuln,exploit".to_string());
-        args.service_detection = true;
-        args.concurrency = 150;
-    } else if profile == options[3] {
-        // 🔴 Vulnerability Hunter — professional CVE hunting profile
-        args.vuln_scan = true;
-        args.service_detection = true;
-        args.concurrency = 50;
-        println!("\n  🔴 Vulnerability Hunter activado:");
-        println!("     • OS Detection (-O --osscan-guess)");
-        println!("     • Version Intensity 9 (-sV --version-intensity 9)");
-        println!("     • NSE Suite: vuln, exploit, auth, default, discovery");
-        println!("     • Top 5000 ports · Script timeout: 10min · Host timeout: 24h\n");
-    } else {
-        // Custom Configuration
-        args.stealth = Confirm::new("¿Habilitar Modo Sigiloso (Jitter, Profiling ligero)?")
-            .with_default(false)
-            .prompt()?;
-            
-        args.doh = Confirm::new("¿Usar DNS over HTTPS (DoH) para privacidad?")
-            .with_default(true)
-            .prompt()?;
-            
-        args.service_detection = Confirm::new("¿Habilitar Detección de Servicios y Versiones de Nmap (-sV)?")
-            .with_default(false)
-            .prompt()?;
-            
-        let custom_scripts = Text::new("Ejecutar Scripts Nmap (NSE) - separado por comas (vacío = ninguno):")
-            .with_help_message("ej: http-title,vuln,auth")
-            .prompt()?;
-            
-        if !custom_scripts.trim().is_empty() {
-             args.scripts = Some(custom_scripts);
-        }
-
-        let custom_ports = Text::new("Puertos a escanear (vacío = top 3000):")
-            .with_help_message("ej: 1-65535, 80,443,8080, o vacío para top-ports")
-            .prompt()?;
-            
-        if !custom_ports.trim().is_empty() {
-             args.ports = Some(custom_ports);
-        }
         
-        let conc_str = Text::new("Nivel de Concurrencia (Máximos hilos paralelos):")
-             .with_default("10")
-             .prompt()?;
-        args.concurrency = conc_str.parse().unwrap_or(10);
+        if Confirm::new("🌐 ¿Configurar DNS personalizados / DoH?").with_default(args.doh).prompt()? {
+            args.doh = Confirm::new("   ¿Usar DNS over HTTPS (DoH)?").with_default(args.doh).prompt()?;
+            let dns = Text::new("   Servidores DNS (separados por coma, opcional):").prompt()?;
+            if !dns.trim().is_empty() {
+                args.dns_servers = Some(dns);
+            }
+        }
     }
-    
-    println!("\n✅ Perfil configurado para objetivo '{}' correctamente. Iniciando motor...\n", target);
 
-    Ok(Some(args))
+    let summary = format!(
+        "\n✅ Misión configurada:\n - Objetivo: {}\n - Capas: {}\n - Concurrencia: {}\n - IA Autónoma: {}\n - Sigilo: {}\n",
+        target, args.max_layer, args.concurrency, args.autonomous, args.stealth
+    );
+    println!("{}", summary);
+
+    if Confirm::new("🚀 ¿Iniciar operativo ahora?").with_default(true).prompt()? {
+        Ok(Some(args))
+    } else {
+        println!("🛑 Operativo cancelado.");
+        Ok(None)
+    }
 }
