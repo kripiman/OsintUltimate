@@ -1,0 +1,139 @@
+# Azure DevOps Pipeline - OsintUltimate Red Team Platform
+# Includes: Linting, Testing, Build, Docker Build, and Security Audit (SARIF)
+
+trigger:
+  branches:
+    include:
+      - main
+      - develop
+
+pool:
+  vmImage: 'ubuntu-latest'
+
+variables:
+  CARGO_TERM_COLOR: always
+  CRATE_DIR: 'redteam_rust_core'
+  DOCKER_IMAGE: 'osintultimate/engine'
+
+stages:
+- stage: Quality
+  displayName: "Code Quality & Tests"
+  jobs:
+  - job: LintAndTest
+    displayName: "Linting and Unit Tests"
+    steps:
+    - task: UseRust@0
+      inputs:
+        version: '1.75.0'
+        components: 'clippy, rustfmt'
+      
+    - script: |
+        sudo apt-get update
+        sudo apt-get install -y pkg-config libssl-dev libsqlite3-dev
+      displayName: 'Install System Dependencies'
+
+    - script: cargo fmt --all -- --check
+      workingDirectory: $(CRATE_DIR)
+      displayName: 'Format Check'
+
+    - script: cargo clippy --all-targets --all-features -- -D warnings
+      workingDirectory: $(CRATE_DIR)
+      displayName: 'Clippy Lint'
+
+    - script: cargo test --locked
+      workingDirectory: $(CRATE_DIR)
+      displayName: 'Unit & Integration Tests'
+
+- stage: Security
+  displayName: "Security Audit"
+  jobs:
+  - job: CargoAudit
+    displayName: "Cargo Audit & SARIF Generator"
+    steps:
+    - task: UseRust@0
+      inputs:
+        version: '1.75.0'
+        
+    - script: cargo install cargo-audit
+      displayName: 'Install cargo-audit'
+
+    - script: |
+        # Generate JSON audit report
+        cargo audit --json > audit.json || true
+        
+        # Convert JSON to SARIF logic (inline Python)
+        python3 -c "
+        import json, sys
+        try:
+          with open('audit.json') as f:
+            data = json.load(f)
+          
+          results = []
+          for vuln in data.get('vulnerabilities', {}).get('list', []):
+            adv = vuln.get('advisory', {})
+            pkg = vuln.get('package', {})
+            results.append({
+              'ruleId': adv.get('id', 'UNKNOWN'),
+              'level': 'error' if float(adv.get('cvss', {}).get('score', 0) or 0) >= 7.0 else 'warning',
+              'message': {'text': adv.get('description', 'No description')},
+              'locations': [{'physicalLocation': {'artifactLocation': {'uri': 'Cargo.lock'}, 'region': {'startLine': 1}}}],
+            })
+            
+          sarif = {
+            'version': '2.1.0',
+            '\$schema': 'https://schemastore.azurewebsites.net/schemas/json/sarif-2.1.0-rtm.5.json',
+            'runs': [{'tool': {'driver': {'name': 'cargo-audit', 'version': '0.21.0'}}, 'results': results}]
+          }
+          with open('audit.sarif', 'w') as f:
+            json.dump(sarif, f)
+        except Exception as e:
+          print('Failed SARIF generation', e)
+        "
+      workingDirectory: $(CRATE_DIR)
+      displayName: 'Run Audit & Generate SARIF'
+
+    - task: PublishBuildArtifacts@1
+      inputs:
+        PathtoPublish: '$(CRATE_DIR)/audit.sarif'
+        ArtifactName: 'CodeAnalysisLogs'
+        publishLocation: 'Container'
+      displayName: 'Publish SARIF Report'
+
+- stage: Build
+  displayName: "Build & Package"
+  dependsOn: [Quality, Security]
+  jobs:
+  - job: ReleaseBinary
+    displayName: "Compile Release Binary"
+    steps:
+    - task: UseRust@0
+      inputs:
+        version: 'stable'
+    
+    - script: |
+        sudo apt-get update
+        sudo apt-get install -y pkg-config libssl-dev libsqlite3-dev
+      displayName: 'Install System Dependencies'
+
+    - script: cargo build --release --locked
+      workingDirectory: $(CRATE_DIR)
+      displayName: 'Build Release'
+
+    - task: PublishBuildArtifacts@1
+      inputs:
+        PathtoPublish: '$(CRATE_DIR)/target/release/redteam_rust_core'
+        ArtifactName: 'osintultimate-linux-amd64'
+        publishLocation: 'Container'
+      displayName: 'Publish Release Binary'
+
+  - job: DockerImage
+    displayName: "Build Docker Image"
+    steps:
+    - task: Docker@2
+      inputs:
+        command: 'build'
+        Dockerfile: '$(CRATE_DIR)/Dockerfile'
+        tags: |
+          latest
+          $(Build.BuildId)
+      displayName: 'Build runtime Docker image'

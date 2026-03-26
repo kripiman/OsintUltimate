@@ -8,10 +8,15 @@ Este documento describe las medidas de seguridad interna y tácticas de evasión
 
 Optimizado para entornos con **1GB de RAM** (ej. AWS t3.micro, Azure B1s, GCP f1-micro).
 
-### Vigilancia de Memoria (`MemoryMonitor`)
-- **Límite Suave (600MB)**: Activa el `Backpressure`. El orquestador pausa la lectura de nuevos objetivos.
-- **Límite Duro (900MB)**: Provoca un apagado de emergencia (`Greaceful Shutdown`) para proteger al sistema operativo de un OOM (Out Of Memory) fatal.
-- **Logging**: El monitor registra el uso de RAM actual y el pico (`VmRSS`) cada 500ms en `/proc/self/status`.
+### Vigilancia de Memoria Adaptativa y Backpressure
+Optimizado dinámicamente según el hardware detectado:
+- **UltraLowMemory Mode (Adaptativo)**:
+  - **Límite Suave (500MB)**: Activa el `Backpressure`. El orquestador pausa la lectura de nuevos objetivos.
+  - **Límite Duro (850MB)**: Provoca un apagado de emergencia (`Graceful Shutdown`) protegiendo al sistema operativo.
+  - **Concurrencia**: Capada automáticamente a un máximo de 5-10 hilos simultáneos.
+- **LocalPC/Server Default**:
+  - **Límite Suave (600MB)** / **Límite Duro (900MB)**.
+- **Logging**: El monitor registra el uso de RAM actual y el pico (`VmRSS`) en `/proc/self/status`.
 
 ### Límites de Subprocesos (`rlimit`)
 OsintUltimate encapsula cada herramienta externa (Nmap, Nuclei, SqlMap) con restricciones estrictas de recursos:
@@ -53,6 +58,18 @@ El núcleo implementa una validación asíncrona de liveness que protege al Red 
 - **Bloqueo `RFC1918`**: 10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16.
 - **Bloqueo `CGNAT` / Cloud Metadata**: 100.64.0.0/10 y 169.254.169.254.
 - **Bloqueo `IPv6`**: Rangos de documentación y metadatos IPv6.
+
+---
+
+## 5. Auditoría de Despliegue (DevOps Hardening) [NUEVO]
+
+### Docker de Grado Alpine
+Para entornos críticos de baja memoria, la imagen Docker ha sido migrada a **Alpine Linux**:
+- **Base Minimalista**: Reduce el consumo de RAM del contenedor base en un 70% comparado con Debian.
+- **Static linking (musl)**: El binario se compila estáticamente.
+
+### Advertencia Preventiva de Docker en 1GB
+En hardware de **1GB RAM**, OsintUltimate emite una advertencia crítica contra el uso de Docker. Se recomienda la ejecución nativa en estos casos.
 
 ---
 

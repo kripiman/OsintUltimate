@@ -58,15 +58,23 @@ El sistema organiza los plugins en capas de riesgo:
     *   **Mid (Azure Flash)**: Triaje de vulnerabilidades medianas.
     *   **Premium (Gemini Pro)**: Análisis profundo de cadenas de ataque críticas.
 
+### Fase de Infraestructura: Adaptabilidad Automática [NUEVO]
+El sistema detecta el entorno de ejecución antes de iniciar (`detect_infrastructure`):
+- **UltraLowMemory (≤1.5GB RAM)**: Capa la concurrencia a 10 y activa límites estrictos.
+- **LocalPC**: Optimiza para 30 hilos y sigilo balanceado.
+- **Server**: Desbloquea escalabilidad masiva (100+ hilos).
+
 ---
 
 ## 3. Componentes del Núcleo
 
 ### `Orchestrator`
-Gestiona la concurrencia a través de `Semaphores` y `RwLock`. Utiliza `StreamExt::buffer_unordered` para maximizar el rendimiento de la red sin saturar la CPU.
+Gestiona la concurrencia a través de `Semaphores` y `RwLock`. Ahora es **Adaptativo**: ajusta su semáforo de memoria y número de hilos según el hardware detectado en el inicio. Utiliza `StreamExt::buffer_unordered` para maximizar el rendimiento.
 
-### `TieredAIRouter`
-Implementa una caché táctica supervisada (`moka`) que evita el consumo excesivo de tokens de IA al recordar análisis de hallazgos similares. Comprime el contexto eliminando headers ruidosos y truncando cuerpos HTTP antes del envío al LLM.
+### `TacticalWebhookSink` [OPTIMIZADO]
+Diseñado para entornos de alta latencia (C2 remoto/VPS):
+- **Batching**: Acumula hasta 10 objetivos/hallazgos antes de realizar el envío.
+- **Compresión Gzip**: Comprime los payloads de red mediante `flate2` para minimizar el tráfico y la latencia.
 
 ### `ExternalToolGuard`
 Envuelve herramientas como `nmap` o `sqlmap`. 

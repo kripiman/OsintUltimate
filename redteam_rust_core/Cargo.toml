@@ -58,6 +58,8 @@ async-stream = "0.3.6"
 dotenv = "0.15.0"
 libloading = "0.9.0"
 sqlx = { version = "0.7", features = ["runtime-tokio-rustls", "sqlite", "chrono", "macros", "json"] }
+sysinfo = "0.30.5"
+flate2 = "1.0.28"
 
 [profile.release]
 opt-level = 3
