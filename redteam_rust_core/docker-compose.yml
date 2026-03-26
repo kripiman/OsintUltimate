@@ -1,0 +1,127 @@
+# =============================================================================
+# docker-compose.yml — OsintUltimate
+# =============================================================================
+# Perfiles disponibles:
+#   - base     : Escaneo pasivo/discovery sin privilegios de red especiales
+#   - privileged: Escaneo con nmap -sS / vuln-scan (requiere CAP_NET_RAW)
+#   - full     : Stack completo con Ollama (IA local) + Jaeger (telemetría)
+#
+# Uso rápido:
+#   docker compose --profile base run osintultimate <target>
+#   docker compose --profile privileged run osintultimate-priv <target> --vuln-scan
+#   docker compose --profile full up -d && docker compose --profile full run osintultimate-ai <target> --autonomous
+# =============================================================================
+
+services:
+  # ── Servicio base (no privilegiado) ──────────────────────────────────────────
+  osintultimate:
+    image: ghcr.io/kripiman/osintultimate:latest
+    build:
+      context: .
+      dockerfile: Dockerfile
+    profiles: ["base", "full"]
+    env_file:
+      - .env
+    environment:
+      # Variables de API — sobreescribir en .env
+      - GEMINI_API_KEY=${GEMINI_API_KEY:-}
+      - GEMINI_API_KEYS=${GEMINI_API_KEYS:-}
+      - AZURE_OPENAI_ENDPOINT=${AZURE_OPENAI_ENDPOINT:-}
+      - AZURE_OPENAI_KEY=${AZURE_OPENAI_KEY:-}
+      - C2_URL=${C2_URL:-}
+      - C2_TOKEN=${C2_TOKEN:-}
+      # Telemetría OpenTelemetry (opcional, conecta con Jaeger si está activo)
+      - OTEL_ENDPOINT=${OTEL_ENDPOINT:-}
+    volumes:
+      - ./output:/output
+      - ./wordlists:/wordlists:ro
+    working_dir: /workspace
+    stdin_open: true
+    tty: true
+    # Sin privilegios especiales para escaneos pasivos/HTTP
+    security_opt:
+      - no-new-privileges:true
+    # Limitar recursos (ajustar para VPS de 1 GB)
+    deploy:
+      resources:
+        limits:
+          memory: 900M
+          cpus: "2.0"
+
+  # ── Servicio privilegiado (nmap -sS, vuln-scan, ARP) ─────────────────────────
+  osintultimate-priv:
+    extends:
+      service: osintultimate
+    profiles: ["privileged"]
+    # Capabilities mínimas requeridas por nmap para SYN scans
+    cap_add:
+      - NET_RAW
+      - NET_ADMIN
+    security_opt: []
+    # Modo red host: necesario para escaneos ARP y detección OS precisa
+    # ADVERTENCIA: Usar solo en entornos de red controlada/laboratorio
+    network_mode: host
+    # Anular la restricción de usuario para nmap (necesita root para raw sockets)
+    user: root
+
+  # ── Servicio con IA autónoma (Sentinel) + Ollama local ───────────────────────
+  osintultimate-ai:
+    extends:
+      service: osintultimate
+    profiles: ["full"]
+    environment:
+      - GEMINI_API_KEY=${GEMINI_API_KEY:-}
+      - GEMINI_API_KEYS=${GEMINI_API_KEYS:-}
+      - AZURE_OPENAI_ENDPOINT=${AZURE_OPENAI_ENDPOINT:-}
+      - AZURE_OPENAI_KEY=${AZURE_OPENAI_KEY:-}
+      - OLLAMA_URL=http://ollama:11434
+    depends_on:
+      ollama:
+        condition: service_healthy
+    command: ["--autonomous", "--ollama-url", "http://ollama:11434"]
+
+  # ── Ollama (Inferencia LLM local para modo --autonomous) ─────────────────────
+  ollama:
+    image: ollama/ollama:latest
+    profiles: ["full"]
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama_models:/root/.ollama
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:11434/api/tags"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 60s
+    deploy:
+      resources:
+        limits:
+          memory: 6G
+
+  # ── Jaeger (Distributed Tracing / OpenTelemetry) ──────────────────────────────
+  jaeger:
+    image: jaegertracing/all-in-one:latest
+    profiles: ["full"]
+    ports:
+      - "16686:16686"  # UI
+      - "4317:4317"    # OTLP gRPC
+      - "4318:4318"    # OTLP HTTP
+    environment:
+      - COLLECTOR_OTLP_ENABLED=true
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:16686"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
+volumes:
+  ollama_models:
+    driver: local
+
+networks:
+  default:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.20.0.0/16

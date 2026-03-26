@@ -1,0 +1,42 @@
+# =============================================================================
+# .dockerignore — OsintUltimate / redteam_rust_core
+# Excluye archivos innecesarios del contexto de construcción Docker
+# para reducir tiempo de build y tamaño del contexto.
+# =============================================================================
+
+# Artefactos de compilación (se recompilan dentro del builder stage)
+target/
+**/*.rs.bk
+
+# Outputs de scans (no deben quedar dentro de la imagen)
+*.jsonl
+*.db
+*.sqlite
+*.html
+scan_result*
+scan_report*
+
+# Documentación (no necesaria en imagen de producción)
+docs/
+
+# Archivos de desarrollo y prueba
+.git/
+.gitignore
+.gitattributes
+
+# Archivos de entorno local (NUNCA incluir secrets en imágenes)
+.env
+.env.*
+
+# CI/CD (no necesarios en runtime)
+.github/
+azure-pipelines.yml
+
+# Archivos temporales del SO
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+
+# Logs locales
+*.log

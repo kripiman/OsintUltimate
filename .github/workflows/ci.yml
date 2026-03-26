@@ -1,0 +1,229 @@
+# =============================================================================
+# ci.yml — GitHub Actions: Lint, Test, Security Audit & SARIF Upload
+# OsintUltimate / redteam_rust_core
+# =============================================================================
+# Triggers:
+#   - push a main y develop
+#   - pull requests hacia main
+#   - semanal (lunes 06:00 UTC) para auditorías de seguridad periódicas
+# =============================================================================
+
+name: CI — Lint, Test & Security Audit
+
+on:
+  push:
+    branches: ["main", "develop"]
+    paths:
+      - "redteam_rust_core/**"
+      - ".github/workflows/ci.yml"
+  pull_request:
+    branches: ["main"]
+    paths:
+      - "redteam_rust_core/**"
+  schedule:
+    # Auditoría semanal de vulnerabilidades en dependencias (lunes 06:00 UTC)
+    - cron: "0 6 * * 1"
+  workflow_dispatch:
+
+env:
+  CARGO_TERM_COLOR: always
+  RUST_BACKTRACE: 1
+  # Ruta al crate dentro del monorepo
+  CRATE_DIR: redteam_rust_core
+
+jobs:
+  # ── Job 1: Lint y formato ─────────────────────────────────────────────────────
+  lint:
+    name: "Clippy & rustfmt"
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Instalar Rust toolchain estable
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy, rustfmt
+
+      - name: Caché de Cargo
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: "${{ env.CRATE_DIR }} -> target"
+
+      - name: Instalar dependencias del sistema (sqlx, openssl)
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends \
+            libsqlite3-dev \
+            libssl-dev \
+            pkg-config
+
+      - name: "Clippy — warnings == errors"
+        working-directory: ${{ env.CRATE_DIR }}
+        run: cargo clippy --all-targets --all-features -- -D warnings
+
+      - name: "rustfmt — verificar formato"
+        working-directory: ${{ env.CRATE_DIR }}
+        run: cargo fmt --all -- --check
+
+  # ── Job 2: Tests unitarios e integración ──────────────────────────────────────
+  test:
+    name: "Tests (stable + MSRV)"
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        rust: ["stable", "1.75"]   # 1.75 = MSRV mínimo (por tokio 1.28 + sqlx 0.7)
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Instalar Rust ${{ matrix.rust }}
+        uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: ${{ matrix.rust }}
+
+      - name: Caché de Cargo
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: "${{ env.CRATE_DIR }} -> target"
+          key: "test-${{ matrix.rust }}"
+
+      - name: Instalar dependencias del sistema
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends \
+            libsqlite3-dev \
+            libssl-dev \
+            pkg-config
+
+      - name: "cargo test"
+        working-directory: ${{ env.CRATE_DIR }}
+        run: cargo test --locked -- --test-threads=4
+
+  # ── Job 3: Auditoría de seguridad (cargo-audit → SARIF) ──────────────────────
+  security-audit:
+    name: "Security Audit (cargo-audit + SARIF)"
+    runs-on: ubuntu-latest
+    permissions:
+      # Necesario para subir SARIF a GitHub Security
+      security-events: write
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Instalar Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Instalar cargo-audit
+        run: cargo install cargo-audit --locked
+
+      - name: "Auditoría de vulnerabilidades (formato JSON)"
+        working-directory: ${{ env.CRATE_DIR }}
+        # --json para post-procesarlo; ignorar si no hay advisories críticos
+        run: |
+          cargo audit --json > /tmp/audit.json || true
+          cat /tmp/audit.json
+
+      - name: Convertir audit JSON → SARIF
+        # Conversión manual mínima compatible con GitHub Security
+        run: |
+          python3 << 'PYEOF'
+          import json, sys
+
+          with open("/tmp/audit.json") as f:
+            data = json.load(f)
+
+          vulnerabilities = data.get("vulnerabilities", {}).get("list", [])
+
+          results = []
+          for vuln in vulnerabilities:
+            advisory = vuln.get("advisory", {})
+            package  = vuln.get("package", {})
+            results.append({
+              "ruleId": advisory.get("id", "UNKNOWN"),
+              "level": "error" if advisory.get("cvss") and float(advisory.get("cvss", {}).get("score", 0) or 0) >= 7.0 else "warning",
+              "message": {"text": advisory.get("description", "No description")},
+              "locations": [{
+                "physicalLocation": {
+                  "artifactLocation": {"uri": "Cargo.lock"},
+                  "region": {"startLine": 1}
+                }
+              }],
+              "properties": {
+                "package": package.get("name", ""),
+                "version": package.get("version", ""),
+                "url": advisory.get("url", "")
+              }
+            })
+
+          sarif = {
+            "version": "2.1.0",
+            "$schema": "https://schemastore.azurewebsites.net/schemas/json/sarif-2.1.0-rtm.5.json",
+            "runs": [{
+              "tool": {
+                "driver": {
+                  "name": "cargo-audit",
+                  "version": "0.21.0",
+                  "informationUri": "https://rustsec.org",
+                  "rules": []
+                }
+              },
+              "results": results
+            }]
+          }
+
+          with open("/tmp/audit.sarif", "w") as f:
+            json.dump(sarif, f, indent=2)
+
+          print(f"Convertidos {len(results)} hallazgos a SARIF")
+          PYEOF
+
+      - name: Subir SARIF a GitHub Security
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: /tmp/audit.sarif
+          category: cargo-audit
+
+  # ── Job 4: Compilación release (build check) ──────────────────────────────────
+  build-check:
+    name: "Build Release Binary"
+    runs-on: ubuntu-latest
+    needs: [lint, test]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Instalar Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Caché de Cargo
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: "${{ env.CRATE_DIR }} -> target"
+          key: "release-build"
+
+      - name: Instalar dependencias del sistema
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends \
+            libsqlite3-dev \
+            libssl-dev \
+            pkg-config
+
+      - name: "cargo build --release"
+        working-directory: ${{ env.CRATE_DIR }}
+        run: cargo build --release --locked
+
+      - name: Verificar tamaño del binario
+        working-directory: ${{ env.CRATE_DIR }}
+        run: |
+          SIZE=$(du -sh target/release/redteam_rust_core | cut -f1)
+          echo "📦 Tamaño del binario release: $SIZE"
+
+      - name: Subir binario como artefacto del workflow
+        uses: actions/upload-artifact@v4
+        with:
+          name: osintultimate-linux-x64
+          path: ${{ env.CRATE_DIR }}/target/release/redteam_rust_core
+          retention-days: 7
