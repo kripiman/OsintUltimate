@@ -11,7 +11,7 @@ use std::time::Duration;
 
 #[async_trait]
 pub trait LlmClient: Send + Sync {
-    async fn analyze(&self, finding: &Finding, target: &TargetHost) -> Result<AIAnalysis>;
+    async fn analyze(&self, finding: &Finding, target: &TargetHost, route_level: crate::core::ai_cascade::RouteLevel) -> Result<AIAnalysis>;
     async fn decide_action(
         &self, 
         finding: &Finding, 
@@ -19,6 +19,7 @@ pub trait LlmClient: Send + Sync {
         plugins: &[crate::plugins::PluginMetadata],
         gap: Option<&CapabilityGap>,
         adaptive_context: Option<&AdaptiveContext>,
+        route_level: crate::core::ai_cascade::RouteLevel,
     ) -> Result<Option<(String, serde_json::Value)>>;
 }
 
@@ -46,8 +47,8 @@ impl OllamaClient {
 
 #[async_trait]
 impl LlmClient for OllamaClient {
-    async fn analyze(&self, finding: &Finding, target: &TargetHost) -> Result<AIAnalysis> {
-        let compressed = ContextCompressor::compress_finding(finding);
+    async fn analyze(&self, finding: &Finding, target: &TargetHost, route_level: crate::core::ai_cascade::RouteLevel) -> Result<AIAnalysis> {
+        let compressed = ContextCompressor::compress_finding(finding, route_level);
         let prompt = format!(
             "### PROFESSIONAL RED TEAM ENGINE (v3.0) ###\n\
             Analyze this finding based on modern TTPs. Be extremely technical.\n\n\
@@ -73,8 +74,9 @@ impl LlmClient for OllamaClient {
         plugins: &[crate::plugins::PluginMetadata],
         _gap: Option<&CapabilityGap>,
         adaptive_context: Option<&AdaptiveContext>,
+        route_level: crate::core::ai_cascade::RouteLevel,
     ) -> Result<Option<(String, serde_json::Value)>> {
-        let compressed_finding = ContextCompressor::compress_finding(finding);
+        let compressed_finding = ContextCompressor::compress_finding(finding, route_level);
         let compressed_plugins = ContextCompressor::compress_plugins(plugins);
         let adaptive_json = serde_json::to_string(&adaptive_context)?;
 
@@ -129,8 +131,8 @@ impl GeminiClient {
 
 #[async_trait]
 impl LlmClient for GeminiClient {
-    async fn analyze(&self, finding: &Finding, target: &TargetHost) -> Result<AIAnalysis> {
-        let compressed = ContextCompressor::compress_finding(finding);
+    async fn analyze(&self, finding: &Finding, target: &TargetHost, route_level: crate::core::ai_cascade::RouteLevel) -> Result<AIAnalysis> {
+        let compressed = ContextCompressor::compress_finding(finding, route_level);
         let prompt = format!("Analyze this Red Team finding: {}. Target: {}. Provide JSON.", serde_json::to_string(&compressed)?, target.host);
         
         let mut last_error = None;
@@ -150,7 +152,8 @@ impl LlmClient for GeminiClient {
         Err(anyhow::anyhow!("Gemini analyze failed: {:?}", last_error))
     }
 
-    async fn decide_action(&self, finding: &Finding, target: &TargetHost, plugins: &[crate::plugins::PluginMetadata], _gap: Option<&CapabilityGap>, adaptive_context: Option<&AdaptiveContext>) -> Result<Option<(String, serde_json::Value)>> {
+    async fn decide_action(&self, finding: &Finding, target: &TargetHost, plugins: &[crate::plugins::PluginMetadata], _gap: Option<&CapabilityGap>, adaptive_context: Option<&AdaptiveContext>, route_level: crate::core::ai_cascade::RouteLevel) -> Result<Option<(String, serde_json::Value)>> {
+        let compressed = ContextCompressor::compress_finding(finding, route_level);
         let prompt = format!("Decide next step for {}. History: {:?}. Finding: {}. Plugins: {}. Focus on WAF bypass.", target.host, adaptive_context, finding.id, plugins.len());
         
         for _ in 0..self.keys.len() {
@@ -190,8 +193,8 @@ impl AzureOpenAIClient {
 
 #[async_trait]
 impl LlmClient for AzureOpenAIClient {
-    async fn analyze(&self, finding: &Finding, target: &TargetHost) -> Result<AIAnalysis> {
-        let compressed = ContextCompressor::compress_finding(finding);
+    async fn analyze(&self, finding: &Finding, target: &TargetHost, route_level: crate::core::ai_cascade::RouteLevel) -> Result<AIAnalysis> {
+        let compressed = ContextCompressor::compress_finding(finding, route_level);
         let url = format!("{}/openai/deployments/{}/chat/completions?api-version={}", self.endpoint, self.deployment, self.api_version);
         let res = self.client.post(url).header("api-key", &self.key).json(&json!({
             "messages": [{ "role": "system", "content": "Return strictly JSON analysis." }, { "role": "user", "content": format!("Target: {}, Finding: {}", target.host, serde_json::to_string(&compressed)?) }],
@@ -201,7 +204,8 @@ impl LlmClient for AzureOpenAIClient {
         Ok(serde_json::from_str(extract_json(text))?)
     }
 
-    async fn decide_action(&self, finding: &Finding, target: &TargetHost, plugins: &[crate::plugins::PluginMetadata], _gap: Option<&CapabilityGap>, adaptive_context: Option<&AdaptiveContext>) -> Result<Option<(String, serde_json::Value)>> {
+    async fn decide_action(&self, finding: &Finding, target: &TargetHost, plugins: &[crate::plugins::PluginMetadata], _gap: Option<&CapabilityGap>, adaptive_context: Option<&AdaptiveContext>, route_level: crate::core::ai_cascade::RouteLevel) -> Result<Option<(String, serde_json::Value)>> {
+        let compressed = ContextCompressor::compress_finding(finding, route_level);
         let url = format!("{}/openai/deployments/{}/chat/completions?api-version={}", self.endpoint, self.deployment, self.api_version);
         let res = self.client.post(url).header("api-key", &self.key).json(&json!({
             "messages": [
@@ -240,6 +244,7 @@ impl AutonomousAgent {
         info!("🤖 SENTINEL: Iniciando ciclo autónomo adaptativo para {}", initial_target.host);
         let mut seen_finding_ids = std::collections::HashSet::new();
         let mut adaptive_context = AdaptiveContext::default();
+        let mut correlation_engine = crate::core::CorrelationEngine::new();
         let (tx, mut rx) = mpsc::channel(100);
         let pipeline = Arc::clone(&self.pipeline);
         let target = initial_target.clone();
@@ -249,11 +254,20 @@ impl AutonomousAgent {
         while let Some(finding) = rx.recv().await {
             if seen_finding_ids.contains(&finding.id) { continue; }
             seen_finding_ids.insert(finding.id.clone());
+            
+            // Add to correlation engine
+            correlation_engine.add_finding(finding.clone());
+            
             let analysis = self.router.analyze(&finding, &initial_target).await?;
             let mut final_finding = finding.with_ai_analysis(analysis.clone()).with_remediation(&analysis.remediation);
             if let Some(tags) = analysis.mitre_attack { final_finding = final_finding.with_mitre_attack(tags); }
+            
             let mut sink_target = initial_target.clone();
             sink_target.findings = vec![final_finding.clone()];
+            let paths = correlation_engine.get_attack_paths();
+            if !paths.is_empty() {
+                 sink_target.extra_data["attack_paths"] = serde_json::json!(paths);
+            }
             let _ = sink_tx.send(sink_target).await;
 
             let metadata = self.pipeline.get_plugin_metadata();
