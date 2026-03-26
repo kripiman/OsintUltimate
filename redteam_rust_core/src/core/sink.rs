@@ -5,6 +5,9 @@ use tokio::io::AsyncWriteExt;
 use std::path::PathBuf;
 use sqlx::{SqlitePool, sqlite::SqliteConnectOptions, Row};
 use std::str::FromStr;
+use flate2::write::GzEncoder;
+use flate2::Compression;
+use std::io::Write;
 
 /// Trait for defining where scan results should be written.
 #[async_trait]
@@ -64,6 +67,8 @@ pub struct TacticalWebhookSink {
     client: reqwest::Client,
     url: String,
     auth_token: Option<String>,
+    buffer: Vec<TargetHost>,
+    batch_size: usize,
 }
 
 impl TacticalWebhookSink {
@@ -72,21 +77,47 @@ impl TacticalWebhookSink {
             client: reqwest::Client::new(),
             url,
             auth_token,
+            buffer: Vec::with_capacity(10),
+            batch_size: 10,
         }
+    }
+
+    async fn flush(&mut self) -> Result<()> {
+        if self.buffer.is_empty() {
+            return Ok(());
+        }
+
+        let json = serde_json::to_vec(&self.buffer)
+            .context("TacticalWebhookSink: Failed to serialize batch to JSON")?;
+        
+        // Gzip compression for remote latency optimization
+        let mut encoder = GzEncoder::new(Vec::new(), Compression::default());
+        encoder.write_all(&json)?;
+        let compressed_data = encoder.finish()?;
+
+        let mut request = self.client.post(&self.url)
+            .header(reqwest::header::CONTENT_TYPE, "application/json")
+            .header(reqwest::header::CONTENT_ENCODING, "gzip")
+            .body(compressed_data);
+        
+        if let Some(token) = &self.auth_token {
+            request = request.header("Authorization", format!("Bearer {}", token));
+        }
+
+        request.send().await.context("TacticalWebhookSink: Failed to send batched result to C2")?;
+        
+        self.buffer.clear();
+        Ok(())
     }
 }
 
 #[async_trait]
 impl DataSink for TacticalWebhookSink {
     async fn write(&mut self, target: &TargetHost) -> Result<()> {
-        let mut request = self.client.post(&self.url)
-            .json(target);
-        
-        if let Some(token) = &self.auth_token {
-            request = request.header("Authorization", format!("Bearer {}", token));
+        self.buffer.push(target.clone());
+        if self.buffer.len() >= self.batch_size {
+            self.flush().await?;
         }
-
-        request.send().await.context("TacticalWebhookSink: Failed to send result to C2")?;
         Ok(())
     }
 
@@ -103,6 +134,7 @@ impl DataSink for TacticalWebhookSink {
     }
 
     async fn close(&mut self) -> Result<()> {
+        self.flush().await?;
         Ok(())
     }
 }

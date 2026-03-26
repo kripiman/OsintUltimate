@@ -62,6 +62,14 @@ impl MemoryMonitor {
         (self.current.load(Ordering::Relaxed) / 1_000_000) as u32
     }
 
+    pub fn soft_limit_mb(&self) -> u32 {
+        self.soft_limit_mb
+    }
+
+    pub fn hard_limit_mb(&self) -> u32 {
+        self.hard_limit_mb
+    }
+
     pub fn peak_mb(&self) -> u32 {
         (self.peak.load(Ordering::Relaxed) / 1_000_000) as u32
     }

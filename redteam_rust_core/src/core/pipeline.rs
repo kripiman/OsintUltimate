@@ -6,6 +6,7 @@ use crate::utils::{LivenessChecker, JitterSleep};
 use crate::utils::liveness::is_safe_ip;
 use crate::core::capability_layer::ScanLayerPolicy;
 use crate::core::approval_gate::ApprovalGate;
+use crate::core::filter::FalsePositiveFilter;
 use anyhow::{Context, Result};
 use std::sync::Arc;
 use tokio::sync::mpsc;
@@ -27,6 +28,8 @@ pub struct Pipeline {
     approval_gate: Arc<ApprovalGate>,
     blackarch_bridge: Arc<crate::core::blackarch::BlackArchBridge>,
     jitter: Option<JitterSleep>,
+    fp_filter: Arc<FalsePositiveFilter>,
+    memory_monitor: Arc<crate::utils::memory_monitor::MemoryMonitor>,
 }
 
 impl Pipeline {
@@ -142,6 +145,7 @@ impl Pipeline {
         let scan_rx = scan_rx;
         let sink_tx_stage3 = sink_tx.clone();
         let scan_token = self.shutdown_token.clone();
+        let memory_monitor = self.memory_monitor.clone();
         handles.push(tokio::spawn(async move {
             let orchestrator = Orchestrator::new(
                 plugins, 
@@ -149,6 +153,7 @@ impl Pipeline {
                 policy,
                 approval_gate,
                 blackarch_bridge,
+                memory_monitor,
             );
             orchestrator.run(scan_rx, sink_tx_stage3, scan_token).await;
         }));
@@ -157,8 +162,13 @@ impl Pipeline {
         // --- STAGE 4: Sink ---
         let mut final_sink = sink;
         let mut final_sink_rx = sink_rx;
+        let fp_filter = self.fp_filter.clone();
         handles.push(tokio::spawn(async move {
-            while let Some(target) = final_sink_rx.recv().await { let _ = final_sink.write(&target).await; }
+            while let Some(mut target) = final_sink_rx.recv().await {
+                // Apply FalsePositiveFilter
+                target.findings.retain(|f| fp_filter.evaluate(f));
+                let _ = final_sink.write(&target).await;
+            }
             let _ = final_sink.close().await;
         }));
 
@@ -172,11 +182,13 @@ impl Pipeline {
         sink.write_metadata(&ScanMetadata::new(&self.command_line)).await?;
         
         let (tx, mut rx) = mpsc::channel(100);
+        let fp_filter = self.fp_filter.clone();
         let handle = tokio::spawn(async move {
-            while let Some(target) = rx.recv().await {
-                let _ = sink.write(&target).await;
+            while let Some(mut target) = rx.recv().await {
+                target.findings.retain(|f| fp_filter.evaluate(f));
+                let _ = final_sink.write(&target).await;
             }
-            let _ = sink.close().await;
+            let _ = final_sink.close().await;
         });
 
         Ok((tx, handle))
@@ -255,6 +267,8 @@ pub struct PipelineBuilder {
     policy: Option<ScanLayerPolicy>,
     approval_gate: Option<Arc<ApprovalGate>>,
     jitter: Option<JitterSleep>,
+    fp_filter: Option<Arc<FalsePositiveFilter>>,
+    memory_monitor: Option<Arc<crate::utils::memory_monitor::MemoryMonitor>>,
 }
 
 impl Default for PipelineBuilder { fn default() -> Self { Self::new() } }
@@ -272,6 +286,8 @@ impl PipelineBuilder {
             policy: None,
             approval_gate: None,
             jitter: None,
+            fp_filter: None,
+            memory_monitor: None,
         }
     }
 
@@ -279,6 +295,10 @@ impl PipelineBuilder {
         self.jitter = jitter;
         self 
     }
+
+    pub fn with_filter(mut self, filter: Arc<FalsePositiveFilter>) -> Self { self.fp_filter = Some(filter); self }
+
+    pub fn memory_monitor(mut self, monitor: Arc<crate::utils::memory_monitor::MemoryMonitor>) -> Self { self.memory_monitor = Some(monitor); self }
 
     pub fn policy(mut self, policy: ScanLayerPolicy) -> Self { self.policy = Some(policy); self }
     pub fn approval_gate(mut self, gate: Arc<ApprovalGate>) -> Self { self.approval_gate = Some(gate); self }
@@ -310,6 +330,8 @@ impl PipelineBuilder {
             approval_gate,
             blackarch_bridge,
             jitter: self.jitter,
+            fp_filter: self.fp_filter.unwrap_or(Arc::new(FalsePositiveFilter::default())),
+            memory_monitor: self.memory_monitor.context("Pipeline requires a configured memory monitor")?,
         })
     }
 }

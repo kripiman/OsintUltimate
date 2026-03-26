@@ -97,8 +97,39 @@ async fn main() -> Result<()> {
     redteam_rust_core::utils::init_telemetry(args.otel_endpoint.clone(), args.json_logs)
         .context("Failed to initialize telemetry")?;
 
-    // Initialize Memory Monitor for 1GB RAM environments (Soft: 600MB, Hard: 900MB)
-    let memory_monitor = redteam_rust_core::utils::MemoryMonitor::new(600, 900);
+    // --- ADAPTIVE INFRASTRUCTURE DETECTION ---
+    let hw = redteam_rust_core::utils::detect_infrastructure();
+    info!("Hardware Detected: {:?} (Cores: {}, RAM: {}MB)", hw.infra_type, hw.cores, hw.ram_mb);
+
+    // Auto-adjust concurrency based on HW if not specified by user or if too high
+    let (mut soft_limit, mut hard_limit) = (600, 900);
+    
+    match hw.infra_type {
+        redteam_rust_core::utils::InfrastructureType::UltraLowMemory => {
+            warn!("🚨 ULTRA-LOW MEMORY DETECTED: Optimizing for 1GB RAM minimum.");
+            warn!("⚠️  ADVISORY: Running OsintUltimate via Docker on 1GB RAM is NOT recommended due to Docker overhead. Please run the native binary or ensure swaps are enabled.");
+            if args.concurrency > 10 {
+                warn!("Overriding user concurrency of {} to 10 for stability.", args.concurrency);
+                args.concurrency = 10;
+            }
+            soft_limit = 500;
+            hard_limit = 850;
+        }
+        redteam_rust_core::utils::InfrastructureType::LocalPC => {
+            if args.concurrency > 30 {
+                warn!("LocalPC detected. Capping concurrency at 30.");
+                args.concurrency = 30;
+            }
+        }
+        redteam_rust_core::utils::InfrastructureType::Server => {
+            info!("Server-grade hardware detected. Scalable mode activated.");
+            // Concurrency remains as user specified or default
+        }
+        redteam_rust_core::utils::InfrastructureType::Hybrid => {}
+    }
+
+    // Initialize Memory Monitor with dynamic limits
+    let memory_monitor = Arc::new(redteam_rust_core::utils::MemoryMonitor::new(soft_limit, hard_limit));
     memory_monitor.start_logging();
 
     // 1. Determine Initial Targets
@@ -206,7 +237,8 @@ async fn main() -> Result<()> {
         .liveness_checker(liveness_checker.clone())
         .command_line(command_line)
         .with_sink(sink)
-        .with_jitter(stealth_jitter);
+        .with_jitter(stealth_jitter)
+        .memory_monitor(memory_monitor.clone());
 
     // Initialize Capability Layer Policy
     let max_layer = match args.max_layer.to_lowercase().as_str() {

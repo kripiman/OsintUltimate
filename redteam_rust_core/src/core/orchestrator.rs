@@ -23,9 +23,10 @@ impl Orchestrator {
         policy: ScanLayerPolicy,
         approval_gate: Arc<ApprovalGate>,
         blackarch_bridge: Arc<crate::core::blackarch::BlackArchBridge>,
+        memory_monitor: Arc<crate::utils::memory_monitor::MemoryMonitor>,
     ) -> Self {
-        let memory_semaphore = Arc::new(tokio::sync::Semaphore::new(800)); // 800MB Global RAM limit for plugins
-        let memory_monitor = Arc::new(crate::utils::memory_monitor::MemoryMonitor::new(700, 850));
+        let hard_limit = memory_monitor.hard_limit_mb();
+        let memory_semaphore = Arc::new(tokio::sync::Semaphore::new(hard_limit as usize));
 
         Self {
             plugins,
@@ -159,9 +160,9 @@ impl Orchestrator {
                             1.0
                         };
                         
-                        let total_capacity = 800; // Total 800MB limit
-                        let base_permits = (meta.cost as u32).max(1) * 80;
-                        let permits_needed = ((base_permits as f32 * multiplier) as u32).min(total_capacity - 1);
+                        let total_capacity = memory_monitor_clone.hard_limit_mb();
+                        let base_permits = (meta.cost as u32).max(1) * (total_capacity / 10).max(10); // scale cost based on limit
+                        let permits_needed = ((base_permits as f32 * multiplier) as u32).min(total_capacity.saturating_sub(1));
                         
                         let _permit = memory_semaphore_clone.acquire_many(permits_needed).await;
                         
