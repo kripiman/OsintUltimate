@@ -25,11 +25,12 @@ Utilizamos **SimHash (Locality-Sensitive Hashing)** para cachear mutaciones exit
 - Si un nuevo payload es similar en un 90% a uno ya mutado con éxito, el sistema reutiliza la mutación instantáneamente.
 - **Implementación**: El cache se gestiona en el `WafEvasionEngine` junto con el cliente de IA local (Ollama).
 
-### Off-Path Engine
-Si no hay match en el cache:
-1. La solicitud de mutación se encola en un `mpsc::channel`.
-2. El hilo de red continúa inmediatamente usando una estrategia de fallback (Header Rotation).
-3. Un pool de trabajadores analiza el bloqueo y actualiza el cache de LSH en segundo plano.
+### Tiered Priority Router
+Además del LSH y Off-Path, el router de IA v4.0 implementa un sistema de **prioridades deterministas** por nivel:
+1. El motor clasifica el hallazgo en un `RouteLevel`.
+2. Se intenta el proveedor con mayor prioridad dentro del nivel (ej. Anthropic).
+3. En caso de fallo, el sistema realiza un failover transparente al siguiente proveedor en la lista antes de escalar al nivel superior.
+4. **Beneficio**: Maximiza el uso de modelos con mejor razonamiento pero menor disponibilidad, manteniendo gpt-4o/Gemini como buffers de confiabilidad.
 
 ## 3. Pipeline de Alto Rendimiento (Vector 1)
 

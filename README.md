@@ -93,8 +93,8 @@ Consulta los siguientes documentos para profundizar en el motor y tácticas de c
 ### 1. **Orquestador Central** (`Orchestrator`)
 Coordina las fases de escaneo, gestiona la concurrencia asíncrona y orquestra la ejecución multi-fase integrando el **TieredAIRouter**.
 
-### 2. **TieredAIRouter** (IA en Cascada)
-Selecciona dinámicamente el mejor modelo de IA (Local, Flash, Pro) según la criticidad, aplicando **compresión de contexto** para máxima eficiencia.
+### 2. **TieredAIRouter** (IA Multicloud en Cascada)
+Selecciona dinámicamente el mejor modelo entre múltiples proveedores (**Anthropic, OpenAI, Gemini, Azure, Local**) según la criticidad y prioridad (`ProviderEntry`), aplicando **failover transparente** y **comprensión de contexto** (Whitelist filtering + Truncation) para máxima eficiencia.
 
 ### 3. **Capas de Capacidad** (`CapabilityLayer`)
 Define el "scope" de la operación: Passive (OSINT), Discovery, Scanning, Verification, Exploitation y Post-Exploitation.

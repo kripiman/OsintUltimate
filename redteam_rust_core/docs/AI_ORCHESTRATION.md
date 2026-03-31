@@ -12,9 +12,9 @@ La arquitectura de IA en OsintUltimate es jerárquica y eficiente en costos, dis
 
 | Nivel | Modelo Sugerido | Uso | Costo |
 | :--- | :--- | :--- | :--- |
-| **Local** | `qwen2.5-coder:7b` | Triaje rápido, hallazgos informativos, falsos positivos comunes. | $0 (Autohospedado vía Ollama) |
-| **Mid** | `gemini-1.5-flash` | Análisis de vulnerabilidades web, correlación de cabeceras, sugerencias de Nmap. | Bajo (Centavos / millón tokens) |
-| **Premium** | `gemini-1.5-pro` | Cadenas de ataque críticas, explotación de AD, bypass de WAF complejo, reporte ejecutivo. | Medio/Alto |
+| **Local** | `qwen2.5-coder` | Triaje rápido, hallazgos informativos, falsos positivos comunes. | $0 (Ollama) |
+| **Mid** | `GPT-4o-mini`, `Gemini Flash` | Análisis de vulnerabilidades web, correlación de cabeceras, sugerencias de Nmap. | Bajo |
+| **Premium** | `Claude 3.5 Sonnet`, `GPT-4o`, `Gemini Pro` | Cadenas de ataque críticas, bypass de WAF complejo, reporte ejecutivo. | Medio/Alto |
 
 ### Optimización de Contexto (`ContextCompressor`)
 
@@ -46,7 +46,18 @@ Cuando un objetivo devuelve un error 403 (WAF detectado), Sentinel activa la **E
 
 ---
 
-## 3. Caché Táctica Supervisada
+## 3. Enrutamiento y Fallback Multicloud
+
+El `TieredAIRouter` no solo selecciona un nivel, sino que gestiona una lista de **Proveedores Genéricos** (`LlmProviderKind`) con prioridades específicas.
+
+### Mecanismo de Resiliencia:
+1.  **Prioridad Intra-Nivel**: Dentro de un mismo tier (ej. Premium), el router intenta primero el proveedor con `priority: 0` (ej. Claude 3.5 Sonnet). Si este falla (rate limit, error 500), pasa automáticamente al siguiente (ej. GPT-4o).
+2.  **Escalación de Tier**: Solo si todos los proveedores de un nivel seleccionado fallan, el motor escala la petición al siguiente nivel superior.
+3.  **Anotación de Modelo**: Cada hallazgo analizado incluye metadatos sobre qué proveedor y qué tier exacto generó el análisis (ej. `Claude 3.5 (Tiered: Premium, Provider: Anthropic)`).
+
+---
+
+## 4. Caché Táctica Supervisada
 
 OsintUltimate utiliza dos cachés críticas para ahorrar tokens y tiempo:
 - **`analysis_cache`**: Almacena el análisis de vulnerabilidades único por host/hallazgo (TTL 2h).
@@ -68,9 +79,33 @@ OLLAMA_URL="http://localhost:11434"
 AZURE_OPENAI_ENDPOINT="https://tu-endpoint.openai.azure.com/"
 AZURE_OPENAI_KEY="tu-clave-azure"
 
-# Gemini (Premium Tier)
-GEMINI_API_KEY="tu-clave-gemini"
+# OpenAI (Generic)
+OPENAI_API_KEY="sk-..."
+
+# Anthropic (Generic)
+ANTHROPIC_API_KEY="sk-ant-..."
+
+# Gemini (Premium Tier - Multi-key redundancy support)
+GEMINI_API_KEYS="clave1,clave2,clave3"
+GEMINI_API_KEY="clave_unica_fallback"
 ```
+
+---
+
+## 5. Pipeline de Validación de PoC (v4.0)
+
+Sentinel integra un motor de validación para confirmar hallazgos mediante la ejecución de exploits seguros.
+
+### Estrategias de Validación:
+- **ShellCommand**: Comandos de sistema (ej. `id`, `whoami`) ejecutados con timeouts estrictos.
+- **HttpPayload**: Peticiones web específicas para confirmar inyecciones o archivos expuestos.
+- **NucleiTemplate**: Uso de plantillas Nuclei generadas dinámicamente.
+
+### Interacción con el Dashboard:
+Para PoCs marcados como **intrusivos**, el sistema se bloquea y lanza una solicitud al Dashboard:
+1. El operador visualiza la acción propuesta, el riesgo y el payload.
+2. Tras la aprobación vía API (`POST /api/v1/approvals/:id/decision`), Sentinel procede con la ejecución.
+3. Los resultados se reflejan en tiempo real, marcando el hallazgo como `verified: true` en el reporte final.
 
 ---
 
