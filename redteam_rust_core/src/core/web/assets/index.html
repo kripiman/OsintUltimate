@@ -1,0 +1,99 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>OsintUltimate 3.1 | Core Dashboard</title>
+    <link rel="stylesheet" href="style.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet">
+</head>
+<body>
+    <div class="glass-bg"></div>
+    
+    <nav class="sidebar">
+        <div class="logo">
+            <span class="shield">🛡️</span>
+            <h1>OSINT<span>ULTIMATE</span></h1>
+        </div>
+        <ul class="nav-links">
+            <li class="active" data-tab="overview">📡 Overview</li>
+            <li data-tab="targets">🎯 Targets</li>
+            <li data-tab="findings">🔥 Findings</li>
+            <li data-tab="ai">🧠 AI Cascade</li>
+            <li data-tab="decoys">🪤 Decoys</li>
+        </ul>
+        <div class="sidebar-status">
+            <div class="status-item">
+                <span class="dot pulse"></span> Engined Armed
+            </div>
+        </div>
+    </nav>
+
+    <main class="content">
+        <header>
+            <div class="page-title">
+                <h2 id="tab-title">Operational Overview</h2>
+                <p id="tab-desc">Real-time telemetry from the autonomous redteam core.</p>
+            </div>
+            <div class="stats-row">
+                <div class="mini-card">
+                    <span class="label">RAM</span>
+                    <span class="value" id="stat-ram">0 MB</span>
+                </div>
+                <div class="mini-card">
+                    <span class="label">THREADS</span>
+                    <span class="value" id="stat-threads">0</span>
+                </div>
+                <div class="mini-card">
+                    <span class="label">PROXIES</span>
+                    <span class="value" id="stat-proxies">0</span>
+                </div>
+            </div>
+        </header>
+
+        <section id="tab-content">
+            <!-- Overview Tab -->
+            <div class="tab-pane active" id="overview">
+                <div class="grid">
+                    <div class="card event-feed">
+                        <h3>Live Finding Stream</h3>
+                        <div class="stream-container" id="finding-stream">
+                            <div class="system-msg">Initializing SSE connection...</div>
+                        </div>
+                    </div>
+                    <div class="card status-grid">
+                        <h3>Resource Pressure</h3>
+                        <div class="gauge-container">
+                            <!-- JS will render gauge here -->
+                            <div class="resource-row">
+                                <span>Memory Limit</span>
+                                <div class="progress-bar"><div class="fill" id="ram-fill" style="width: 0%"></div></div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Targets Tab (hidden by default) -->
+            <div class="tab-pane" id="targets">
+                <div class="card">
+                    <table id="target-table">
+                        <thead>
+                            <tr>
+                                <th>Host</th>
+                                <th>IP</th>
+                                <th>Status</th>
+                                <th>Findings</th>
+                                <th>Last Action</th>
+                            </tr>
+                        </thead>
+                        <tbody></tbody>
+                    </table>
+                </div>
+            </div>
+        </section>
+    </main>
+
+    <script src="app.js"></script>
+</body>
+</html>
