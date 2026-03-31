@@ -11,8 +11,10 @@ use rand::seq::SliceRandom;
 const MAX_LATENCY_SAMPLES: usize = 10;
 const DEFAULT_BLACKLIST_DURATION: u64 = 300;
 
+use std::sync::Mutex;
+
 pub struct ProxyManager {
-    proxies: Vec<String>,
+    proxies: Arc<Mutex<Vec<String>>>,
     clients: Arc<DashMap<String, Client>>,
     blacklist: Arc<DashMap<String, u64>>,
     latency_stats: Arc<DashMap<String, VecDeque<u64>>>,
@@ -38,7 +40,7 @@ impl ProxyManager {
         ];
 
         let mut pm = Self {
-            proxies,
+            proxies: Arc::new(Mutex::new(proxies)),
             clients: Arc::new(DashMap::new()),
             blacklist: Arc::new(DashMap::new()),
             latency_stats: Arc::new(DashMap::new()),
@@ -50,7 +52,7 @@ impl ProxyManager {
         };
 
         // Start background health checker if there are proxies
-        if !pm.proxies.is_empty() {
+        if !pm.proxies.lock().unwrap().is_empty() {
              pm.start_health_checker();
         }
 
@@ -179,7 +181,8 @@ impl ProxyManager {
     fn pick_best_proxy(&self) -> Option<String> {
         let now = SystemTime::now().duration_since(UNIX_EPOCH).unwrap_or_default().as_secs();
         
-        let available_proxies: Vec<String> = self.proxies.iter()
+        let proxies_lock = self.proxies.lock().unwrap();
+        let available_proxies: Vec<String> = proxies_lock.iter()
             .filter(|p| {
                 if let Some(entry) = self.blacklist.get(*p) {
                     if now < *entry.value() {
@@ -205,7 +208,7 @@ impl ProxyManager {
     }
 
     pub fn get_client(&self, host: &str) -> Option<(String, Client)> {
-        if self.proxies.is_empty() { return None; }
+        if self.proxies.lock().unwrap().is_empty() { return None; }
 
         let p_url = self.pick_best_proxy()?;
         
@@ -239,7 +242,7 @@ impl ProxyManager {
     }
 
     pub fn get_client_pinned(&self, host: &str, ip: IpAddr, port: u16) -> Option<(String, Client)> {
-        if self.proxies.is_empty() { return None; }
+        if self.proxies.lock().unwrap().is_empty() { return None; }
 
         let p_url = self.pick_best_proxy()?;
         
@@ -319,8 +322,17 @@ impl ProxyManager {
         base_delay.mul_f64(multiplier)
     }
 
+    pub fn add_proxy(&self, proxy: String) {
+        let mut proxies = self.proxies.lock().unwrap();
+        if !proxies.contains(&proxy) {
+            proxies.push(proxy);
+            // Since we use &self, start_health_checker might need to be called differently if pm is already constructed.
+            // But usually health checker is already running if there were proxies, or it will start on next call if we adapt it.
+        }
+    }
+
     pub fn is_empty(&self) -> bool {
-        self.proxies.is_empty()
+        self.proxies.lock().unwrap().is_empty()
     }
 }
 

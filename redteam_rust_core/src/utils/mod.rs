@@ -1,4 +1,5 @@
 pub mod report_gen;
+pub mod config;
 pub mod common;
 pub mod liveness;
 pub mod telemetry;
