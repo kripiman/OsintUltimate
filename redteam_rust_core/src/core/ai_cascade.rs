@@ -14,8 +14,23 @@ use tokio::sync::mpsc;
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 pub enum RouteLevel {
     Local = 0,   // Ollama / Qwen
-    Mid = 1,     // Gemini Flash
-    Premium = 2, // Gemini Pro
+    Mid = 1,     // Gemini Flash / GPT-4o-mini
+    Premium = 2, // Gemini Pro / GPT-4o / Claude 3.5
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub enum LlmProviderKind {
+    Local,
+    Gemini,
+    Anthropic,
+    OpenAI,
+    AzureOpenAI,
+}
+
+pub struct ProviderEntry {
+    pub kind: LlmProviderKind,
+    pub priority: u8, // 0 is highest
+    pub client: Arc<dyn LlmClient>,
 }
 
 /// ARCH-11: AdaptiveContext tracks the history of attempts to allow the AI
@@ -182,7 +197,7 @@ impl ContextCompressor {
 
 /// Orchestrates multiple LLM clients based on task complexity/severity.
 pub struct TieredAIRouter {
-    pub clients: std::collections::HashMap<RouteLevel, Vec<Arc<dyn LlmClient>>>,
+    pub providers: std::collections::HashMap<RouteLevel, Vec<ProviderEntry>>,
     analysis_cache: Cache<String, AIAnalysis>, // TACTICAL CACHE: Prevents Azure credit bleed
     decision_cache: Cache<String, Option<String>>, // TACTICAL CACHE: Autonomous logic reuse
     metrics: Arc<CacheMetrics>,
@@ -314,7 +329,7 @@ impl OffPathAiEngine {
 impl TieredAIRouter {
     pub fn new() -> Self {
         Self {
-            clients: std::collections::HashMap::new(),
+            providers: std::collections::HashMap::new(),
             analysis_cache: Cache::builder()
                 .max_capacity(5000)
                 .time_to_live(Duration::from_secs(7200)) // 2h TTL
@@ -327,8 +342,12 @@ impl TieredAIRouter {
         }
     }
 
-    pub fn add_client(&mut self, level: RouteLevel, client: Arc<dyn LlmClient>) {
-        self.clients.entry(level).or_default().push(client);
+    pub fn add_provider(&mut self, level: RouteLevel, kind: LlmProviderKind, priority: u8, client: Arc<dyn LlmClient>) {
+        let entry = ProviderEntry { kind, priority, client };
+        let level_providers = self.providers.entry(level).or_default();
+        level_providers.push(entry);
+        // Sort by priority (0 = highest)
+        level_providers.sort_by_key(|p| p.priority);
     }
 
     fn calculate_finding_cache_key(finding: &Finding, target: &crate::models::TargetHost) -> String {
@@ -397,24 +416,24 @@ impl TieredAIRouter {
                 _ => break,
             };
 
-            if let Some(clients) = self.clients.get(&current_level) {
-                for client in clients {
-                    match client.analyze(finding, target, current_level).await {
+            if let Some(providers) = self.providers.get(&current_level) {
+                for entry in providers {
+                    match entry.client.analyze(finding, target, current_level).await {
                         Ok(analysis) => {
                             let mut analysis = analysis;
-                            analysis.model = format!("{} (Tiered: {:?})", analysis.model, current_level);
+                            analysis.model = format!("{} (Tiered: {:?}, Provider: {:?})", analysis.model, current_level, entry.kind);
                             self.analysis_cache.insert(cache_key, analysis.clone()).await;
                             return Ok(analysis);
                         }
                         Err(e) => {
-                            tracing::warn!("TieredRouter: Model in {:?} failed: {}. Escalating...", current_level, e);
+                            tracing::warn!("TieredRouter: Provider {:?} in {:?} failed: {}. Trying next...", entry.kind, current_level, e);
                         }
                     }
                 }
             }
         }
         
-        Err(anyhow::anyhow!("All TieredAIRouter attempts failed for {}", finding.id))
+        Err(anyhow::anyhow!("All TieredAIRouter providers failed for {}", finding.id))
     }
 
     pub async fn decide_action(
@@ -434,15 +453,15 @@ impl TieredAIRouter {
                 _ => break,
             };
 
-            if let Some(clients) = self.clients.get(&current_level) {
-                for client in clients {
-                    match client.decide_action(finding, target, plugins, None, adaptive_context, current_level).await {
+            if let Some(providers) = self.providers.get(&current_level) {
+                for entry in providers {
+                    match entry.client.decide_action(finding, target, plugins, None, adaptive_context, current_level).await {
                         Ok(Some((action, context))) => {
                             return Ok(Some((action, context)));
                         }
                         Ok(None) => continue,
                         Err(e) => {
-                           tracing::warn!("TieredRouter: Decision failed in {:?}: {}. Escalating...", current_level, e);
+                           tracing::warn!("TieredRouter: Decision failed with provider {:?} in {:?}: {}. Trying next...", entry.kind, current_level, e);
                         }
                     }
                 }
@@ -497,5 +516,86 @@ mod tests {
         // Tier 1 -> Scrubbing applied
         let compressed_mid = ContextCompressor::compress_finding(&finding, RouteLevel::Mid);
         assert_eq!(compressed_mid["ev"]["key"], "[AWS_ACCESS_KEY]");
+    }
+
+    #[tokio::test]
+    async fn test_priority_routing_logic() -> Result<()> {
+        let mut router = TieredAIRouter::new();
+        
+        struct MockClient { fail: bool, name: String }
+        #[async_trait::async_trait]
+        impl LlmClient for MockClient {
+            async fn analyze(&self, _: &Finding, _: &crate::models::TargetHost, _: RouteLevel) -> Result<AIAnalysis> {
+                if self.fail { Err(anyhow::anyhow!("fail")) }
+                else { Ok(AIAnalysis { 
+                    summary: "ok".into(), impact: "".into(), stealth_notes: "".into(), 
+                    risk_score: 1, confidence: 1.0, mitre_attack: None, 
+                    remediation: "".into(), model: self.name.clone() 
+                }) }
+            }
+            async fn decide_action(&self, _: &Finding, _: &crate::models::TargetHost, _: &[crate::plugins::PluginMetadata], _: Option<&crate::core::agent::CapabilityGap>, _: Option<&AdaptiveContext>, _: RouteLevel) -> Result<Option<(String, serde_json::Value)>> {
+                Ok(None)
+            }
+        }
+
+        // Add 3 providers to Local level
+        // P0: Fails
+        router.add_provider(RouteLevel::Local, LlmProviderKind::Local, 0, Arc::new(MockClient { fail: true, name: "P0".into() }));
+        // P1: Succeeds
+        router.add_provider(RouteLevel::Local, LlmProviderKind::Local, 1, Arc::new(MockClient { fail: false, name: "P1".into() }));
+        // P2: Succeeds (but shouldn't be reached)
+        router.add_provider(RouteLevel::Local, LlmProviderKind::Local, 2, Arc::new(MockClient { fail: false, name: "P2".into() }));
+
+        let finding = mock_finding(json!({}));
+        let target = crate::models::TargetHost {
+            host: "test".into(), ip: None, status: crate::models::TargetStatus::Pending,
+            target_type: crate::models::TargetType::Host, findings: vec![],
+            tool_suggestions: vec![], tactical_context: json!({}), extra_data: json!({}),
+        };
+
+        let res = router.analyze(&finding, &target).await?;
+        // Should contain P1 because P0 failed. Analyze format: model (Tiered: level, Provider: kind)
+        assert!(res.model.contains("P1"));
+        assert!(!res.model.contains("P0"));
+        assert!(!res.model.contains("P2"));
+
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn test_tier_escalation_logic() -> Result<()> {
+        let mut router = TieredAIRouter::new();
+        
+        struct MockClient { fail: bool, name: String }
+        #[async_trait::async_trait]
+        impl LlmClient for MockClient {
+            async fn analyze(&self, _: &Finding, _: &crate::models::TargetHost, _: RouteLevel) -> Result<AIAnalysis> {
+                if self.fail { Err(anyhow::anyhow!("fail")) }
+                else { Ok(AIAnalysis { 
+                    summary: "ok".into(), impact: "".into(), stealth_notes: "".into(), 
+                    risk_score: 1, confidence: 1.0, mitre_attack: None, 
+                    remediation: "".into(), model: self.name.clone() 
+                }) }
+            }
+            async fn decide_action(&self, _: &Finding, _: &crate::models::TargetHost, _: &[crate::plugins::PluginMetadata], _: Option<&crate::core::agent::CapabilityGap>, _: Option<&AdaptiveContext>, _: RouteLevel) -> Result<Option<(String, serde_json::Value)>> {
+                Ok(None)
+            }
+        }
+
+        // Local level: all fail
+        router.add_provider(RouteLevel::Local, LlmProviderKind::Local, 0, Arc::new(MockClient { fail: true, name: "L0".into() }));
+        // Mid level: succeeds
+        router.add_provider(RouteLevel::Mid, LlmProviderKind::Gemini, 0, Arc::new(MockClient { fail: false, name: "M0".into() }));
+
+        let finding = mock_finding(json!({}));
+        let target = crate::models::TargetHost {
+            host: "test".into(), ip: None, status: crate::models::TargetStatus::Pending,
+            target_type: crate::models::TargetType::Host, findings: vec![],
+            tool_suggestions: vec![], tactical_context: json!({}), extra_data: json!({}),
+        };
+
+        let res = router.analyze(&finding, &target).await?;
+        assert!(res.model.contains("M0"));
+        Ok(())
     }
 }

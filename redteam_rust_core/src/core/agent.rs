@@ -176,6 +176,9 @@ impl LlmClient for GeminiClient {
     }
 }
 
+    }
+}
+
 pub struct AzureOpenAIClient {
     endpoint: String,
     key: String,
@@ -222,11 +225,81 @@ impl LlmClient for AzureOpenAIClient {
     }
 }
 
+pub struct AnthropicClient {
+    key: String,
+    model: String,
+    client: reqwest::Client,
+}
+
+impl AnthropicClient {
+    pub fn new(key: String, model: String) -> Result<Self> {
+        let client = reqwest::Client::builder().timeout(Duration::from_secs(60)).build()?;
+        Ok(Self { key, model, client })
+    }
+}
+
+#[async_trait]
+impl LlmClient for AnthropicClient {
+    async fn analyze(&self, finding: &Finding, target: &TargetHost, route_level: crate::core::ai_cascade::RouteLevel) -> Result<AIAnalysis> {
+        let compressed = ContextCompressor::compress_finding(finding, route_level);
+        let res = self.client.post("https://api.anthropic.com/v1/messages")
+            .header("x-api-key", &self.key)
+            .header("anthropic-version", "2023-06-01")
+            .json(&json!({
+                "model": self.model,
+                "max_tokens": 1024,
+                "messages": [{ "role": "user", "content": format!("Analyze this: {}. Target: {}", serde_json::to_string(&compressed)?, target.host) }],
+            })).send().await?.json::<serde_json::Value>().await?;
+        
+        let text = res["content"][0]["text"].as_str().context("Anthropic error")?;
+        Ok(serde_json::from_str(extract_json(text))?)
+    }
+
+    async fn decide_action(&self, finding: &Finding, target: &TargetHost, plugins: &[crate::plugins::PluginMetadata], _gap: Option<&CapabilityGap>, adaptive_context: Option<&AdaptiveContext>, route_level: crate::core::ai_cascade::RouteLevel) -> Result<Option<(String, serde_json::Value)>> {
+        Ok(None)
+    }
+}
+
+pub struct OpenAIClient {
+    key: String,
+    model: String,
+    client: reqwest::Client,
+}
+
+impl OpenAIClient {
+    pub fn new(key: String, model: String) -> Result<Self> {
+        let client = reqwest::Client::builder().timeout(Duration::from_secs(60)).build()?;
+        Ok(Self { key, model, client })
+    }
+}
+
+#[async_trait]
+impl LlmClient for OpenAIClient {
+    async fn analyze(&self, finding: &Finding, target: &TargetHost, route_level: crate::core::ai_cascade::RouteLevel) -> Result<AIAnalysis> {
+        let compressed = ContextCompressor::compress_finding(finding, route_level);
+        let res = self.client.post("https://api.openai.com/v1/chat/completions")
+            .header("Authorization", format!("Bearer {}", self.key))
+            .json(&json!({
+                "model": self.model,
+                "messages": [{ "role": "user", "content": format!("Analyze this: {}. Target: {}", serde_json::to_string(&compressed)?, target.host) }],
+                "response_format": { "type": "json_object" }
+            })).send().await?.json::<serde_json::Value>().await?;
+        
+        let text = res["choices"][0]["message"]["content"].as_str().context("OpenAI error")?;
+        Ok(serde_json::from_str(extract_json(text))?)
+    }
+
+    async fn decide_action(&self, finding: &Finding, target: &TargetHost, plugins: &[crate::plugins::PluginMetadata], _gap: Option<&CapabilityGap>, adaptive_context: Option<&AdaptiveContext>, route_level: crate::core::ai_cascade::RouteLevel) -> Result<Option<(String, serde_json::Value)>> {
+        Ok(None)
+    }
+}
+
 pub struct AutonomousAgent {
     router: Arc<crate::core::ai_cascade::TieredAIRouter>,
     pipeline: Arc<Pipeline>,
     approval_gate: Arc<crate::core::approval_gate::ApprovalGate>,
     operator: crate::core::approval_gate::User,
+    poc_validator: Arc<crate::core::poc_validator::PocValidator>,
 }
 
 impl AutonomousAgent {
@@ -237,7 +310,12 @@ impl AutonomousAgent {
             role: crate::core::approval_gate::UserRole::RedTeamFull,
             authorized_at: chrono::Utc::now(),
         };
-        Self { router, pipeline, approval_gate, operator }
+        let poc_validator = Arc::new(crate::core::poc_validator::PocValidator::new(
+            router.clone(),
+            approval_gate.clone(),
+            operator.clone(),
+        ));
+        Self { router, pipeline, approval_gate, operator, poc_validator }
     }
 
     pub async fn run_autopilot(&self, initial_target: TargetHost, sink_tx: mpsc::Sender<TargetHost>) -> Result<()> {
@@ -262,6 +340,12 @@ impl AutonomousAgent {
             let mut final_finding = finding.with_ai_analysis(analysis.clone()).with_remediation(&analysis.remediation);
             if let Some(tags) = analysis.mitre_attack { final_finding = final_finding.with_mitre_attack(tags); }
             
+            // --- POC VALIDATION PIPELINE ---
+            if analysis.risk_score >= 8 || final_finding.severity == crate::models::Severity::High || final_finding.severity == crate::models::Severity::Critical {
+                info!("🧪 SENTINEL: Detectado hallazgo crítico/alto. Iniciando pipeline de validación de PoC...");
+                let _ = self.poc_validator.validate(&mut final_finding, &initial_target).await;
+            }
+
             let mut sink_target = initial_target.clone();
             sink_target.findings = vec![final_finding.clone()];
             let paths = correlation_engine.get_attack_paths();

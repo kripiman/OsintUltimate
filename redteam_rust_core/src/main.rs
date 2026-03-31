@@ -15,8 +15,8 @@ use once_cell::sync::Lazy;
 use tokio_util::sync::CancellationToken;
 use redteam_rust_core::core::capability_layer::{ScanLayer, ScanLayerPolicy};
 use redteam_rust_core::core::approval_gate::ApprovalGate;
-use redteam_rust_core::core::ai_cascade::{TieredAIRouter, RouteLevel};
-use redteam_rust_core::core::agent::{OllamaClient, GeminiClient};
+use redteam_rust_core::core::ai_cascade::{TieredAIRouter, RouteLevel, LlmProviderKind};
+use redteam_rust_core::core::agent::{OllamaClient, GeminiClient, AnthropicClient, OpenAIClient};
 
 #[derive(Parser, Debug, Clone)]
 #[command(author, version, about, long_about = None)]
@@ -318,6 +318,7 @@ async fn main() -> Result<()> {
             targets,
             findings_tx: tx,
             ram_limit_mb: hard_limit,
+            approval_gate: Some(approval_gate.clone()),
         });
         
         tokio::spawn(redteam_rust_core::core::web_server::start_dashboard(dashboard_state, port));
@@ -399,17 +400,17 @@ async fn main() -> Result<()> {
         
         // Tier 0: Local (Ollama) - Multi-model Redundancy
         let local_models = vec!["qwen2.5-coder:7b", "kimi-k2.5:cloud", "minimax-m2.5:cloud"];
-        for model in local_models {
-            router.add_client(RouteLevel::Local, Arc::new(OllamaClient::new(
+        for (i, model) in local_models.into_iter().enumerate() {
+            router.add_provider(RouteLevel::Local, LlmProviderKind::Local, i as u8, Arc::new(OllamaClient::new(
                 args.ollama_url.clone(),
                 model.to_string()
             )?));
         }
-
-        // Tier 1: Mid (Azure OpenAI) - Optimized for student credits
+    
+        // Tier 1: Mid (Azure OpenAI / OpenAI / Anthropic)
         if let (Ok(endpoint), Ok(key)) = (std::env::var("AZURE_OPENAI_ENDPOINT"), std::env::var("AZURE_OPENAI_KEY")) {
-            info!("  - Mid Tier enabled (Azure OpenAI gpt-4o-mini)");
-            router.add_client(RouteLevel::Mid, Arc::new(redteam_rust_core::core::agent::AzureOpenAIClient::new(
+            info!("  - Mid Tier: Azure OpenAI enabled");
+            router.add_provider(RouteLevel::Mid, LlmProviderKind::AzureOpenAI, 0, Arc::new(redteam_rust_core::core::agent::AzureOpenAIClient::new(
                 endpoint,
                 key,
                 "gpt-4o-mini".to_string(),
@@ -417,25 +418,40 @@ async fn main() -> Result<()> {
             )?));
         }
 
-        // Tier 2: Premium (Gemini) - Multi-key Redundancy
+        if let Ok(key) = std::env::var("OPENAI_API_KEY") {
+            info!("  - Mid Tier: OpenAI (GPT-4o-mini) enabled");
+            router.add_provider(RouteLevel::Mid, LlmProviderKind::OpenAI, 1, Arc::new(OpenAIClient::new(
+                key,
+                "gpt-4o-mini".to_string()
+            )?));
+        }
+
+        // Tier 2: Premium (Gemini / Anthropic / OpenAI)
         if let Ok(keys_str) = std::env::var("GEMINI_API_KEYS") {
             let keys: Vec<String> = keys_str.split(',').map(|k| k.trim().to_string()).filter(|k| !k.is_empty()).collect();
             if !keys.is_empty() {
-                info!("  - Premium Tier enabled with {} API keys", keys.len());
-                router.add_client(RouteLevel::Premium, Arc::new(GeminiClient::new(
+                info!("  - Premium Tier: Gemini enabled ({} keys)", keys.len());
+                router.add_provider(RouteLevel::Premium, LlmProviderKind::Gemini, 0, Arc::new(GeminiClient::new(
                     keys, 
                     "gemini-1.5-pro".to_string()
                 )?));
             }
-        } else if let Ok(key) = std::env::var("GEMINI_API_KEY") {
-            // Fallback to single key if only GEMINI_API_KEY is present
-            info!("  - Premium Tier enabled (Single Key)");
-            router.add_client(RouteLevel::Premium, Arc::new(GeminiClient::new(
-                vec![key], 
-                "gemini-1.5-pro".to_string()
+        }
+
+        if let Ok(key) = std::env::var("ANTHROPIC_API_KEY") {
+            info!("  - Premium Tier: Anthropic (Claude 3.5 Sonnet) enabled");
+            router.add_provider(RouteLevel::Premium, LlmProviderKind::Anthropic, 1, Arc::new(AnthropicClient::new(
+                key,
+                "claude-3-5-sonnet-20240620".to_string()
             )?));
-        } else {
-            warn!("  - Premium Tier DISABLED (GEMINI_API_KEYS/GEMINI_API_KEY not found). Fallback to Local/Mid tiers.");
+        }
+
+        if let Ok(key) = std::env::var("OPENAI_API_KEY") {
+            info!("  - Premium Tier: OpenAI (GPT-4o) enabled");
+            router.add_provider(RouteLevel::Premium, LlmProviderKind::OpenAI, 2, Arc::new(OpenAIClient::new(
+                key,
+                "gpt-4o".to_string()
+            )?));
         }
 
         let agent = redteam_rust_core::core::agent::AutonomousAgent::new(
