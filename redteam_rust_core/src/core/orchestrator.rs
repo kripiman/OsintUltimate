@@ -14,6 +14,8 @@ pub struct Orchestrator {
     blackarch_bridge: Arc<crate::core::blackarch::BlackArchBridge>,
     memory_semaphore: Arc<tokio::sync::Semaphore>,
     memory_monitor: Arc<crate::utils::memory_monitor::MemoryMonitor>,
+    dashboard_tx: Option<tokio::sync::broadcast::Sender<Finding>>,
+    dashboard_targets: Arc<dashmap::DashMap<String, TargetHost>>,
 }
 
 impl Orchestrator {
@@ -36,7 +38,14 @@ impl Orchestrator {
             blackarch_bridge,
             memory_semaphore,
             memory_monitor,
+            dashboard_tx: None,
+            dashboard_targets: Arc::new(dashmap::DashMap::new()),
         }
+    }
+
+    pub fn with_dashboard_preconfigured(&mut self, tx: tokio::sync::broadcast::Sender<Finding>, current_targets: Arc<dashmap::DashMap<String, TargetHost>>) {
+        self.dashboard_tx = Some(tx);
+        self.dashboard_targets = current_targets;
     }
 
     pub async fn run(
@@ -86,6 +95,9 @@ impl Orchestrator {
         let memory_semaphore = self.memory_semaphore.clone();
         let memory_monitor = self.memory_monitor.clone();
 
+        let dashboard_tx = self.dashboard_tx.clone();
+        let dashboard_targets = self.dashboard_targets.clone();
+
         let mut processed_stream = stream.map(move |mut target| {
             let plugins = plugins.clone();
             let policy = policy;
@@ -93,6 +105,8 @@ impl Orchestrator {
             let blackarch_bridge = blackarch_bridge.clone();
             let memory_semaphore = memory_semaphore.clone();
             let memory_monitor = memory_monitor.clone();
+            let dashboard_tx = dashboard_tx.clone();
+            let dashboard_targets = dashboard_targets.clone();
             
             async move {
                 // MEMORY-BACKPRESSURE: Wait if memory is critical 
@@ -106,7 +120,15 @@ impl Orchestrator {
                     tokio::time::sleep(std::time::Duration::from_millis(500)).await;
                 }
 
+                dashboard_targets.insert(target.host.clone(), target.clone());
+                if let Some(ref tx) = dashboard_tx {
+                    for f in &target.findings {
+                        let _ = tx.send(f.clone());
+                    }
+                }
+
                 target.status = TargetStatus::Scanning;
+                dashboard_targets.insert(target.host.clone(), target.clone());
                 
                 // QA-005 FIX: Use Arc only for read-only sharing. Collect findings via JoinSet return values.
                 let target_ref = Arc::new(target);
@@ -251,6 +273,14 @@ impl Orchestrator {
                 if target.status == TargetStatus::Scanning {
                      target.status = TargetStatus::Scanned;
                 }
+
+                if let Some(ref tx) = dashboard_tx {
+                    for f in &all_findings {
+                        let _ = tx.send(f.clone());
+                    }
+                }
+                dashboard_targets.insert(target.host.clone(), target.clone());
+
                 target
             }
         }).buffer_unordered(self.concurrency);

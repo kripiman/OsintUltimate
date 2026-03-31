@@ -68,6 +68,8 @@ pub struct Args {
     pub ollama_url: String,
     #[arg(long, default_value = "Scanning")]
     pub max_layer: String,
+    #[arg(long, help = "Enable real-time web dashboard (port)")]
+    pub dashboard: Option<u16>,
 }
 
 static TARGET_RE: Lazy<Regex> = Lazy::new(|| {
@@ -191,10 +193,52 @@ async fn main() -> Result<()> {
     // Initialize Stealth Components
     // P0 FIX: Evasion mechanisms (Jitter and Proxies)
     let jitter = std::sync::Arc::new(redteam_rust_core::utils::common::HumanJitter::new(100, 1500));
-    let proxy_manager = args.proxies.as_ref().map(|s| {
+    let mut proxy_manager = args.proxies.as_ref().map(|s| {
         let proxies_list = s.split(',').map(|p| p.trim().to_string()).filter(|p| !p.is_empty()).collect();
         std::sync::Arc::new(redteam_rust_core::utils::proxy::ProxyManager::new(proxies_list, args.insecure))
     });
+
+    // --- INFRASTRUCTURE STEALTH UPGRADE ---
+    let mut droplet_id: Option<u64> = None;
+    let mut do_client: Option<redteam_rust_core::infrastructure::digital_ocean::DigitalOceanClient> = None;
+
+    if args.stealth {
+        let config = redteam_rust_core::utils::config::Config::from_env();
+        if let Ok(token) = config.require_do_token() {
+            info!("🛡️ STEALTH MODE: Initializing DigitalOcean ephemeral infrastructure...");
+            let client = redteam_rust_core::infrastructure::digital_ocean::DigitalOceanClient::new(token);
+            
+            match client.create_droplet("osint-stealth-node", "nyc1").await {
+                Ok(droplet) => {
+                    info!("🚀 Droplet created (ID: {}). Waiting for IP...", droplet.id);
+                    droplet_id = Some(droplet.id);
+                    do_client = Some(client);
+                    
+                    match do_client.as_ref().unwrap().wait_for_ip(droplet.id).await {
+                        Ok(ip) => {
+                            info!("✅ Ephemeral Node Ready: {}", ip);
+                            let do_proxy = redteam_rust_core::infrastructure::proxy::ProxyManager::from_droplet_ip(&ip);
+                            let proxy_url = do_proxy.url();
+                            
+                            // Inject into the proxy manager
+                            if let Some(ref pm) = proxy_manager {
+                                pm.add_proxy(proxy_url);
+                            } else {
+                                // Create a new manager if none existed
+                                proxy_manager = Some(std::sync::Arc::new(
+                                    redteam_rust_core::utils::proxy::ProxyManager::new(vec![proxy_url], args.insecure)
+                                ));
+                            }
+                        }
+                        Err(e) => error!("❌ Failed to get Droplet IP: {}. Falling back to local IP.", e),
+                    }
+                }
+                Err(e) => error!("❌ Failed to create Droplet: {}. Falling back to local IP.", e),
+            }
+        } else {
+            warn!("⚠️ STEALTH flag active but DIGITALOCEAN_TOKEN not found. Using local IP with human-jitter only.");
+        }
+    }
 
     // Global Shutdown Token (CancellationToken is better than broadcast for hierarchies)
     let shutdown_token = CancellationToken::new();
@@ -264,6 +308,20 @@ async fn main() -> Result<()> {
     let approval_gate = Arc::new(ApprovalGate::for_red_team());
     
     builder = builder.policy(policy).approval_gate(approval_gate.clone());
+    
+    // --- DASHBOARD STARTUP ---
+    if let Some(port) = args.dashboard {
+        let (tx, targets) = (tokio::sync::broadcast::channel(1024).0, Arc::new(dashmap::DashMap::new()));
+        builder = builder.with_dashboard(tx.clone(), targets.clone());
+        
+        let dashboard_state = Arc::new(redteam_rust_core::core::web_server::DashboardState {
+            targets,
+            findings_tx: tx,
+            ram_limit_mb: hard_limit,
+        });
+        
+        tokio::spawn(redteam_rust_core::core::web_server::start_dashboard(dashboard_state, port));
+    }
 
     for p in redteam_rust_core::plugins::get_all_discovery() {
         builder = builder.with_discovery(p);
@@ -408,6 +466,17 @@ async fn main() -> Result<()> {
     }
     
     info!("✅ Scan complete. Incremental results saved to {}", jsonl_path);
+
+    // --- INFRASTRUCTURE CLEANUP ---
+    if let (Some(id), Some(client)) = (droplet_id, do_client) {
+        info!("🧹 STEALTH CLEANUP: Destroying ephemeral infrastructure (ID: {})...", id);
+        if let Err(e) = client.destroy_droplet(id).await {
+            error!("❌ Failed to destroy droplet: {}. Please delete it manually in DO panel to avoid costs.", e);
+        } else {
+            info!("✅ Infrastructure destroyed successfully.");
+        }
+    }
+
     redteam_rust_core::utils::shutdown_telemetry();
     Ok(())
 }
