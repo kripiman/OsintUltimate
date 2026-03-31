@@ -47,7 +47,7 @@ pub enum ApprovalStatus {
 /// Gate que controla acciones de alto riesgo
 pub struct ApprovalGate {
     risk_threshold: u8,
-    pending_approvals: Arc<DashMap<String, ApprovalRequest>>,
+    pub pending_approvals: Arc<DashMap<String, ApprovalRequest>>,
     approval_cache: Arc<DashMap<String, ApprovalStatus>>,
     audit_log: Arc<DashMap<DateTime<Utc>, AuditLogEntry>>,
 }
@@ -83,14 +83,14 @@ impl ApprovalGate {
         Self::new(50) // Aprobación para casi todo
     }
     
-    /// Solicita aprobación para una acción de alto riesgo
+    /// Solicita aprobación para una acción de alto riesgo. Responde con `None` si se aprueba automáticamente, o `Some(request_id)` si aguarda aprobación.
     pub async fn request_approval(
         &self,
         action: &str,
         risk_level: u8,
         user: &User,
         reason: &str,
-    ) -> Result<bool> {
+    ) -> Result<Option<String>> {
         // Si el riesgo está por debajo del threshold, aprobada automáticamente
         if risk_level <= self.risk_threshold {
             self.log_action(
@@ -99,7 +99,7 @@ impl ApprovalGate {
                 "APPROVED (Auto - Low Risk)".to_string(),
                 serde_json::json!({"risk_level": risk_level, "threshold": self.risk_threshold}),
             ).await;
-            return Ok(true);
+            return Ok(None);
         }
         
         // Riesgo alto: crear solicitud de aprobación
@@ -117,17 +117,18 @@ impl ApprovalGate {
             action, risk_level, user.name
         );
         
-        self.pending_approvals.insert(request.id.clone(), request.clone());
+        let request_id = request.id.clone();
+        self.pending_approvals.insert(request.id.clone(), request);
         
         self.log_action(
             user.name.clone(),
             action.to_string(),
             "PENDING_APPROVAL".to_string(),
-            serde_json::json!(request),
+            serde_json::json!({"request_id": request_id}),
         ).await;
         
         // En una implementación real, notificación a CISO/Admin
-        Ok(false)
+        Ok(Some(request_id))
     }
     
     /// Aprueba una solicitud pendiente
@@ -202,6 +203,20 @@ impl ApprovalGate {
         false
     }
     
+    /// Bloquea temporalmente hasta que se apruebe o rechace una solicitud
+    pub async fn wait_for_approval(&self, request_id: &str, timeout_secs: u64) -> bool {
+        use tokio::time::{sleep, Duration};
+        let start = std::time::Instant::now();
+        
+        while start.elapsed().as_secs() < timeout_secs {
+            if let Some(status) = self.approval_cache.get(request_id) {
+                return matches!(*status, ApprovalStatus::Approved { .. });
+            }
+            sleep(Duration::from_millis(1000)).await;
+        }
+        false
+    }
+    
     async fn log_action(
         &self,
         user: String,
@@ -251,7 +266,7 @@ mod tests {
         ).await;
         
         assert!(result.is_ok());
-        assert!(result.unwrap());
+        assert!(result.unwrap().is_none());
     }
     
     #[tokio::test]
@@ -272,6 +287,6 @@ mod tests {
         ).await;
         
         assert!(result.is_ok());
-        assert!(!result.unwrap()); // No approved yet
+        assert!(result.unwrap().is_some()); // Require validation
     }
 }

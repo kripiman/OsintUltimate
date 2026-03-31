@@ -33,6 +33,7 @@ pub struct DashboardState {
     pub targets: Arc<dashmap::DashMap<String, TargetHost>>,
     pub findings_tx: broadcast::Sender<Finding>,
     pub ram_limit_mb: u64,
+    pub approval_gate: Option<Arc<crate::core::approval_gate::ApprovalGate>>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -135,6 +136,55 @@ fn get_current_stats(state: &DashboardState) -> DashboardStats {
     }
 }
 
+async fn get_approvals(State(state): State<Arc<DashboardState>>) -> Json<Vec<serde_json::Value>> {
+    if let Some(gate) = &state.approval_gate {
+        let approvals: Vec<serde_json::Value> = gate.pending_approvals.iter().map(|kv| {
+            let req = kv.value();
+            serde_json::json!({
+                "id": req.id,
+                "action": req.action,
+                "risk_level": req.risk_level,
+                "reason": req.reason,
+                "requested_by": req.requested_by,
+            })
+        }).collect();
+        Json(approvals)
+    } else {
+        Json(vec![])
+    }
+}
+
+#[derive(Deserialize)]
+struct ApprovalDecisionPayload {
+    decision: String, // "approve" or "reject"
+    reason: String,
+}
+
+async fn post_approval_decision(
+    State(state): State<Arc<DashboardState>>,
+    axum::extract::Path(id): axum::extract::Path<String>,
+    Json(payload): Json<ApprovalDecisionPayload>,
+) -> impl IntoResponse {
+    if let Some(gate) = &state.approval_gate {
+        // Mocking a dashboard user
+        let user = crate::core::approval_gate::User {
+            id: "dash_admin_1".to_string(),
+            name: "Dashboard Admin".to_string(),
+            role: crate::core::approval_gate::UserRole::Administrator,
+            authorized_at: chrono::Utc::now(),
+        };
+
+        if payload.decision == "approve" {
+            let _ = gate.approve(&id, &user, &payload.reason).await;
+        } else {
+            let _ = gate.reject(&id, &user, &payload.reason).await;
+        }
+        (axum::http::StatusCode::OK, "Decision recorded").into_response()
+    } else {
+        (axum::http::StatusCode::BAD_REQUEST, "Approval gate not configured").into_response()
+    }
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // SERVER LIFECYCLE
 // ─────────────────────────────────────────────────────────────────────────────
@@ -146,6 +196,8 @@ pub async fn start_dashboard(state: Arc<DashboardState>, port: u16) {
         .route("/:path", get(serve_asset))
         .route("/api/v1/targets", get(get_targets))
         .route("/api/v1/findings/stream", get(findings_stream))
+        .route("/api/v1/approvals", get(get_approvals))
+        .route("/api/v1/approvals/:id/decision", post(post_approval_decision))
         .layer(CorsLayer::permissive())
         .with_state(state);
 

@@ -13,6 +13,7 @@ pub mod web_server;
 pub mod filter;
 pub mod lock_free_sink;
 pub mod native_scanner;
+pub mod poc_validator;
 #[cfg(test)]
 pub mod tests;
 
@@ -21,3 +22,4 @@ pub use pipeline::{Pipeline, PipelineBuilder};
 pub use sink::{DataSink, JsonlSink, SqliteSink};
 pub use correlation::{CorrelationEngine, AttackGraph, AttackPath};
 pub use filter::FalsePositiveFilter;
+pub use poc_validator::PocValidator;

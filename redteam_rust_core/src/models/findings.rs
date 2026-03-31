@@ -46,6 +46,23 @@ pub struct Evidence {
 
 fn default_confidence() -> f32 { 0.5 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum PocStrategy {
+    ShellCommand,
+    HttpPayload,
+    NucleiTemplate,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PocDefinition {
+    pub strategy: PocStrategy,
+    pub payload: String,
+    pub expected_pattern: String,
+    #[serde(default)]
+    pub is_intrusive: bool,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AIAnalysis {
     pub summary: String,
@@ -57,6 +74,8 @@ pub struct AIAnalysis {
     pub mitre_attack: Option<Vec<String>>,
     pub remediation: String,
     pub model: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub poc: Option<PocDefinition>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
