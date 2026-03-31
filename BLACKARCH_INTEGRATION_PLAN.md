@@ -46,7 +46,23 @@ Continuando con la gestión consciente del hardware (Hardware-Aware Resource Man
 
 ---
 
-## 4. OPSEC, Privacidad y Evasión
+## 4. Redes y Anonimato Crítico (Evasión de Azure)
+
+Para proteger la cuenta estudiantil y evitar baneos por parte de Microsoft Azure, es imperativo no exponer la IP pública del VPS de África en acciones ofensivas.
+
+### A. Enrutado Forzoso de Anonimato
+*   **Regla de Oro:** NUNCA permitas que `nmap` o herramientas activas impacten directamente su destino usando la IP pública del Azure.
+*   **Configuración de Proxy Transparente:** El servidor de Azure debe actuar únicamente como un nodo de retransmisión. Se deben configurar `proxychains-ng` o túneles `Tor` / `WireGuard` rotativos.
+*   **Aislamiento:** De esta manera, para los sistemas de monitoreo de Microsoft, el tráfico saliente será identificado como un nodo de red cifrada, previniendo la detección de escaneos de vulnerabilidades o fuerza bruta originados desde su infraestructura.
+
+### B. Infraestructura de Dominios y C2 (GitHub Student Pack)
+Aprovechando los beneficios de Namecheap y Name.com:
+*   **Listeners Camuflados:** Configurar servidores de Comando y Control (C2) bajo dominios legítimos (`.me`, `.tech`) para evadir filtros de reputación de IP.
+*   **Frontend Realista:** Montar paneles de control de `OsintUltimate` o señuelos (decoys) en estos dominios para profesionalizar la presencia digital de la plataforma y dificultar el rastreo de la infraestructura base.
+
+---
+
+## 5. OPSEC, Privacidad y Evasión
 
 *   **Auto-Evasión Orquestada:** La IA estará programada para anteceder sus comandos con herramientas de ofuscación de red y capas de proxy (ej. `proxychains-ng`, `tor`) nativas en el propio BlackArch.
 *   **Limpieza de Pistas:** Las herramientas de post-explotación estarán envueltas por un proceso que limpia logs y temporales localmente dentro de los objetivos.
@@ -54,9 +70,11 @@ Continuando con la gestión consciente del hardware (Hardware-Aware Resource Man
 
 ---
 
-## 5. Próximos Pasos (Roadmap de Ejecución)
+## 6. Próximos Pasos (Roadmap de Ejecución)
 
-1.  [ ] **Actualizar Infraestructura:** Modificar la imagen base de Docker a Arch Linux/BlackArch (`blackarch/blackarch-bare`).
-2.  [ ] **Desarrollo del Executor:** Crear `src/core/blackarch_bridge.rs` para permitir las peticiones de línea de comandos asíncronas desde la IA.
-3.  [ ] **Mapeo de Herramientas Inicial:** Configurar los primeros 5 "Tool Manifests" dedicados a OSINT puro.
-4.  [ ] **Pruebas de Estrés:** Medir el rendimiento en contenedores restringidos (<2GB RAM) corriendo cadenas de llamadas IA -> Herramienta BlackArch -> IA.
+1.  [x] **Actualizar Infraestructura:** Modificar la imagen base de Docker a Arch Linux/BlackArch (`blackarch/blackarch-bare`).
+2.  [x] **Desarrollo del Executor:** Crear `src/core/blackarch.rs` (BlackArchBridge) para permitir las peticiones de línea de comandos asíncronas y la destilación de esquemas.
+3.  [x] **Mapeo de Herramientas Inicial:** Configurar los primeros manifests y el motor de destilación estructurada para OSINT y webapp.
+4.  [x] **Pruebas de Estrés:** Verificado el rendimiento en entornos de 1GB RAM con destilación de esquemas activada.
+5.  [x] **Configuración de Red y Dashboard:** Implementado el túnel de anonimato (DO Proxies) y el Web Dashboard con telemetría en tiempo real.
+

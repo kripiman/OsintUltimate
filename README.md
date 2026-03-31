@@ -1,18 +1,21 @@
-# 🛡️ OsintUltimate (RedTeam Rust Core v3.0)
+# 🛡️ OsintUltimate (RedTeam Rust Core v4.0)
 
 > **Motor de Evaluación de Red Team de Alto Rendimiento y Asíncrono**
 > 
 > *Precisión Binaria. Seguridad Atómica. Concurrencia Masiva.*
-> *Ahora con Capas de Capacidad, Puertas de Aprobación y Flujo de Trabajo Inteligente en 2 Fases: Descubrimiento + Expansión de Superficie de Ataque*
+> *Arquitectura v4.0: Evasión Estocástica, I/O io-uring y IA Off-Path.*
 
 ## 🚀 Vista General
 
-**OsintUltimate** ha sido re-arquitecturado desde cero en **Rust** para proporcionar una plataforma de evaluación de seguridad de grado empresarial. Reemplaza los scripts legados de Python con un único binario compilado estáticamente capaz de manejar miles de objetivos concurrentes con cero problemas de seguridad de memoria.
+**OsintUltimate** ha sido re-arquitecturado en su versión **v4.0** para soportar operaciones de Red Team a escala global. Esta actualización introduce un motor de evasión probabilístico y una infraestructura de red de latencia ultra-baja basada en `io-uring`.
 
-**Nuevo en v3.0**: 
-- **Capas de Capacidad (Capability Layers)**: Control granular sobre la profundidad de escaneo (Descubrimiento, Escaneo, Explotación, Post-Explotación).
-- **Puertas de Aprobación (Approval Gates)**: Sistema de control de riesgos con umbrales configurables y auditoría completa.
-- **Flujo de Trabajo en Dos Fases**: Descubrimiento automático de subdominios que se alimenta sin problemas en la fase de escaneo activo.
+**Nuevo en v4.0**: 
+- **Evasión Estocástica (Thompson Sampling)**: Motor de decisión bayesiano que elige estrategias de evasión para minimizar la detección por WAFs con ML.
+- **IA Off-Path con LSH Cache**: Análisis de payloads mediante LLMs en segundo plano con caché de similitud (*SimHash*), eliminando bloqueos en el pipeline de red.
+- **Pipeline Lock-Free**: Sumidero de resultados basado en colas `SegQueue` para ingestión de datos sin bloqueos de mutex.
+- **Native io-uring Scanner**: Escaneo de red de alto rendimiento que bypassa el modelo `fork/exec`, operando directamente en el kernel.
+- **Resistencia a HashDoS**: Migración a `SipHash-1-3` para todas las estructuras de datos críticas.
+
 
 ### 🔥 Características Principales
 
@@ -24,12 +27,14 @@
 *   **🧩 Arquitectura Modular**: Sistema basado en plugins (trait `ScannerPlugin`) para una fácil extensibilidad.
 *   **📡 Pipeline de Streaming**:
     *   **Salida JSONL**: La escritura en tiempo real en disco evita errores de memoria (OOM) en escaneos masivos.
+    *   **Web Dashboard**: Centro de mando premium con Glassmorphism y actualizaciones vía SSE.
     *   **Panel HTML**: Reporte limpio y amigable para resúmenes ejecutivos.
 *   **🕵️ Preparado para la Evasión**:
-*   **🕵️ Preparado para la Evasión**:
     -   **Jitter LogNormal**: Simula el comportamiento humano matemáticamente (evitando la detección de WAF).
+    -   **Evasión Automática 403**: Motor de escalación reactivo (vía Local AI y DigitalOcean).
     -   **Rotación Inteligente de Proxies**: Los pools de clientes garantizados por `DashMap` aseguran una rotación de IP efectiva por solicitud.
     -   **Protección SSRF**: Bloqueo estricto de RFC (CGNAT, metadatos, IPs no enrutables y rangos de documentación IPv6).
+    -   **Honeypot Mapping**: Detecta si tu infraestructura está bajo investigación mediante canarios DNS.
 *   **🔒 Seguridad de Memoria y ABI**:
     -   **Validación de ABI**: Los plugins dinámicos se verifican por versión para evitar corrupción de memoria.
     -   **Optimización de Memoria**: Uso de `Arc` para compartir objetivos entre hilos, minimizando allocations en el heap.
@@ -58,7 +63,7 @@ Para garantizar un rendimiento óptimo, se recomiendan las siguientes especifica
 | **Red** | 10 Mbps | 100 Mbps+ (Baja latencia) |
 
 ### Software (Dependencias)
-- **Sistema Operativo**: Linux (Kernel 5.4+)
+- **Sistema Operativo**: Linux (Kernel 5.1+ requerido para `io-uring`)
 - **Compilador**: Rust 1.75+ (para construcción desde código fuente)
 - **Herramientas de Red**: 
     - `nmap` (Requerido para escaneo de puertos y servicios)
@@ -69,6 +74,7 @@ Para garantizar un rendimiento óptimo, se recomiendan las siguientes especifica
 
 Consulta los siguientes documentos para profundizar en el motor y tácticas de campo:
 
+*   [🏗️ Arquitectura v4.0 (NUEVO)](redteam_rust_core/docs/V4_ARCHITECTURE.md): Detalle técnico sobre Evasión Estocástica, io-uring y IA Off-Path.
 *   [🏗️ Arquitectura y Pipeline](redteam_rust_core/docs/ARCHITECTURE.md): Diseño asíncrono, fases de ejecución y flujo de datos.
 *   [🧠 Orquestación de IA (Sentinel)](redteam_rust_core/docs/AI_ORCHESTRATION.md): Tiered AI Router, análisis en cascada y toma de decisiones autónoma.
 *   [🛡️ Hardening y OPSEC (Sigilo)](redteam_rust_core/docs/HARDENING_AND_OPSEC.md): Protección de memoria (1GB RAM), sandboxing de procesos, Jitter y Evasión.
@@ -92,7 +98,10 @@ Define el "scope" de la operación: Passive (OSINT), Discovery, Scanning, Verifi
 Gestión de riesgos que requiere confirmación explícita para acciones de nivel 3 o superior, manteniendo un rastro de auditoría inmutable.
 
 ### 5. **Motores de Evasión (OPSEC)**
-Implementa **Human Jitter** (LogNormal), rotación inteligente de proxies y sandboxing de herramientas (`ProcessGuard`) con límites de RAM.
+Implementa **Human Jitter** (LogNormal), rotación inteligente de proxies y sandboxing de herramientas (`ProcessGuard`) con límites de RAM. Soporta escalación 403 dinámica.
+
+### 6. **Web Dashboard** (`web_server`)
+Servidor embebido de alto rendimiento (Axum) que proporciona telemetría en tiempo real sobre hallazgos, uso de RAM y estado de los objetivos.
 
 ### 8. **Plugins Disponibles**
 
@@ -191,6 +200,11 @@ cargo build --release
 El binario optimizado estará en `target/release/redteam_rust_core`.
 
 ### Ejecución de Escaneos
+
+**Escaneo con Dashboard Real-time (Recomendado):**
+```bash
+./redteam_rust_core -t ejemplo.com --dashboard 8080
+```
 
 **Escaneo Estándar (Objetivo Único):**
 ```bash

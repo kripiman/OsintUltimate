@@ -31,6 +31,7 @@ graph TD
     G --> H[Fase 4: Data Sink & AI Analysis]
     H -- Acciones Sugeridas --> D
     H --> I[JSONL / HTML Report]
+    D -- Telemetría SSE --> J[Fase 5: Web Dashboard]
 ```
 
 ### Fase 1: Descubrimiento (Expansion)
@@ -58,6 +59,12 @@ El sistema organiza los plugins en capas de riesgo:
     *   **Mid (Azure Flash)**: Triaje de vulnerabilidades medianas.
     *   **Premium (Gemini Pro)**: Análisis profundo de cadenas de ataque críticas.
 
+### Fase 5: Telemetría y Monitoreo (Dashboard) [NUEVO]
+Un servidor embebido **Axum** procesa eventos en tiempo real:
+*   **SSE (Server-Sent Events)**: Enrutamiento directo de hallazgos desde el orquestador al navegador sin polling.
+*   **Gestión de Estado**: Uso de `DashMap` compartido para rastrear miles de objetivos con latencia mínima.
+*   **Zero Footprint**: Los assets frontend están integrados en el binario (`rust-embed`).
+
 ### Fase de Infraestructura: Adaptabilidad Automática [NUEVO]
 El sistema detecta el entorno de ejecución antes de iniciar (`detect_infrastructure`):
 - **UltraLowMemory (≤1.5GB RAM)**: Capa la concurrencia a 10 y activa límites estrictos.
@@ -81,6 +88,12 @@ Envuelve herramientas como `nmap` o `sqlmap`.
 - **Sandboxing**: Limpia variables de entorno y utiliza `setsid`.
 - **Resource Control**: Limita la RAM vurtual a 512MB por subproceso.
 - **Zombie Prevention**: Mata el `PGID` completo si hay un timeout.
+
+### `DecoyController` [NUEVO]
+Gestiona el ciclo de vida de señuelos DNS (via Cloudflare) y tripwires persistentes (via SQLite WAL).
+
+### `WafEvasionEngine` [NUEVO]
+Máquina de estados reactiva que escala de Headers → TLS → Local AI → IP Rotation ante respuestas HTTP 403.
 
 ### `MemoryMonitor`
 Hilo de fondo que vigila `/proc/self/status`. Implementa **Backpressure**: si el consumo de RAM supera el límite suave, el orquestador pausa la ingesta de nuevos objetivos hasta que la memoria se libere.

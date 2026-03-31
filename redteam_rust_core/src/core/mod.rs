@@ -7,8 +7,12 @@ pub mod capability_layer;
 pub mod approval_gate;
 pub mod blackarch;
 pub mod ai_cascade;
+pub mod waf_evasion;
 pub mod correlation;
+pub mod web_server;
 pub mod filter;
+pub mod lock_free_sink;
+pub mod native_scanner;
 #[cfg(test)]
 pub mod tests;
 

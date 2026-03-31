@@ -29,15 +29,18 @@ Esta hoja de ruta detalla la evolución de OsintUltimate de un motor asíncrono 
 - [x] **Context Compression**: Optimización de evidencia para ahorro masivo de tokens.
 - [x] **Attack Graph Correlation**: Correlación automática de hallazgos para identificar cadenas de ataque complejas.
 - [x] **ML-based False Positive Filter**: Clasificador local para reducir ruido en reportes.
+- [x] **Adaptive WAF Evasion**: Motor de 4 etapas (Header, TLS, Local AI, IP Rotation). [NUEVO]
+- [x] **Honeypot-Decoy Mapping**: Detección de probes mediante canarios DNS y tripwires. [NUEVO]
 
-## 📦 Fase 4: Ecosistema y Despliegue (Próximamente)
+## ✅ Fase 4: Ecosistema y Despliegue (Completado)
 *Enfoque: Extensibilidad y DevOps.*
 
 - [x] **Dynamic Plugin Loader**: Carga de plugins `.so` / `.dylib` en caliente.
-- [x] **BlackArch Integration**: Detección y uso automático de herramientas del sistema.
+- [x] **BlackArch Integration**: Detección, uso y destilación estructurada de herramientas.
 - [x] **Dockerization**: Imagen optimizada (`distroless`) con todas las dependencias.
 - [x] **CI/CD Integration**: Templates para GitHub Actions y Azure DevOps (SARIF export).
-- [ ] **Web Dashboard**: Interfaz en tiempo real para monitoreo de escaneos masivos.
+- [x] **Web Dashboard**: Interfaz en tiempo real embebida con telemetría SSE (Axum/Rust).
+
 
 ---
 

@@ -22,6 +22,7 @@ OsintUltimate **comprime** los datos antes de enviarlos a la IA:
 1.  **Truncamiento de Cuerpo**: Los cuerpos HTTP se cortan a 512 bytes para conservar la esencia técnica sin agotar la ventana de contexto.
 2.  **Filtrado de Cabeceras (Whitelist)**: Solo se envían cabeceras relevantes para la seguridad (`Server`, `CSP`, `Sec-Headers`, etc.).
 3.  **Deduplicación de Evidencia**: Si un hallazgo es idéntico a uno ya analizado, la IA no se consulta gracias a la `analysis_cache` persistente (vía `moka`).
+4.  **Structured Distillation (v3.1)**: En lugar de enviar texto de `--help` crudo, el motor extrae esquemas JSON optimizados, permitiendo a la IA entender las flags exactas de herramientas BlackArch complejas.
 
 ---
 
@@ -36,6 +37,12 @@ Activado con el flag `--autonomous`, el sistema activa el **Modo Autopiloto**.
 4.  **Decisión**: La IA propone la **siguiente acción táctica**. 
     - *Ejemplo*: "He detectado una versión vulnerable de Apache. Recomiendo lanzar el plugin `nuclei_scanner` con el template `cve-2021-41773`."
 5.  **Ejecución**: El orquestador inyecta dinámicamente la tarea sugerida en el pipeline de ejecución, cerrando el ciclo.
+
+### 🛡️ Sentinel en Evasión (Fase de Escalación)
+Cuando un objetivo devuelve un error 403 (WAF detectado), Sentinel activa la **Etapa 3 de Evasión**:
+- El agente recibe el mensaje de error del WAF y el payload original.
+- Utiliza **Ollama Local** (para mantener OPSEC) para generar una variante del payload que eluda la firma detectada.
+- El orquestador reintenta la petición con el nuevo "Advice" táctico inyectado.
 
 ---
 

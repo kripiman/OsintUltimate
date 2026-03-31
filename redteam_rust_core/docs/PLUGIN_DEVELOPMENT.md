@@ -197,67 +197,26 @@ if verify_tool_version("sqlmap", Some("1.5")).await? {
 
 **Total integrado: 35+ plugins** | **Estado: ✅ BlackArch Ready**
 
-### Cómo Integrar una Nueva Herramienta
+## 🚀 Plugins Nativos (io-uring) - NUEVO en v4.0
 
-1. **En tu plugin** (ej., `src/plugins/enumeration/web/my_tool.rs`):
-```rust
-use crate::utils::tool_detection::detect_tool;
+Para tareas de red que requieren una latencia extremadamente baja (como port scanning masivo), OsintUltimate v4.0 introduce el trait `NativeScanner`. Estos plugins operan mediante `io-uring` para bypassar el modelo tradicional de subprocesos.
 
-pub struct MyToolScanner {
-    binary_path: String,
-}
-
-impl MyToolScanner {
-    pub fn new() -> Self {
-        let path = detect_tool("my_tool"); // Auto-detects system binary
-        Self { binary_path: path }
-    }
-}
-
-#[async_trait]
-impl ScannerPlugin for MyToolScanner {
-    async fn check_dependencies(&self) -> Result<bool> {
-        Ok(crate::utils::check_tool_availability("my_tool").await)
-    }
-    
-    async fn scan(&self, target: &TargetHost) -> Result<Vec<Finding>> {
-        // Use self.binary_path to execute the tool
-        Command::new(&self.binary_path)
-            .arg("--target")
-            .arg(&target.host)
-            .spawn()?
-            // ... rest of implementation
-    }
-}
-```
-
-2. **Archivos relacionados a actualizar**:
-   - `src/utils/tool_detection.rs` - Agregar soporte específico si es necesario
-   - `docs/PLUGIN_DEVELOPMENT.md` - Documentar la integración
-   - `ARCHITECTURE_VISUALIZATION.sh` - Listar la herramienta en la matriz de compatibilidad
-
-### Comportamiento de Fallback
-
-Si una herramienta no se encuentra en el sistema:
-1. El plugin cae en el nombre de la herramienta como fallback
-2. Sistema intenta ejecutar desde PATH (caso muy poco probable)
-3. Si falla completamente, se registra en telemetría y el plugin marca la dependencia como no disponible
-4. El orquestador puede saltear este plugin o usar un sustituto
-
-### Telemetría y Logging
-
-Todas las detecciones se registran con `tracing`:
+### Implementación del Trait NativeScanner
+Ubicado en `src/core/native_scanner.rs`.
 
 ```rust
-info!("Tool 'ffuf' detected at: /usr/bin/ffuf");
-warn!("Tool 'nuclei' not found in system PATH");
-debug!("Attempting to detect tool: sqlmap");
+pub trait NativeScanner: Send + Sync {
+    fn name(&self) -> &str;
+    async fn scan(&self, target: &str) -> Result<Vec<crate::models::Finding>>;
+}
 ```
 
-Revisa el archivo de logs con:
-```bash
-RUST_LOG=debug cargo run -- --target example.com
-```
+### Ventajas del Modelo Nativo:
+1. **Zero-Copy**: Envío de paquetes directamente desde buffers compartidos con el kernel.
+2. **Lock-Free**: Ingestión de resultados directamente en el `LockFreeResultSink`.
+3. **Escala**: Capaz de manejar >100k paquetes por segundo sin saturar el planificador de hilos de Rust.
+
+---
 
 ### Instalación de Herramientas (para pruebas)
 

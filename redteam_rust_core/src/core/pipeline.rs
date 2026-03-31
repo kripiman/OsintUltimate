@@ -30,6 +30,8 @@ pub struct Pipeline {
     jitter: Option<JitterSleep>,
     fp_filter: Arc<FalsePositiveFilter>,
     memory_monitor: Arc<crate::utils::memory_monitor::MemoryMonitor>,
+    dashboard_tx: Option<tokio::sync::broadcast::Sender<crate::models::Finding>>,
+    dashboard_targets: Option<Arc<dashmap::DashMap<String, TargetHost>>>,
 }
 
 impl Pipeline {
@@ -147,7 +149,7 @@ impl Pipeline {
         let scan_token = self.shutdown_token.clone();
         let memory_monitor = self.memory_monitor.clone();
         handles.push(tokio::spawn(async move {
-            let orchestrator = Orchestrator::new(
+            let mut orchestrator = Orchestrator::new(
                 plugins, 
                 concurrency,
                 policy,
@@ -155,24 +157,27 @@ impl Pipeline {
                 blackarch_bridge,
                 memory_monitor,
             );
+            if let (Some(tx), Some(targets)) = (self.dashboard_tx, self.dashboard_targets) {
+                orchestrator.with_dashboard_preconfigured(tx, targets);
+            }
             orchestrator.run(scan_rx, sink_tx_stage3, scan_token).await;
         }));
         drop(sink_tx);
 
-        // --- STAGE 4: Sink ---
+        // --- STAGE 4: Sink (v4 Lock-Free) ---
         let mut final_sink = sink;
-        let mut final_sink_rx = sink_rx;
+        let v4_sink = Arc::new(crate::core::lock_free_sink::LockFreeResultSink::new());
         let fp_filter = self.fp_filter.clone();
-        handles.push(tokio::spawn(async move {
-            while let Some(mut target) = final_sink_rx.recv().await {
-                // Apply FalsePositiveFilter
-                target.findings.retain(|f| fp_filter.evaluate(f));
-                let _ = final_sink.write(&target).await;
-            }
-            let _ = final_sink.close().await;
-        }));
+        
+        // Start background OS thread for batched writes
+        v4_sink.start_worker(final_sink);
 
-        for h in handles { let _ = h.await; }
+        while let Some(mut target) = sink_rx.recv().await {
+            target.findings.retain(|f| fp_filter.evaluate(f));
+            v4_sink.enqueue(target);
+        }
+        
+        v4_sink.stop();
         Ok(())
     }
 
@@ -181,14 +186,14 @@ impl Pipeline {
         let mut sink = self.sink.take().context("Pipeline: Sink already taken")?;
         sink.write_metadata(&ScanMetadata::new(&self.command_line)).await?;
         
-        let (tx, mut rx) = mpsc::channel(100);
+        let (tx, mut rx) = mpsc::channel::<TargetHost>(100);
         let fp_filter = self.fp_filter.clone();
         let handle = tokio::spawn(async move {
             while let Some(mut target) = rx.recv().await {
                 target.findings.retain(|f| fp_filter.evaluate(f));
-                let _ = final_sink.write(&target).await;
+                let _ = sink.write(&target).await;
             }
-            let _ = final_sink.close().await;
+            let _ = sink.close().await;
         });
 
         Ok((tx, handle))
@@ -220,6 +225,7 @@ impl Pipeline {
             self.policy,
             self.approval_gate.clone(),
             self.blackarch_bridge.clone(),
+            self.memory_monitor.clone(),
         );
         let token = self.shutdown_token.clone();
         
@@ -269,6 +275,8 @@ pub struct PipelineBuilder {
     jitter: Option<JitterSleep>,
     fp_filter: Option<Arc<FalsePositiveFilter>>,
     memory_monitor: Option<Arc<crate::utils::memory_monitor::MemoryMonitor>>,
+    dashboard_tx: Option<tokio::sync::broadcast::Sender<crate::models::Finding>>,
+    dashboard_targets: Option<Arc<dashmap::DashMap<String, TargetHost>>>,
 }
 
 impl Default for PipelineBuilder { fn default() -> Self { Self::new() } }
@@ -288,7 +296,15 @@ impl PipelineBuilder {
             jitter: None,
             fp_filter: None,
             memory_monitor: None,
+            dashboard_tx: None,
+            dashboard_targets: None,
         }
+    }
+
+    pub fn with_dashboard(mut self, tx: tokio::sync::broadcast::Sender<crate::models::Finding>, targets: Arc<dashmap::DashMap<String, TargetHost>>) -> Self {
+        self.dashboard_tx = Some(tx);
+        self.dashboard_targets = Some(targets);
+        self
     }
 
     pub fn with_jitter(mut self, jitter: Option<JitterSleep>) -> Self {
@@ -332,6 +348,8 @@ impl PipelineBuilder {
             jitter: self.jitter,
             fp_filter: self.fp_filter.unwrap_or(Arc::new(FalsePositiveFilter::default())),
             memory_monitor: self.memory_monitor.context("Pipeline requires a configured memory monitor")?,
+            dashboard_tx: self.dashboard_tx,
+            dashboard_targets: self.dashboard_targets,
         })
     }
 }

@@ -40,9 +40,36 @@ Evitamos los "patrones de claqueo" (click patterns) predecibles. En lugar de una
 ### DNS sobre HTTPS (DoH)
 Las consultas DNS tradicionales a menudo son el primer punto de detección por parte de los Blue Teams (SOC/SIEM). OsintUltimate permite el uso de **DoH (DNS over HTTPS)** vía Cloudflare o Google, cifrando nuestras consultas de resolución de objetivos y haciéndolas indistinguibles del tráfico HTTPS normal.
 
+### 🛡️ Evasión de WAF Adaptativa (Escalación de 4 Etapas)
+OsintUltimate v3.1 introduce un motor de evasión inteligente que reacciona automáticamente a bloqueos HTTP 403:
+1.  **Rotación de Cabeceras**: Cambia User-Agents y cabeceras de fingerprinting sin coste.
+2.  **Mutación de TLS**: Cambia el perfil de negociación TLS (Chrome, Firefox, Safari) para evadir firmas de nivel 4.
+3.  **Local AI Payload Rewrite**: Utiliza Ollama (Local) para reescribir payloads sospechosos antes de reintentar (OPSEC estricto).
+4.  **Rotación de IP Ephemeral**: Despliega un nuevo nodo en DigitalOcean para obtener una IP limpia y continuar la operación.
+
 ---
 
-## 3. Prevención de Riesgos (Sandboxing)
+## 3. Infraestructura Defensiva: Honeypot-Decoy Mapping [NUEVO]
+
+Para detectar si nuestra infraestructura está siendo rastreada por analistas de red o competidores, OsintUltimate ahora soporta el despliegue de **Canary Subdomains** y **Tripwires**:
+- **Despliegue Automatizado**: Integrado con la API de Cloudflare DNS.
+- **Detección de Probes**: Escucha silenciosamente en los dominios señuelo. Cualquier acceso dispara un evento de alerta.
+- **Persistencia Segura**: Los eventos se registran en SQLite (WAL mode) con backpressure para evitar saturación de logs.
+- **Atribución**: Captura IPs de origen, User-Agents y hashes JA3 de los atacantes/analistas.
+
+---
+
+## 4. Web Dashboard (Zero Trace) [NUEVO]
+
+El nuevo panel de control ha sido diseñado con el sigilo en mente:
+- **Localhost Bound**: Por defecto, el servidor Axum solo escucha en `127.0.0.1`, minimizando la superficie expuesta.
+- **SSE Efficiency**: La tecnología **Server-Sent Events** reduce drásticamente las conexiones repetitivas al servidor, haciendo que el tráfico interno sea indistinguible de la actividad normal del kernel.
+- **Embedded Assets**: Al no requerir un servidor web externo (Nginx/Apache), no deja rastros en los logs del sistema sobre instalaciones de dependencias web.
+- **Local AI Privacy**: Los reintentos de evasión generados vía Ollama se mantienen 100% locales, protegiendo las tácticas de exfiltración de ser analizadas por proveedores cloud.
+
+---
+
+## 4. Prevención de Riesgos (Sandboxing)
 
 ### `ExternalToolGuard` (Prevención de Zombis)
 Los plugins que ejecutan binarios externos son gestionados por un guardián de procesos:
