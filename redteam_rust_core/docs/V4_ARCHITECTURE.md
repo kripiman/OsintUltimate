@@ -21,9 +21,9 @@ Los WAFs modernos utilizan Machine Learning para identificar patrones de "escala
 La inferencia de LLMs es lenta (~100-500ms). En v3.x, esto bloqueaba el hilo de red.
 
 ### LSH Payload Cache
-Utilizamos **SimHash (Locality-Sensitive Hashing)** para cachear mutaciones.
-- Si un payload es similar en un 90% (Distancia de Hamming <= 8) a uno ya mutado con éxito, reutilizamos la mutación instantáneamente.
-- Evita llamadas redundantes a LLMs para variaciones de payloads de inyección.
+Utilizamos **SimHash (Locality-Sensitive Hashing)** para cachear mutaciones exitosas.
+- Si un nuevo payload es similar en un 90% a uno ya mutado con éxito, el sistema reutiliza la mutación instantáneamente.
+- **Implementación**: El cache se gestiona en el `WafEvasionEngine` junto con el cliente de IA local (Ollama).
 
 ### Off-Path Engine
 Si no hay match en el cache:
@@ -40,10 +40,10 @@ Para evitar bloqueos de Mutex en la base de datos (SQLite) bajo alta carga:
 - **Resultado**: Cero esperas para los trabajadores de escaneo al reportar hallazgos.
 
 ### Native io-uring Scanner
-Utiliza la interfaz `io_uring` de Linux para:
-- Enviar ráfagas de paquetes SYN sin el overhead de `fork/exec` o múltiples syscalls.
-- Soporte para **Zero-Copy** en el envío de paquetes.
-- Requiere Kernel 5.1+ y privilegios `CAP_NET_RAW`.
+Implementado en `native_scanner.rs`, utiliza la interfaz `io_uring` de Linux para:
+- Enviar ráfagas de paquetes SYN de forma asíncrona mediante la SQ (Submission Queue).
+- **SQPOLL**: Utiliza hilos de polling del kernel para eliminar el costo de las syscalls `write/send`.
+- Requiere privilegios `CAP_NET_RAW` y Kernel 5.1+.
 
 ## 4. HashDoS Hardening
 Para evitar ataques de denegación de servicio contra los caches internos (especialmente en el `Orchestrator`), hemos migrado a **SipHash-1-3** con llaves aleatorias inicializadas por ejecución.

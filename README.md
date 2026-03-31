@@ -14,6 +14,8 @@
 - **IA Off-Path con LSH Cache**: Análisis de payloads mediante LLMs en segundo plano con caché de similitud (*SimHash*), eliminando bloqueos en el pipeline de red.
 - **Pipeline Lock-Free**: Sumidero de resultados basado en colas `SegQueue` para ingestión de datos sin bloqueos de mutex.
 - **Native io-uring Scanner**: Escaneo de red de alto rendimiento que bypassa el modelo `fork/exec`, operando directamente en el kernel.
+- **Hardware-Aware Core**: Detección automática del entorno para optimizar la concurrencia y el uso de RAM (ajustado para VPS de 1GB).
+- **Sentinel Autonomous Agent**: Modo autocompleto (`--autonomous`) con cascada de IA nativa y toma de decisiones tácticas.
 - **Resistencia a HashDoS**: Migración a `SipHash-1-3` para todas las estructuras de datos críticas.
 
 
@@ -38,15 +40,17 @@
 *   **🔒 Seguridad de Memoria y ABI**:
     -   **Validación de ABI**: Los plugins dinámicos se verifican por versión para evitar corrupción de memoria.
     -   **Optimización de Memoria**: Uso de `Arc` para compartir objetivos entre hilos, minimizando allocations en el heap.
-*   **🛡️ Capas de Capacidad**: Control de profundidad de escaneo con políticas configurables (Passive, Discovery, Scanning, Exploitation, Post-Exploitation).
+*   **🛡️ Capas de Capacidad**: Control de profundidad de escaneo con políticas configurables (Passive, Discovery, Scanning, Verification, Exploitation, Post-Exploitation).
 *   **🚪 Puertas de Aprobación**: Sistema de gestión de riesgos con umbrales de aprobación, auditoría y roles de usuario.
+*   **🤖 Sentinel AI Agent**: Pentesting autónomo con orquestación de LLMs en cascada y análisis de evidencia en tiempo real.
+*   **💻 Hardware-Aware Optimization**: Ajuste dinámico de rendimiento basado en la detección de infraestructura (Server, LocalPC, UltraLowMemory).
 
-### 🆕 Nuevas Características en v3.0
+### 🆕 Nuevas Características en v4.0
 
-*   **Capas de Capacidad (Capability Layers)**: Define límites estrictos en la profundidad de los escaneos para evitar daños accidentales o legales.
-*   **Puertas de Aprobación (Approval Gates)**: Requiere aprobación explícita para operaciones de alto riesgo, con registro completo de auditoría.
-*   **Roles de Usuario**: Soporte para diferentes niveles de acceso (Analyst, Red Team Basic, Red Team Full, Administrator).
-*   **Modo Interactivo Mejorado**: Menú TUI con configuración guiada y validaciones de seguridad.
+*   **Sentinel Autonomous Agent**: Activa un agente de inteligencia que toma decisiones tácticas y selecciona plugins automáticamente.
+*   **Adaptive Infrastructure Mode**: Detección de hardware para optimizar la RAM y evitar errores OOM en VPS de 1GB.
+*   **Thompson Sampling Evasion**: Estrategias de salto de WAF aleatorias para evitar patrones de detección de ML.
+*   **Native io-uring Scanner**: Escaneo SYN ultra-rápido directamente desde el kernel.
 
 ---
 
@@ -70,14 +74,15 @@ Para garantizar un rendimiento óptimo, se recomiendan las siguientes especifica
     - `sqlmap`, `commix`, `nuclei` (Opcionales, recomendados para mayor cobertura)
 - **Entorno de IA**: Conectividad a APIs (Gemini Pro/Flash) u Ollama local para el `TieredAIRouter`.
 
-## 📚 Documentación Técnica (v3.0)
+## 📚 Documentación Técnica (v4.0)
 
 Consulta los siguientes documentos para profundizar en el motor y tácticas de campo:
 
 *   [🏗️ Arquitectura v4.0 (NUEVO)](redteam_rust_core/docs/V4_ARCHITECTURE.md): Detalle técnico sobre Evasión Estocástica, io-uring y IA Off-Path.
-*   [🏗️ Arquitectura y Pipeline](redteam_rust_core/docs/ARCHITECTURE.md): Diseño asíncrono, fases de ejecución y flujo de datos.
+*   [🗺️ Roadmap de Desarrollo](redteam_rust_core/docs/ROADMAP.md): Próximas fases (Fase 5) y visión v4.0.
+*   [🏗️ Arquitectura y Pipeline](redteam_rust_core/docs/ARCHITECTURE.md): Diseño asíncrono, Hardware-Aware layer y flujo de datos.
 *   [🧠 Orquestación de IA (Sentinel)](redteam_rust_core/docs/AI_ORCHESTRATION.md): Tiered AI Router, análisis en cascada y toma de decisiones autónoma.
-*   [🛡️ Hardening y OPSEC (Sigilo)](redteam_rust_core/docs/HARDENING_AND_OPSEC.md): Protección de memoria (1GB RAM), sandboxing de procesos, Jitter y Evasión.
+*   [🛡️ Hardening y OPSEC (Sigilo)](redteam_rust_core/docs/HARDENING_AND_OPSEC.md): Optimización de memoria (1GB RAM), DigitalOcean stealth nodes y Evasión.
 *   [🧩 Desarrollo de Plugins](redteam_rust_core/docs/PLUGIN_DEVELOPMENT.md): Guía para extender las capacidades del núcleo.
 *   [🔄 Combinaciones de Uso](redteam_rust_core/docs/usage_combinations.md): Playbooks y ejemplos de ejecución complejos.
 

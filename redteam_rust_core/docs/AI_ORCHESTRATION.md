@@ -1,6 +1,6 @@
 # 🧠 Orquestación de IA y Agentes Autónomos (Sentinel)
 
-OsintUltimate v3.0 integra un sistema avanzado de inteligencia artificial para elevar el pentesting de una simple ejecución de herramientas a una **toma de decisiones estratégica**.
+OsintUltimate v4.0 integra un sistema nativo de inteligencia artificial para elevar el pentesting de una simple ejecución de herramientas a una **toma de decisiones estratégica autónoma**.
 
 ---
 
@@ -21,8 +21,8 @@ La arquitectura de IA en OsintUltimate es jerárquica y eficiente en costos, dis
 OsintUltimate **comprime** los datos antes de enviarlos a la IA:
 1.  **Truncamiento de Cuerpo**: Los cuerpos HTTP se cortan a 512 bytes para conservar la esencia técnica sin agotar la ventana de contexto.
 2.  **Filtrado de Cabeceras (Whitelist)**: Solo se envían cabeceras relevantes para la seguridad (`Server`, `CSP`, `Sec-Headers`, etc.).
-3.  **Deduplicación de Evidencia**: Si un hallazgo es idéntico a uno ya analizado, la IA no se consulta gracias a la `analysis_cache` persistente (vía `moka`).
-4.  **Structured Distillation (v3.1)**: En lugar de enviar texto de `--help` crudo, el motor extrae esquemas JSON optimizados, permitiendo a la IA entender las flags exactas de herramientas BlackArch complejas.
+3.  **Deduplicación de Evidencia**: Si un hallazgo es idéntico a uno ya analizado, la IA no se consulta gracias a la `analysis_cache` persistente.
+4.  **Structured Distillation**: En lugar de enviar texto de `--help` crudo, el motor extrae esquemas JSON optimizados, permitiendo a la IA entender las flags exactas de herramientas BlackArch complejas. **Optimizado nativamente en Rust.**
 
 ---
 
@@ -74,4 +74,4 @@ GEMINI_API_KEY="tu-clave-gemini"
 
 ---
 
-© 2026 RedTeam Lab | OsintUltimate v3.0 Documentation
+© 2026 RedTeam Lab | OsintUltimate v4.0 Documentation

@@ -1,17 +1,17 @@
-# 🏗️ Arquitectura Técnica OsintUltimate v3.0
+# 🏗️ Arquitectura Técnica OsintUltimate v4.0
 
 > **Motor de Evaluación de Red Team de Alto Rendimiento, Asíncrono y Autónomo**
 
-Este documento detalla el diseño interno, los flujos de datos y las garantías de seguridad del núcleo de **OsintUltimate v3.0**, re-arquitecturado íntegramente en Rust para máxima eficiencia y sigilo.
+Este documento detalla el diseño interno, los flujos de datos y las garantías de seguridad del núcleo de **OsintUltimate v4.0**, re-arquitecturado íntegramente en Rust para máxima eficiencia, sigilo y adaptabilidad.
 
 ---
 
 ## 1. Filosofía de Diseño: "Atomicidad y Concurrencia"
 
 OsintUltimate v3.0 no es solo un escáner; es un **orquestador de inteligencia**. Se basa en tres pilares:
-1.  **Costo Cero de Memoria**: Procesamiento de flujos (streaming) mediante `tokio::sync::mpsc` y `JSONL`, permitiendo miles de objetivos en hardware de 1GB RAM.
+1.  **Costo Cero de Memoria**: Procesamiento de flujos (streaming) mediante `tokio::sync::mpsc` y `JSONL`, permitiendo miles de objetivos en hardware de 1GB RAM gracias al sistema de **Backpressure**.
 2.  **Aislamiento de Seguridad**: Cada herramienta externa se ejecuta en un grupo de procesos (`PGID`) propio, con límites de recursos (`rlimit`) y limpieza automática.
-3.  **Decisión Autónoma**: Un sistema de IA en cascada (`TieredAIRouter`) elige el mejor modelo (Local, Flash, Pro) según la criticidad del hallazgo.
+3.  **Decisión Autónoma y Estocástica**: Un sistema de IA en cascada (`TieredAIRouter`) y un motor de evasión probabilístico (`StochasticEvasionPolicy`) eligen la mejor ruta de ataque.
 
 ---
 
@@ -55,9 +55,9 @@ El sistema organiza los plugins en capas de riesgo:
 ### Fase 4: Data Sink & AI Cascade
 *   **Streaming Persistence**: Los resultados se escriben línea a línea en disco como `JSONL`, evitando picos de RAM.
 *   **Análisis Tiered**:
-    *   **Local (Ollama)**: Análisis rápido de hallazgos informativos.
-    *   **Mid (Azure Flash)**: Triaje de vulnerabilidades medianas.
-    *   **Premium (Gemini Pro)**: Análisis profundo de cadenas de ataque críticas.
+    *   **Local (Ollama)**: Análisis rápido de hallazgos informativos y mutación de payloads para evasión de WAF (Thompson Sampling).
+    *   **Mid (Azure OpenAI)**: Triaje de vulnerabilidades medianas y correlación de ataques.
+    *   **Premium (Gemini Pro)**: Análisis profundo de cadenas de ataque críticas y generación de reportes ejecutivos.
 
 ### Fase 5: Telemetría y Monitoreo (Dashboard) [NUEVO]
 Un servidor embebido **Axum** procesa eventos en tiempo real:
@@ -112,9 +112,11 @@ Hilo de fondo que vigila `/proc/self/status`. Implementa **Backpressure**: si el
 ## 5. Salidas y Reportes
 
 *   **JSONL**: Formato base para procesamiento masivo y estabilidad.
+*   **SQLite**: Persistencia relacional para consultas complejas y gestión de estado.
+*   **Lock-Free Sink**: Uso de `SegQueue` para inserciones masivas sin bloqueos de Mutex en la base de datos.
 *   **HTML Visual**: Reporte tipo semáforo con tablas interactivas y clasificación CVSS.
-*   **Audit Log**: Registro inmutable de cada acción, quién la aprobó y por qué (esencial para cumplimiento normativo).
+*   **Audit Log**: Registro inmutable de cada acción, quién la aprobó y por qué.
 
 ---
 
-© 2026 RedTeam Lab | OsintUltimate v3.0 Documentation
+© 2026 RedTeam Lab | OsintUltimate v4.0 Documentation

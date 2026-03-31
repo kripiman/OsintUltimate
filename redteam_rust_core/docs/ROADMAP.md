@@ -42,6 +42,17 @@ Esta hoja de ruta detalla la evolución de OsintUltimate de un motor asíncrono 
 - [x] **Web Dashboard**: Interfaz en tiempo real embebida con telemetría SSE (Axum/Rust).
 
 
+## 🚀 Fase 5: Ecosistema de Agentes y Validación (v4.0 - PRÓXIMAMENTE)
+*Enfoque: Autonomía Total, Sandboxing y Verificación de Resultados.*
+
+- [ ] **Multi-Agent Swarm Orchestration**: Evolución del Sentinel-AI hacia un modelo de enjambre (Swarm/Crew) con roles especializados (Planner, Scout, Exploiter, Ghost-Reporter).
+- [ ] **Aislamiento Dinámico por Escaneo (Sandboxing)**: Ejecución de herramientas críticas y procesos peligrosos en contenedores efímeros (Docker/Sidecars) aislados para cada objetivo.
+- [ ] **Pipeline de Validación de PoC**: Motor de verificación automática de hallazgos mediante la ejecución de exploits en entornos controlados para eliminar falsos positivos.
+- [ ] **Source-Aware / White-Box Correlation**: Integración de análisis estático de código fuente con pruebas dinámicas para una cobertura de seguridad 360°.
+- [ ] **Multicloud AI Core**: Expansión del `TieredAIRouter` para soportar de forma nativa Anthropic (Claude 3.5 Sonnet), OpenAI (GPT-4o), y Mistral Large 2 como fallbacks automáticos.
+- [ ] **Protocolo MCP (Model Context Protocol)**: Compartir capacidades entre subagentes de forma estandarizada para permitir la integración de herramientas externas como "Agentes de Seguridad".
+- [ ] **Web Dashboard v2.0**: Visualización avanzada de grafos de ataque en tiempo real y gestión centralizada de contenedores de escaneo.
+
 ---
 
-© 2026 RedTeam Lab | OsintUltimate v3.0 Roadmap
+© 2026 RedTeam Lab | OsintUltimate v4.0 Vision

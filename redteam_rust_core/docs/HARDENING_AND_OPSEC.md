@@ -1,6 +1,6 @@
 # 🛡️ Hardening y SIGILO (OPSEC)
 
-Este documento describe las medidas de seguridad interna y tácticas de evasión implementadas en OsintUltimate v3.0 para garantizar la **estabilidad del sistema** y la **invisibilidad operativa**.
+Este documento describe las medidas de seguridad interna y tácticas de evasión implementadas en OsintUltimate v4.0 para garantizar la **estabilidad del sistema** y la **invisibilidad operativa**.
 
 ---
 
@@ -40,6 +40,12 @@ Evitamos los "patrones de claqueo" (click patterns) predecibles. En lugar de una
 ### DNS sobre HTTPS (DoH)
 Las consultas DNS tradicionales a menudo son el primer punto de detección por parte de los Blue Teams (SOC/SIEM). OsintUltimate permite el uso de **DoH (DNS over HTTPS)** vía Cloudflare o Google, cifrando nuestras consultas de resolución de objetivos y haciéndolas indistinguibles del tráfico HTTPS normal.
 
+### Dynamic Infrastructure Stealth [NUEVO]
+El flag `--stealth` activa la orquestación de infraestructura efímera:
+- **DigitalOcean Nodes**: El sistema utiliza la API de DigitalOcean para crear un droplet en una región aleatoria (ej. `nyc1`, `ams3`).
+- **Proxy Iniection**: Una vez activo, el nodo se autodetecta y se inyecta en el `ProxyManager` como el nodo de salida primario.
+- **Auto-Destruction**: Al finalizar el escaneo, el motor destruye la infraestructura para eliminar el rastro y minimizar costos.
+
 ### 🛡️ Evasión de WAF Adaptativa (Escalación de 4 Etapas)
 OsintUltimate v3.1 introduce un motor de evasión inteligente que reacciona automáticamente a bloqueos HTTP 403:
 1.  **Rotación de Cabeceras**: Cambia User-Agents y cabeceras de fingerprinting sin coste.
@@ -51,10 +57,12 @@ OsintUltimate v3.1 introduce un motor de evasión inteligente que reacciona auto
 
 ## 3. Infraestructura Defensiva: Honeypot-Decoy Mapping [NUEVO]
 
-Para detectar si nuestra infraestructura está siendo rastreada por analistas de red o competidores, OsintUltimate ahora soporta el despliegue de **Canary Subdomains** y **Tripwires**:
-- **Despliegue Automatizado**: Integrado con la API de Cloudflare DNS.
-- **Detección de Probes**: Escucha silenciosamente en los dominios señuelo. Cualquier acceso dispara un evento de alerta.
-- **Persistencia Segura**: Los eventos se registran en SQLite (WAL mode) con backpressure para evitar saturación de logs.
+### Hardware-Aware Resource Hardening [OPTIMIZADO]
+
+OsintUltimate v4.0 es ahora **autoconsciente** de su entorno de ejecución:
+1.  **Detección de RAM**: El motor clasifica el host (UltraLowMemory, LocalPC, Server).
+2.  **Backpressure Dinámico**: Si el `MemoryMonitor` detecta que la RAM libre cae por debajo de los 500MB (soft limit), el orquestador pausa automáticamente el procesamiento de nuevos objetivos.
+3.  **Concurrency Capping**: En sistemas de 1GB RAM, el motor limita la concurrencia a 10 hilos para garantizar la estabilidad de la red y evitar el kernel OOM-killer.
 - **Atribución**: Captura IPs de origen, User-Agents y hashes JA3 de los atacantes/analistas.
 
 ---
@@ -100,4 +108,4 @@ En hardware de **1GB RAM**, OsintUltimate emite una advertencia crítica contra 
 
 ---
 
-© 2026 RedTeam Lab | OsintUltimate v3.0 Documentation
+© 2026 RedTeam Lab | OsintUltimate v4.0 Documentation
