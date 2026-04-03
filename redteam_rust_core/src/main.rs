@@ -17,6 +17,8 @@ use redteam_rust_core::core::capability_layer::{ScanLayer, ScanLayerPolicy};
 use redteam_rust_core::core::approval_gate::ApprovalGate;
 use redteam_rust_core::core::ai_cascade::{TieredAIRouter, RouteLevel, LlmProviderKind};
 use redteam_rust_core::core::agent::{OllamaClient, GeminiClient, AnthropicClient, OpenAIClient};
+use redteam_rust_core::core::sandbox::SandboxDispatcher;
+use redteam_rust_core::core::resource_manager::SysResourceManager;
 
 #[derive(Parser, Debug, Clone)]
 #[command(author, version, about, long_about = None)]
@@ -70,6 +72,14 @@ pub struct Args {
     pub max_layer: String,
     #[arg(long, help = "Enable real-time web dashboard (port)")]
     pub dashboard: Option<u16>,
+    #[arg(long, default_value_t = false, help = "Activate Multi-Agent Swarm Mode (V4.0)")]
+    pub swarm: bool,
+    #[arg(long, default_value_t = 5000, help = "Maximum tokens allowed per scan job")]
+    pub max_tokens: u32,
+    #[arg(long, help = "Start MCP (Model Context Protocol) Server via SSE")]
+    pub mcp_server: bool,
+    #[arg(long, default_value_t = 3001)]
+    pub mcp_port: u16,
 }
 
 static TARGET_RE: Lazy<Regex> = Lazy::new(|| {
@@ -133,6 +143,39 @@ async fn main() -> Result<()> {
     // Initialize Memory Monitor with dynamic limits
     let memory_monitor = Arc::new(redteam_rust_core::utils::MemoryMonitor::new(soft_limit, hard_limit));
     memory_monitor.start_logging();
+
+    // --- MCP SERVER MODE ---
+    if args.mcp_server {
+        info!("🔮 [MCP-MODE] Activando servidor Model Context Protocol sobre SSE...");
+        let jitter = std::sync::Arc::new(redteam_rust_core::utils::common::HumanJitter::new(100, 1500));
+        let res_mgr = SysResourceManager::new();
+        let sandbox = Arc::new(SandboxDispatcher::new(res_mgr));
+
+        let config = redteam_rust_core::plugins::GlobalConfig {
+            insecure: args.insecure,
+            jitter: jitter.clone(),
+            proxy_manager: None,
+            nmap_options: redteam_rust_core::plugins::NmapOptions {
+                scripts: args.scripts.clone(),
+                stealth: args.stealth,
+                service_detection: args.service_detection,
+                scan_type: args.scan_type.clone(),
+                fragment: args.fragment,
+                decoy: args.decoy.clone(),
+                ports: args.ports.clone(),
+                vuln_scan: args.vuln_scan,
+            },
+            sandbox: sandbox.clone(),
+        };
+
+        let server_mcp = redteam_rust_core::core::mcp::McpServer::new(config);
+        server_mcp.run(args.mcp_port).await?;
+        return Ok(());
+    }
+
+    // --- HYBRID SANDBOX INITIALIZATION ---
+    let res_mgr = SysResourceManager::new();
+    let sandbox = Arc::new(SandboxDispatcher::new(res_mgr));
 
     // 1. Determine Initial Targets
     let initial_targets: Vec<String> = if let Some(input_path) = args.input.clone() {
@@ -282,7 +325,8 @@ async fn main() -> Result<()> {
         .command_line(command_line)
         .with_sink(sink)
         .with_jitter(stealth_jitter)
-        .memory_monitor(memory_monitor.clone());
+        .memory_monitor(memory_monitor.clone())
+        .sandbox(sandbox.clone());
 
     // Initialize Capability Layer Policy
     let max_layer = match args.max_layer.to_lowercase().as_str() {
@@ -342,6 +386,7 @@ async fn main() -> Result<()> {
             ports: args.ports.clone(),
             vuln_scan: args.vuln_scan,
         },
+        sandbox: sandbox.clone(),
     };
 
     for p in redteam_rust_core::plugins::get_all_scanners(config) {
@@ -466,6 +511,38 @@ async fn main() -> Result<()> {
         }
         drop(sink_tx);
         let _ = sink_handle.await;
+    } else if args.swarm {
+        info!("🐝 SWARM: Multi-Agent Enjambre mode activated.");
+        
+        // Router configuration (similar to autonomous but optimized for swarm)
+        let mut router = TieredAIRouter::new();
+        
+        // Local Tier
+        router.add_provider(RouteLevel::Local, LlmProviderKind::Local, 0, Arc::new(OllamaClient::new(
+            args.ollama_url.clone(),
+            "qwen2.5-coder:7b".into()
+        )?));
+
+        // Gemini Premium for specialized roles
+        if let Ok(keys_str) = std::env::var("GEMINI_API_KEYS") {
+            let keys: Vec<String> = keys_str.split(',').map(|k| k.trim().to_string()).filter(|k| !k.is_empty()).collect();
+            if !keys.is_empty() {
+                router.add_provider(RouteLevel::Premium, LlmProviderKind::Gemini, 0, Arc::new(GeminiClient::new(
+                    keys, "gemini-1.5-pro".into()
+                )?));
+                router.add_provider(RouteLevel::Mid, LlmProviderKind::Gemini, 0, Arc::new(GeminiClient::new(
+                    vec![std::env::var("GEMINI_API_KEYS").unwrap().split(',').next().unwrap().to_string()],
+                    "gemini-1.5-flash".into()
+                )?));
+            }
+        }
+
+        let router_arc = Arc::new(router);
+        pipeline = pipeline.with_swarm(true, args.max_tokens, router_arc);
+
+        if let Err(e) = pipeline.run(target_hosts).await {
+            error!("Swarm Pipeline execution error: {}", e);
+        }
     } else {
         if let Err(e) = pipeline.run(target_hosts).await {
             error!("Pipeline execution returned error: {}", e);

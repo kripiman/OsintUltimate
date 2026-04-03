@@ -45,13 +45,14 @@ Esta hoja de ruta detalla la evolución de OsintUltimate de un motor asíncrono 
 ## 🚀 Fase 5: Ecosistema de Agentes y Validación (v4.0 - PRÓXIMAMENTE)
 *Enfoque: Autonomía Total, Sandboxing y Verificación de Resultados.*
 
-- [ ] **Multi-Agent Swarm Orchestration**: Evolución del Sentinel-AI hacia un modelo de enjambre (Swarm/Crew) con roles especializados (Planner, Scout, Exploiter, Ghost-Reporter).
-- [ ] **Aislamiento Dinámico por Escaneo (Sandboxing)**: Ejecución de herramientas críticas y procesos peligrosos en contenedores efímeros (Docker/Sidecars) aislados para cada objetivo.
+- [x] **Multi-Agent Swarm Orchestration**: Evolución del Sentinel-AI hacia un modelo de enjambre (Swarm/Crew) con roles especializados (Planner, Scout, Exploiter, Ghost-Reporter). [COMPLETADO]
+- [x] **Aislamiento Dinámico e Híbrido (Sandboxing Múltiple)**: Ejecución en contenedores efímeros condicionado por el hardware (**Hardware Tiering**). Si el sistema dispone de recursos óptimos (ej. >= 16GB RAM), usa aislamiento total (Docker/Sidecars). Si los recursos son limitados (ej. < 16GB), hace "fallback" automático a ejecución local aislada por procesos (`ProcessGuard` PGID), priorizando la fluidez del OS anfitrión. [COMPLETADO]
 - [x] **Pipeline de Validación de PoC**: Motor de verificación automática de hallazgos mediante la ejecución de exploits en entornos controlados para eliminar falsos positivos. [COMPLETADO]
 - [ ] **Source-Aware / White-Box Correlation**: Integración de análisis estático de código fuente con pruebas dinámicas para una cobertura de seguridad 360°.
 - [x] **Multicloud AI Core**: Expansión del `TieredAIRouter` para soportar de forma nativa Anthropic (Claude 3.5 Sonnet), OpenAI (GPT-4o), y Mistral Large 2 como fallbacks automáticos. [COMPLETADO]
-- [ ] **Protocolo MCP (Model Context Protocol)**: Compartir capacidades entre subagentes de forma estandarizada para permitir la integración de herramientas externas como "Agentes de Seguridad".
-- [ ] **Web Dashboard v2.0**: Visualización avanzada de grafos de ataque en tiempo real y gestión centralizada de contenedores de escaneo.
+- [x] **Token Budgeting & Cost Controls**: Gestión de presupuesto de tokens por escaneo con auto-detención para optimizar el gasto en APIs premium. [COMPLETADO]
+- [x] **Protocolo MCP (Model Context Protocol)**: Compartir capacidades entre subagentes de forma estandarizada e integración de herramientas externas con máscara OPSEC. [COMPLETADO]
+- [ ] **Web Dashboard v2.0**: Visualización avanzada de grafos de ataque en tiempo real y gestión centralizada de contenedores de escaneo. [EN CURSO]
 
 ---
 

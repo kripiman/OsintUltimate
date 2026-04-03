@@ -14,6 +14,10 @@ pub mod filter;
 pub mod lock_free_sink;
 pub mod native_scanner;
 pub mod poc_validator;
+pub mod swarm;
+pub mod resource_manager;
+pub mod sandbox;
+pub mod mcp;
 #[cfg(test)]
 pub mod tests;
 
@@ -23,3 +27,4 @@ pub use sink::{DataSink, JsonlSink, SqliteSink};
 pub use correlation::{CorrelationEngine, AttackGraph, AttackPath};
 pub use filter::FalsePositiveFilter;
 pub use poc_validator::PocValidator;
+
