@@ -25,6 +25,7 @@ pub struct NmapScanner {
     decoy: Option<String>,
     ports: Option<String>,
     vuln_scan: bool,
+    sandbox: std::sync::Arc<crate::core::sandbox::SandboxDispatcher>, // Inyectado para hardware tiering
 }
 
 // Known critical vulnerability patterns for severity classification
@@ -104,6 +105,7 @@ impl NmapScanner {
         decoy: Option<String>,
         ports: Option<String>,
         vuln_scan: bool,
+        sandbox: std::sync::Arc<crate::core::sandbox::SandboxDispatcher>,
     ) -> Self {
         let path = detect_tool("nmap");
         Self {
@@ -116,6 +118,7 @@ impl NmapScanner {
             decoy,
             ports,
             vuln_scan,
+            sandbox,
         }
     }
 }
@@ -267,15 +270,18 @@ impl ScannerPlugin for NmapScanner {
              args.push(target.host.clone());
         }
 
-        let mut child = crate::utils::common::stealth_command(&self.nmap_path)
-            .args(&args)
-            .stdin(Stdio::null())
-            .stdout(Stdio::piped())
-            .stderr(Stdio::piped())
-            .spawn()
-            .context("Failed to spawn nmap")?;
+        // --- HYBRID SANDBOX EXECUTION ---
+        let tool_info = crate::core::blackarch::BlackArchTool {
+            name: "nmap".to_string(),
+            category: "scanner".to_string(),
+            description: "Network mapper".to_string(),
+            capabilities: vec![], // No necesario para ejecución
+        };
 
-        let child_pid = child.id().context("Failed to get nmap PID")?;
+        let mut child = self.sandbox.execute_tool_streamed(&tool_info, &args).await
+            .context("Fallo al iniciar Nmap vía SandboxDispatcher")?;
+
+        let child_pid = child.id().unwrap_or(0);
         let stdout = child.stdout.take().context("Failed to capture nmap stdout")?;
         let std_stdout = tokio_util::io::SyncIoBridge::new(stdout);
         
