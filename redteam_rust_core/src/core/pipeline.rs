@@ -32,6 +32,10 @@ pub struct Pipeline {
     memory_monitor: Arc<crate::utils::memory_monitor::MemoryMonitor>,
     dashboard_tx: Option<tokio::sync::broadcast::Sender<crate::models::Finding>>,
     dashboard_targets: Option<Arc<dashmap::DashMap<String, TargetHost>>>,
+    swarm_mode: bool,
+    max_tokens: u32,
+    ai_router: Option<Arc<crate::core::ai_cascade::TieredAIRouter>>,
+    sandbox: Arc<crate::core::sandbox::SandboxDispatcher>,
 }
 
 impl Pipeline {
@@ -156,9 +160,15 @@ impl Pipeline {
                 approval_gate,
                 blackarch_bridge,
                 memory_monitor,
+                self.sandbox.clone(), // NUEVO
             );
             if let (Some(tx), Some(targets)) = (self.dashboard_tx, self.dashboard_targets) {
                 orchestrator.with_dashboard_preconfigured(tx, targets);
+            }
+            if self.swarm_mode {
+                if let Some(router) = self.ai_router.clone() {
+                    orchestrator = orchestrator.with_swarm_mode(true, self.max_tokens, router);
+                }
             }
             orchestrator.run(scan_rx, sink_tx_stage3, scan_token).await;
         }));
@@ -226,6 +236,7 @@ impl Pipeline {
             self.approval_gate.clone(),
             self.blackarch_bridge.clone(),
             self.memory_monitor.clone(),
+            self.sandbox.clone(), // NUEVO
         );
         let token = self.shutdown_token.clone();
         
@@ -274,9 +285,12 @@ pub struct PipelineBuilder {
     approval_gate: Option<Arc<ApprovalGate>>,
     jitter: Option<JitterSleep>,
     fp_filter: Option<Arc<FalsePositiveFilter>>,
-    memory_monitor: Option<Arc<crate::utils::memory_monitor::MemoryMonitor>>,
     dashboard_tx: Option<tokio::sync::broadcast::Sender<crate::models::Finding>>,
     dashboard_targets: Option<Arc<dashmap::DashMap<String, TargetHost>>>,
+    swarm_mode: bool,
+    max_tokens: u32,
+    ai_router: Option<Arc<crate::core::ai_cascade::TieredAIRouter>>,
+    sandbox: Option<Arc<crate::core::sandbox::SandboxDispatcher>>,
 }
 
 impl Default for PipelineBuilder { fn default() -> Self { Self::new() } }
@@ -298,7 +312,18 @@ impl PipelineBuilder {
             memory_monitor: None,
             dashboard_tx: None,
             dashboard_targets: None,
+            swarm_mode: false,
+            max_tokens: 0,
+            ai_router: None,
+            sandbox: None,
         }
+    }
+
+    pub fn with_swarm(mut self, enabled: bool, max_tokens: u32, router: Arc<crate::core::ai_cascade::TieredAIRouter>) -> Self {
+        self.swarm_mode = enabled;
+        self.max_tokens = max_tokens;
+        self.ai_router = Some(router);
+        self
     }
 
     pub fn with_dashboard(mut self, tx: tokio::sync::broadcast::Sender<crate::models::Finding>, targets: Arc<dashmap::DashMap<String, TargetHost>>) -> Self {
@@ -326,6 +351,7 @@ impl PipelineBuilder {
     pub fn with_sink(mut self, sink: Box<dyn DataSink>) -> Self { self.sink = Some(sink); self }
     pub fn shutdown_token(mut self, token: CancellationToken) -> Self { self.shutdown_token = token; self }
     pub fn command_line(mut self, cmd: String) -> Self { self.command_line = cmd; self }
+    pub fn sandbox(mut self, s: Arc<crate::core::sandbox::SandboxDispatcher>) -> Self { self.sandbox = Some(s); self }
 
     pub fn build(self) -> Result<Pipeline> {
         let sink = self.sink.context("Pipeline requires a configured sink")?;
@@ -333,6 +359,8 @@ impl PipelineBuilder {
         let policy = self.policy.unwrap_or(ScanLayerPolicy::preset_audit());
         let approval_gate = self.approval_gate.unwrap_or(Arc::new(ApprovalGate::for_red_team()));
         let blackarch_bridge = Arc::new(crate::core::blackarch::BlackArchBridge::new());
+
+        let sandbox = self.sandbox.context("Pipeline requires a configured sandbox dispatcher")?;
 
         Ok(Pipeline {
             concurrency: self.concurrency,
@@ -350,6 +378,10 @@ impl PipelineBuilder {
             memory_monitor: self.memory_monitor.context("Pipeline requires a configured memory monitor")?,
             dashboard_tx: self.dashboard_tx,
             dashboard_targets: self.dashboard_targets,
+            swarm_mode: self.swarm_mode,
+            max_tokens: self.max_tokens,
+            ai_router: self.ai_router,
+            sandbox,
         })
     }
 }

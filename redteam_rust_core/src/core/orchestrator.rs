@@ -16,6 +16,10 @@ pub struct Orchestrator {
     memory_monitor: Arc<crate::utils::memory_monitor::MemoryMonitor>,
     dashboard_tx: Option<tokio::sync::broadcast::Sender<Finding>>,
     dashboard_targets: Arc<dashmap::DashMap<String, TargetHost>>,
+    swarm_mode: bool,
+    max_tokens: u32,
+    ai_router: Option<Arc<crate::core::ai_cascade::TieredAIRouter>>,
+    sandbox: Arc<crate::core::sandbox::SandboxDispatcher>, // NUEVO
 }
 
 impl Orchestrator {
@@ -26,6 +30,7 @@ impl Orchestrator {
         approval_gate: Arc<ApprovalGate>,
         blackarch_bridge: Arc<crate::core::blackarch::BlackArchBridge>,
         memory_monitor: Arc<crate::utils::memory_monitor::MemoryMonitor>,
+        sandbox: Arc<crate::core::sandbox::SandboxDispatcher>,
     ) -> Self {
         let hard_limit = memory_monitor.hard_limit_mb();
         let memory_semaphore = Arc::new(tokio::sync::Semaphore::new(hard_limit as usize));
@@ -40,7 +45,18 @@ impl Orchestrator {
             memory_monitor,
             dashboard_tx: None,
             dashboard_targets: Arc::new(dashmap::DashMap::new()),
+            swarm_mode: false,
+            max_tokens: 0,
+            ai_router: None,
+            sandbox,
         }
+    }
+
+    pub fn with_swarm_mode(mut self, enabled: bool, max_tokens: u32, router: Arc<crate::core::ai_cascade::TieredAIRouter>) -> Self {
+        self.swarm_mode = enabled;
+        self.max_tokens = max_tokens;
+        self.ai_router = Some(router);
+        self
     }
 
     pub fn with_dashboard_preconfigured(&mut self, tx: tokio::sync::broadcast::Sender<Finding>, current_targets: Arc<dashmap::DashMap<String, TargetHost>>) {
@@ -97,6 +113,34 @@ impl Orchestrator {
 
         let dashboard_tx = self.dashboard_tx.clone();
         let dashboard_targets = self.dashboard_targets.clone();
+
+        if self.swarm_mode {
+            if let (Some(router), Some(out_tx)) = (self.ai_router.clone(), Some(output_tx.clone())) {
+                info!("🐝 ORCHESTRATOR: Entering Swarm Mode (Max Tokens: {})", self.max_tokens);
+                let pipeline = Arc::new(crate::core::pipeline::Pipeline::new(plugins.clone()));
+                let swarm = crate::core::swarm::SwarmOrchestrator::new(
+                    router,
+                    pipeline,
+                    approval_gate.clone(),
+                    self.max_tokens,
+                );
+
+                // Use buffered stream to run swarm on each target
+                let swarm_stream = stream.map(move |target| {
+                    let swarm = &swarm;
+                    let out_tx = out_tx.clone();
+                    async move {
+                        let _ = swarm.run(target.clone(), out_tx.clone()).await;
+                        target // Return original to keep stream moving if needed
+                    }
+                }).buffer_unordered(self.concurrency);
+
+                tokio::pin!(swarm_stream);
+                while let Some(_) = swarm_stream.next().await {}
+                info!("🐝 ORCHESTRATOR: Swarm processing finished.");
+                return;
+            }
+        }
 
         let mut processed_stream = stream.map(move |mut target| {
             let plugins = plugins.clone();

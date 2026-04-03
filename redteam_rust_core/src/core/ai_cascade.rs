@@ -193,6 +193,30 @@ impl ContextCompressor {
             "tech": tech_stack,
         })
     }
+
+    /// NEW V4: Ultra-aggressive compression for Swarm Planner
+    pub fn compress_swarm_context(finding: &Finding, target: &crate::models::TargetHost) -> serde_json::Value {
+        let mut base = Self::compress_finding(finding, RouteLevel::Local);
+        
+        // Planner only needs high-level telemetry, not raw body samples
+        if let Some(obj) = base.as_object_mut() {
+            if let Some(ev) = obj.get_mut("ev").and_then(|e| e.as_object_mut()) {
+                ev.remove("body");
+                ev.remove("raw_response");
+                if let Some(headers) = ev.get_mut("headers").and_then(|h| h.as_object_mut()) {
+                    // Keep ONLY Server and Tech headers for planning
+                    let critical = ["server", "x-powered-by"];
+                    let keys: Vec<String> = headers.keys().cloned().collect();
+                    for k in keys {
+                        if !critical.contains(&k.to_lowercase().as_str()) {
+                            headers.remove(&k);
+                        }
+                    }
+                }
+            }
+        }
+        base
+    }
 }
 
 /// Orchestrates multiple LLM clients based on task complexity/severity.

@@ -58,12 +58,18 @@ impl LlmClient for OllamaClient {
             target.host, serde_json::to_string(&compressed)?, self.model
         );
 
-        let res = self.client.post(format!("{}/api/generate", self.url))
-            .json(&json!({ "model": self.model, "prompt": prompt, "stream": false, "format": "json" }))
-            .send().await?.json::<serde_json::Value>().await?;
-
         let response_text = res["response"].as_str().context("Ollama response missing text")?;
-        let analysis: AIAnalysis = serde_json::from_str(extract_json(response_text))?;
+        let mut analysis: AIAnalysis = serde_json::from_str(extract_json(response_text))?;
+        
+        // Ollama token usage (eval_count, prompt_eval_count)
+        if let Some(prompt_tokens) = res["prompt_eval_count"].as_u64() {
+            analysis.usage.prompt_tokens = prompt_tokens as u32;
+        }
+        if let Some(completion_tokens) = res["eval_count"].as_u64() {
+            analysis.usage.completion_tokens = completion_tokens as u32;
+        }
+        analysis.usage.total_tokens = analysis.usage.prompt_tokens + analysis.usage.completion_tokens;
+        
         Ok(analysis)
     }
 
@@ -142,7 +148,16 @@ impl LlmClient for GeminiClient {
                 Ok(res) => {
                     let val = res.json::<serde_json::Value>().await?;
                     if let Some(text) = val["candidates"][0]["content"]["parts"][0]["text"].as_str() {
-                        return Ok(serde_json::from_str(extract_json(text))?);
+                        let mut analysis: AIAnalysis = serde_json::from_str(extract_json(text))?;
+                        
+                        // Gemini token usage
+                        if let Some(usage) = val["usageMetadata"].as_object() {
+                            analysis.usage.prompt_tokens = usage.get("promptTokenCount").and_then(|v| v.as_u64()).unwrap_or(0) as u32;
+                            analysis.usage.completion_tokens = usage.get("candidatesTokenCount").and_then(|v| v.as_u64()).unwrap_or(0) as u32;
+                            analysis.usage.total_tokens = usage.get("totalTokenCount").and_then(|v| v.as_u64()).unwrap_or(0) as u32;
+                        }
+                        
+                        return Ok(analysis);
                     }
                     self.rotate_key();
                 }
