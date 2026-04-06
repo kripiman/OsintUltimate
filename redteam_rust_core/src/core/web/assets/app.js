@@ -1,24 +1,49 @@
-// Navigation Logic
-document.querySelectorAll('.nav-links li').forEach(li => {
+/**
+ * OsintUltimate 4.0 Dashboard Controller
+ */
+
+const UI = {
+    tabs: document.querySelectorAll('.nav-links li'),
+    panes: document.querySelectorAll('.tab-pane'),
+    stream: document.getElementById('finding-stream'),
+    ramValue: document.getElementById('stat-ram'),
+    ramFill: document.getElementById('ram-fill'),
+    tokenValue: document.getElementById('stat-tokens'),
+    tokenFill: document.getElementById('token-fill'),
+    containerStat: document.getElementById('stat-containers'),
+    swarmContainer: document.getElementById('swarm-container'),
+    modal: document.getElementById('modal-overlay')
+};
+
+// --- State Management ---
+let state = {
+    activeTab: 'overview',
+    stats: { ram_mb: 0, ram_limit_mb: 1, tokens_used: 0, token_limit: 0 },
+    agents: [],
+    graphInitialized: false
+};
+
+// --- Navigation ---
+UI.tabs.forEach(li => {
     li.addEventListener('click', () => {
-        document.querySelectorAll('.nav-links li').forEach(el => el.classList.remove('active'));
-        document.querySelectorAll('.tab-pane').forEach(el => el.classList.remove('active'));
+        const tab = li.getAttribute('data-tab');
+        document.querySelector('.nav-links li.active').classList.remove('active');
+        document.querySelector('.tab-pane.active').classList.remove('active');
         
         li.classList.add('active');
-        const tab = li.getAttribute('data-tab');
         document.getElementById(tab).classList.add('active');
+        state.activeTab = tab;
         
         document.getElementById('tab-title').textContent = li.textContent.trim();
+        
+        if (tab === 'graph' && !state.graphInitialized) {
+            initAttackGraph();
+            state.graphInitialized = true;
+        }
     });
 });
 
-// SSE Controller
-const streamContainer = document.getElementById('finding-stream');
-const ramValue = document.getElementById('stat-ram');
-const ramFill = document.getElementById('ram-fill');
-const threadStat = document.getElementById('stat-threads');
-const proxyStat = document.getElementById('stat-proxies');
-
+// --- SSE Engine ---
 function initSSE() {
     const evtSource = new EventSource("/api/v1/findings/stream");
 
@@ -27,14 +52,16 @@ function initSSE() {
         
         if (data.type === "finding") {
             addFindingToStream(data.payload);
+            refreshData(); // Updates tables and graph on new findings
         } else if (data.type === "heartbeat") {
-            updateStats(data.stats);
+            updateGlobalStats(data.stats);
+        } else if (data.type === "approval_request") {
+            showApprovalModal(data.payload);
         }
     };
 
-    evtSource.onerror = (err) => {
-        console.error("SSE failed:", err);
-        streamContainer.insertAdjacentHTML('afterbegin', '<div class="system-msg" style="color: red">Connection lost. Reconnecting...</div>');
+    evtSource.onerror = () => {
+        UI.stream.insertAdjacentHTML('afterbegin', '<div class="stream-item" style="color: var(--accent)">[SYSTEM] Reconnecting to core...</div>');
     };
 }
 
@@ -47,53 +74,168 @@ function addFindingToStream(finding) {
             <span class="msg"><strong>${finding.tool}</strong>: ${finding.title}</span>
         </div>
     `;
-    streamContainer.insertAdjacentHTML('afterbegin', html);
-    
-    // Pruning
-    if (streamContainer.children.length > 500) {
-        streamContainer.removeChild(streamContainer.lastChild);
-    }
+    UI.stream.insertAdjacentHTML('afterbegin', html);
+    if (UI.stream.children.length > 100) UI.stream.removeChild(UI.stream.lastChild);
 }
 
-function updateStats(stats) {
-    ramValue.textContent = `${stats.ram_mb} MB`;
-    threadStat.textContent = stats.active_threads;
-    proxyStat.textContent = stats.active_proxies;
-    
-    const ramPercent = (stats.ram_mb / stats.ram_limit_mb) * 100;
-    ramFill.style.width = `${Math.min(ramPercent, 100)}%`;
-    
-    if (ramPercent > 80) ramFill.style.backgroundColor = 'var(--critical)';
-    else if (ramPercent > 60) ramFill.style.backgroundColor = 'var(--high)';
-    else ramFill.style.backgroundColor = 'var(--accent)';
+// --- Data Fetching ---
+async function refreshData() {
+    fetchTargets();
+    fetchFindings();
+    fetchSwarmStatus();
+    fetchStats();
+    if (state.activeTab === 'graph') updateAttackGraph();
 }
 
-// Target Fetcher
+async function fetchStats() {
+    const res = await fetch('/api/v1/stats');
+    const stats = await res.json();
+    updateGlobalStats(stats);
+}
+
+function updateGlobalStats(stats) {
+    UI.ramValue.textContent = `${stats.ram_mb} MB`;
+    UI.tokenValue.textContent = `${stats.tokens_used} / ${stats.token_limit}`;
+    
+    const ramPct = (stats.ram_mb / stats.ram_limit_mb) * 100;
+    const tokenPct = stats.token_limit > 0 ? (stats.tokens_used / stats.token_limit) * 100 : 0;
+    
+    UI.ramFill.style.width = `${Math.min(ramPct, 100)}%`;
+    UI.tokenFill.style.width = `${Math.min(tokenPct, 100)}%`;
+}
+
 async function fetchTargets() {
-    try {
-        const response = await fetch('/api/v1/targets');
-        const targets = await response.json();
-        const tbody = document.querySelector('#target-table tbody');
-        tbody.innerHTML = '';
-        
-        targets.forEach(t => {
-            const row = `
-                <tr>
-                    <td><strong>${t.host}</strong></td>
-                    <td><code style="color: var(--text-dim)">${t.ip || '---'}</code></td>
-                    <td><span class="status-badge badge-${t.status.toLowerCase()}">${t.status}</span></td>
-                    <td style="color: var(--accent)">${t.findings_count}</td>
-                    <td style="font-size: 0.8rem; color: var(--text-dim)">${t.last_action || 'Pending'}</td>
-                </tr>
-            `;
-            tbody.insertAdjacentHTML('beforeend', row);
-        });
-    } catch (e) {
-        console.error("Fetch targets failed:", e);
-    }
+    const res = await fetch('/api/v1/targets');
+    const targets = await res.json();
+    const tbody = document.querySelector('#target-table tbody');
+    tbody.innerHTML = targets.map(t => `
+        <tr>
+            <td><strong>${t.host}</strong></td>
+            <td><code>${t.ip || '---'}</code></td>
+            <td><span class="status-badge badge-${t.status.toLowerCase()}">${t.status}</span></td>
+            <td style="color: var(--accent)">${t.findings_count}</td>
+            <td style="font-size: 0.75rem; color: var(--text-dim)">${t.last_action || 'Pending'}</td>
+        </tr>
+    `).join('');
 }
 
-// Initial Kickoff
+async function fetchFindings() {
+    const res = await fetch('/api/v1/targets'); // Finding list is derived from targets in current API
+    const targets = await res.json();
+    const tbody = document.querySelector('#finding-table tbody');
+    
+    let rows = [];
+    targets.forEach(t => {
+        // Mocking finding display for list view
+        rows.push(`<tr><td colspan="5" style="background: rgba(255,0,0,0.05); font-weight: 800; font-size: 0.7rem;">TARGET: ${t.host}</td></tr>`);
+    });
+    tbody.innerHTML = rows.join('');
+}
+
+async function fetchSwarmStatus() {
+    const res = await fetch('/api/v1/swarm/status');
+    const data = await res.json();
+    UI.swarmContainer.innerHTML = data.agents.map(a => `
+        <div class="agent-card">
+            <h4>${a.role} <span>●</span></h4>
+            <div class="agent-status">STATUS: ${a.status}</div>
+            <div class="agent-status" style="font-size: 0.6rem; margin-top: 5px;">LAST: ${a.last_action}</div>
+        </div>
+    `).join('');
+}
+
+// --- D3.js Attack Graph ---
+let simulation, svg, link, node;
+
+function initAttackGraph() {
+    const width = document.getElementById('attack-graph-canvas').clientWidth;
+    const height = 600;
+
+    svg = d3.select("#attack-graph-canvas")
+        .append("svg")
+        .attr("width", width)
+        .attr("height", height);
+
+    simulation = d3.forceSimulation()
+        .force("link", d3.forceLink().id(d.id).distance(100))
+        .force("charge", d3.forceManyBody().strength(-300))
+        .force("center", d3.forceCenter(width / 2, height / 2));
+        
+    updateAttackGraph();
+}
+
+async function updateAttackGraph() {
+    const res = await fetch('/api/v1/attack-graph');
+    const data = await res.json();
+    if (!svg) return;
+
+    svg.selectAll("*").remove();
+    
+    const links = data.links;
+    const nodes = data.nodes;
+
+    const link = svg.append("g")
+        .attr("stroke", "#330000")
+        .selectAll("line")
+        .data(links)
+        .join("line");
+
+    const node = svg.append("g")
+        .selectAll("circle")
+        .data(nodes)
+        .join("circle")
+        .attr("r", d => d.type === 'target' ? 12 : 6)
+        .attr("fill", d => d.type === 'target' ? "#cc0000" : "#ff4500")
+        .call(drag(simulation));
+
+    node.append("title").text(d => d.label);
+
+    simulation.nodes(nodes).on("tick", () => {
+        link.attr("x1", d => d.source.x).attr("y1", d => d.source.y)
+            .attr("x2", d => d.target.x).attr("y2", d => d.target.y);
+        node.attr("cx", d => d.x).attr("cy", d => d.y);
+    });
+
+    simulation.force("link").links(links);
+}
+
+function drag(simulation) {
+    return d3.drag()
+        .on("start", (event) => {
+            if (!event.active) simulation.alphaTarget(0.3).restart();
+            event.subject.fx = event.subject.x;
+            event.subject.fy = event.subject.y;
+        })
+        .on("drag", (event) => {
+            event.subject.fx = event.x;
+            event.subject.fy = event.y;
+        })
+        .on("end", (event) => {
+            if (!event.active) simulation.alphaTarget(0);
+            event.subject.fx = null;
+            event.subject.fy = null;
+        });
+}
+
+// --- Approvals ---
+function showApprovalModal(req) {
+    document.getElementById('modal-desc').textContent = `${req.requested_by} requests ${req.action} on ${req.reason}. Risk Level: ${req.risk_level}`;
+    UI.modal.style.display = 'flex';
+    
+    document.getElementById('btn-approve').onclick = () => decide(req.id, 'approve');
+    document.getElementById('btn-reject').onclick = () => decide(req.id, 'reject');
+}
+
+async function decide(id, decision) {
+    await fetch(`/api/v1/approvals/${id}/decision`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ decision, reason: "Executed via Dashboard" })
+    });
+    UI.modal.style.display = 'none';
+}
+
+// --- Kickoff ---
 initSSE();
-setInterval(fetchTargets, 5000);
-fetchTargets();
+setInterval(refreshData, 5000);
+refreshData();

@@ -50,11 +50,11 @@ impl ScannerPlugin for SearchsploitScanner {
         let mut findings = Vec::new();
         // Searchsploit identifies exploits based on service versions found in other findings
         // We iterate through existing findings to find software versions
-        for finding in &target.findings {
+        for finding in target.findings.iter() {
             if finding.category == Category::TechnologyStack || finding.category == Category::Vulnerability {
                 // Try to extract software name from description or evidence
                 // This is a simplified heuristic
-                let query = if let Some(product) = finding.evidence.data.get("product") {
+                let query: String = if let Some(product) = finding.evidence.data.get("product") {
                     product.as_str().unwrap_or("").to_string()
                 } else {
                     finding.description.clone()

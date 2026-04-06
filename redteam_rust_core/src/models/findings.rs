@@ -27,6 +27,7 @@ pub enum Category {
     TechnologyStack,
     NetworkPort,
     Recon,
+    Scanning,
     Availability,
     SCA,
     Compliance,
@@ -63,6 +64,13 @@ pub struct PocDefinition {
     pub is_intrusive: bool,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct TokenUsage {
+    pub prompt_tokens: u32,
+    pub completion_tokens: u32,
+    pub total_tokens: u32,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AIAnalysis {
     pub summary: String,
@@ -76,6 +84,8 @@ pub struct AIAnalysis {
     pub model: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub poc: Option<PocDefinition>,
+    #[serde(default)]
+    pub usage: TokenUsage,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

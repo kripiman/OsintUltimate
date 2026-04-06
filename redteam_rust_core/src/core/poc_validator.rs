@@ -1,4 +1,4 @@
-use crate::models::{Finding, TargetHost, PocStrategy, PocDefinition};
+use crate::models::{Finding, TargetHost, findings::PocStrategy, findings::PocDefinition};
 use crate::core::ai_cascade::TieredAIRouter;
 use crate::core::approval_gate::{ApprovalGate, User};
 use anyhow::{Result, Context};
@@ -120,12 +120,10 @@ impl PocValidator {
     }
 
     async fn execute_shell(&self, command: &str) -> Result<String> {
-        let output = Command::new("sh")
-            .arg("-c")
-            .arg(command)
-            .timeout(Duration::from_secs(10))
-            .output()
-            .await?;
+        let mut cmd = Command::new("sh");
+        cmd.arg("-c").arg(command);
+        let res = tokio::time::timeout(Duration::from_secs(10), cmd.output()).await;
+        let output = res.context("PoC command timed out")??;
         
         let combined = format!(
             "{}\n{}",
@@ -144,7 +142,7 @@ impl PocValidator {
         let url = if payload.starts_with("http") {
             payload.to_string()
         } else {
-            format!("http://{}{}", target.host, if payload.starts_with('/') { "" } else { "/" }, payload)
+            format!("http://{}{}{}", target.host, if payload.starts_with('/') { "" } else { "/" }, payload)
         };
 
         let res = client.get(&url).send().await?;

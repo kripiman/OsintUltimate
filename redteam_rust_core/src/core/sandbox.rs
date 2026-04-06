@@ -1,5 +1,6 @@
 use crate::core::blackarch::BlackArchTool;
 use crate::core::resource_manager::SysResourceManager;
+use crate::models::findings::Category;
 use anyhow::{Result, Context};
 use tokio::process::{Command, Child};
 use tracing::{info, warn, error};
@@ -12,7 +13,7 @@ pub enum ExecutionTier {
 }
 
 pub struct SandboxDispatcher {
-    pub res_mgr: SysResourceManager,
+    pub(crate) res_mgr: SysResourceManager,
 }
 
 impl SandboxDispatcher {
@@ -21,7 +22,8 @@ impl SandboxDispatcher {
     }
 
     pub fn determine_tier(&self, tool: &BlackArchTool) -> ExecutionTier {
-        let is_exploit = tool.category.to_lowercase() == "exploitation";
+        let category = self.map_blackarch_category(&tool.category);
+        let is_exploit = matches!(category, Category::Vulnerability | Category::Windows | Category::Linux);
         
         if self.res_mgr.supports_strict_mode() {
             // Sistemas potentes (ej. 16GB, 32GB RAM): Todo en Docker (Sandbox total).
@@ -30,12 +32,24 @@ impl SandboxDispatcher {
             // Sistemas Fluidos (ej. 8GB RAM): Fallback activado.
             if is_exploit {
                 // EXCEPCIÓN: Por seguridad, si es de penetración/explotación pura, forzamos Docker.
-                info!("⚠️ [Sandbox] Tier Fluido activo, pero la herramienta '{}' es EXPLOITATION. Forzando sandbox StrictDocker por seguridad.", tool.name);
+                info!("⚠️ [Sandbox] Tier Fluido activo, pero la herramienta '{}' es {:?}. Forzando sandbox StrictDocker por seguridad.", tool.name, category);
                 ExecutionTier::StrictDocker
             } else {
                 // Escáneres y OSINT: ejecutan nativo para ser fluidos de RAM.
                 ExecutionTier::FluidLocal
             }
+        }
+    }
+
+    fn map_blackarch_category(&self, cat: &str) -> Category {
+        match cat.to_lowercase().as_str() {
+            "exploitation" | "cracker" => Category::Vulnerability,
+            "scanner" | "fuzzer" => Category::Scanning,
+            "osint" | "recon" | "discovery" => Category::Recon,
+            "webapp" => Category::SCA, // Map to SCA for webapp tools
+            "windows" => Category::Windows,
+            "linux" => Category::Linux,
+            _ => Category::TechnologyStack,
         }
     }
 
@@ -50,13 +64,34 @@ impl SandboxDispatcher {
 
         match tier {
             ExecutionTier::StrictDocker => {
-                info!("🐳 [Sandbox-Stream] '{}' vía Docker. Límite: {}m", tool.name, cost_mb);
+                let category = self.map_blackarch_category(&tool.category);
+                info!("🐳 [Sandbox-Stream] '{}' ({:?}) vía Docker. Límite: {}m", tool.name, category, cost_mb);
+                
                 let mut cmd = Command::new("docker");
                 cmd.arg("run")
                    .arg("--rm")
-                   .arg("-i") // Interactivo para pipes
+                   .arg("-i") 
                    .arg(format!("--memory={}m", cost_mb))
-                   .arg("redteam-tools:v4-slim") 
+                   .arg("--cap-drop=ALL") // Harden: drop all capabilities
+                   .arg("--security-opt").arg("no-new-privileges") // Harden: no-new-privileges
+                   .arg("--user").arg("1000:1000"); // Harden: run as non-root
+
+                // Dynamic Networking Policy
+                match category {
+                    Category::Recon | Category::TechnologyStack => {
+                        cmd.arg("--network=bridge"); // OSINT needs internet
+                    },
+                    Category::Scanning | Category::Vulnerability => {
+                        // Some scanners need raw sockets (CAP_NET_RAW)
+                        cmd.arg("--cap-add=NET_RAW"); 
+                        cmd.arg("--network=host"); // Target access
+                    },
+                    _ => {
+                        cmd.arg("--network=none"); // Isolated by default
+                    }
+                }
+
+                cmd.arg("redteam-tools:v4-slim") 
                    .arg(&tool.name)
                    .args(args)
                    .stdout(std::process::Stdio::piped())

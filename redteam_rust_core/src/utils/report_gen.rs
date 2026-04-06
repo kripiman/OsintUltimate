@@ -282,7 +282,7 @@ pub async fn generate_report(jsonl_path: &str, output_path: &str) -> Result<()> 
             let mut total_cvss = 0.0;
             let mut cvss_count = 0;
             
-            for f in &target.findings {
+            for f in target.findings.iter() {
                 stats.total_findings += 1;
                 if f.category == crate::models::Category::SCA {
                     stats.sca_count += 1;
@@ -320,7 +320,7 @@ pub async fn generate_report(jsonl_path: &str, output_path: &str) -> Result<()> 
                 status: format!("{:?}", target.status),
                 max_severity: severity_str.to_string(),
                 has_findings: !target.findings.is_empty(),
-                findings: target.findings.clone(),
+                findings: (*target.findings).clone(),
             });
         }
     }

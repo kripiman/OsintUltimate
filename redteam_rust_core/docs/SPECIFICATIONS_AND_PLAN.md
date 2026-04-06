@@ -28,7 +28,13 @@ Usa los **$200 de crédito de DigitalOcean** para implementar la arquitectura de
 - Levanta 5-10 nodos "Scanning Droplets" (1 vCPU, 512MB RAM) en DO.
 - **Ventaja**: Las IPs de escaneo son frescas (evitas bloqueos en tu IP residencial) y el tráfico pesado no ahoga tu red local.
 
-### 3. Optimización de Disco (SSD vs HDD)
+### 3. Sandboxing Híbrido (Nuevo en v4.0)
+Para evitar el colapso de la RAM al usar contenedores:
+- El motor ahora usa **Hardware Tiering**. En tu máquina de 8GB, el sistema activa automáticamente el **Fluid Tier** (ejecución nativa con `ProcessGuard`).
+- **Ahorro de RAM**: Evitas el overhead de múltiples daemons de Docker corriendo simultáneamente.
+- **Seguridad Dirigida**: Solo las herramientas de **Explotación** usarán Docker (excepción de seguridad), manteniendo el resto del sistema fluido.
+
+### 4. Optimización de Disco (SSD vs HDD)
 - **SSD**: Solo para el ejecutable de Rust y la DB activa (`results.sqlite` o `RocksDB`).
 - **HDD**: Solo para los backups de JSONL o el dump de tráfico `.pcap` masivo. Nunca corras la DB en el HDD durante un escaneo de 1,000+ targets.
 

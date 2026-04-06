@@ -1,6 +1,7 @@
 use super::findings::Finding;
 use serde::{Deserialize, Serialize};
 use chrono::{DateTime, Utc};
+use std::sync::Arc;
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct ScanMetadata {
@@ -50,15 +51,20 @@ pub struct TargetHost {
     pub ip: Option<String>,
     pub status: TargetStatus,
     pub target_type: TargetType,
-    pub findings: Vec<Finding>,
-    pub tool_suggestions: Vec<String>,
-    #[serde(default = "default_tactical_context")]
-    pub tactical_context: serde_json::Value,
-    pub extra_data: serde_json::Value,
+    pub findings: Arc<Vec<Finding>>,
+    pub tool_suggestions: Arc<Vec<String>>,
+    #[serde(default = "default_arc_json")]
+    pub tactical_context: Arc<serde_json::Value>,
+    #[serde(default = "default_arc_json")]
+    pub extra_data: Arc<serde_json::Value>,
 }
 
-fn default_tactical_context() -> serde_json::Value {
-    serde_json::json!({})
+fn default_arc_json() -> Arc<serde_json::Value> {
+    Arc::new(serde_json::json!({}))
+}
+
+fn default_arc_vec<T>() -> Arc<Vec<T>> {
+    Arc::new(Vec::new())
 }
 
 

@@ -6,7 +6,7 @@ use axum::{
     Json,
 };
 use axum::response::IntoResponse;
-use futures_util::stream::{self, Stream};
+use futures::stream::{self, Stream};
 use rust_embed::RustEmbed;
 use serde::{Deserialize, Serialize};
 use std::convert::Infallible;
@@ -34,6 +34,7 @@ pub struct DashboardState {
     pub findings_tx: broadcast::Sender<Finding>,
     pub ram_limit_mb: u64,
     pub approval_gate: Option<Arc<crate::core::approval_gate::ApprovalGate>>,
+    pub budget: Option<Arc<crate::core::swarm::TokenBudget>>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -42,6 +43,22 @@ pub struct DashboardStats {
     pub ram_limit_mb: u64,
     pub active_threads: usize,
     pub active_proxies: usize,
+    pub tokens_used: u32,
+    pub token_limit: u32,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct SwarmAgentStatus {
+    pub role: String,
+    pub status: String,
+    pub last_action: String,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct SwarmStatusResponse {
+    pub agents: Vec<SwarmAgentStatus>,
+    pub total_tokens: u32,
+    pub max_tokens: u32,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -94,7 +111,7 @@ async fn findings_stream(
 ) -> Sse<impl Stream<Item = Result<Event, Infallible>>> {
     let mut rx = state.findings_tx.subscribe();
 
-    let stream = stream::unfold(rx, move |mut rx| async move {
+    let stream = stream::unfold((rx, state), |(mut rx, state)| async move {
         loop {
             match rx.recv().await {
                 Ok(finding) => {
@@ -111,7 +128,7 @@ async fn findings_stream(
                     });
                     
                     if let Ok(data) = serde_json::to_string(&event) {
-                        return Some((Ok(Event::default().data(data)), rx));
+                        return Some((Ok(Event::default().data(data)), (rx, state)));
                     }
                 }
                 Err(broadcast::error::RecvError::Lagged(_)) => continue,
@@ -128,12 +145,81 @@ fn get_current_stats(state: &DashboardState) -> DashboardStats {
     let mut sys = sysinfo::System::new_all();
     sys.refresh_all();
     
+    let tokens = state.budget.as_ref().map(|b| b.current_total()).unwrap_or(0);
+    let limit = state.budget.as_ref().map(|b| b.max_tokens).unwrap_or(0);
+
     DashboardStats {
         ram_mb: sys.used_memory() / 1024 / 1024,
         ram_limit_mb: state.ram_limit_mb,
-        active_threads: 0, // Simplified for now
+        active_threads: 0, 
         active_proxies: 0,
+        tokens_used: tokens,
+        token_limit: limit,
     }
+}
+
+async fn get_stats_handler(State(state): State<Arc<DashboardState>>) -> Json<DashboardStats> {
+    Json(get_current_stats(&state))
+}
+
+async fn get_swarm_status(State(state): State<Arc<DashboardState>>) -> Json<SwarmStatusResponse> {
+    let tokens = state.budget.as_ref().map(|b| b.current_total()).unwrap_or(0);
+    let limit = state.budget.as_ref().map(|b| b.max_tokens).unwrap_or(0);
+
+    let agents = vec![
+        SwarmAgentStatus { role: "Planner".to_string(), status: "Waiting".to_string(), last_action: "Initial analysis".to_string() },
+        SwarmAgentStatus { role: "Scout".to_string(), status: "Idle".to_string(), last_action: "Port scan".to_string() },
+        SwarmAgentStatus { role: "Exploiter".to_string(), status: "Idle".to_string(), last_action: "Vulnerability check".to_string() },
+        SwarmAgentStatus { role: "Reporter".to_string(), status: "Idle".to_string(), last_action: "Drafting report".to_string() },
+    ];
+
+    Json(SwarmStatusResponse {
+        agents,
+        total_tokens: tokens,
+        max_tokens: limit,
+    })
+}
+
+async fn get_attack_graph(State(state): State<Arc<DashboardState>>) -> Json<serde_json::Value> {
+    // Generate graph from targets and findings
+    let mut nodes = Vec::new();
+    let mut edges = Vec::new();
+
+    for kv in state.targets.iter() {
+        let t = kv.value();
+        nodes.push(serde_json::json!({
+            "id": t.host,
+            "label": t.host,
+            "type": "target",
+            "severity": "Info"
+        }));
+
+        for f in t.findings.iter() {
+            nodes.push(serde_json::json!({
+                "id": f.id,
+                "label": f.title,
+                "type": "finding",
+                "severity": format!("{:?}", f.severity)
+            }));
+            edges.push(serde_json::json!({
+                "source": t.host,
+                "target": f.id
+            }));
+        }
+    }
+
+    Json(serde_json::json!({
+        "nodes": nodes,
+        "links": edges
+    }))
+}
+
+async fn get_containers() -> Json<Vec<serde_json::Value>> {
+    // Mock container status for SandboxDispatcher
+    Json(vec![
+        serde_json::json!({"id": "osint-sandbox-1", "image": "distroless-python", "status": "running", "cpu": "2%", "memory": "45MB"}),
+        serde_json::json!({"id": "osint-sandbox-2", "image": "blackarch-minimal", "status": "idle", "cpu": "0%", "memory": "12MB"}),
+    ])
 }
 
 async fn get_approvals(State(state): State<Arc<DashboardState>>) -> Json<Vec<serde_json::Value>> {
@@ -195,6 +281,10 @@ pub async fn start_dashboard(state: Arc<DashboardState>, port: u16) {
         .route("/index.html", get(serve_index))
         .route("/:path", get(serve_asset))
         .route("/api/v1/targets", get(get_targets))
+        .route("/api/v1/stats", get(get_stats_handler))
+        .route("/api/v1/swarm/status", get(get_swarm_status))
+        .route("/api/v1/attack-graph", get(get_attack_graph))
+        .route("/api/v1/containers", get(get_containers))
         .route("/api/v1/findings/stream", get(findings_stream))
         .route("/api/v1/approvals", get(get_approvals))
         .route("/api/v1/approvals/:id/decision", post(post_approval_decision))

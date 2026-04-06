@@ -41,6 +41,11 @@ pub fn show_menu() -> Result<Option<Args>> {
         autonomous: false,
         ollama_url: "http://localhost:11434".to_string(),
         max_layer: "Scanning".to_string(),
+        dashboard: None,
+        swarm: false,
+        max_tokens: 5000,
+        mcp_server: false,
+        mcp_port: 3001,
     };
 
     if std::path::Path::new(&target).exists() {
@@ -59,9 +64,9 @@ pub fn show_menu() -> Result<Option<Args>> {
     ];
 
     let selected_features = MultiSelect::new("⚙️  Selecciona las capacidades para este operativo (espacio para marcar):", features.clone())
-        .with_validator(|selected: &[&str]| {
-            let has_stealth = selected.iter().any(|&f| f.contains("Sigilo"));
-            let has_aggressive = selected.iter().any(|&f| f.contains("Agresivo"));
+        .with_validator(|selected: &[inquire::list_option::ListOption<&&str>]| {
+            let has_stealth = selected.iter().any(|f| f.value.contains("Sigilo"));
+            let has_aggressive = selected.iter().any(|f| f.value.contains("Agresivo"));
             if has_stealth && has_aggressive {
                 Ok(Validation::Invalid("No puedes combinar 'Sigilo' y 'Agresivo' en una misma misión.".into()))
             } else if selected.is_empty() {

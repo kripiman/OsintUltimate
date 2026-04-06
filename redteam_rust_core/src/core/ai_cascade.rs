@@ -175,8 +175,8 @@ impl ContextCompressor {
 
     /// NEW V10: Compress target host info including tech stack for AI context.
     pub fn compress_target(target: &crate::models::TargetHost) -> serde_json::value::Value {
-        let mut tech_stack = Vec::new();
-        for finding in &target.findings {
+        let mut tech_stack: Vec<String> = Vec::new();
+        for finding in target.findings.iter() {
             if finding.category == crate::models::Category::TechnologyStack {
                 if let Some(plugins) = finding.evidence.data.get("plugins") {
                     if let Some(obj) = plugins.as_object() {
@@ -213,6 +213,32 @@ impl ContextCompressor {
                         }
                     }
                 }
+            }
+        }
+        base
+    }
+
+    /// NEW V11: Specialized compression for source code findings to save tokens.
+    pub fn compress_source_aware_finding(finding: &Finding) -> serde_json::Value {
+        let mut base = serde_json::json!({
+            "id": finding.id,
+            "cat": finding.category,
+            "sev": finding.severity,
+            "desc": finding.description,
+        });
+
+        if let Some(obj) = base.as_object_mut() {
+            if let Some(ev) = finding.evidence.data.as_object() {
+                let mut compressed_ev = ev.clone();
+                // Ultra-aggressive snippet truncation
+                if let Some(snippet) = compressed_ev.get_mut("snippet") {
+                    if let Some(s) = snippet.as_str() {
+                        if s.len() > 300 {
+                            *snippet = serde_json::json!(format!("{}... [TRUNCATED]", &s[..300]));
+                        }
+                    }
+                }
+                obj.insert("ev".to_string(), serde_json::Value::Object(compressed_ev));
             }
         }
         base
@@ -419,10 +445,21 @@ impl TieredAIRouter {
             }
         }
 
+        // NEW V11: Source-aware findings prefer Local Code-Models (Tier 0) 
+        // because code snippets are large and local models are often fine-tuned for this.
+        if finding.evidence.data.get("type").and_then(|v| v.as_str()) == Some("source_aware") {
+            return RouteLevel::Local;
+        }
+
         level
     }
 
     pub async fn analyze(&self, finding: &Finding, target: &crate::models::TargetHost) -> Result<AIAnalysis> {
+        let level = self.classify(finding, target);
+        self.analyze_with_level(finding, target, level).await
+    }
+
+    pub async fn analyze_with_level(&self, finding: &Finding, target: &crate::models::TargetHost, target_level: RouteLevel) -> Result<AIAnalysis> {
         let cache_key = Self::calculate_finding_cache_key(finding, target);
         if let Some(cached) = self.analysis_cache.get(&cache_key) {
             self.metrics.hits.fetch_add(1, Ordering::Relaxed);
@@ -430,7 +467,6 @@ impl TieredAIRouter {
         }
 
         self.metrics.misses.fetch_add(1, Ordering::Relaxed);
-        let target_level = self.classify(finding, target);
         
         for level_val in (target_level as i32)..=2 {
             let current_level = match level_val {

@@ -117,7 +117,7 @@ impl DynamicPluginLoader {
             // PFC-002: El cargador ahora envuelve el plugin en LoadedPlugin que garantiza 
             // que la librería se mantenga cargada mientras el plugin exista (vía Arc).
             let wrapped_plugin = Box::new(LoadedPlugin {
-                plugin: Box::new(FFIPluginWrapper::new(ffi_plugin)),
+                plugin: Box::new(FFIPluginWrapper::new(ffi_plugin)?),
                 _lib: lib_arc,
             });
             

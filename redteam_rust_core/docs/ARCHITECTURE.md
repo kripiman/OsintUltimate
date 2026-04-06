@@ -10,7 +10,7 @@ Este documento detalla el diseño interno, los flujos de datos y las garantías 
 
 OsintUltimate v3.0 no es solo un escáner; es un **orquestador de inteligencia**. Se basa en tres pilares:
 1.  **Costo Cero de Memoria**: Procesamiento de flujos (streaming) mediante `tokio::sync::mpsc` y `JSONL`, permitiendo miles de objetivos en hardware de 1GB RAM gracias al sistema de **Backpressure**.
-2.  **Aislamiento de Seguridad**: Cada herramienta externa se ejecuta en un grupo de procesos (`PGID`) propio, con límites de recursos (`rlimit`) y limpieza automática.
+2.  **Aislamiento de Seguridad Híbrido**: El sistema evalúa el hardware disponible (`Hardware Tiering`) para decidir entre el aislamiento total por **Docker** (para sistemas >= 16GB) o aislamiento nativo por **PGID** (para sistemas <= 8GB), garantizando fluidez sin sacrificar seguridad.
 3.  **Decisión Autónoma y Estocástica**: Un sistema de IA en cascada (`TieredAIRouter`) y un motor de evasión probabilístico (`StochasticEvasionPolicy`) eligen la mejor ruta de ataque.
 
 ---
@@ -59,11 +59,13 @@ El sistema organiza los plugins en capas de riesgo:
     *   **Mid (Azure OpenAI)**: Triaje de vulnerabilidades medianas y correlación de ataques.
     *   **Premium (Gemini Pro)**: Análisis profundo de cadenas de ataque críticas y generación de reportes ejecutivos.
 
-### Fase 5: Telemetría y Monitoreo (Dashboard) [NUEVO]
-Un servidor embebido **Axum** procesa eventos en tiempo real:
-*   **SSE (Server-Sent Events)**: Enrutamiento directo de hallazgos desde el orquestador al navegador sin polling.
-*   **Gestión de Estado**: Uso de `DashMap` compartido para rastrear miles de objetivos con latencia mínima.
-*   **Zero Footprint**: Los assets frontend están integrados en el binario (`rust-embed`).
+### Fase 5: Command Center Dashboard v2.0 [OPTIMIZADO]
+Un servidor embebido **Axum** gestiona una interfaz táctica de alto rendimiento:
+*   **SSE (Server-Sent Events)**: Enrutamiento en tiempo real de hallazgos, latidos de sistema y solicitudes de aprobación.
+*   **Attack Correlation Graph (D3.js)**: Visualización interactiva de la superficie de ataque y relaciones entre vulnerabilidades mediante grafos de fuerza.
+*   **Swarm Monitoring**: Panel de control para supervisar el estado y consumo de tokens de los agentes autónomos (Planner/Scout/Exploiter/Reporter).
+*   **Interactive Approval Gate**: Interfaz de decisión para autorizar o abortar acciones de alto riesgo detectadas por el motor.
+*   **Zero Footprint**: Todos los assets (HTML/CSS/JS) están embebidos en el binario mediante `rust-embed`.
 
 ### Fase de Infraestructura: Adaptabilidad Automática [NUEVO]
 El sistema detecta el entorno de ejecución antes de iniciar (`detect_infrastructure`):
@@ -83,11 +85,19 @@ Diseñado para entornos de alta latencia (C2 remoto/VPS):
 - **Batching**: Acumula hasta 10 objetivos/hallazgos antes de realizar el envío.
 - **Compresión Gzip**: Comprime los payloads de red mediante `flate2` para minimizar el tráfico y la latencia.
 
-### `ExternalToolGuard`
-Envuelve herramientas como `nmap` o `sqlmap`. 
-- **Sandboxing**: Limpia variables de entorno y utiliza `setsid`.
-- **Resource Control**: Limita la RAM vurtual a 512MB por subproceso.
-- **Zombie Prevention**: Mata el `PGID` completo si hay un timeout.
+### `SandboxDispatcher` (Inspirado en ExternalToolGuard)
+Es el componente encargado de la ejecución de binarios externos.
+- **Hardware Tiering**: Selecciona entre `Docker` o `Nativo` según la RAM.
+- **Explotación Segura**: Fuerza Docker para herramientas de explotación, incluso en entornos de bajos recursos.
+- **Resource Control**: Consulta al `SysResourceManager` para evitar colapsar la RAM del host.
+- **Zombie Prevention**: Mata el `PGID` completo si hay un timeout en modo nativo.
+
+### `SourceAnalyzer` [NUEVO Vector 7]
+El componente encargado de la integración del código fuente en el ciclo de vida del escaneo.
+- **Git Connector**: Permite clonar repositorios efímeramente para análisis dinámico.
+- **Extractor de SAST Ligero**: Motor de detección de patrones orientado a endpoints y sinks peligrosos en JS/TS y Python.
+- **SAST-DAST Linker**: Colabora con el `CorrelationEngine` para elevar la confianza de hallazgos dinámicos basados en la lógica del código fuente.
+- **Minificador de Código**: Pre-procesa snippets para reducir el consumo de tokens en la IA antes del envío.
 
 ### `DecoyController` [NUEVO]
 Gestiona el ciclo de vida de señuelos DNS (via Cloudflare) y tripwires persistentes (via SQLite WAL).

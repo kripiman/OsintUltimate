@@ -51,5 +51,63 @@ Para evitar ataques de denegación de servicio contra los caches internos (espec
 
 ---
 
-> [!NOTE]
-> Esta arquitectura está optimizada para hardware con >= 4 núcleos y kernels modernos. En sistemas antiguos, el motor caerá automáticamente en modos de compatibilidad legados.
+## 5. Sandboxing Híbrido & Hardware Tiering (Vector 5)
+
+OsintUltimate v4.0 introduce un sistema de ejecución adaptativo basado en el perfil de hardware del anfitrión.
+
+### SysResourceManager
+Utiliza la crate `sysinfo` para monitorear en tiempo real la RAM y Swap disponibles.
+- **Pre-flight Check**: Antes de lanzar cualquier herramienta, el sistema calcula el costo estimado (Ligero/Medio/Pesado) y verifica si hay memoria disponible para evitar bloqueos del SO (OOM).
+
+### SandboxDispatcher: Dos Niveles de Aislamiento
+El motor selecciona la estrategia de ejecución dinámicamente:
+1. **Strict Tier (Sistemas >= 16GB RAM)**: Aislamiento total mediante contenedores **Docker efímeros**. Se inyectan límites de memoria estrictos (`--memory`) para cada contenedor.
+2. **Fluid Tier (Sistemas < 16GB RAM)**: Ejecución nativa optimizada. Utiliza **ProcessGuard (PGID)** para aislar grupos de procesos y garantizar la limpieza de procesos hijos sin el overhead de Docker.
+
+### La Regla de Excepción de Explotación
+Independientemente del tier de RAM, cualquier herramienta catalogada como **"Exploitation"** (ej. SqlMap, exploits de PoC) se fuerza a ejecutarse en el **Strict Tier (Docker)**. Esto garantiza que el código potencialmente peligroso o inestable nunca toque el sistema operativo anfitrión de forma nativa.
+
+---
+
+## 6. Command Center Dashboard v2.0 (Vector 6)
+
+El Dashboard v2.0 trasciende la monitorización básica para convertirse en una interfaz de control operativa táctiva para el Red Team.
+
+### Attack Correlation Graph (D3.js)
+- **Visualización**: Renderizado en tiempo real de nodos (objetivos y hallazgos) y sus aristas de correlación.
+- **Interactividad**: Permite identificar de un vistazo las cadenas de ataque (attack chains) mediante la proximidad física de los nodos en el grafo de simulación de fuerzas.
+- **Grafo de Gravedad**: El tamaño de los nodos escala según la severidad del hallazgo, permitiendo priorizar la atención humana en activos críticos.
+
+### Swarm Monitoring & Human-in-the-Loop
+- **Estado de Agentes**: Panel en vivo que muestra la actividad detallada de los 4 roles (Planner, Scout, Exploiter, Reporter).
+- **Approval Gate Interactiva**: Integración nativa con el sistema de autorizaciones. Cuando un agente (`Exploiter`) requiere permiso para lanzar una acción de alto riesgo, el Dashboard dispara un modal de decisión que pausa el flujo hasta la intervención humana.
+- **Token Budget Gauge**: Monitoreo visual del consumo de cuotas de IA (Gemini/Claude/OpenAI) para evitar sobrecostos accidentales.
+
+## 7. Source-Aware Correlation (Vector 7)
+
+Introducción del análisis de código fuente nativo para una cobertura de seguridad 360°.
+
+### Local Lightweight SAST
+- **Extracción de Endpoints**: El motor analiza automáticamente archivos de rutas (Express, Flask, Django) para mapear la superficie de ataque sin necesidad de fuzzing exhaustivo.
+- **Identificación de Sinks**: Uso de extractores optimizados para JS/TS y Python que localizan funciones peligrosas (`eval`, `os.system`, `subprocess`) y las marcan como objetivos de alta prioridad.
+- **Context-Aware Token Optimization**: Sistema de compresión que envía solo fragmentos de código relevantes y abstrae la lógica, minimizando el consumo de tokens en modelos premium.
+
+### SAST-DAST Correlation Loop
+- **Vínculos de Confianza**: Si un hallazgo dinámico (DAST) coincide con un endpoint o sink identificado en el código (SAST), el motor eleva automáticamente la confianza al 100% y genera un PoC especializado basado en la lógica del código fuente.
+- **Git Integration**: Capacidad nativa para clonar repositorios remotos y realizar análisis "on-the-fly" durante la fase de reconocimiento.
++
++## 8. Planeación Determinista (ARCH-03)
++
++Para maximizar la eficiencia y confiabilidad, la clasificación de objetivos (Network vs Web App) y el enrutamiento inicial entre los agentes `Scout` y `Exploiter` se ha migrado a un modelo **determínistico basado en reglas**.
++
++### ¿Por qué?
++El uso de LLMs para decisiones binarias de enrutamiento introducía latencia innecesaria y riesgos de alucinación en la fase crítica de descubrimiento.
++
++### Detalles de Implementación:
++- **Capa de Clasificación**: Los resultados de escaneo de puertos alimentan un `TargetClassifier` que utiliza firmas estáticas (ej. detección de HTTP/S, SSH, SMB).
++- **Enrutamiento**: El `Planner` utiliza la salida del clasificador para asignar tareas de forma instantánea, reservando el presupuesto de tokens de la IA para el análisis profundo de vulnerabilidades y la mutación de payloads.
++
+
+---
+
+© 2026 RedTeam Lab | OsintUltimate v4.0 Documentation

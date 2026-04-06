@@ -18,6 +18,8 @@ pub mod swarm;
 pub mod resource_manager;
 pub mod sandbox;
 pub mod mcp;
+pub mod source_analyzer;
+pub mod factory;
 #[cfg(test)]
 pub mod tests;
 

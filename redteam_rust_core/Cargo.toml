@@ -64,7 +64,6 @@ flate2 = "1.0.28"
 axum = { version = "0.7", features = ["macros"] }
 tower-http = { version = "0.5", features = ["fs", "cors", "trace"] }
 rust-embed = "8.4"
-futures-util = "0.3"
 tokio-stream = "0.1"
 mime_guess = "2.0"
 
@@ -78,8 +77,7 @@ aya = "0.13"
 socket2 = "0.5"
 
 # Persistence & Swarm
-rocksdb = "0.21"
-chitchat = "0.5"
+# RocksDB and Chitchat removed as they were not used in the final v4.0 architecture and caused build failures.
 
 [profile.release]
 opt-level = 3

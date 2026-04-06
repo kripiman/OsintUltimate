@@ -14,7 +14,7 @@
 - **IA Off-Path con LSH Cache**: Análisis de payloads mediante LLMs en segundo plano con caché de similitud (*SimHash*), eliminando bloqueos en el pipeline de red.
 - **Pipeline Lock-Free**: Sumidero de resultados basado en colas `SegQueue` para ingestión de datos sin bloqueos de mutex.
 - **Native io-uring Scanner**: Escaneo de red de alto rendimiento que bypassa el modelo `fork/exec`, operando directamente en el kernel.
-- **Hardware-Aware Core**: Detección automática del entorno para optimizar la concurrencia y el uso de RAM (ajustado para VPS de 1GB).
+- **Sandboxing Híbrido & Hardware Tiering**: Sistema adaptativo que elige entre Docker (aislamiento total) o ProcessGuard (nativo ligero) según la RAM disponible, protegiendo el host de OOM.
 - **Sentinel Autonomous Agent**: Modo autocompleto (`--autonomous`) con cascada de IA nativa y toma de decisiones tácticas.
 - **Resistencia a HashDoS**: Migración a `SipHash-1-3` para todas las estructuras de datos críticas.
 
@@ -43,7 +43,7 @@
 *   **🛡️ Capas de Capacidad**: Control de profundidad de escaneo con políticas configurables (Passive, Discovery, Scanning, Verification, Exploitation, Post-Exploitation).
 *   **🚪 Puertas de Aprobación**: Sistema de gestión de riesgos con umbrales de aprobación, auditoría y roles de usuario.
 *   **🤖 Sentinel AI Agent**: Pentesting autónomo con orquestación de LLMs en cascada y análisis de evidencia en tiempo real.
-*   **💻 Hardware-Aware Optimization**: Ajuste dinámico de rendimiento basado en la detección de infraestructura (Server, LocalPC, UltraLowMemory).
+*   **💻 Hardware-Aware Optimization**: Ajuste dinámico de rendimiento y **Sandboxing Híbrido** (Docker vs Nativo) basado en la detección de infraestructura (Server, LocalPC, UltraLowMemory).
 
 ### 🆕 Nuevas Características en v4.0
 
@@ -51,6 +51,7 @@
 *   **Adaptive Infrastructure Mode**: Detección de hardware para optimizar la RAM y evitar errores OOM en VPS de 1GB.
 *   **Thompson Sampling Evasion**: Estrategias de salto de WAF aleatorias para evitar patrones de detección de ML.
 *   **Native io-uring Scanner**: Escaneo SYN ultra-rápido directamente desde el kernel.
+*   **Hybrid Sandboxing Engine**: Aislamiento inteligente que fuerza Docker para herramientas de explotación incluso en sistemas de bajos recursos.
 
 ---
 
@@ -102,8 +103,8 @@ Define el "scope" de la operación: Passive (OSINT), Discovery, Scanning, Verifi
 ### 4. **Puertas de Aprobación** (`ApprovalGate`)
 Gestión de riesgos que requiere confirmación explícita para acciones de nivel 3 o superior, manteniendo un rastro de auditoría inmutable.
 
-### 5. **Motores de Evasión (OPSEC)**
-Implementa **Human Jitter** (LogNormal), rotación inteligente de proxies y sandboxing de herramientas (`ProcessGuard`) con límites de RAM. Soporta escalación 403 dinámica.
+### 5. **Motores de Evasión y Sandboxing**
+Implementa **Human Jitter** (LogNormal), rotación inteligente de proxies y el nuevo **SandboxDispatcher**. Soporta escalación 403 dinámica y elige entre aislamiento Docker o nativo (`ProcessGuard`) analizando la RAM mediante `SysResourceManager`.
 
 ### 6. **Web Dashboard** (`web_server`)
 Servidor embebido de alto rendimiento (Axum) que proporciona telemetría en tiempo real sobre hallazgos, uso de RAM y estado de los objetivos.

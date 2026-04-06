@@ -58,6 +58,10 @@ impl LlmClient for OllamaClient {
             target.host, serde_json::to_string(&compressed)?, self.model
         );
 
+        let res = self.client.post(format!("{}/api/generate", self.url))
+            .json(&json!({ "model": self.model, "prompt": prompt, "stream": false, "format": "json" }))
+            .send().await?.json::<serde_json::Value>().await?;
+
         let response_text = res["response"].as_str().context("Ollama response missing text")?;
         let mut analysis: AIAnalysis = serde_json::from_str(extract_json(response_text))?;
         
@@ -188,9 +192,6 @@ impl LlmClient for GeminiClient {
             }
         }
         Ok(None)
-    }
-}
-
     }
 }
 
@@ -362,10 +363,10 @@ impl AutonomousAgent {
             }
 
             let mut sink_target = initial_target.clone();
-            sink_target.findings = vec![final_finding.clone()];
+            sink_target.findings = Arc::new(vec![final_finding.clone()]);
             let paths = correlation_engine.get_attack_paths();
             if !paths.is_empty() {
-                 sink_target.extra_data["attack_paths"] = serde_json::json!(paths);
+                 Arc::make_mut(&mut sink_target.extra_data)["attack_paths"] = serde_json::json!(paths);
             }
             let _ = sink_tx.send(sink_target).await;
 
@@ -373,7 +374,7 @@ impl AutonomousAgent {
             if let Ok(Some((action, tactical))) = self.router.decide_action(&final_finding, &initial_target, &metadata, Some(&adaptive_context)).await {
                 if self.request_operator_approval(&action).await {
                     let mut task_target = initial_target.clone();
-                    task_target.tactical_context = tactical.clone();
+                    task_target.tactical_context = Arc::new(tactical.clone());
                     adaptive_context.previous_actions.push(action.clone());
                     let results = self.pipeline.run_specific_plugin(&action, &task_target).await?;
                     if results.is_empty() {
@@ -392,7 +393,10 @@ impl AutonomousAgent {
 
     async fn request_operator_approval(&self, action: &str) -> bool {
         if self.approval_gate.is_approved(action).await { return true; }
-        self.approval_gate.request_approval(action, 85, &self.operator, "Autonomous Adaptive Loop").await.unwrap_or(false)
+        match self.approval_gate.request_approval(action, 85, &self.operator, "Autonomous Adaptive Loop").await {
+            Ok(None) => true,
+            _ => false,
+        }
     }
 }
 

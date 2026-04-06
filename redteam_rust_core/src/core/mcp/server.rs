@@ -156,10 +156,10 @@ async fn handle_execute_plugin(state: &Arc<McpServer>, args: serde_json::Value) 
             ip: None, // El plugin lo resolverá si es necesario
             status: crate::models::TargetStatus::Scanning,
             target_type: crate::models::TargetType::Network, // Auto-detect later or assume net
-            findings: Vec::new(),
-            tool_suggestions: Vec::new(),
-            tactical_context: json!({}),
-            extra_data: json!({}),
+            findings: Arc::new(Vec::new()),
+            tool_suggestions: Arc::new(Vec::new()),
+            tactical_context: Arc::new(json!({})),
+            extra_data: Arc::new(json!({})),
         };
 
         match p.scan(&host).await {

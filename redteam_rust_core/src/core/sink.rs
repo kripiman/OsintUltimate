@@ -283,7 +283,7 @@ impl DataSink for SqliteSink {
         let target_id = row.0;
 
         // Insert findings
-        for finding in &target.findings {
+        for finding in target.findings.iter() {
             let evidence = serde_json::to_string(&finding.evidence.data)?;
             let mitre = finding.mitre_attack.as_ref().map(|m| serde_json::to_string(m).unwrap_or_default());
             let ai = finding.ai_analysis.as_ref().map(|a| serde_json::to_string(a).unwrap_or_default());
@@ -353,7 +353,7 @@ impl DataSink for MarkdownSink {
         report.push_str("| ID | Severity | Category | Description |\n");
         report.push_str("|----|----------|----------|-------------|\n");
         
-        for f in &target.findings {
+        for f in target.findings.iter() {
             self.findings_count += 1;
             report.push_str(&format!("| {} | **{:?}** | {:?} | {} |\n", f.id, f.severity, f.category, f.description));
             
@@ -363,7 +363,8 @@ impl DataSink for MarkdownSink {
                 report.push_str(&format!("> **Impact:** {}\n", ai.impact));
                 report.push_str(&format!("> **Remediation:** {}\n", ai.remediation));
                 if let Some(mitre) = &ai.mitre_attack {
-                    report.push_str(&format!("> **MITRE ATT&CK:** {}\n", mitre.join(", ")));
+                    let mitre_tags: Vec<String> = mitre.iter().map(|s| s.to_string()).collect();
+                    report.push_str(&format!("> **MITRE ATT&CK:** {}\n", mitre_tags.join(", ")));
                 }
             }
         }

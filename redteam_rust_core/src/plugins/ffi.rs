@@ -3,6 +3,8 @@ use crate::utils::tool_detection::detect_tool;
 use crate::models::{TargetHost, Finding};
 use anyhow::Result;
 use std::panic::{catch_unwind, AssertUnwindSafe};
+use once_cell::sync::Lazy;
+use dashmap::DashSet;
 
 /// V10 HARDENING: ABI Versioning to prevent memory corruption from incompatible plugins.
 pub const PLUGIN_ABI_VERSION: u32 = 1;
@@ -50,14 +52,14 @@ pub struct FFIPluginWrapper {
     cached_name: &'static str,
 }
 
+static PLUGIN_NAME_CACHE: Lazy<DashSet<String>> = Lazy::new(DashSet::new);
+
 impl FFIPluginWrapper {
-    pub fn new(ffi: ScannerPluginFFI) -> Self {
+    pub fn new(ffi: ScannerPluginFFI) -> Result<Self> {
         // V10 ABI Handshake: Prevent loading incompatible plugins
         let version = (ffi.abi_version)();
         if version != PLUGIN_ABI_VERSION {
-            // In a production app, we would likely use a better error path here,
-            // but for a dynamic loader, we'll log and treat it as a critical failure.
-            tracing::error!("ABI MISMATCH: Plugin version {}, expected {}. Plugin will likely crash or corrupt memory.", version, PLUGIN_ABI_VERSION);
+            anyhow::bail!("ABI MISMATCH: Plugin version {}, expected {}. Refusing to load to prevent memory corruption.", version, PLUGIN_ABI_VERSION);
         }
 
         let cached_name = unsafe {
@@ -66,10 +68,17 @@ impl FFIPluginWrapper {
                 "unknown"
             } else {
                 let s = std::ffi::CStr::from_ptr(c_str).to_str().unwrap_or("unknown");
-                Box::leak(s.to_string().into_boxed_str())
+                if let Some(existing) = PLUGIN_NAME_CACHE.get(s) {
+                    unsafe { std::mem::transmute::<&str, &'static str>(existing.as_str()) }
+                } else {
+                    let owned = s.to_string();
+                    let leaked: &'static str = Box::leak(owned.clone().into_boxed_str());
+                    PLUGIN_NAME_CACHE.insert(owned);
+                    leaked
+                }
             }
         };
-        Self { ffi, cached_name }
+        Ok(Self { ffi, cached_name })
     }
 }
 
@@ -123,26 +132,16 @@ impl crate::plugins::ScannerPlugin for FFIPluginWrapper {
                 }
                 unsafe {
                     let ffi_findings = Box::from_raw(findings_ptr);
-                    // Convert FFIFindings (FFI-safe) back to standard Vec<Finding>
-                    let findings = Vec::from_raw_parts(
-                        ffi_findings.data,
-                        ffi_findings.len,
-                        ffi_findings.capacity
-                    );
                     
-                    // IMPORTANTE: Al usar from_raw_parts, tomamos posesión de la memoria.
-                    // El Drop de FFIFindings NO debe liberar los datos de nuevo si el ownership se transfirió.
-                    // Sin embargo, nuestra estructura FFIFindings tiene un free_fn.
-                    // Para mayor seguridad en FFI, lo ideal es que el plugin asigne y nosotros copiemos,
-                    // o usemos un protocolo de transferencia de ownership claro.
+                    // V10 CLONE-AND-SIGNAL: 
+                    // 1. Read memory via FFI-safe slice (no ownership taken yet)
+                    let slice = std::slice::from_raw_parts(ffi_findings.data, ffi_findings.len);
                     
-                    // Refactor: Para máxima seguridad "Industrial", clonamos los hallazgos 
-                    // y dejamos que el plugin limpie su propia memoria original.
-                    let cloned_findings = findings.clone();
+                    // 2. Clone to native Rust Vec (Host takes ownership of the clone)
+                    let cloned_findings = slice.to_vec();
                     
-                    // NOTA: Aquí hay un riesgo de doble free si no somos cuidadosos.
-                    // Una implementación industrial usaría un buffer compartido o serialización Bincode/Protobuf.
-                    // Por ahora, asumimos que el plugin asignó con el mismo Global Allocator (std).
+                    // 3. Drop ffi_findings -> calls free_fn -> Plugin cleans up its original memory.
+                    // This prevents double-free and allocator mismatch issues.
                     
                     Ok(cloned_findings)
                 }

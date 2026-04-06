@@ -55,7 +55,8 @@ impl Pipeline {
         let (osint_tx, osint_rx) = mpsc::channel::<TargetHost>(channel_size);
         let (liveness_tx, liveness_rx) = mpsc::channel::<TargetHost>(channel_size);
         let (scan_tx, scan_rx) = mpsc::channel::<TargetHost>(channel_size);
-        let (sink_tx, mut sink_rx) = mpsc::channel::<TargetHost>(channel_size);
+        // ARCH-01: Decoupled Stage 4 (Sink). 1024 buffer ensures scanning isn't blocked by slow I/O.
+        let (sink_tx, mut sink_rx) = mpsc::channel::<TargetHost>(1024);
 
         let mut handles = Vec::new();
         
@@ -94,16 +95,16 @@ impl Pipeline {
                         for sub in subdomains {
                             if !seen_domains.check(&sub) {
                                 seen_domains.set(&sub);
-                                target.findings.push(Finding::new("DISCOVERED_SUBDOMAIN", Category::Recon, Severity::Info, &format!("Discovered via {}: {}", name, sub), json!({ "subdomain": sub, "source": name })));
+                                Arc::make_mut(&mut target.findings).push(Finding::new("DISCOVERED_SUBDOMAIN", Category::Recon, Severity::Info, &format!("Discovered via {}: {}", name, sub), json!({ "subdomain": sub, "source": name })));
                                 let _ = liveness_tx.send(TargetHost { 
                                     host: sub, 
                                     ip: None, 
                                     status: TargetStatus::Pending, 
                                     target_type: crate::models::TargetType::Web,
-                                    findings: Vec::new(),
-                                    tool_suggestions: Vec::new(),
-                                    tactical_context: serde_json::json!({}),
-                                    extra_data: serde_json::json!({}),
+                                    findings: Arc::new(Vec::new()),
+                                    tool_suggestions: Arc::new(Vec::new()),
+                                    tactical_context: Arc::new(serde_json::json!({})),
+                                    extra_data: Arc::new(serde_json::json!({})),
                                 }).await;
                             }
                         }
@@ -183,7 +184,7 @@ impl Pipeline {
         v4_sink.start_worker(final_sink);
 
         while let Some(mut target) = sink_rx.recv().await {
-            target.findings.retain(|f| fp_filter.evaluate(f));
+            Arc::make_mut(&mut target.findings).retain(|f| fp_filter.evaluate(f));
             v4_sink.enqueue(target);
         }
         
@@ -200,13 +201,37 @@ impl Pipeline {
         let fp_filter = self.fp_filter.clone();
         let handle = tokio::spawn(async move {
             while let Some(mut target) = rx.recv().await {
-                target.findings.retain(|f| fp_filter.evaluate(f));
+                Arc::make_mut(&mut target.findings).retain(|f| fp_filter.evaluate(f));
                 let _ = sink.write(&target).await;
             }
             let _ = sink.close().await;
         });
 
         Ok((tx, handle))
+    }
+
+    pub fn new_minimal(plugins: Arc<Vec<Box<dyn ScannerPlugin>>>, sandbox: Arc<crate::core::sandbox::SandboxDispatcher>) -> Self {
+        Self {
+            concurrency: 10,
+            discovery_plugins: Arc::new(Vec::new()),
+            plugins,
+            sink: None,
+            shutdown_token: tokio_util::sync::CancellationToken::new(),
+            liveness_checker: LivenessChecker::new(None, false),
+            command_line: "OsintUltimate-Minimal".to_string(),
+            policy: crate::core::capability_layer::ScanLayerPolicy::preset_audit(),
+            approval_gate: Arc::new(crate::core::approval_gate::ApprovalGate::for_red_team()),
+            blackarch_bridge: Arc::new(crate::core::blackarch::BlackArchBridge::new()),
+            jitter: None,
+            fp_filter: Arc::new(crate::core::filter::FalsePositiveFilter::default()),
+            memory_monitor: Arc::new(crate::utils::memory_monitor::MemoryMonitor::new(8000, 10000)),
+            dashboard_tx: None,
+            dashboard_targets: None,
+            swarm_mode: false,
+            max_tokens: 0,
+            ai_router: None,
+            sandbox,
+        }
     }
 
     pub async fn run_discovery(&self, target: &TargetHost, tx: mpsc::Sender<Finding>) -> Result<()> {
@@ -248,7 +273,7 @@ impl Pipeline {
         orchestrator.run(rx, out_tx, token).await;
         
         if let Some(res) = out_rx.recv().await {
-            Ok(res.findings)
+            Ok((*res.findings).clone())
         } else {
             Ok(Vec::new())
         }
@@ -291,6 +316,7 @@ pub struct PipelineBuilder {
     max_tokens: u32,
     ai_router: Option<Arc<crate::core::ai_cascade::TieredAIRouter>>,
     sandbox: Option<Arc<crate::core::sandbox::SandboxDispatcher>>,
+    memory_monitor: Option<Arc<crate::utils::memory_monitor::MemoryMonitor>>,
 }
 
 impl Default for PipelineBuilder { fn default() -> Self { Self::new() } }

@@ -88,13 +88,15 @@ impl Orchestrator {
                     // AUDIT-005 FIX: Use recv() to ensure all buffered targets are processed after close()
                     while let Some(mut remaining_target) = rx.recv().await {
                         remaining_target.status = TargetStatus::Dead;
-                        remaining_target.findings.push(Finding::new(
+                        let mut findings = (*remaining_target.findings).clone();
+                        findings.push(Finding::new(
                             "SHUTDOWN_ABORT",
                             Category::Availability,
                             Severity::Info,
                             "Target scan aborted due to graceful shutdown",
                             serde_json::json!({"host": remaining_target.host})
                         ));
+                        remaining_target.findings = Arc::new(findings);
                         let _ = tokio::time::timeout(std::time::Duration::from_millis(100), out_tx.send(remaining_target)).await;
                     }
                     None // Graceful shutdown
@@ -117,7 +119,7 @@ impl Orchestrator {
         if self.swarm_mode {
             if let (Some(router), Some(out_tx)) = (self.ai_router.clone(), Some(output_tx.clone())) {
                 info!("🐝 ORCHESTRATOR: Entering Swarm Mode (Max Tokens: {})", self.max_tokens);
-                let pipeline = Arc::new(crate::core::pipeline::Pipeline::new(plugins.clone()));
+                let pipeline = Arc::new(crate::core::pipeline::Pipeline::new_minimal(plugins.clone(), self.sandbox.clone()));
                 let swarm = crate::core::swarm::SwarmOrchestrator::new(
                     router,
                     pipeline,
@@ -127,10 +129,10 @@ impl Orchestrator {
 
                 // Use buffered stream to run swarm on each target
                 let swarm_stream = stream.map(move |target| {
-                    let swarm = &swarm;
+                    let swarm = swarm.clone();
                     let out_tx = out_tx.clone();
                     async move {
-                        let _ = swarm.run(target.clone(), out_tx.clone()).await;
+                        let _ = swarm.run(target.clone(), out_tx).await;
                         target // Return original to keep stream moving if needed
                     }
                 }).buffer_unordered(self.concurrency);
@@ -166,7 +168,7 @@ impl Orchestrator {
 
                 dashboard_targets.insert(target.host.clone(), target.clone());
                 if let Some(ref tx) = dashboard_tx {
-                    for f in &target.findings {
+                    for f in target.findings.iter() {
                         let _ = tx.send(f.clone());
                     }
                 }
@@ -194,9 +196,9 @@ impl Orchestrator {
                         ip: target_ref.ip.clone(),
                         target_type: target_ref.target_type,
                         status: TargetStatus::Scanning,
-                        findings: Vec::new(),
-                        tool_suggestions: Vec::new(),
-                        tactical_context: target_ref.tactical_context.clone(), // V10: Pass the advice!
+                        findings: Arc::new(Vec::new()),
+                        tool_suggestions: Arc::new(Vec::new()),
+                        tactical_context: target_ref.tactical_context.clone(), // Cheap now (Arc)
                         extra_data: target_ref.extra_data.clone(),
                     };
                     let policy = policy;
@@ -253,26 +255,30 @@ impl Orchestrator {
                                 }
                                 Err(e) => {
                                     error!("Plugin {} error on {}: {}", name, target_ref.host, e);
-                                    all_findings.push(Finding::new(
+                                    let mut error_findings = Vec::new(); // Local vec
+                                    error_findings.push(Finding::new(
                                         FINDING_PLUGIN_ERROR,
                                         Category::Misconfiguration,
                                         Severity::Info, 
                                         &format!("Plugin {} failed", name),
                                         serde_json::json!({"error": e.to_string()})
                                     ));
+                                    all_findings.append(&mut error_findings);
                                     plugin_error = true;
                                 }
                             }
                         }
                         Err(join_err) => {
                             error!("Target task panicked: {}", join_err);
-                            all_findings.push(Finding::new(
+                            let mut panic_findings = Vec::new();
+                            panic_findings.push(Finding::new(
                                 FINDING_PLUGIN_PANIC,
                                 Category::Misconfiguration,
                                 Severity::Critical, 
                                 "A scanner plugin panicked during execution!",
                                 serde_json::json!({"error": join_err.to_string()})
                             ));
+                            all_findings.append(&mut panic_findings);
                             plugin_error = true;
                         }
                     }
@@ -283,10 +289,13 @@ impl Orchestrator {
                 // QA-005 FIX: Attempt to extract owned target. Fallback to clone if other references exist (safe side).
                 let mut target = Arc::try_unwrap(target_ref)
                     .unwrap_or_else(|arc| (*arc).clone());
-                target.findings.append(&mut all_findings);
+                
+                let mut findings = (*target.findings).clone();
+                findings.append(&mut all_findings);
+                target.findings = Arc::new(findings);
                 // --- NEW: BlackArch Dynamic Tool Suggestion ---
                 let mut suggestions = Vec::new();
-                for finding in &target.findings {
+                for finding in target.findings.iter() {
                     if finding.severity == Severity::High || finding.severity == Severity::Critical {
                         // Mapear categorías de hallazgos a capacidades
                         let capability = match finding.category {
@@ -307,7 +316,9 @@ impl Orchestrator {
                 }
 
                 if !suggestions.is_empty() {
-                    target.tool_suggestions.extend(suggestions);
+                    let mut current_suggestions = (*target.tool_suggestions).clone();
+                    current_suggestions.extend(suggestions);
+                    target.tool_suggestions = Arc::new(current_suggestions);
                 }
 
                 if plugin_error {

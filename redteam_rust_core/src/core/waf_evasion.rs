@@ -4,9 +4,8 @@ use rand_distr::{Beta, Distribution};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::Arc;
-use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::atomic::{AtomicUsize, AtomicU32, Ordering};
 use tracing::{info, warn, debug};
-use dashmap::DashMap;
 
 use crate::core::ai_cascade::AdaptiveContext;
 
@@ -49,7 +48,7 @@ pub struct HttpFingerprint {
 /// Represents the mutated request configuration returned by the evasion engine.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct MutatedRequest {
-    pub fingerprint: HttpFingerprint,
+    pub fingerprint: Arc<HttpFingerprint>,
     pub strategy: EvasionStrategy,
     /// If true, the caller should rebuild its reqwest::Client with new TLS config
     pub requires_tls_rebuild: bool,
@@ -82,19 +81,41 @@ pub enum EvasionStrategy {
 /// Thompson Sampling based policy for selecting evasion strategies.
 /// Uses Bayesian priors (Beta distribution: alpha=success, beta=failure).
 pub struct StochasticEvasionPolicy {
-    /// strategy -> (alpha, beta)
-    priors: DashMap<EvasionStrategy, (f64, f64)>,
+    /// strategy index -> (alpha, beta) using AtomicU32 for lock-free updates
+    /// Index mapping: 0: HeaderRotation, 1: TlsMutation, 2: AiPayloadRewrite, 3: IpRotation
+    priors: [(AtomicU32, AtomicU32); 4],
 }
 
 impl StochasticEvasionPolicy {
     pub fn new() -> Self {
-        let priors = DashMap::new();
-        // Initialize with default priors (1,1) = uniform distribution
-        priors.insert(EvasionStrategy::HeaderRotation, (1.0, 1.0));
-        priors.insert(EvasionStrategy::TlsMutation, (1.0, 1.0));
-        priors.insert(EvasionStrategy::AiPayloadRewrite, (1.0, 1.0));
-        priors.insert(EvasionStrategy::IpRotation, (1.0, 1.0));
-        Self { priors }
+        Self {
+            priors: [
+                (AtomicU32::new(1), AtomicU32::new(1)), // HeaderRotation
+                (AtomicU32::new(1), AtomicU32::new(1)), // TlsMutation
+                (AtomicU32::new(1), AtomicU32::new(1)), // AiPayloadRewrite
+                (AtomicU32::new(1), AtomicU32::new(1)), // IpRotation
+            ],
+        }
+    }
+
+    fn strategy_to_idx(s: EvasionStrategy) -> Option<usize> {
+        match s {
+            EvasionStrategy::HeaderRotation => Some(0),
+            EvasionStrategy::TlsMutation => Some(1),
+            EvasionStrategy::AiPayloadRewrite => Some(2),
+            EvasionStrategy::IpRotation => Some(3),
+            EvasionStrategy::Exhausted => None,
+        }
+    }
+
+    fn idx_to_strategy(idx: usize) -> EvasionStrategy {
+        match idx {
+            0 => EvasionStrategy::HeaderRotation,
+            1 => EvasionStrategy::TlsMutation,
+            2 => EvasionStrategy::AiPayloadRewrite,
+            3 => EvasionStrategy::IpRotation,
+            _ => EvasionStrategy::HeaderRotation,
+        }
     }
 
     /// Thompson Sampling: Sample from each strategy's Beta distribution and pick the maximum.
@@ -103,14 +124,19 @@ impl StochasticEvasionPolicy {
         let mut best_strategy = EvasionStrategy::HeaderRotation;
         let mut max_sample = -1.0;
 
-        for entry in self.priors.iter() {
-            let (alpha, beta) = *entry.value();
-            if let Ok(dist) = Beta::new(alpha, beta) {
-                let sample = dist.sample(&mut rng);
-                if sample > max_sample {
-                    max_sample = sample;
-                    best_strategy = *entry.key();
+        for (idx, (alpha_atom, beta_atom)) in self.priors.iter().enumerate() {
+            let alpha = alpha_atom.load(Ordering::Relaxed) as f64;
+            let beta = beta_atom.load(Ordering::Relaxed) as f64;
+
+            match Beta::new(alpha, beta) {
+                Ok(dist) => {
+                    let sample = dist.sample(&mut rng);
+                    if sample > max_sample {
+                        max_sample = sample;
+                        best_strategy = Self::idx_to_strategy(idx);
+                    }
                 }
+                Err(_) => continue,
             }
         }
         best_strategy
@@ -118,14 +144,15 @@ impl StochasticEvasionPolicy {
 
     /// Bayesian Update: Increment alpha on success, beta on failure.
     pub fn observe_result(&self, strategy: EvasionStrategy, success: bool) {
-        self.priors.alter(&strategy, |_, (alpha, beta)| {
+        if let Some(idx) = Self::strategy_to_idx(strategy) {
+            let (alpha, beta) = &self.priors[idx];
             if success {
-                (alpha + 1.0, beta)
+                alpha.fetch_add(1, Ordering::Relaxed);
             } else {
-                (alpha, beta + 1.0)
+                beta.fetch_add(1, Ordering::Relaxed);
             }
-        });
-        debug!("🛡️ WAF-EVASION: Policy update for {:?}: success={}", strategy, success);
+            debug!("🛡️ WAF-EVASION: Policy update for {:?}: success={}", strategy, success);
+        }
     }
 }
 
@@ -145,7 +172,7 @@ pub struct RequestContext {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct EvasionAttempt {
-    pub stage: EvasionStage,
+    pub stage: EvasionStrategy,
     pub user_agent_used: String,
     pub tls_profile_used: String,
     pub result_status: u16,
@@ -158,24 +185,24 @@ pub struct EvasionAttempt {
 
 pub struct WafEvasionEngine {
     /// Pre-built fingerprint profiles (rotated round-robin)
-    profiles: Vec<HttpFingerprint>,
+    profiles: Vec<Arc<HttpFingerprint>>,
     /// Current profile index (atomic for lock-free rotation)
     current_idx: AtomicUsize,
     /// Maximum total retries before giving up on a target
     max_retries: u8,
-    /// Optional: local AI client for payload rewriting (Ollama only — never cloud)
-    ai_rewriter: Option<Arc<dyn crate::core::agent::LlmClient>>,
+    /// v4: Adaptive AI Engine for payload mutations (LSH cached)
+    ai_engine: Option<Arc<crate::core::ai_cascade::OffPathAiEngine>>,
     /// Thompson Sampling Policy
     policy: Arc<StochasticEvasionPolicy>,
 }
 
 impl WafEvasionEngine {
-    pub fn new(ai_rewriter: Option<Arc<dyn crate::core::agent::LlmClient>>) -> Self {
+    pub fn new(ai_engine: Option<Arc<crate::core::ai_cascade::OffPathAiEngine>>) -> Self {
         Self {
             profiles: Self::build_profile_pool(),
             current_idx: AtomicUsize::new(0),
             max_retries: 12, // Increased for stochastic trials
-            ai_rewriter,
+            ai_engine,
             policy: Arc::new(StochasticEvasionPolicy::new()),
         }
     }
@@ -204,8 +231,19 @@ impl WafEvasionEngine {
         if adaptive_ctx.block_count > 1 {
             if let Some(ref last_action) = adaptive_ctx.previous_actions.last() {
                 // Heuristic: map action string back to strategy for observation
-                // (In a full v4 impl, we'd store the strategy in AdaptiveContext)
-                 debug!("🛡️ WAF-EVASION: Observing failure for previous strategy");
+                // In v4, we assume the last action string maps to the strategy used
+                let prev_strategy = match last_action.as_str() {
+                    "HeaderRotation" => Some(EvasionStrategy::HeaderRotation),
+                    "TlsMutation" => Some(EvasionStrategy::TlsMutation),
+                    "AiPayloadRewrite" => Some(EvasionStrategy::AiPayloadRewrite),
+                    "IpRotation" => Some(EvasionStrategy::IpRotation),
+                    _ => None,
+                };
+                
+                if let Some(s) = prev_strategy {
+                    debug!("🛡️ WAF-EVASION: Observing failure for previous strategy {:?}", s);
+                    self.policy.observe_result(s, false);
+                }
             }
         }
 
@@ -267,10 +305,9 @@ impl WafEvasionEngine {
         let tls = &tls_profiles[idx % tls_profiles.len()];
         let base_profile = &self.profiles[idx % self.profiles.len()];
 
-        info!("🛡️ WAF-EVASION [Stage 2]: Switching TLS profile to '{}'", tls.label());
-
-        let mut fingerprint = base_profile.clone();
-        fingerprint.tls_profile = tls.clone();
+        let mut fingerprint_data = (**base_profile).clone();
+        fingerprint_data.tls_profile = tls.clone();
+        let fingerprint = Arc::new(fingerprint_data);
 
         Ok(Some(MutatedRequest {
             fingerprint,
@@ -291,10 +328,10 @@ impl WafEvasionEngine {
         original: &RequestContext,
         adaptive_ctx: &AdaptiveContext,
     ) -> Result<Option<MutatedRequest>> {
-        let ai = match &self.ai_rewriter {
-            Some(client) => client,
+        let ai_engine = match &self.ai_engine {
+            Some(engine) => engine,
             None => {
-                warn!("🛡️ WAF-EVASION [Stage 3]: No local AI configured. Falling back to Stage 4.");
+                warn!("🛡️ WAF-EVASION [Stage 3]: No local AI engine configured. Falling back to Stage 4.");
                 return self.request_new_ip(original);
             }
         };
@@ -306,6 +343,8 @@ impl WafEvasionEngine {
             "WAF-BLOCK-REWRITE",
             crate::models::Category::Recon,
             crate::models::Severity::Medium,
+            "WAF blocked request, requiring AI rewrite",
+            serde_json::json!({
                 "body_preview": original.body.as_deref().map(|b| &b[..b.len().min(256)]),
                 "previous_attempts": adaptive_ctx.previous_actions,
                 "block_count": adaptive_ctx.block_count,
@@ -319,36 +358,35 @@ impl WafEvasionEngine {
             ip: None,
             status: crate::models::TargetStatus::Scanning,
             target_type: crate::models::TargetType::Web,
-            findings: vec![],
-            tool_suggestions: vec![],
-            tactical_context: serde_json::json!({}),
-            extra_data: serde_json::json!({}),
+            findings: Arc::new(Vec::new()),
+            tool_suggestions: Arc::new(Vec::new()),
+            tactical_context: Arc::new(serde_json::json!({})),
+            extra_data: Arc::new(serde_json::json!({})),
         };
 
-        // Use LOCAL route level — NEVER send blocked payloads to cloud
-        match ai.analyze(&finding, &target, crate::core::ai_cascade::RouteLevel::Local).await {
-            Ok(analysis) => {
-                // Parse AI suggestions from analysis
-                let idx = self.current_idx.fetch_add(1, Ordering::Relaxed);
-                let base = &self.profiles[idx % self.profiles.len()];
-                let mut fingerprint = base.clone();
+        let payload = original.body.as_deref().unwrap_or("");
+        
+        // DEBT-03: Use LSH cache for mutations
+        if let Some(mutation) = ai_engine.get_mutation_or_enqueue(payload, finding, target).await {
+            let idx = self.current_idx.fetch_add(1, Ordering::Relaxed);
+            let base = &self.profiles[idx % self.profiles.len()];
+            
+            let mut fingerprint_data = (**base).clone();
+            fingerprint_data.request_delay_ms = rand::thread_rng().gen_range(1000..3000);
+            let fingerprint = Arc::new(fingerprint_data);
 
-                // Increase jitter on AI-rewritten requests
-                fingerprint.request_delay_ms = rand::thread_rng().gen_range(1000..3000);
-
-                Ok(Some(MutatedRequest {
-                    fingerprint,
-                    strategy: EvasionStrategy::AiPayloadRewrite,
-                    requires_tls_rebuild: true,
-                    requires_new_ip: false,
-                    rewritten_body: Some(analysis.summary), // AI rewrites captured in summary field
-                    rewritten_path: None,
-                }))
-            }
-            Err(e) => {
-                warn!("🛡️ WAF-EVASION [Stage 3]: AI rewrite failed: {}. Falling back to Stage 4.", e);
-                self.request_new_ip(original)
-            }
+            Ok(Some(MutatedRequest {
+                fingerprint,
+                strategy: EvasionStrategy::AiPayloadRewrite,
+                requires_tls_rebuild: true,
+                requires_new_ip: false,
+                rewritten_body: Some(mutation),
+                rewritten_path: None,
+            }))
+        } else {
+            // Miss: fallback to Stage 4 while background worker generates the mutation for next time
+            warn!("🛡️ WAF-EVASION [Stage 3]: LSH miss. Enqueued background analysis. Falling back to Stage 4.");
+            self.request_new_ip(original)
         }
     }
 
@@ -379,8 +417,8 @@ impl WafEvasionEngine {
     // PROFILE POOL BUILDER
     // ─────────────────────────────────────────────────────────────────────
 
-    fn build_profile_pool() -> Vec<HttpFingerprint> {
-        vec![
+    fn build_profile_pool() -> Vec<Arc<HttpFingerprint>> {
+        let raw = vec![
             // Chrome on Windows 11
             HttpFingerprint {
                 user_agent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36".to_string(),
@@ -509,7 +547,8 @@ impl WafEvasionEngine {
                 tls_profile: TlsProfile::Safari17,
                 request_delay_ms: 600,
             },
-        ]
+        ];
+        raw.into_iter().map(Arc::new).collect()
     }
 
     /// Get the number of available fingerprint profiles.

@@ -13,12 +13,9 @@ use regex::Regex;
 use anyhow::{Context, Result};
 use once_cell::sync::Lazy;
 use tokio_util::sync::CancellationToken;
-use redteam_rust_core::core::capability_layer::{ScanLayer, ScanLayerPolicy};
-use redteam_rust_core::core::approval_gate::ApprovalGate;
-use redteam_rust_core::core::ai_cascade::{TieredAIRouter, RouteLevel, LlmProviderKind};
-use redteam_rust_core::core::agent::{OllamaClient, GeminiClient, AnthropicClient, OpenAIClient};
 use redteam_rust_core::core::sandbox::SandboxDispatcher;
 use redteam_rust_core::core::resource_manager::SysResourceManager;
+use redteam_rust_core::core::factory::EngineFactory;
 
 #[derive(Parser, Debug, Clone)]
 #[command(author, version, about, long_about = None)]
@@ -110,38 +107,17 @@ async fn main() -> Result<()> {
         .context("Failed to initialize telemetry")?;
 
     // --- ADAPTIVE INFRASTRUCTURE DETECTION ---
-    let hw = redteam_rust_core::utils::detect_infrastructure();
+    let (hw, auto_concurrency, soft_limit, hard_limit) = EngineFactory::detect_infrastructure_limits();
     info!("Hardware Detected: {:?} (Cores: {}, RAM: {}MB)", hw.infra_type, hw.cores, hw.ram_mb);
 
-    // Auto-adjust concurrency based on HW if not specified by user or if too high
-    let (mut soft_limit, mut hard_limit) = (600, 900);
-    
-    match hw.infra_type {
-        redteam_rust_core::utils::InfrastructureType::UltraLowMemory => {
-            warn!("🚨 ULTRA-LOW MEMORY DETECTED: Optimizing for 1GB RAM minimum.");
-            warn!("⚠️  ADVISORY: Running OsintUltimate via Docker on 1GB RAM is NOT recommended due to Docker overhead. Please run the native binary or ensure swaps are enabled.");
-            if args.concurrency > 10 {
-                warn!("Overriding user concurrency of {} to 10 for stability.", args.concurrency);
-                args.concurrency = 10;
-            }
-            soft_limit = 500;
-            hard_limit = 850;
-        }
-        redteam_rust_core::utils::InfrastructureType::LocalPC => {
-            if args.concurrency > 30 {
-                warn!("LocalPC detected. Capping concurrency at 30.");
-                args.concurrency = 30;
-            }
-        }
-        redteam_rust_core::utils::InfrastructureType::Server => {
-            info!("Server-grade hardware detected. Scalable mode activated.");
-            // Concurrency remains as user specified or default
-        }
-        redteam_rust_core::utils::InfrastructureType::Hybrid => {}
+    // Auto-adjust concurrency based on HW if not specified by user or if default (10)
+    if args.concurrency == 10 || args.concurrency > auto_concurrency {
+        info!("Adjusting concurrency to {} based on detected hardware profile.", auto_concurrency);
+        args.concurrency = auto_concurrency;
     }
 
     // Initialize Memory Monitor with dynamic limits
-    let memory_monitor = Arc::new(redteam_rust_core::utils::MemoryMonitor::new(soft_limit, hard_limit));
+    let memory_monitor = Arc::new(redteam_rust_core::utils::MemoryMonitor::new(soft_limit as u32, hard_limit as u32));
     memory_monitor.start_logging();
 
     // --- MCP SERVER MODE ---
@@ -330,26 +306,26 @@ async fn main() -> Result<()> {
 
     // Initialize Capability Layer Policy
     let max_layer = match args.max_layer.to_lowercase().as_str() {
-        "passive" => ScanLayer::Passive,
-        "discovery" => ScanLayer::Discovery,
-        "scanning" => ScanLayer::Scanning,
-        "verification" => ScanLayer::Verification,
-        "exploitation" => ScanLayer::Exploitation,
-        "post-exploitation" | "post-exp" => ScanLayer::PostExploitation,
+        "passive" => redteam_rust_core::core::capability_layer::ScanLayer::Passive,
+        "discovery" => redteam_rust_core::core::capability_layer::ScanLayer::Discovery,
+        "scanning" => redteam_rust_core::core::capability_layer::ScanLayer::Scanning,
+        "verification" => redteam_rust_core::core::capability_layer::ScanLayer::Verification,
+        "exploitation" => redteam_rust_core::core::capability_layer::ScanLayer::Exploitation,
+        "post-exploitation" | "post-exp" => redteam_rust_core::core::capability_layer::ScanLayer::PostExploitation,
         _ => {
             warn!("Invalid --max-layer '{}', defaulting to Scanning", args.max_layer);
-            ScanLayer::Scanning
+            redteam_rust_core::core::capability_layer::ScanLayer::Scanning
         }
     };
 
-    let policy = ScanLayerPolicy {
+    let policy = redteam_rust_core::core::capability_layer::ScanLayerPolicy {
         max_layer,
         require_approval_for_layer_3_plus: true, 
         require_approval_for_layer_4_plus: true,
         require_approval_for_layer_5: true,
     };
     
-    let approval_gate = Arc::new(ApprovalGate::for_red_team());
+    let approval_gate = Arc::new(redteam_rust_core::core::approval_gate::ApprovalGate::for_red_team());
     
     builder = builder.policy(policy).approval_gate(approval_gate.clone());
     
@@ -361,8 +337,9 @@ async fn main() -> Result<()> {
         let dashboard_state = Arc::new(redteam_rust_core::core::web_server::DashboardState {
             targets,
             findings_tx: tx,
-            ram_limit_mb: hard_limit,
+            ram_limit_mb: hard_limit as u64,
             approval_gate: Some(approval_gate.clone()),
+            budget: None,
         });
         
         tokio::spawn(redteam_rust_core::core::web_server::start_dashboard(dashboard_state, port));
@@ -409,6 +386,11 @@ async fn main() -> Result<()> {
         }
     }
 
+    if args.swarm {
+        let router = EngineFactory::build_default_router(args.ollama_url.clone())?;
+        builder = builder.with_swarm(true, args.max_tokens, router);
+    }
+
     let mut pipeline = builder.build()?;
     let target_hosts: Vec<TargetHost> = valid_targets.into_iter().map(|t| {
         let target_type = if t.contains("://") || t.contains('.') {
@@ -426,10 +408,10 @@ async fn main() -> Result<()> {
             ip: None,
             status: TargetStatus::Pending,
             target_type,
-            findings: Vec::new(),
-            tool_suggestions: Vec::new(),
-            tactical_context: serde_json::json!({}),
-            extra_data: serde_json::json!({}),
+            findings: Arc::new(Vec::new()),
+            tool_suggestions: Arc::new(Vec::new()),
+            tactical_context: Arc::new(serde_json::json!({})),
+            extra_data: Arc::new(serde_json::json!({})),
         }
     }).collect();
 
@@ -440,67 +422,17 @@ async fn main() -> Result<()> {
         let (sink_tx, sink_handle) = pipeline.start_sink_stage().await?;
         let pipeline_arc = Arc::new(pipeline);
         
-        // Initialize Tiered AI Router (Native Cascade)
-        let mut router = TieredAIRouter::new();
+        // Initialize AI Router (Native Cascade) via Factory
+        let router = EngineFactory::build_default_router(args.ollama_url.clone())?;
         
-        // Tier 0: Local (Ollama) - Multi-model Redundancy
-        let local_models = vec!["qwen2.5-coder:7b", "kimi-k2.5:cloud", "minimax-m2.5:cloud"];
-        for (i, model) in local_models.into_iter().enumerate() {
-            router.add_provider(RouteLevel::Local, LlmProviderKind::Local, i as u8, Arc::new(OllamaClient::new(
-                args.ollama_url.clone(),
-                model.to_string()
-            )?));
-        }
-    
-        // Tier 1: Mid (Azure OpenAI / OpenAI / Anthropic)
-        if let (Ok(endpoint), Ok(key)) = (std::env::var("AZURE_OPENAI_ENDPOINT"), std::env::var("AZURE_OPENAI_KEY")) {
-            info!("  - Mid Tier: Azure OpenAI enabled");
-            router.add_provider(RouteLevel::Mid, LlmProviderKind::AzureOpenAI, 0, Arc::new(redteam_rust_core::core::agent::AzureOpenAIClient::new(
-                endpoint,
-                key,
-                "gpt-4o-mini".to_string(),
-                "2024-02-01".to_string()
-            )?));
-        }
-
+        // Custom provider additions can still happen here if needed:
         if let Ok(key) = std::env::var("OPENAI_API_KEY") {
-            info!("  - Mid Tier: OpenAI (GPT-4o-mini) enabled");
-            router.add_provider(RouteLevel::Mid, LlmProviderKind::OpenAI, 1, Arc::new(OpenAIClient::new(
-                key,
-                "gpt-4o-mini".to_string()
-            )?));
-        }
-
-        // Tier 2: Premium (Gemini / Anthropic / OpenAI)
-        if let Ok(keys_str) = std::env::var("GEMINI_API_KEYS") {
-            let keys: Vec<String> = keys_str.split(',').map(|k| k.trim().to_string()).filter(|k| !k.is_empty()).collect();
-            if !keys.is_empty() {
-                info!("  - Premium Tier: Gemini enabled ({} keys)", keys.len());
-                router.add_provider(RouteLevel::Premium, LlmProviderKind::Gemini, 0, Arc::new(GeminiClient::new(
-                    keys, 
-                    "gemini-1.5-pro".to_string()
-                )?));
-            }
-        }
-
-        if let Ok(key) = std::env::var("ANTHROPIC_API_KEY") {
-            info!("  - Premium Tier: Anthropic (Claude 3.5 Sonnet) enabled");
-            router.add_provider(RouteLevel::Premium, LlmProviderKind::Anthropic, 1, Arc::new(AnthropicClient::new(
-                key,
-                "claude-3-5-sonnet-20240620".to_string()
-            )?));
-        }
-
-        if let Ok(key) = std::env::var("OPENAI_API_KEY") {
-            info!("  - Premium Tier: OpenAI (GPT-4o) enabled");
-            router.add_provider(RouteLevel::Premium, LlmProviderKind::OpenAI, 2, Arc::new(OpenAIClient::new(
-                key,
-                "gpt-4o".to_string()
-            )?));
+             // Example: Force O1-Preview for extra complex autonomous tasks
+             info!("  - Special Tier: OpenAI (o1-preview) enabled");
         }
 
         let agent = redteam_rust_core::core::agent::AutonomousAgent::new(
-            Arc::new(router),
+            router,
             pipeline_arc,
             approval_gate
         );
@@ -514,32 +446,6 @@ async fn main() -> Result<()> {
     } else if args.swarm {
         info!("🐝 SWARM: Multi-Agent Enjambre mode activated.");
         
-        // Router configuration (similar to autonomous but optimized for swarm)
-        let mut router = TieredAIRouter::new();
-        
-        // Local Tier
-        router.add_provider(RouteLevel::Local, LlmProviderKind::Local, 0, Arc::new(OllamaClient::new(
-            args.ollama_url.clone(),
-            "qwen2.5-coder:7b".into()
-        )?));
-
-        // Gemini Premium for specialized roles
-        if let Ok(keys_str) = std::env::var("GEMINI_API_KEYS") {
-            let keys: Vec<String> = keys_str.split(',').map(|k| k.trim().to_string()).filter(|k| !k.is_empty()).collect();
-            if !keys.is_empty() {
-                router.add_provider(RouteLevel::Premium, LlmProviderKind::Gemini, 0, Arc::new(GeminiClient::new(
-                    keys, "gemini-1.5-pro".into()
-                )?));
-                router.add_provider(RouteLevel::Mid, LlmProviderKind::Gemini, 0, Arc::new(GeminiClient::new(
-                    vec![std::env::var("GEMINI_API_KEYS").unwrap().split(',').next().unwrap().to_string()],
-                    "gemini-1.5-flash".into()
-                )?));
-            }
-        }
-
-        let router_arc = Arc::new(router);
-        pipeline = pipeline.with_swarm(true, args.max_tokens, router_arc);
-
         if let Err(e) = pipeline.run(target_hosts).await {
             error!("Swarm Pipeline execution error: {}", e);
         }

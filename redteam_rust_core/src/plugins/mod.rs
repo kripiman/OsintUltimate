@@ -152,6 +152,7 @@ impl PluginRegistry {
 
 
 /// Global configuration shared across all plugins to ensure consistency and streamline initialization.
+#[derive(Clone)]
 pub struct GlobalConfig {
     pub insecure: bool,
     pub jitter: std::sync::Arc<crate::utils::common::HumanJitter>,
@@ -160,6 +161,7 @@ pub struct GlobalConfig {
     pub sandbox: std::sync::Arc<crate::core::sandbox::SandboxDispatcher>, // NUEVO: Inyección del sandbox
 }
 
+#[derive(Clone, Serialize, Deserialize)]
 pub struct NmapOptions {
     pub scripts: Option<String>,
     pub stealth: bool,

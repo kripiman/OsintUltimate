@@ -3,28 +3,29 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>OsintUltimate 3.1 | Core Dashboard</title>
+    <title>OsintUltimate 4.0 | Command Center</title>
     <link rel="stylesheet" href="style.css">
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;900&family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet">
+    <script src="https://d3js.org/d3.v7.min.js"></script>
 </head>
 <body>
     <div class="glass-bg"></div>
     
     <nav class="sidebar">
         <div class="logo">
-            <span class="shield">🛡️</span>
             <h1>OSINT<span>ULTIMATE</span></h1>
         </div>
         <ul class="nav-links">
             <li class="active" data-tab="overview">📡 Overview</li>
+            <li data-tab="graph">🕸️ Attack Graph</li>
             <li data-tab="targets">🎯 Targets</li>
             <li data-tab="findings">🔥 Findings</li>
-            <li data-tab="ai">🧠 AI Cascade</li>
-            <li data-tab="decoys">🪤 Decoys</li>
+            <li data-tab="swarm">🐝 Swarm Monitor</li>
+            <li data-tab="approvals">⚖️ Approvals</li>
         </ul>
         <div class="sidebar-status">
             <div class="status-item">
-                <span class="dot pulse"></span> Engined Armed
+                <span class="dot pulse"></span> CORE ACTIVE
             </div>
         </div>
     </nav>
@@ -33,57 +34,67 @@
         <header>
             <div class="page-title">
                 <h2 id="tab-title">Operational Overview</h2>
-                <p id="tab-desc">Real-time telemetry from the autonomous redteam core.</p>
+                <p id="tab-desc">Autonomous Red Team Execution Engine v4.0</p>
             </div>
             <div class="stats-row">
                 <div class="mini-card">
-                    <span class="label">RAM</span>
+                    <span class="label">RAM USAGE</span>
                     <span class="value" id="stat-ram">0 MB</span>
                 </div>
                 <div class="mini-card">
-                    <span class="label">THREADS</span>
-                    <span class="value" id="stat-threads">0</span>
+                    <span class="label">TOKEN BUDGET</span>
+                    <span class="value" id="stat-tokens">0 / 0</span>
                 </div>
                 <div class="mini-card">
-                    <span class="label">PROXIES</span>
-                    <span class="value" id="stat-proxies">0</span>
+                    <span class="label">ACTIVE SANDBOXES</span>
+                    <span class="value" id="stat-containers">0</span>
                 </div>
             </div>
         </header>
 
         <section id="tab-content">
-            <!-- Overview Tab -->
+            <!-- Overview -->
             <div class="tab-pane active" id="overview">
                 <div class="grid">
-                    <div class="card event-feed">
-                        <h3>Live Finding Stream</h3>
+                    <div class="card">
+                        <h3>Live Signal Stream</h3>
                         <div class="stream-container" id="finding-stream">
-                            <div class="system-msg">Initializing SSE connection...</div>
+                            <div class="system-msg">Awaiting SSE handshake...</div>
                         </div>
                     </div>
-                    <div class="card status-grid">
-                        <h3>Resource Pressure</h3>
-                        <div class="gauge-container">
-                            <!-- JS will render gauge here -->
-                            <div class="resource-row">
-                                <span>Memory Limit</span>
-                                <div class="progress-bar"><div class="fill" id="ram-fill" style="width: 0%"></div></div>
-                            </div>
+                    <div class="card">
+                        <h3>Telemetry</h3>
+                        <div class="resource-row">
+                            <span>Memory Pressure</span>
+                            <div class="progress-bar"><div class="fill" id="ram-fill" style="width: 0%"></div></div>
+                        </div>
+                        <div class="resource-row">
+                            <span>Token Consumption</span>
+                            <div class="progress-bar"><div class="fill" id="token-fill" style="width: 0%"></div></div>
                         </div>
                     </div>
                 </div>
             </div>
 
-            <!-- Targets Tab (hidden by default) -->
+            <!-- Attack Graph -->
+            <div class="tab-pane" id="graph">
+                <div class="card" style="height: 100%;">
+                    <h3>Attack Correlation Graph</h3>
+                    <div id="attack-graph-canvas"></div>
+                </div>
+            </div>
+
+            <!-- Targets -->
             <div class="tab-pane" id="targets">
                 <div class="card">
+                    <h3>Infrastructure Inventory</h3>
                     <table id="target-table">
                         <thead>
                             <tr>
                                 <th>Host</th>
-                                <th>IP</th>
+                                <th>IP Address</th>
                                 <th>Status</th>
-                                <th>Findings</th>
+                                <th>Risk Score</th>
                                 <th>Last Action</th>
                             </tr>
                         </thead>
@@ -91,8 +102,59 @@
                     </table>
                 </div>
             </div>
+
+            <!-- Findings -->
+            <div class="tab-pane" id="findings">
+                <div class="card">
+                    <h3>Aggregated Findings</h3>
+                    <table id="finding-table">
+                        <thead>
+                            <tr>
+                                <th>Severity</th>
+                                <th>Title</th>
+                                <th>Target</th>
+                                <th>Tool</th>
+                                <th>Category</th>
+                            </tr>
+                        </thead>
+                        <tbody></tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- Swarm -->
+            <div class="tab-pane" id="swarm">
+                <div class="card">
+                    <h3>Multi-Agent Swarm Status</h3>
+                    <div class="swarm-grid" id="swarm-container">
+                        <!-- Agents rendered here -->
+                    </div>
+                </div>
+            </div>
+
+            <!-- Approvals -->
+            <div class="tab-pane" id="approvals">
+                <div class="card">
+                    <h3>Pending Authorization</h3>
+                    <div id="approvals-list">
+                        <!-- Pending requests -->
+                    </div>
+                </div>
+            </div>
         </section>
     </main>
+
+    <!-- Modal for Approval -->
+    <div id="modal-overlay">
+        <div class="modal">
+            <h3 id="modal-title">Approval Required</h3>
+            <p id="modal-desc"></p>
+            <div class="modal-actions">
+                <button id="btn-reject">Abort Action</button>
+                <button id="btn-approve" class="primary">Authorize Execution</button>
+            </div>
+        </div>
+    </div>
 
     <script src="app.js"></script>
 </body>

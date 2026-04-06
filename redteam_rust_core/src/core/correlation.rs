@@ -70,6 +70,21 @@ impl CorrelationEngine {
                 },
                 _ => {}
             }
+
+            // Rule 4: SAST Endpoint -> DAST Finding (Source-Aware Correlation)
+            if let (Some(a_type), Some(b_type)) = (existing.evidence.data.get("type"), new_finding.evidence.data.get("type")) {
+                if a_type == "source_aware" || b_type == "source_aware" {
+                    let a_end = existing.evidence.data.get("endpoint").and_then(|v| v.as_str());
+                    let b_end = new_finding.evidence.data.get("endpoint").and_then(|v| v.as_str());
+                    
+                    // Si ambos tienen el mismo endpoint (uno SAST, otro DAST)
+                    if let (Some(ae), Some(be)) = (a_end, b_end) {
+                        if ae.to_lowercase().contains(&be.to_lowercase()) || be.to_lowercase().contains(&ae.to_lowercase()) {
+                            self.graph.add_edge(&existing.id, &new_finding.id);
+                        }
+                    }
+                }
+            }
             
             // Reverse rules
             match (&new_finding.category, &existing.category) {
