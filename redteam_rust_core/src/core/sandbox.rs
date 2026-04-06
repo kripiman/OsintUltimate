@@ -53,8 +53,42 @@ impl SandboxDispatcher {
         }
     }
 
+    fn sanitize_args(&self, args: &[String]) -> Result<Vec<String>> {
+        let mut sanitized = Vec::new();
+        let forbidden_prefixes = ["--exec", "--script", "-e", "--eval", "--cmd"];
+        let shell_metachars = [';', '|', '&', '$', '`', '(', ')', '{', '}', '<', '>', '\n', '\r'];
+
+        for arg in args {
+            if arg.is_empty() {
+                anyhow::bail!("Empty argument not allowed");
+            }
+
+            for prefix in forbidden_prefixes {
+                if arg.to_lowercase().starts_with(prefix) {
+                    error!("Rejecting dangerous argument (prefix): {}", arg);
+                    anyhow::bail!("Flag injection detected: {}", arg);
+                }
+            }
+
+            for c in shell_metachars {
+                if arg.contains(c) {
+                    error!("Rejecting dangerous argument (metacharacter '{}'): {}", c, arg);
+                    anyhow::bail!("Shell metacharacter detected in argument: {}", arg);
+                }
+            }
+
+            if arg == ">" || arg == ">>" || arg == "<" {
+                anyhow::bail!("Manual redirect not allowed in arguments");
+            }
+
+            sanitized.push(arg.clone());
+        }
+        Ok(sanitized)
+    }
+
     /// Ejecuta una herramienta devolviendo el objeto Child para permitir streaming de stdout/stderr.
     pub async fn execute_tool_streamed(&self, tool: &BlackArchTool, args: &[String]) -> Result<Child> {
+        let sanitized_args = self.sanitize_args(args)?;
         let tier = self.determine_tier(tool);
         let cost_mb = SysResourceManager::estimate_cost_mb(&tool.category);
 
@@ -84,7 +118,7 @@ impl SandboxDispatcher {
                     Category::Scanning | Category::Vulnerability => {
                         // Some scanners need raw sockets (CAP_NET_RAW)
                         cmd.arg("--cap-add=NET_RAW"); 
-                        cmd.arg("--network=host"); // Target access
+                        cmd.arg("--network=bridge"); // REPLACED: host -> bridge for isolation
                     },
                     _ => {
                         cmd.arg("--network=none"); // Isolated by default
@@ -93,7 +127,7 @@ impl SandboxDispatcher {
 
                 cmd.arg("redteam-tools:v4-slim") 
                    .arg(&tool.name)
-                   .args(args)
+                   .args(sanitized_args)
                    .stdout(std::process::Stdio::piped())
                    .stderr(std::process::Stdio::piped());
 
@@ -102,10 +136,11 @@ impl SandboxDispatcher {
             ExecutionTier::FluidLocal => {
                 info!("⚡ [Sandbox-Stream] '{}' Nativo (ProcessGuard).", tool.name);
                 let mut cmd = Command::new(&tool.name);
-                cmd.args(args)
+                cmd.args(sanitized_args)
                    .stdout(std::process::Stdio::piped())
                    .stderr(std::process::Stdio::piped());
 
+                #[cfg(unix)]
                 unsafe {
                     cmd.pre_exec(|| {
                         libc::setpgid(0, 0);

@@ -79,12 +79,72 @@ pub struct Args {
     pub mcp_port: u16,
 }
 
-static TARGET_RE: Lazy<Regex> = Lazy::new(|| {
-    Regex::new(r"^[a-zA-Z0-9.-]+$").expect("TARGET_RE must be valid")
-});
-
 fn validate_target(target: &str) -> bool {
-    TARGET_RE.is_match(target) && !target.starts_with('-')
+    if target.is_empty() || target.starts_with('-') {
+        return false;
+    }
+
+    // 1. Valid as IP Address (v4 or v6)
+    if target.parse::<std::net::IpAddr>().is_ok() {
+        return true;
+    }
+
+    // 2. Valid as URL
+    if target.contains("://") {
+        if let Ok(url) = url::Url::parse(target) {
+            return url.host_str().is_some();
+        }
+    }
+
+    // 3. Valid as Hostname
+    static HOSTNAME_RE: once_cell::sync::Lazy<regex::Regex> = once_cell::sync::Lazy::new(|| {
+        regex::Regex::new(r"^(?i)[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?(\.[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?)*$").unwrap()
+    });
+    HOSTNAME_RE.is_match(target)
+}
+
+fn is_ssrf_safe_host(host: &str) -> bool {
+    if host.is_empty() { return false; }
+    let host_lower = host.to_lowercase();
+    
+    // Exact name blacklist
+    let name_blacklist = ["localhost", "broadcasthost", "local", "invalid"];
+    if name_blacklist.iter().any(|&b| host_lower == b) {
+        return false;
+    }
+
+    // Direct IP parse
+    if let Ok(ip) = host.parse::<std::net::IpAddr>() {
+        return match ip {
+            std::net::IpAddr::V4(v4) => {
+                let bytes = v4.octets();
+                !(bytes[0] == 127 || bytes[0] == 10 || bytes[0] == 0 ||
+                  (bytes[0] == 172 && bytes[1] >= 16 && bytes[1] <= 31) ||
+                  (bytes[0] == 192 && bytes[1] == 168) ||
+                  (bytes[0] == 169 && bytes[1] == 254) ||
+                  (bytes[0] == 100 && bytes[1] >= 64 && bytes[1] <= 127))
+            },
+            std::net::IpAddr::V6(v6) => {
+                if v6.is_loopback() || v6.is_unspecified() { return false; }
+                if (v6.segments()[0] & 0xffc0) == 0xfe80 { return false; } // Link Local
+                if (v6.segments()[0] & 0xfe00) == 0xfc00 { return false; } // Unique Local
+                if let Some(v4) = v6.to_ipv4_mapped() {
+                    return is_ssrf_safe_host(&v4.to_string());
+                }
+                true
+            }
+        };
+    }
+
+    // Decimal IP representation
+    if host.chars().all(|c| c.is_digit(10)) {
+        if let Ok(val) = host.parse::<u32>() {
+            return is_ssrf_safe_host(&std::net::Ipv4Addr::from(val).to_string());
+        }
+    }
+
+    // Octal/Hex checks could be more complex, but this covers major vectors
+    true
 }
 
 #[tokio::main]
@@ -308,8 +368,8 @@ async fn main() -> Result<()> {
                 }
                 
                 let host = parsed_url.host_str().unwrap_or("");
-                if host == "localhost" || host.starts_with("127.") || host == "::1" || host.starts_with("169.254.") {
-                     anyhow::bail!("Security Violation: C2_URL cannot point to internal addresses (preventing SSRF).");
+                if !is_ssrf_safe_host(host) {
+                     anyhow::bail!("Security Violation: C2_URL cannot point to internal/private addresses (SSRF prevention). Host rejected: {}", host);
                 }
 
                 let c2_token = std::env::var("C2_TOKEN").ok();
@@ -365,15 +425,33 @@ async fn main() -> Result<()> {
     
     // --- DASHBOARD STARTUP ---
     if let Some(port) = args.dashboard {
+        use redteam_rust_core::core::web_server::{DashboardState, DashboardAuth, generate_dashboard_token};
+        use ed25519_dalek::SigningKey;
+        use rand::RngCore;
+
         let (tx, targets) = (tokio::sync::broadcast::channel(1024).0, Arc::new(dashmap::DashMap::new()));
         builder = builder.with_dashboard(tx.clone(), targets.clone());
         
-        let dashboard_state = Arc::new(redteam_rust_core::core::web_server::DashboardState {
+        let signing_key = SigningKey::generate(&mut rand::rngs::OsRng);
+        let mut session_id = [0u8; 16];
+        rand::rngs::OsRng.fill_bytes(&mut session_id);
+        
+        let auth = Arc::new(DashboardAuth {
+            verifying_key: signing_key.verifying_key(),
+            session_id,
+        });
+
+        let token = generate_dashboard_token(&signing_key, session_id, 86400); // 24h expiry
+        info!("🔑 [DASHBOARD-AUTH] Token de acceso (Bearer): {}", token);
+        warn!("⚠️  Guarda este token. Lo necesitarás para autorizar decisiones críticas en el Dashboard (Header 'Authorization: Bearer <token>').");
+
+        let dashboard_state = Arc::new(DashboardState {
             targets,
             findings_tx: tx,
             ram_limit_mb: hard_limit as u64,
             approval_gate: Some(approval_gate.clone()),
             budget: None,
+            auth: auth.clone(),
         });
         
         tokio::spawn(redteam_rust_core::core::web_server::start_dashboard(dashboard_state, port));
