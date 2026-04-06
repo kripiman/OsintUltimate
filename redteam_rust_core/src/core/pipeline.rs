@@ -44,7 +44,7 @@ impl Pipeline {
     }
 
     /// Runs the 4-stage pipeline: Discovery -> Liveness -> Scanning -> Sink
-    pub async fn run(mut self, targets: Vec<TargetHost>) -> Result<()> {
+    pub async fn run(mut self, mut targets: futures::stream::BoxStream<'static, TargetHost>) -> Result<()> {
         info!("🚀 Starting Pipeline with {} plugins...", self.plugins.len());
         
         let mut sink = self.sink.take().context("Pipeline: Sink already taken")?;
@@ -114,8 +114,13 @@ impl Pipeline {
             }
         }));
 
-        for t in targets { let _ = osint_tx.send(t).await; }
-        drop(osint_tx);
+        let osint_token = self.shutdown_token.clone();
+        tokio::spawn(async move {
+            while let Some(t) = targets.next().await {
+                if osint_token.is_cancelled() { break; }
+                if osint_tx.send(t).await.is_err() { break; }
+            }
+        });
 
         // --- STAGE 2: Liveness ---
         let liveness_checker = self.liveness_checker.clone();

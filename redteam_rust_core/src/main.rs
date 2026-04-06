@@ -153,40 +153,60 @@ async fn main() -> Result<()> {
     let res_mgr = SysResourceManager::new();
     let sandbox = Arc::new(SandboxDispatcher::new(res_mgr));
 
-    // 1. Determine Initial Targets
-    let initial_targets: Vec<String> = if let Some(input_path) = args.input.clone() {
+    // 1. Determine Initial Targets (Stream Based)
+    use futures::stream::StreamExt;
+    let target_stream: futures::stream::BoxStream<'static, String> = if let Some(input_path) = args.input.clone() {
         use tokio::fs::File;
-        use tokio::io::{BufReader, AsyncBufReadExt};
+        use tokio::io::BufReader;
         let file = File::open(&input_path).await
             .with_context(|| format!("Failed to open input file: {}", input_path))?;
-        let mut reader = BufReader::new(file).lines();
-        let mut targets = Vec::new();
-        while let Some(line) = reader.next_line().await? {
-            if !line.trim().is_empty() {
-                targets.push(line);
-            }
-        }
-        targets
+        let reader = BufReader::new(file);
+        
+        let s = tokio_stream::wrappers::LinesStream::new(tokio::io::AsyncBufReadExt::lines(reader))
+            .filter_map(|res| async {
+                match res {
+                    Ok(line) if !line.trim().is_empty() => Some(line.trim().to_string()),
+                    _ => None,
+                }
+            });
+        Box::pin(s)
     } else if let Some(target) = args.target.clone() {
-        vec![target]
+        Box::pin(futures::stream::iter(vec![target]))
     } else {
         anyhow::bail!("Either --target or --input must be provided.");
     };
 
-    // Validate Targets
-    let valid_targets: Vec<String> = initial_targets.iter()
+    let mut target_hosts: futures::stream::BoxStream<'static, TargetHost> = target_stream
         .filter(|t| {
-            if validate_target(t) { true } else {
+            let valid = validate_target(t);
+            if !valid {
                 error!("❌ Skipping invalid target: {}", t);
-                false
+            }
+            async move { valid }
+        })
+        .map(|t| {
+            let target_type = if t.contains("://") || t.contains('.') {
+                redteam_rust_core::models::TargetType::Web
+            } else if t.contains(':') && t.chars().filter(|&c| c == ':').count() > 1 {
+                redteam_rust_core::models::TargetType::Network // IPv6
+            } else if t.split('.').all(|s| s.parse::<u8>().is_ok()) && t.split('.').count() == 4 {
+                redteam_rust_core::models::TargetType::Network // IPv4
+            } else {
+                redteam_rust_core::models::TargetType::Host
+            };
+
+            TargetHost {
+                host: t,
+                ip: None,
+                status: TargetStatus::Pending,
+                target_type,
+                findings: Arc::new(Vec::new()),
+                tool_suggestions: Arc::new(Vec::new()),
+                tactical_context: Arc::new(serde_json::json!({})),
+                extra_data: Arc::new(serde_json::json!({})),
             }
         })
-        .cloned()
-        .collect();
-
-    if valid_targets.is_empty() {
-        anyhow::bail!("No valid targets found. Please check your input.");
-    }
+        .boxed();
 
     // V9 FIX (CRIT-010): Regex must accept 2-char scan types like "sS" (the default).
     // Format: 's' prefix + one valid Nmap scan type character.
@@ -280,10 +300,24 @@ async fn main() -> Result<()> {
     }
 
     // V10 C2 Bridge: Check for Webhook exfiltration
-    if let Ok(c2_url) = std::env::var("C2_URL") {
-        let c2_token = std::env::var("C2_TOKEN").ok();
-        info!("📡 C2 READY: Tactical Webhook exfiltration enabled to {}", c2_url);
-        multi_sink.add(Box::new(redteam_rust_core::core::sink::TacticalWebhookSink::new(c2_url, c2_token)));
+    if let Ok(c2_env) = std::env::var("C2_URL") {
+        match url::Url::parse(&c2_env) {
+            Ok(parsed_url) => {
+                if parsed_url.scheme() != "https" {
+                    anyhow::bail!("Security Violation: C2_URL must use HTTPS to prevent MitM leaks.");
+                }
+                
+                let host = parsed_url.host_str().unwrap_or("");
+                if host == "localhost" || host.starts_with("127.") || host == "::1" || host.starts_with("169.254.") {
+                     anyhow::bail!("Security Violation: C2_URL cannot point to internal addresses (preventing SSRF).");
+                }
+
+                let c2_token = std::env::var("C2_TOKEN").ok();
+                info!("📡 C2 READY: Tactical Webhook exfiltration enabled to {}", parsed_url);
+                multi_sink.add(Box::new(redteam_rust_core::core::sink::TacticalWebhookSink::new(parsed_url.to_string(), c2_token)));
+            }
+            Err(e) => anyhow::bail!("Invalid C2_URL environment variable format: {}", e),
+        }
     }
 
     let sink: Box<dyn redteam_rust_core::core::DataSink> = Box::new(multi_sink);
@@ -392,29 +426,6 @@ async fn main() -> Result<()> {
     }
 
     let mut pipeline = builder.build()?;
-    let target_hosts: Vec<TargetHost> = valid_targets.into_iter().map(|t| {
-        let target_type = if t.contains("://") || t.contains('.') {
-            redteam_rust_core::models::TargetType::Web
-        } else if t.contains(':') && t.chars().filter(|&c| c == ':').count() > 1 {
-            redteam_rust_core::models::TargetType::Network // IPv6
-        } else if t.split('.').all(|s| s.parse::<u8>().is_ok()) && t.split('.').count() == 4 {
-            redteam_rust_core::models::TargetType::Network // IPv4
-        } else {
-            redteam_rust_core::models::TargetType::Host
-        };
-
-        TargetHost {
-            host: t,
-            ip: None,
-            status: TargetStatus::Pending,
-            target_type,
-            findings: Arc::new(Vec::new()),
-            tool_suggestions: Arc::new(Vec::new()),
-            tactical_context: Arc::new(serde_json::json!({})),
-            extra_data: Arc::new(serde_json::json!({})),
-        }
-    }).collect();
-
     if args.autonomous {
         info!("🤖 SENTINEL: Activating Autonomous Agent with Native AI Cascade...");
         
@@ -436,7 +447,7 @@ async fn main() -> Result<()> {
             pipeline_arc,
             approval_gate
         );
-        for target in target_hosts {
+        while let Some(target) = target_hosts.next().await {
             if let Err(e) = agent.run_autopilot(target, sink_tx.clone()).await {
                 error!("Autonomous agent failed on target: {}", e);
             }

@@ -93,6 +93,9 @@ impl DynamicPluginLoader {
 
     /// Loads a single shared library and extracts the `_plugin_create` symbol.
     fn load_plugin(&mut self, path: &Path) -> Result<Box<dyn ScannerPlugin>> {
+        // SECURITY FIX (CRIT-002): Verify Ed25519 signature before loading dynamic library
+        Self::verify_signature(path)?;
+
         unsafe {
             // Load the shared library
             let lib = Library::new(path).with_context(|| format!("Failed to load library {:?}", path))?;
@@ -145,6 +148,30 @@ impl DynamicPluginLoader {
             
             // TODO: Añadir verificación de 'magic number' o hash de estructuras críticas (TargetHost, Finding)
         }
+        Ok(())
+    }
+
+    /// Extracs Ed25519 public key and verifies plugin integrity against its `.sig` file.
+    fn verify_signature(path: &Path) -> Result<()> {
+        use ed25519_dalek::{VerifyingKey, Signature, Verifier};
+        use std::fs;
+        
+        let public_key_hex = "d75a980182b10ab7d54bfed3c964073a0ee172f3daa62325af021a68f707511a";
+        let pk_bytes = hex::decode(public_key_hex).context("Invalid public key hex")?;
+        let pk_array: [u8; 32] = pk_bytes.try_into().map_err(|_| anyhow::anyhow!("Key len mismatch"))?;
+        let public_key = VerifyingKey::from_bytes(&pk_array).context("Invalid PK format")?;
+
+        let sig_path = std::path::PathBuf::from(format!("{}.sig", path.display()));
+        if !sig_path.exists() {
+            anyhow::bail!("Security violation: No cryptographic signature (.sig) found for {:?}", path);
+        }
+
+        let sig_hex = fs::read_to_string(&sig_path).context("Failed to read signature")?;
+        let sig_bytes = hex::decode(sig_hex.trim()).context("Invalid sig hex")?;
+        let signature = Signature::from_slice(&sig_bytes).context("Invalid signature length")?;
+        let plugin_bytes = fs::read(path).context("Failed to read plugin binary")?;
+
+        public_key.verify(&plugin_bytes, &signature).context("Plugin signature verification failed! Possible tampering.")?;
         Ok(())
     }
 }

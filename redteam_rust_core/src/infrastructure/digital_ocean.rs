@@ -68,6 +68,7 @@ write_files:
       }
 runcmd:
   - systemctl restart danted
+  - shutdown -h +240
 "#;
 
 pub struct DigitalOceanClient {
