@@ -66,20 +66,21 @@ impl DataSink for MultiSink {
 pub struct TacticalWebhookSink {
     client: reqwest::Client,
     url: String,
-    auth_token: Option<String>,
+    auth_token: String,
     buffer: Vec<TargetHost>,
     batch_size: usize,
 }
 
 impl TacticalWebhookSink {
-    pub fn new(url: String, auth_token: Option<String>) -> Self {
-        Self {
-            client: reqwest::Client::new(),
+    pub fn new(url: String, auth_token: Option<String>) -> Result<Self> {
+        let token = auth_token.context("Security Violation: C2 Webhook integration requires C2_TOKEN for authorization. Cannot send findings without authentication.")?;
+        Ok(Self {
+            client: reqwest::Client::builder().danger_accept_invalid_certs(false).build()?,
             url,
-            auth_token,
+            auth_token: token,
             buffer: Vec::with_capacity(10),
             batch_size: 10,
-        }
+        })
     }
 
     async fn flush(&mut self) -> Result<()> {
@@ -100,9 +101,7 @@ impl TacticalWebhookSink {
             .header(reqwest::header::CONTENT_ENCODING, "gzip")
             .body(compressed_data);
         
-        if let Some(token) = &self.auth_token {
-            request = request.header("Authorization", format!("Bearer {}", token));
-        }
+        request = request.header("Authorization", format!("Bearer {}", self.auth_token));
 
         request.send().await.context("TacticalWebhookSink: Failed to send batched result to C2")?;
         
@@ -125,9 +124,7 @@ impl DataSink for TacticalWebhookSink {
         let mut request = self.client.post(&format!("{}/metadata", self.url))
             .json(metadata);
             
-        if let Some(token) = &self.auth_token {
-            request = request.header("Authorization", format!("Bearer {}", token));
-        }
+        request = request.header("Authorization", format!("Bearer {}", self.auth_token));
 
         request.send().await.context("TacticalWebhookSink: Failed to send metadata to C2")?;
         Ok(())

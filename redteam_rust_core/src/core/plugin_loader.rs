@@ -93,12 +93,43 @@ impl DynamicPluginLoader {
 
     /// Loads a single shared library and extracts the `_plugin_create` symbol.
     fn load_plugin(&mut self, path: &Path) -> Result<Box<dyn ScannerPlugin>> {
-        // SECURITY FIX (CRIT-002): Verify Ed25519 signature before loading dynamic library
-        Self::verify_signature(path)?;
+        // FIX DE AISLAMIENTO: Verificar rutas permitidas y seguras (MED-001 canonicalize)
+        let canonical_path = std::fs::canonicalize(path).with_context(|| format!("Failed to canonicalize path: {:?}", path))?;
+        let path_str = canonical_path.to_string_lossy();
+        if path_str.starts_with("/tmp") || path_str.starts_with("/var/tmp") || path_str.starts_with("/dev/shm") || path_str.contains("..") {
+             anyhow::bail!("Security Violation: Carga de plugin dinámico rechazada. Ruta peligrosa (evita directorios temporales o escalada de rutas): {:?}", canonical_path);
+        }
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::MetadataExt;
+            if let Ok(meta) = std::fs::metadata(&canonical_path) {
+                if (meta.mode() & 0o002) != 0 {
+                    anyhow::bail!("Security Violation: Archivo de plugin tiene permisos de escritura global (world-writable).");
+                }
+            }
+        }
+
+        // SECURITY FIX (CRIT-002): Verificación de firma y carga desde un FD en unix para evitar TOCTOU
+        #[cfg(unix)]
+        let lib = {
+            let mut file = std::fs::File::open(&canonical_path).context("Failed to open plugin file")?;
+            use std::io::Read;
+            let mut plugin_bytes = Vec::new();
+            file.read_to_end(&mut plugin_bytes)?;
+            Self::verify_signature_from_bytes(&canonical_path, &plugin_bytes)?;
+            use std::os::unix::io::AsRawFd;
+            let fd = file.as_raw_fd();
+            unsafe { Library::new(format!("/proc/self/fd/{}", fd)).with_context(|| format!("Failed to load FD library {:?}", canonical_path))? }
+        };
+
+        #[cfg(not(unix))]
+        let lib = {
+            let plugin_bytes = std::fs::read(&canonical_path)?;
+            Self::verify_signature_from_bytes(&canonical_path, &plugin_bytes)?;
+            unsafe { Library::new(&canonical_path).with_context(|| format!("Failed to load library {:?}", canonical_path))? }
+        };
 
         unsafe {
-            // Load the shared library
-            let lib = Library::new(path).with_context(|| format!("Failed to load library {:?}", path))?;
 
             // AUDIT-001 FIX: Verify ABI/Version compatibility before instantiation
             Self::verify_abi(&lib)?;
@@ -132,10 +163,14 @@ impl DynamicPluginLoader {
     /// AUDIT-002: Además de la versión, podríamos verificar un hash del ABI o features activas.
     fn verify_abi(lib: &Library) -> Result<()> {
         unsafe {
-            let version_sym: Symbol<fn() -> &'static str> = lib.get(b"plugin_version\0")
+            let version_sym: Symbol<unsafe extern "C" fn() -> *const std::os::raw::c_char> = lib.get(b"plugin_version\0")
                 .context("Failed to find `plugin_version` symbol. Dynamic plugins must export this to ensure ABI compatibility.")?;
             
-            let plugin_version = version_sym();
+            let plugin_version_ptr = version_sym();
+            if plugin_version_ptr.is_null() {
+                anyhow::bail!("plugin_version returned null pointer");
+            }
+            let plugin_version = std::ffi::CStr::from_ptr(plugin_version_ptr).to_string_lossy();
             let host_version = env!("CARGO_PKG_VERSION");
 
             if plugin_version != host_version {
@@ -152,11 +187,15 @@ impl DynamicPluginLoader {
     }
 
     /// Extracs Ed25519 public key and verifies plugin integrity against its `.sig` file.
-    fn verify_signature(path: &Path) -> Result<()> {
+    fn verify_signature_from_bytes(path: &Path, plugin_bytes: &[u8]) -> Result<()> {
         use ed25519_dalek::{VerifyingKey, Signature, Verifier};
         use std::fs;
         
-        let public_key_hex = "d75a980182b10ab7d54bfed3c964073a0ee172f3daa62325af021a68f707511a";
+        let public_key_hex = std::env::var("ED25519_PUBLIC_KEY").unwrap_or_else(|_| {
+            tracing::warn!("⚠️ Using default test Ed25519 public key! Set ED25519_PUBLIC_KEY for production security.");
+            "d75a980182b10ab7d54bfed3c964073a0ee172f3daa62325af021a68f707511a".to_string()
+        });
+        
         let pk_bytes = hex::decode(public_key_hex).context("Invalid public key hex")?;
         let pk_array: [u8; 32] = pk_bytes.try_into().map_err(|_| anyhow::anyhow!("Key len mismatch"))?;
         let public_key = VerifyingKey::from_bytes(&pk_array).context("Invalid PK format")?;
@@ -169,9 +208,8 @@ impl DynamicPluginLoader {
         let sig_hex = fs::read_to_string(&sig_path).context("Failed to read signature")?;
         let sig_bytes = hex::decode(sig_hex.trim()).context("Invalid sig hex")?;
         let signature = Signature::from_slice(&sig_bytes).context("Invalid signature length")?;
-        let plugin_bytes = fs::read(path).context("Failed to read plugin binary")?;
 
-        public_key.verify(&plugin_bytes, &signature).context("Plugin signature verification failed! Possible tampering.")?;
+        public_key.verify(plugin_bytes, &signature).context("Plugin signature verification failed! Possible tampering.")?;
         Ok(())
     }
 }

@@ -84,14 +84,13 @@ impl DigitalOceanClient {
         }
     }
 
-    fn headers(&self) -> HeaderMap {
+    fn headers(&self) -> Result<HeaderMap> {
         let mut headers = HeaderMap::new();
-        headers.insert(
-            AUTHORIZATION,
-            HeaderValue::from_str(&format!("Bearer {}", self.token)).unwrap(),
-        );
+        let auth_val = HeaderValue::from_str(&format!("Bearer {}", self.token))
+            .context("Validation Error: Invalid characters in DigitalOcean token")?;
+        headers.insert(AUTHORIZATION, auth_val);
         headers.insert(CONTENT_TYPE, HeaderValue::from_static("application/json"));
-        headers
+        Ok(headers)
     }
 
     pub async fn create_droplet(&self, name: &str, region: &str) -> Result<Droplet> {
@@ -110,7 +109,7 @@ impl DigitalOceanClient {
 
         let response = self.client
             .post("https://api.digitalocean.com/v2/droplets")
-            .headers(self.headers())
+            .headers(self.headers()?)
             .json(&request)
             .send()
             .await?
@@ -128,7 +127,7 @@ impl DigitalOceanClient {
     pub async fn get_droplet(&self, id: u64) -> Result<Droplet> {
         let response = self.client
             .get(format!("https://api.digitalocean.com/v2/droplets/{}", id))
-            .headers(self.headers())
+            .headers(self.headers()?)
             .send()
             .await?
             .error_for_status()?;
@@ -158,7 +157,7 @@ impl DigitalOceanClient {
     pub async fn destroy_droplet(&self, id: u64) -> Result<()> {
         self.client
             .delete(format!("https://api.digitalocean.com/v2/droplets/{}", id))
-            .headers(self.headers())
+            .headers(self.headers()?)
             .send()
             .await?
             .error_for_status()?;

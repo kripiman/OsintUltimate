@@ -8,6 +8,40 @@ pub async fn is_target_live(checker: &LivenessChecker, target: &str) -> Option<I
     checker.is_live(target).await
 }
 
+/// Validates whether a given host is safe from SSRF attacks.
+pub fn is_ssrf_safe_host(host: &str) -> bool {
+    if host.is_empty() { return false; }
+    let host_lower = host.to_lowercase();
+    
+    // 1. Strict blacklist for cloud metadata and internal names
+    let name_blacklist = ["localhost", "broadcasthost", "local", "invalid", "kubernetes.default.svc", "metadata.google.internal", "169.254.169.254"];
+    if name_blacklist.iter().any(|&b| host_lower.contains(b)) {
+        return false;
+    }
+
+    // 2. Exact IP parsing
+    if let Ok(ip) = host.parse::<std::net::IpAddr>() {
+        return is_safe_ip(&ip);
+    }
+
+    // 3. Decimal IP representation (e.g. 2130706433 -> 127.0.0.1)
+    if host.chars().all(|c| c.is_digit(10)) {
+        if let Ok(val) = host.parse::<u32>() {
+            return is_safe_ip(&std::net::Ipv4Addr::from(val).into());
+        }
+    }
+    
+    // 4. Hexadecimal/Octal heuristics bypass
+    if host_lower.starts_with("0x") || (host_lower.starts_with("0") && host.chars().all(|c| c.is_digit(8))) {
+         return false; // Safely drop obscured encodings lacking exact DNS matching
+    }
+    
+    // 5. Encoded string bypasses
+    if host.chars().any(|c| c == '%' || c == '\\') { return false; }
+    
+    true
+}
+
 /// Checks if an IP address is safe to scan (i.e., Global, not Private/Loopback).
 /// Returns true if safe, false if it's a private/local/link-local address.
 pub fn is_safe_ip(ip: &IpAddr) -> bool {
@@ -94,12 +128,21 @@ impl LivenessChecker {
 
     pub async fn is_live(&self, target: &str) -> Option<IpAddr> {
         if let Ok(ip) = target.parse::<IpAddr>() {
-            return Some(ip);
+            if is_safe_ip(&ip) {
+                return Some(ip);
+            } else {
+                return None;
+            }
         }
 
         match self.resolver.lookup_ip(target).await {
             Ok(response) => {
-                response.iter().next()
+                for ip in response.iter() {
+                    if is_safe_ip(&ip) {
+                        return Some(ip);
+                    }
+                }
+                None
             }
             Err(_) => None
         }

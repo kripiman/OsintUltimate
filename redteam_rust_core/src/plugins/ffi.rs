@@ -7,7 +7,7 @@ use once_cell::sync::Lazy;
 use dashmap::DashSet;
 
 /// V10 HARDENING: ABI Versioning to prevent memory corruption from incompatible plugins.
-pub const PLUGIN_ABI_VERSION: u32 = 1;
+pub const PLUGIN_ABI_VERSION: u32 = 2;
 
 /// FFI-safe result for plugin names
 #[repr(C)]
@@ -38,8 +38,8 @@ pub struct ScannerPluginFFI {
     /// Returns the ABI version this plugin was compiled with.
     pub abi_version: extern "C" fn() -> u32,
     pub name: extern "C" fn(*const ()) -> *const c_char,
-    /// Performs the scan. Returns a raw pointer to a vector-like structure.
-    pub scan: extern "C" fn(*const (), *const TargetHost) -> *mut FFIFindings,
+    /// Performs the scan. Returns a vector-like structure directly by value to avoid outer pointer leaks.
+    pub scan: extern "C" fn(*const (), *const TargetHost) -> FFIFindings,
     pub plugin_ptr: *const (),
     pub destroy: extern "C" fn(*const ()),
 }
@@ -50,9 +50,10 @@ unsafe impl Sync for ScannerPluginFFI {}
 pub struct FFIPluginWrapper {
     pub ffi: ScannerPluginFFI,
     cached_name: &'static str,
+    sync_lock: std::sync::Mutex<()>, // CRIT-FIX: Guarantee sequential FFI execution for unsafe plugins (HIGH-005)
 }
 
-static PLUGIN_NAME_CACHE: Lazy<DashSet<String>> = Lazy::new(DashSet::new);
+static PLUGIN_NAME_CACHE: Lazy<DashSet<&'static str>> = Lazy::new(DashSet::new);
 
 impl FFIPluginWrapper {
     pub fn new(ffi: ScannerPluginFFI) -> Result<Self> {
@@ -69,16 +70,16 @@ impl FFIPluginWrapper {
             } else {
                 let s = std::ffi::CStr::from_ptr(c_str).to_str().unwrap_or("unknown");
                 if let Some(existing) = PLUGIN_NAME_CACHE.get(s) {
-                    unsafe { std::mem::transmute::<&str, &'static str>(existing.as_str()) }
+                    *existing
                 } else {
                     let owned = s.to_string();
-                    let leaked: &'static str = Box::leak(owned.clone().into_boxed_str());
-                    PLUGIN_NAME_CACHE.insert(owned);
+                    let leaked: &'static str = Box::leak(owned.into_boxed_str());
+                    PLUGIN_NAME_CACHE.insert(leaked);
                     leaked
                 }
             }
         };
-        Ok(Self { ffi, cached_name })
+        Ok(Self { ffi, cached_name, sync_lock: std::sync::Mutex::new(()) })
     }
 }
 
@@ -116,6 +117,7 @@ impl crate::plugins::ScannerPlugin for FFIPluginWrapper {
     }
 
     async fn scan(&self, target: &TargetHost) -> Result<Vec<Finding>> {
+        let _guard = self.sync_lock.lock().unwrap(); // Exclusive lock for thread-safety (HIGH-005)
         let ffi = &self.ffi;
         let plugin_ptr = ffi.plugin_ptr;
         let target_ptr = target as *const TargetHost;
@@ -126,23 +128,23 @@ impl crate::plugins::ScannerPlugin for FFIPluginWrapper {
         }));
 
         match result {
-            Ok(findings_ptr) => {
-                if findings_ptr.is_null() {
-                    return Ok(Vec::new());
-                }
+            Ok(ffi_findings) => {
                 unsafe {
-                    let ffi_findings = Box::from_raw(findings_ptr);
+                    if ffi_findings.len > 1_000_000 {
+                        anyhow::bail!("Security Violation: Plugin devolvió demasiados hallazgos ({}), abortando lectura para prevenir Heap Exhaustion.", ffi_findings.len);
+                    }
                     
-                    // V10 CLONE-AND-SIGNAL: 
-                    // 1. Read memory via FFI-safe slice (no ownership taken yet)
-                    let slice = std::slice::from_raw_parts(ffi_findings.data, ffi_findings.len);
+                    let cloned_findings = if ffi_findings.len > 0 {
+                        if ffi_findings.data.is_null() {
+                            anyhow::bail!("Security Violation: Plugin devolvió data null pero len > 0.");
+                        }
+                        let slice = std::slice::from_raw_parts(ffi_findings.data, ffi_findings.len);
+                        slice.to_vec()
+                    } else {
+                        Vec::new()
+                    };
                     
-                    // 2. Clone to native Rust Vec (Host takes ownership of the clone)
-                    let cloned_findings = slice.to_vec();
-                    
-                    // 3. Drop ffi_findings -> calls free_fn -> Plugin cleans up its original memory.
-                    // This prevents double-free and allocator mismatch issues.
-                    
+                    // Al terminar este bloque, `ffi_findings` se destruye y su impl Drop invoca a `free_fn` del plugin.
                     Ok(cloned_findings)
                 }
             }

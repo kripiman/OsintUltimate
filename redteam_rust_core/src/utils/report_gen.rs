@@ -268,9 +268,13 @@ pub async fn generate_report(jsonl_path: &str, output_path: &str) -> Result<()> 
         
         let peek: serde_json::Value = serde_json::from_str(&line)?;
 
-        if peek.get("metadata").is_some() {
-            metadata = serde_json::from_value(peek.get("metadata").unwrap().clone())?;
-            metadata.command_line = html_escape::encode_safe(&metadata.command_line).to_string();
+        if let Some(meta_val) = peek.get("metadata") {
+            if let Ok(m) = serde_json::from_value(meta_val.clone()) {
+                metadata = m;
+                metadata.command_line = html_escape::encode_safe(&metadata.command_line).to_string();
+            } else {
+                tracing::warn!("Failed to parse metadata from JSONL, skipping invalid metadata line");
+            }
         } else if let Ok(target) = serde_json::from_str::<TargetHost>(&line) {
             stats.total_targets += 1;
             if target.status == crate::models::TargetStatus::Scanned {

@@ -120,8 +120,28 @@ impl PocValidator {
     }
 
     async fn execute_shell(&self, command: &str) -> Result<String> {
-        let mut cmd = Command::new("sh");
-        cmd.arg("-c").arg(command);
+        // Validación estricta anti-Shell Injection
+        let dangerous_chars = ['&', '|', ';', '$', '`', '>', '<'];
+        if command.chars().any(|c| dangerous_chars.contains(&c)) {
+            anyhow::bail!("Security Violation: PoC command contains forbidden shell operators.");
+        }
+
+        let parts: Vec<&str> = command.split_whitespace().collect();
+        if parts.is_empty() {
+            anyhow::bail!("Security Violation: Empty command.");
+        }
+
+        // Whitelist comandos permitidos para PoC (Removidos: python3, nc por riesgo ejecución arbitraria)
+        let allowed_binaries = ["curl", "nmap", "ping", "whoami", "id"];
+        if !allowed_binaries.contains(&parts[0]) {
+            anyhow::bail!("Security Violation: Binary '{}' is not in the whitelist of safe PoC commands.", parts[0]);
+        }
+
+        let mut cmd = Command::new(parts[0]);
+        if parts.len() > 1 {
+            cmd.args(&parts[1..]);
+        }
+        
         let res = tokio::time::timeout(Duration::from_secs(10), cmd.output()).await;
         let output = res.context("PoC command timed out")??;
         
@@ -144,6 +164,14 @@ impl PocValidator {
         } else {
             format!("http://{}{}{}", target.host, if payload.starts_with('/') { "" } else { "/" }, payload)
         };
+
+        if let Ok(parsed_url) = url::Url::parse(&url) {
+            if let Some(host) = parsed_url.host_str() {
+                if !crate::utils::liveness::is_ssrf_safe_host(host) {
+                    anyhow::bail!("Security Violation: HTTP PoC payload attempts to reach forbidden internal/metadata host: {}", host);
+                }
+            }
+        }
 
         let res = client.get(&url).send().await?;
         let status = res.status();

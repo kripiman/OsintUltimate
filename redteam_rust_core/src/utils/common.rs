@@ -88,7 +88,9 @@ pub fn stealth_command(binary: &str) -> tokio::process::Command {
         unsafe {
             cmd.pre_exec(|| {
                 // 1. New Session/PGID
-                libc::setsid();
+                if libc::setsid() == -1 {
+                    return Err(std::io::Error::last_os_error());
+                }
                 
                 // 2. Memory Limits (Hard limit 512MB for any single tool)
                 // This prevents a single nmap/hydra from OOMing the 1GB VPS.
@@ -97,21 +99,27 @@ pub fn stealth_command(binary: &str) -> tokio::process::Command {
                     rlim_cur: mem_limit_val,
                     rlim_max: mem_limit_val,
                 };
-                libc::setrlimit(libc::RLIMIT_AS, &mem_rlimit);
+                if libc::setrlimit(libc::RLIMIT_AS, &mem_rlimit) == -1 {
+                    return Err(std::io::Error::last_os_error());
+                }
                 
                 // 3. CPU Time Limit (300s CPU time max to prevent runaway processes)
                 let cpu_rlimit = libc::rlimit {
                     rlim_cur: 300,
                     rlim_max: 300,
                 };
-                libc::setrlimit(libc::RLIMIT_CPU, &cpu_rlimit);
+                if libc::setrlimit(libc::RLIMIT_CPU, &cpu_rlimit) == -1 {
+                    return Err(std::io::Error::last_os_error());
+                }
 
                 // 4. Process Count Limit (Max 64 children to prevent fork bombs/runaway threads)
                 let nproc_rlimit = libc::rlimit {
                     rlim_cur: 64,
                     rlim_max: 64,
                 };
-                libc::setrlimit(libc::RLIMIT_NPROC, &nproc_rlimit);
+                if libc::setrlimit(libc::RLIMIT_NPROC, &nproc_rlimit) == -1 {
+                    return Err(std::io::Error::last_os_error());
+                }
                 
                 Ok(())
             });
@@ -124,6 +132,9 @@ pub fn stealth_command(binary: &str) -> tokio::process::Command {
 pub async fn kill_pgid(pid: u32) {
     #[cfg(unix)]
     {
+        if pid <= 1 {
+            return; // Bloqueo de seguridad: Evitar matar SIGKILL a root process o proceso local actual si es 0
+        }
         // Sending signal to -pid sends it to the whole process group.
         unsafe {
             libc::kill(-(pid as i32), libc::SIGKILL);
@@ -134,6 +145,9 @@ pub async fn kill_pgid(pid: u32) {
 pub fn kill_pgid_sync(pid: u32) {
     #[cfg(unix)]
     {
+        if pid <= 1 {
+            return;
+        }
         unsafe {
             libc::kill(-(pid as i32), libc::SIGKILL);
         }

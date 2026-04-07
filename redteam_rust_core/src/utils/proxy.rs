@@ -51,8 +51,11 @@ impl ProxyManager {
             _health_checker_handle: None,
         };
 
-        // Start background health checker if there are proxies
-        if !pm.proxies.lock().unwrap().is_empty() {
+        let has_proxies = match pm.proxies.lock() {
+            Ok(guard) => !guard.is_empty(),
+            Err(poisoned) => !poisoned.into_inner().is_empty(),
+        };
+        if has_proxies {
              pm.start_health_checker();
         }
 
@@ -181,7 +184,10 @@ impl ProxyManager {
     fn pick_best_proxy(&self) -> Option<String> {
         let now = SystemTime::now().duration_since(UNIX_EPOCH).unwrap_or_default().as_secs();
         
-        let proxies_lock = self.proxies.lock().unwrap();
+        let proxies_lock = match self.proxies.lock() {
+            Ok(guard) => guard,
+            Err(poisoned) => poisoned.into_inner(),
+        };
         let available_proxies: Vec<String> = proxies_lock.iter()
             .filter(|p| {
                 if let Some(entry) = self.blacklist.get(*p) {
@@ -208,7 +214,11 @@ impl ProxyManager {
     }
 
     pub fn get_client(&self, host: &str) -> Option<(String, Client)> {
-        if self.proxies.lock().unwrap().is_empty() { return None; }
+        let is_empty = match self.proxies.lock() {
+            Ok(guard) => guard.is_empty(),
+            Err(poisoned) => poisoned.into_inner().is_empty(),
+        };
+        if is_empty { return None; }
 
         let p_url = self.pick_best_proxy()?;
         
@@ -242,7 +252,11 @@ impl ProxyManager {
     }
 
     pub fn get_client_pinned(&self, host: &str, ip: IpAddr, port: u16) -> Option<(String, Client)> {
-        if self.proxies.lock().unwrap().is_empty() { return None; }
+        let is_empty = match self.proxies.lock() {
+            Ok(guard) => guard.is_empty(),
+            Err(poisoned) => poisoned.into_inner().is_empty(),
+        };
+        if is_empty { return None; }
 
         let p_url = self.pick_best_proxy()?;
         
@@ -323,7 +337,10 @@ impl ProxyManager {
     }
 
     pub fn add_proxy(&self, proxy: String) {
-        let mut proxies = self.proxies.lock().unwrap();
+        let mut proxies = match self.proxies.lock() {
+            Ok(guard) => guard,
+            Err(poisoned) => poisoned.into_inner(),
+        };
         if !proxies.contains(&proxy) {
             proxies.push(proxy);
             // Since we use &self, start_health_checker might need to be called differently if pm is already constructed.
@@ -332,7 +349,10 @@ impl ProxyManager {
     }
 
     pub fn is_empty(&self) -> bool {
-        self.proxies.lock().unwrap().is_empty()
+        match self.proxies.lock() {
+            Ok(guard) => guard.is_empty(),
+            Err(poisoned) => poisoned.into_inner().is_empty(),
+        }
     }
 }
 

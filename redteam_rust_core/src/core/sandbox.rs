@@ -4,6 +4,7 @@ use crate::models::findings::Category;
 use anyhow::{Result, Context};
 use tokio::process::{Command, Child};
 use tracing::{info, warn, error};
+#[cfg(unix)]
 use std::os::unix::process::CommandExt;
 
 #[derive(Debug, PartialEq)]
@@ -143,7 +144,9 @@ impl SandboxDispatcher {
                 #[cfg(unix)]
                 unsafe {
                     cmd.pre_exec(|| {
-                        libc::setpgid(0, 0);
+                        if libc::setpgid(0, 0) == -1 {
+                            return Err(std::io::Error::last_os_error());
+                        }
                         Ok(())
                     });
                 }
