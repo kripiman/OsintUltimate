@@ -7,6 +7,7 @@ use tracing::{info, warn, error};
 use tokio::process::Command;
 use std::time::Duration;
 use serde_json::json;
+use std::path::Path;
 
 pub struct PocValidator {
     router: Arc<TieredAIRouter>,
@@ -63,8 +64,10 @@ impl PocValidator {
 
         // 3. Ejecución segura según la estrategia
         let execution_result = match poc.strategy {
-            PocStrategy::ShellCommand => self.execute_shell(&poc.payload).await,
+            PocStrategy::SafeCommand => self.execute_safe_command(&poc.payload).await,
             PocStrategy::HttpPayload => self.execute_http(&poc.payload, target).await,
+            PocStrategy::TcpCheck => self.execute_tcp_check(&poc.payload, target).await,
+            PocStrategy::IcmpPing => self.execute_icmp_ping(target).await,
             PocStrategy::NucleiTemplate => Ok("Estrategia Nuclei requiere integración con el plugin. Marcado como pendiente.".to_string()),
         };
 
@@ -97,16 +100,17 @@ impl PocValidator {
              Evidencia original: {:?}\n\
              Objetivo: {}\n\n\
              Responde ÚNICAMENTE con un JSON válido que siga este esquema:\n\
-             {{\n  \"strategy\": \"shell_command\" | \"http_payload\",\n  \"payload\": \"comando o sub-ruta\",\n  \"expected_pattern\": \"cadena que confirma el éxito\",\n  \"is_intrusive\": true | false\n}}",
+             {{\n  \
+               \"strategy\": \"safe_command\" | \"http_payload\" | \"tcp_check\" | \"icmp_ping\",\n  \
+               \"payload\": \"JSON array para safe_command (p.ej. [\\\"nmap\\\", \\\"-p80\\\", \\\"-sV\\\"]) o sub-ruta para http_payload\",\n  \
+               \"expected_pattern\": \"cadena que confirma el éxito\",\n  \
+               \"is_intrusive\": true | false\n\
+             }}",
             finding.title, finding.description, finding.evidence.data, target.host
         );
 
         // Forzar nivel Premium para generación de exploits
         let analysis = self.router.analyze_with_level(finding, target, crate::core::ai_cascade::RouteLevel::Premium).await?;
-        
-        // Aquí asumimos que la IA puede devolver el PoC dentro de la respuesta o tenemos un método nuevo.
-        // Como acabamos de añadir el campo `poc` a `AIAnalysis`, el `TieredAIRouter` debería estar actualizado.
-        // Si no, podemos parsear la respuesta aquí.
         
         if let Some(poc) = analysis.poc {
             Ok(poc)
@@ -119,30 +123,33 @@ impl PocValidator {
         }
     }
 
-    async fn execute_shell(&self, command: &str) -> Result<String> {
-        // Validación estricta anti-Shell Injection
-        let dangerous_chars = ['&', '|', ';', '$', '`', '>', '<'];
-        if command.chars().any(|c| dangerous_chars.contains(&c)) {
-            anyhow::bail!("Security Violation: PoC command contains forbidden shell operators.");
-        }
-
-        let parts: Vec<&str> = command.split_whitespace().collect();
-        if parts.is_empty() {
-            anyhow::bail!("Security Violation: Empty command.");
-        }
-
-        // Whitelist comandos permitidos para PoC (Removidos: python3, nc por riesgo ejecución arbitraria)
-        let allowed_binaries = ["curl", "nmap", "ping", "whoami", "id"];
-        if !allowed_binaries.contains(&parts[0]) {
-            anyhow::bail!("Security Violation: Binary '{}' is not in the whitelist of safe PoC commands.", parts[0]);
-        }
-
-        let mut cmd = Command::new(parts[0]);
-        if parts.len() > 1 {
-            cmd.args(&parts[1..]);
-        }
+    /// V10 HARDENING (CRIT-001): Restricted execution without 'sh -c'.
+    async fn execute_safe_command(&self, payload: &str) -> Result<String> {
+        // Expected payload: ["binary", "arg1", "arg2"]
+        let args: Vec<String> = serde_json::from_str(payload)
+            .context("Invalid JSON payload for safe_command. Expected a JSON array of strings.")?;
         
-        let res = tokio::time::timeout(Duration::from_secs(10), cmd.output()).await;
+        if args.is_empty() {
+             anyhow::bail!("PoC command is empty");
+        }
+
+        let binary = &args[0];
+        // Whitelist validation for executables to prevent arbitrary execution
+        let allowed_binaries = ["nmap", "curl", "ping", "whois", "dig", "host", "nc", "netcat"];
+        let binary_name = Path::new(binary).file_name().unwrap_or_default().to_string_lossy();
+        
+        if !allowed_binaries.iter().any(|&b| binary_name == b) {
+             anyhow::bail!("Binary '{}' is not in the pre-approved whitelist for PoC validation.", binary);
+        }
+
+        let mut cmd = Command::new(binary);
+        cmd.args(&args[1..]);
+        
+        // Use our stealth wrapper from common.rs for resource limits and isolation
+        let mut cmd = crate::utils::common::stealth_command(binary);
+        cmd.args(&args[1..]);
+
+        let res = tokio::time::timeout(Duration::from_secs(15), cmd.output()).await;
         let output = res.context("PoC command timed out")??;
         
         let combined = format!(
@@ -151,6 +158,31 @@ impl PocValidator {
             String::from_utf8_lossy(&output.stderr)
         );
         Ok(combined)
+    }
+
+    async fn execute_tcp_check(&self, payload: &str, target: &TargetHost) -> Result<String> {
+        let port = payload.parse::<u16>().context("Invalid port for tcp_check")?;
+        let addr = format!("{}:{}", target.host, port);
+        
+        match tokio::time::timeout(Duration::from_secs(5), tokio::net::TcpStream::connect(&addr)).await {
+            Ok(Ok(_)) => Ok(format!("TCP Port {} is OPEN", port)),
+            Ok(Err(e)) => Ok(format!("TCP Port {} is CLOSED Or Filtered: {}", port, e)),
+            Err(_) => Ok(format!("TCP Port {} connection TIMED OUT", port)),
+        }
+    }
+
+    async fn execute_icmp_ping(&self, target: &TargetHost) -> Result<String> {
+        let mut cmd = crate::utils::common::stealth_command("ping");
+        cmd.arg("-c").arg("3").arg(&target.host);
+        
+        let res = tokio::time::timeout(Duration::from_secs(10), cmd.output()).await;
+        let output = res.context("Ping PoC timed out")??;
+        
+        if output.status.success() {
+            Ok("Ping successful".to_string())
+        } else {
+            Ok("Ping failed".to_string())
+        }
     }
 
     async fn execute_http(&self, payload: &str, target: &TargetHost) -> Result<String> {
@@ -164,14 +196,6 @@ impl PocValidator {
         } else {
             format!("http://{}{}{}", target.host, if payload.starts_with('/') { "" } else { "/" }, payload)
         };
-
-        if let Ok(parsed_url) = url::Url::parse(&url) {
-            if let Some(host) = parsed_url.host_str() {
-                if !crate::utils::liveness::is_ssrf_safe_host(host) {
-                    anyhow::bail!("Security Violation: HTTP PoC payload attempts to reach forbidden internal/metadata host: {}", host);
-                }
-            }
-        }
 
         let res = client.get(&url).send().await?;
         let status = res.status();

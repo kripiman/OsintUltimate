@@ -87,7 +87,8 @@ impl DigitalOceanClient {
     fn headers(&self) -> Result<HeaderMap> {
         let mut headers = HeaderMap::new();
         let auth_val = HeaderValue::from_str(&format!("Bearer {}", self.token))
-            .context("Validation Error: Invalid characters in DigitalOcean token")?;
+            .context("Invalid DigitalOcean token format for AUTHORIZATION header")?;
+        
         headers.insert(AUTHORIZATION, auth_val);
         headers.insert(CONTENT_TYPE, HeaderValue::from_static("application/json"));
         Ok(headers)

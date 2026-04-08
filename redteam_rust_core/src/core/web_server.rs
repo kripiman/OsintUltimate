@@ -1,5 +1,5 @@
 use axum::{
-    extract::State,
+    extract::{State, FromRequestParts},
     response::sse::{Event, KeepAlive, Sse},
     routing::{get, post},
     Router,
@@ -57,7 +57,7 @@ impl FromRequestParts<Arc<DashboardState>> for ValidatedOperator {
     async fn from_request_parts(
         parts: &mut Parts,
         state: &Arc<DashboardState>,
-    ) -> Result<Self, Self::Rejection> {
+    ) -> Result<Self, (StatusCode, String)> {
         let auth_header = parts.headers.get("Authorization")
             .and_then(|h| h.to_str().ok())
             .ok_or((StatusCode::UNAUTHORIZED, "Missing Authorization header".to_string()))?;

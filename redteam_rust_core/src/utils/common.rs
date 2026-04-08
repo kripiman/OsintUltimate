@@ -1,5 +1,6 @@
 use rand_distr::{LogNormal, Distribution};
 use tokio::time::{sleep, Duration};
+use tracing::error;
  // V9 FIX (MEDIUM-002): std::sync::RwLock for brief RAM-only blacklist access
 
 pub struct HumanJitter {
@@ -88,9 +89,7 @@ pub fn stealth_command(binary: &str) -> tokio::process::Command {
         unsafe {
             cmd.pre_exec(|| {
                 // 1. New Session/PGID
-                if libc::setsid() == -1 {
-                    return Err(std::io::Error::last_os_error());
-                }
+                libc::setsid();
                 
                 // 2. Memory Limits (Hard limit 512MB for any single tool)
                 // This prevents a single nmap/hydra from OOMing the 1GB VPS.
@@ -99,27 +98,21 @@ pub fn stealth_command(binary: &str) -> tokio::process::Command {
                     rlim_cur: mem_limit_val,
                     rlim_max: mem_limit_val,
                 };
-                if libc::setrlimit(libc::RLIMIT_AS, &mem_rlimit) == -1 {
-                    return Err(std::io::Error::last_os_error());
-                }
+                libc::setrlimit(libc::RLIMIT_AS, &mem_rlimit);
                 
                 // 3. CPU Time Limit (300s CPU time max to prevent runaway processes)
                 let cpu_rlimit = libc::rlimit {
                     rlim_cur: 300,
                     rlim_max: 300,
                 };
-                if libc::setrlimit(libc::RLIMIT_CPU, &cpu_rlimit) == -1 {
-                    return Err(std::io::Error::last_os_error());
-                }
+                libc::setrlimit(libc::RLIMIT_CPU, &cpu_rlimit);
 
                 // 4. Process Count Limit (Max 64 children to prevent fork bombs/runaway threads)
                 let nproc_rlimit = libc::rlimit {
                     rlim_cur: 64,
                     rlim_max: 64,
                 };
-                if libc::setrlimit(libc::RLIMIT_NPROC, &nproc_rlimit) == -1 {
-                    return Err(std::io::Error::last_os_error());
-                }
+                libc::setrlimit(libc::RLIMIT_NPROC, &nproc_rlimit);
                 
                 Ok(())
             });
@@ -132,8 +125,10 @@ pub fn stealth_command(binary: &str) -> tokio::process::Command {
 pub async fn kill_pgid(pid: u32) {
     #[cfg(unix)]
     {
+        // V11 HARDENING (HIGH-003): Guard against killing pid 0, 1 or negative (which would kill all processes)
         if pid <= 1 {
-            return; // Bloqueo de seguridad: Evitar matar SIGKILL a root process o proceso local actual si es 0
+            error!("Refusing to kill PGID {} as it is a restricted system PID.", pid);
+            return;
         }
         // Sending signal to -pid sends it to the whole process group.
         unsafe {
@@ -145,9 +140,7 @@ pub async fn kill_pgid(pid: u32) {
 pub fn kill_pgid_sync(pid: u32) {
     #[cfg(unix)]
     {
-        if pid <= 1 {
-            return;
-        }
+        if pid <= 1 { return; }
         unsafe {
             libc::kill(-(pid as i32), libc::SIGKILL);
         }

@@ -1,4 +1,4 @@
-use reqwest::{Client, Proxy};
+use reqwest::{Client, Proxy, header::HeaderValue};
 use std::net::{IpAddr, SocketAddr};
 use std::sync::Arc;
 use dashmap::DashMap;
@@ -51,15 +51,23 @@ impl ProxyManager {
             _health_checker_handle: None,
         };
 
-        let has_proxies = match pm.proxies.lock() {
-            Ok(guard) => !guard.is_empty(),
-            Err(poisoned) => !poisoned.into_inner().is_empty(),
-        };
-        if has_proxies {
+        // Start background health checker if there can be proxies
+        if !pm.lock_proxies().is_empty() {
              pm.start_health_checker();
         }
 
         pm
+    }
+
+    /// Robustness Fix (AUDIT-003): Handle poisoned mutexes without panicking
+    fn lock_proxies(&self) -> std::sync::MutexGuard<'_, Vec<String>> {
+        match self.proxies.lock() {
+            Ok(guard) => guard,
+            Err(poisoned) => {
+                warn!("Proxy Mutex is poisoned, recovering inner data.");
+                poisoned.into_inner()
+            }
+        }
     }
 
     fn start_health_checker(&mut self) {
@@ -105,16 +113,16 @@ impl ProxyManager {
             .user_agent(user_agent)
             .default_headers({
                 let mut h = reqwest::header::HeaderMap::new();
-                h.insert("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8".parse().unwrap());
-                h.insert("Accept-Language", "en-US,en;q=0.9".parse().unwrap());
-                h.insert("Sec-Ch-Ua", "\"Not A(Brand\";v=\"99\", \"Google Chrome\";v=\"122\", \"Chromium\";v=\"122\"".parse().unwrap());
-                h.insert("Sec-Ch-Ua-Mobile", "?0".parse().unwrap());
-                h.insert("Sec-Ch-Ua-Platform", "\"Windows\"".parse().unwrap());
-                h.insert("Sec-Fetch-Dest", "document".parse().unwrap());
-                h.insert("Sec-Fetch-Mode", "navigate".parse().unwrap());
-                h.insert("Sec-Fetch-Site", "none".parse().unwrap());
-                h.insert("Sec-Fetch-User", "?1".parse().unwrap());
-                h.insert("Upgrade-Insecure-Requests", "1".parse().unwrap());
+                h.insert("Accept", HeaderValue::from_static("text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8"));
+                h.insert("Accept-Language", HeaderValue::from_static("en-US,en;q=0.9"));
+                h.insert("Sec-Ch-Ua", HeaderValue::from_static("\"Not A(Brand\";v=\"99\", \"Google Chrome\";v=\"122\", \"Chromium\";v=\"122\""));
+                h.insert("Sec-Ch-Ua-Mobile", HeaderValue::from_static("?0"));
+                h.insert("Sec-Ch-Ua-Platform", HeaderValue::from_static("\"Windows\""));
+                h.insert("Sec-Fetch-Dest", HeaderValue::from_static("document"));
+                h.insert("Sec-Fetch-Mode", HeaderValue::from_static("navigate"));
+                h.insert("Sec-Fetch-Site", HeaderValue::from_static("none"));
+                h.insert("Sec-Fetch-User", HeaderValue::from_static("?1"));
+                h.insert("Upgrade-Insecure-Requests", HeaderValue::from_static("1"));
                 h
             })
             .danger_accept_invalid_certs(self.insecure)
@@ -134,16 +142,16 @@ impl ProxyManager {
             .user_agent(user_agent)
             .default_headers({
                 let mut h = reqwest::header::HeaderMap::new();
-                h.insert("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8".parse().unwrap());
-                h.insert("Accept-Language", "en-US,en;q=0.9".parse().unwrap());
-                h.insert("Sec-Ch-Ua", "\"Not A(Brand\";v=\"99\", \"Google Chrome\";v=\"122\", \"Chromium\";v=\"122\"".parse().unwrap());
-                h.insert("Sec-Ch-Ua-Mobile", "?0".parse().unwrap());
-                h.insert("Sec-Ch-Ua-Platform", "\"Windows\"".parse().unwrap());
-                h.insert("Sec-Fetch-Dest", "document".parse().unwrap());
-                h.insert("Sec-Fetch-Mode", "navigate".parse().unwrap());
-                h.insert("Sec-Fetch-Site", "none".parse().unwrap());
-                h.insert("Sec-Fetch-User", "?1".parse().unwrap());
-                h.insert("Upgrade-Insecure-Requests", "1".parse().unwrap());
+                h.insert("Accept", HeaderValue::from_static("text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8"));
+                h.insert("Accept-Language", HeaderValue::from_static("en-US,en;q=0.9"));
+                h.insert("Sec-Ch-Ua", HeaderValue::from_static("\"Not A(Brand\";v=\"99\", \"Google Chrome\";v=\"122\", \"Chromium\";v=\"122\""));
+                h.insert("Sec-Ch-Ua-Mobile", HeaderValue::from_static("?0"));
+                h.insert("Sec-Ch-Ua-Platform", HeaderValue::from_static("\"Windows\""));
+                h.insert("Sec-Fetch-Dest", HeaderValue::from_static("document"));
+                h.insert("Sec-Fetch-Mode", HeaderValue::from_static("navigate"));
+                h.insert("Sec-Fetch-Site", HeaderValue::from_static("none"));
+                h.insert("Sec-Fetch-User", HeaderValue::from_static("?1"));
+                h.insert("Upgrade-Insecure-Requests", HeaderValue::from_static("1"));
                 h
             })
             .resolve(host, SocketAddr::new(ip, port))
@@ -184,10 +192,7 @@ impl ProxyManager {
     fn pick_best_proxy(&self) -> Option<String> {
         let now = SystemTime::now().duration_since(UNIX_EPOCH).unwrap_or_default().as_secs();
         
-        let proxies_lock = match self.proxies.lock() {
-            Ok(guard) => guard,
-            Err(poisoned) => poisoned.into_inner(),
-        };
+        let proxies_lock = self.lock_proxies();
         let available_proxies: Vec<String> = proxies_lock.iter()
             .filter(|p| {
                 if let Some(entry) = self.blacklist.get(*p) {
@@ -214,11 +219,7 @@ impl ProxyManager {
     }
 
     pub fn get_client(&self, host: &str) -> Option<(String, Client)> {
-        let is_empty = match self.proxies.lock() {
-            Ok(guard) => guard.is_empty(),
-            Err(poisoned) => poisoned.into_inner().is_empty(),
-        };
-        if is_empty { return None; }
+        if self.lock_proxies().is_empty() { return None; }
 
         let p_url = self.pick_best_proxy()?;
         
@@ -252,11 +253,7 @@ impl ProxyManager {
     }
 
     pub fn get_client_pinned(&self, host: &str, ip: IpAddr, port: u16) -> Option<(String, Client)> {
-        let is_empty = match self.proxies.lock() {
-            Ok(guard) => guard.is_empty(),
-            Err(poisoned) => poisoned.into_inner().is_empty(),
-        };
-        if is_empty { return None; }
+        if self.lock_proxies().is_empty() { return None; }
 
         let p_url = self.pick_best_proxy()?;
         
@@ -337,10 +334,7 @@ impl ProxyManager {
     }
 
     pub fn add_proxy(&self, proxy: String) {
-        let mut proxies = match self.proxies.lock() {
-            Ok(guard) => guard,
-            Err(poisoned) => poisoned.into_inner(),
-        };
+        let mut proxies = self.lock_proxies();
         if !proxies.contains(&proxy) {
             proxies.push(proxy);
             // Since we use &self, start_health_checker might need to be called differently if pm is already constructed.
@@ -349,10 +343,7 @@ impl ProxyManager {
     }
 
     pub fn is_empty(&self) -> bool {
-        match self.proxies.lock() {
-            Ok(guard) => guard.is_empty(),
-            Err(poisoned) => poisoned.into_inner().is_empty(),
-        }
+        self.lock_proxies().is_empty()
     }
 }
 

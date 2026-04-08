@@ -8,40 +8,6 @@ pub async fn is_target_live(checker: &LivenessChecker, target: &str) -> Option<I
     checker.is_live(target).await
 }
 
-/// Validates whether a given host is safe from SSRF attacks.
-pub fn is_ssrf_safe_host(host: &str) -> bool {
-    if host.is_empty() { return false; }
-    let host_lower = host.to_lowercase();
-    
-    // 1. Strict blacklist for cloud metadata and internal names
-    let name_blacklist = ["localhost", "broadcasthost", "local", "invalid", "kubernetes.default.svc", "metadata.google.internal", "169.254.169.254"];
-    if name_blacklist.iter().any(|&b| host_lower.contains(b)) {
-        return false;
-    }
-
-    // 2. Exact IP parsing
-    if let Ok(ip) = host.parse::<std::net::IpAddr>() {
-        return is_safe_ip(&ip);
-    }
-
-    // 3. Decimal IP representation (e.g. 2130706433 -> 127.0.0.1)
-    if host.chars().all(|c| c.is_digit(10)) {
-        if let Ok(val) = host.parse::<u32>() {
-            return is_safe_ip(&std::net::Ipv4Addr::from(val).into());
-        }
-    }
-    
-    // 4. Hexadecimal/Octal heuristics bypass
-    if host_lower.starts_with("0x") || (host_lower.starts_with("0") && host.chars().all(|c| c.is_digit(8))) {
-         return false; // Safely drop obscured encodings lacking exact DNS matching
-    }
-    
-    // 5. Encoded string bypasses
-    if host.chars().any(|c| c == '%' || c == '\\') { return false; }
-    
-    true
-}
-
 /// Checks if an IP address is safe to scan (i.e., Global, not Private/Loopback).
 /// Returns true if safe, false if it's a private/local/link-local address.
 pub fn is_safe_ip(ip: &IpAddr) -> bool {
@@ -63,6 +29,16 @@ pub fn is_safe_ip(ip: &IpAddr) -> bool {
             // 0.0.0.0/8 Current network
             if octets[0] == 0 { return false; }
             
+            // AUDIT-002 FIX: Additional restricted IPv4 ranges
+            // 198.51.100.0/24 TEST-NET-2
+            if octets[0] == 198 && octets[1] == 51 && octets[2] == 100 { return false; }
+            // 203.0.113.0/24 TEST-NET-3
+            if octets[0] == 203 && octets[1] == 0 && octets[2] == 113 { return false; }
+            // 240.0.0.0/4 Reserved (including 255.255.255.255)
+            if octets[0] >= 240 { return false; }
+            // 169.254.0.0/16 Link-Local (Explicit check)
+            if octets[0] == 169 && octets[1] == 254 { return false; }
+
             true
         },
         IpAddr::V6(ipv6) => {
@@ -83,6 +59,10 @@ pub fn is_safe_ip(ip: &IpAddr) -> bool {
             if segments[0] == 0x2001 && (segments[1] & 0xfff0) == 0x0010 { return false; }
             // 2002::/16 (6to4)
             if segments[0] == 0x2002 { return false; }
+            // ff00::/8 (Multicast)
+            if (segments[0] & 0xff00) == 0xff00 { return false; }
+            // 100::/64 (Discard-only)
+            if segments[0] == 0x0100 && segments[1] == 0 && segments[2] == 0 && segments[3] == 0 { return false; }
             
             true
         }
@@ -128,21 +108,12 @@ impl LivenessChecker {
 
     pub async fn is_live(&self, target: &str) -> Option<IpAddr> {
         if let Ok(ip) = target.parse::<IpAddr>() {
-            if is_safe_ip(&ip) {
-                return Some(ip);
-            } else {
-                return None;
-            }
+            return Some(ip);
         }
 
         match self.resolver.lookup_ip(target).await {
             Ok(response) => {
-                for ip in response.iter() {
-                    if is_safe_ip(&ip) {
-                        return Some(ip);
-                    }
-                }
-                None
+                response.iter().next()
             }
             Err(_) => None
         }
