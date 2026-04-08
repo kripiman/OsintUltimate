@@ -25,30 +25,34 @@ pub struct TokenBudget {
 
 impl TokenBudget {
     pub fn new(max: u32) -> Self {
+        // V12 HARDENING (HIGH-002): Zero-budget prevention.
+        // If 0 is provided, we set a default safe floor (50k tokens) to prevent infinite loops.
+        let safe_max = if max == 0 { 50_000 } else { max };
         Self {
-            max_tokens: max,
+            max_tokens: safe_max,
             ..Default::default()
         }
     }
 
     pub fn add_usage(&self, usage: &crate::models::findings::TokenUsage) {
-        self.prompt_tokens.fetch_add(usage.prompt_tokens, Ordering::Relaxed);
-        self.completion_tokens.fetch_add(usage.completion_tokens, Ordering::Relaxed);
-        self.total_tokens.fetch_add(usage.total_tokens, Ordering::Relaxed);
+        self.prompt_tokens.fetch_add(usage.prompt_tokens, Ordering::SeqCst);
+        self.completion_tokens.fetch_add(usage.completion_tokens, Ordering::SeqCst);
+        self.total_tokens.fetch_add(usage.total_tokens, Ordering::SeqCst);
     }
 
     /// Pre-reserve tokens before a long-running AI call to prevent over-spending
     pub fn reserve_tokens(&self, amount: u32) -> bool {
-        if self.max_tokens == 0 { return true; }
-        
-        let current = self.total_tokens.load(Ordering::Relaxed);
-        let reserved = self.reserved_tokens.load(Ordering::Relaxed);
+        // V12 HARDENING: No more bypass if max_tokens == 0 (handled in constructor)
+        let current = self.total_tokens.load(Ordering::SeqCst);
+        let reserved = self.reserved_tokens.load(Ordering::SeqCst);
         
         if current + reserved + amount > self.max_tokens {
+            warn!("🛑 SWARM BUDGET EXHAUSTED: Attempted to reserve {} tokens (Current: {}, Reserved: {}, Max: {})", 
+                  amount, current, reserved, self.max_tokens);
             return false;
         }
         
-        self.reserved_tokens.fetch_add(amount, Ordering::Relaxed);
+        self.reserved_tokens.fetch_add(amount, Ordering::SeqCst);
         true
     }
 
@@ -59,8 +63,8 @@ impl TokenBudget {
     }
 
     pub fn is_exhausted(&self) -> bool {
-        if self.max_tokens == 0 { return false; }
-        (self.total_tokens.load(Ordering::Relaxed) + self.reserved_tokens.load(Ordering::SeqCst)) >= self.max_tokens
+        // V12 HARDENING: Strict budget enforcement (no zero-bypass)
+        (self.total_tokens.load(Ordering::SeqCst) + self.reserved_tokens.load(Ordering::SeqCst)) >= self.max_tokens
     }
 
     pub fn current_total(&self) -> u32 {
@@ -142,6 +146,8 @@ impl SwarmOrchestrator {
         });
 
         let mut join_set = tokio::task::JoinSet::new();
+        // V12 HARDENING (HIGH-002): Concurrent Agent Limit (DoS prevention)
+        let agent_semaphore = Arc::new(tokio::sync::Semaphore::new(10));
 
         while let Some(finding) = discovery_rx.recv().await {
             if self.budget.is_exhausted() {
@@ -164,6 +170,7 @@ impl SwarmOrchestrator {
             let mut scout_tx = discovery_tx.clone();
             let mut ctx_clone = adaptive_context.clone();
             let sink_tx_clone = sink_tx.clone();
+            let semaphore = agent_semaphore.clone();
 
             // Optimistic Reservation: 1000 tokens per agent estimate
             if !self.budget.reserve_tokens(1000) {
@@ -172,6 +179,7 @@ impl SwarmOrchestrator {
             }
 
             join_set.spawn(async move {
+                let _permit = semaphore.acquire().await.ok();
                 let res = match role {
                     AgentRole::Scout => orchestrator.execute_scout(finding_clone, &target_clone, &mut scout_tx, &mut ctx_clone, &sink_tx_clone).await,
                     AgentRole::Exploiter => orchestrator.execute_exploiter(finding_clone, &target_clone, &mut scout_tx, &mut ctx_clone, &sink_tx_clone).await,
@@ -179,10 +187,9 @@ impl SwarmOrchestrator {
                     AgentRole::Planner => Ok(()),
                 };
                 
-                // If the specific task didn't commit usage (e.g. Scout or Error), 
-                // we release the reservation here if it wasn't consumed.
-                // Note: Reporter consumes 0, Scout consumes variable.
-                if let AgentRole::GhostReporter | AgentRole::Scout = role {
+                // V12 FIX: Ensure reservation is ALWAYS cleared if not consumed by the agent's logic.
+                // commit_usage(0, 1000) effectively releases the 1000 reserved tokens.
+                if let AgentRole::GhostReporter | AgentRole::Planner = role {
                      orchestrator.budget.commit_usage(0, 1000); 
                 }
                 res
@@ -190,7 +197,20 @@ impl SwarmOrchestrator {
         }
         
         // Wait for all agents to finish
-        while let Some(_) = join_set.join_next().await {}
+        // V12 HARDENING: Robust Agent Join and Error Reporting
+        while let Some(res) = join_set.join_next().await {
+            match res {
+                Ok(Ok(_)) => {},
+                Ok(Err(e)) => error!("🐝 SWARM [Agent Error]: {}", e),
+                Err(e) => {
+                    if e.is_panic() {
+                        error!("🛑 SWARM CRITICAL: Agent task PANICKED! Isolation active. Continuing other agents.");
+                    } else {
+                        error!("🐝 SWARM [Task Error]: Join error: {}", e);
+                    }
+                }
+            }
+        }
 
         info!("🛑 SWARM: Enjambre finalizado. Consumo total: {} tokens.", self.budget.current_total());
         Ok(())
@@ -227,13 +247,27 @@ impl SwarmOrchestrator {
         
         // El Scout usa el Router para decidir qué herramienta de enumeración usar
         let metadata = self.pipeline.get_plugin_metadata();
-        if let Ok(Some((action, tactical))) = self.router.decide_action(&finding, target, &metadata, Some(adaptive_ctx)).await {
-            let mut task_target = target.clone();
-            task_target.tactical_context = Arc::new(tactical);
-            
-            let results = self.pipeline.run_specific_plugin(&action, &task_target).await?;
-            for nf in results {
-                let _ = tx.send(nf).await;
+        match self.router.decide_action(&finding, target, &metadata, Some(adaptive_ctx)).await {
+            Ok(Some((action, tactical))) => {
+                // V12: Commit usage from decide_action (which calls the AI)
+                // Note: decide_action should provide usage in the next iteration of the API.
+                // For now, we commit 200 tokens as a reasonable average for a Flash-level decision.
+                self.budget.commit_usage(200, 1000); 
+
+                let mut task_target = target.clone();
+                task_target.tactical_context = Arc::new(tactical);
+                
+                let results = self.pipeline.run_specific_plugin(&action, &task_target).await?;
+                for nf in results {
+                    let _ = tx.send(nf).await;
+                }
+            }
+            Ok(None) => {
+                self.budget.commit_usage(0, 1000); // Release reservation
+            }
+            Err(e) => {
+                self.budget.commit_usage(0, 1000); // Release reservation
+                return Err(e);
             }
         }
         

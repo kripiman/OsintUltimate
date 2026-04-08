@@ -1,3 +1,4 @@
+use std::sync::Mutex;
 use std::os::raw::c_char;
 use crate::utils::tool_detection::detect_tool;
 use crate::models::{TargetHost, Finding};
@@ -47,6 +48,7 @@ unsafe impl Sync for ScannerPluginFFI {}
 pub struct FFIPluginWrapper {
     pub ffi: ScannerPluginFFI,
     cached_name: &'static str,
+    sync_lock: Mutex<()>,
 }
 
 static PLUGIN_NAME_CACHE: Lazy<DashSet<String>> = Lazy::new(DashSet::new);
@@ -59,23 +61,17 @@ impl FFIPluginWrapper {
             anyhow::bail!("ABI MISMATCH: Plugin version {}, expected {}. Refusing to load to prevent memory corruption.", version, PLUGIN_ABI_VERSION);
         }
 
-        let cached_name = unsafe {
+        let name_str = unsafe {
             let c_str = (ffi.name)(ffi.plugin_ptr);
             if c_str.is_null() {
-                "unknown"
+                "unknown".to_string()
             } else {
-                let s = std::ffi::CStr::from_ptr(c_str).to_str().unwrap_or("unknown");
-                if let Some(existing) = PLUGIN_NAME_CACHE.get(s) {
-                    unsafe { std::mem::transmute::<&str, &'static str>(existing.as_str()) }
-                } else {
-                    let owned = s.to_string();
-                    let leaked: &'static str = Box::leak(owned.clone().into_boxed_str());
-                    PLUGIN_NAME_CACHE.insert(owned);
-                    leaked
-                }
+                std::ffi::CStr::from_ptr(c_str).to_string_lossy().into_owned()
             }
         };
-        Ok(Self { ffi, cached_name })
+        // V12: satisfy &'static str requirement for dynamic plugins
+        let cached_name = Box::leak(name_str.into_boxed_str());
+        Ok(Self { ffi, cached_name, sync_lock: Mutex::new(()) })
     }
 }
 
@@ -87,7 +83,7 @@ impl crate::plugins::ScannerPlugin for FFIPluginWrapper {
 
     fn metadata(&self) -> crate::plugins::PluginMetadata {
         crate::plugins::PluginMetadata {
-            name: self.name().to_string(), // Metadata now expects String
+            name: self.name().to_string(), 
             description: "Dynamic plugin loaded via SafeFFI bridge.".to_string(),
             target_type: crate::plugins::TargetType::Host,
             risk_level: crate::plugins::RiskLevel::Medium,
@@ -113,6 +109,9 @@ impl crate::plugins::ScannerPlugin for FFIPluginWrapper {
     }
 
     async fn scan(&self, target: &TargetHost) -> Result<Vec<Finding>> {
+        // V12 HARDENING: Serialize access to FFI scan method
+        let _guard = self.sync_lock.lock().map_err(|_| anyhow::anyhow!("FFI Sync lock poisoned"))?;
+
         let ffi = &self.ffi;
         let plugin_ptr = ffi.plugin_ptr;
         let target_ptr = target as *const TargetHost;

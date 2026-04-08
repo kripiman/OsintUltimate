@@ -267,6 +267,7 @@ async fn main() -> Result<()> {
             TargetHost {
                 host: t,
                 ip: None,
+                resolved_ip: None,
                 status: TargetStatus::Pending,
                 target_type,
                 findings: Arc::new(Vec::new()),

@@ -99,6 +99,7 @@ impl Pipeline {
                                 let _ = liveness_tx.send(TargetHost { 
                                     host: sub, 
                                     ip: None, 
+                                    resolved_ip: None,
                                     status: TargetStatus::Pending, 
                                     target_type: crate::models::TargetType::Web,
                                     findings: Arc::new(Vec::new()),
@@ -142,7 +143,9 @@ impl Pipeline {
                 async move {
                     if let Some(ip) = tokio::select! { res = checker.is_live(&target.host) => res, _ = token.cancelled() => return } {
                         if !is_safe_ip(&ip) { target.status = TargetStatus::Dead; let _ = sink_tx.send(target).await; return; }
-                        target.ip = Some(ip.to_string()); let _ = scan_tx.send(target).await;
+                        target.ip = Some(ip.to_string()); 
+                        target.resolved_ip = Some(ip.to_string()); // V12: Pin IP here
+                        let _ = scan_tx.send(target).await;
                     } else { target.status = TargetStatus::Dead; let _ = sink_tx.send(target).await; }
                 }
             }).await;

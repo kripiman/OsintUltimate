@@ -356,6 +356,7 @@ impl WafEvasionEngine {
                 .map(|u| u.host_str().unwrap_or("unknown").to_string())
                 .unwrap_or_else(|_| "unknown".to_string()),
             ip: None,
+            resolved_ip: None,
             status: crate::models::TargetStatus::Scanning,
             target_type: crate::models::TargetType::Web,
             findings: Arc::new(Vec::new()),

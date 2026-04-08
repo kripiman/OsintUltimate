@@ -1,0 +1,1017 @@
+    Checking redteam_rust_core v0.1.0 (/home/kripi/Documentos/GitHub/OsintUltimate/redteam_rust_core)
+warning: unused import: `anyhow::Result`
+ --> src/infrastructure/proxy.rs:1:5
+  |
+1 | use anyhow::Result;
+  |     ^^^^^^^^^^^^^^
+  |
+  = note: `#[warn(unused_imports)]` (part of `#[warn(unused)]`) on by default
+
+warning: unused imports: `error` and `warn`
+ --> src/core/agent.rs:8:21
+  |
+8 | use tracing::{info, warn, error};
+  |                     ^^^^  ^^^^^
+
+warning: unused imports: `Finding` and `TargetStatus`
+ --> src/core/sink.rs:1:47
+  |
+1 | use crate::models::{TargetHost, ScanMetadata, TargetStatus, Finding};
+  |                                               ^^^^^^^^^^^^  ^^^^^^^
+
+warning: unused import: `std::cmp::Ordering`
+ --> src/core/capability_layer.rs:6:5
+  |
+6 | use std::cmp::Ordering;
+  |     ^^^^^^^^^^^^^^^^^^
+
+warning: unused import: `Context`
+ --> src/core/waf_evasion.rs:1:22
+  |
+1 | use anyhow::{Result, Context};
+  |                      ^^^^^^^
+
+warning: unused import: `Severity`
+ --> src/core/correlation.rs:1:40
+  |
+1 | use crate::models::{Finding, Category, Severity};
+  |                                        ^^^^^^^^
+
+warning: unused import: `warn`
+  --> src/core/web_server.rs:21:28
+   |
+21 | use tracing::{info, error, warn};
+   |                            ^^^^
+
+warning: unused import: `Category`
+ --> src/core/filter.rs:1:40
+  |
+1 | use crate::models::{Finding, Severity, Category};
+  |                                        ^^^^^^^^
+
+warning: unused import: `anyhow::Result`
+ --> src/core/lock_free_sink.rs:3:5
+  |
+3 | use anyhow::Result;
+  |     ^^^^^^^^^^^^^^
+
+warning: unnecessary parentheses around assigned value
+  --> src/core/native_scanner.rs:89:16
+   |
+89 |         sum += (u16::from_be_bytes([src_octets[0], src_octets[1]]) as u32);
+   |                ^                                                         ^
+   |
+   = note: `#[warn(unused_parens)]` (part of `#[warn(unused)]`) on by default
+help: remove these parentheses
+   |
+89 -         sum += (u16::from_be_bytes([src_octets[0], src_octets[1]]) as u32);
+89 +         sum += u16::from_be_bytes([src_octets[0], src_octets[1]]) as u32 ;
+   |
+
+warning: unnecessary parentheses around assigned value
+  --> src/core/native_scanner.rs:90:16
+   |
+90 |         sum += (u16::from_be_bytes([src_octets[2], src_octets[3]]) as u32);
+   |                ^                                                         ^
+   |
+help: remove these parentheses
+   |
+90 -         sum += (u16::from_be_bytes([src_octets[2], src_octets[3]]) as u32);
+90 +         sum += u16::from_be_bytes([src_octets[2], src_octets[3]]) as u32 ;
+   |
+
+warning: unnecessary parentheses around assigned value
+  --> src/core/native_scanner.rs:91:16
+   |
+91 |         sum += (u16::from_be_bytes([dest_octets[0], dest_octets[1]]) as u32);
+   |                ^                                                           ^
+   |
+help: remove these parentheses
+   |
+91 -         sum += (u16::from_be_bytes([dest_octets[0], dest_octets[1]]) as u32);
+91 +         sum += u16::from_be_bytes([dest_octets[0], dest_octets[1]]) as u32 ;
+   |
+
+warning: unnecessary parentheses around assigned value
+  --> src/core/native_scanner.rs:92:16
+   |
+92 |         sum += (u16::from_be_bytes([dest_octets[2], dest_octets[3]]) as u32);
+   |                ^                                                           ^
+   |
+help: remove these parentheses
+   |
+92 -         sum += (u16::from_be_bytes([dest_octets[2], dest_octets[3]]) as u32);
+92 +         sum += u16::from_be_bytes([dest_octets[2], dest_octets[3]]) as u32 ;
+   |
+
+warning: unnecessary parentheses around assigned value
+  --> src/core/native_scanner.rs:94:16
+   |
+94 |         sum += (tcp_header.len() as u32);
+   |                ^                       ^
+   |
+help: remove these parentheses
+   |
+94 -         sum += (tcp_header.len() as u32);
+94 +         sum += tcp_header.len() as u32 ;
+   |
+
+warning: unnecessary parentheses around assigned value
+  --> src/core/native_scanner.rs:98:20
+   |
+98 |             sum += (u16::from_be_bytes([chunk[0], chunk[1]]) as u32);
+   |                    ^                                               ^
+   |
+help: remove these parentheses
+   |
+98 -             sum += (u16::from_be_bytes([chunk[0], chunk[1]]) as u32);
+98 +             sum += u16::from_be_bytes([chunk[0], chunk[1]]) as u32 ;
+   |
+
+warning: unused import: `tokio::process::Command`
+ --> src/core/poc_validator.rs:7:5
+  |
+7 | use tokio::process::Command;
+  |     ^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: unused import: `serde_json::json`
+ --> src/core/poc_validator.rs:9:5
+  |
+9 | use serde_json::json;
+  |     ^^^^^^^^^^^^^^^^
+
+warning: unused import: `AIAnalysis`
+ --> src/core/swarm.rs:1:62
+  |
+1 | use crate::models::{Finding, TargetHost, Category, Severity, AIAnalysis};
+  |                                                              ^^^^^^^^^^
+
+warning: unused import: `Context`
+ --> src/core/swarm.rs:5:22
+  |
+5 | use anyhow::{Result, Context};
+  |                      ^^^^^^^
+
+warning: unused import: `error`
+ --> src/core/swarm.rs:8:27
+  |
+8 | use tracing::{info, warn, error, debug};
+  |                           ^^^^^
+
+warning: unused import: `crate::core::blackarch::ResourceCost`
+ --> src/core/resource_manager.rs:4:5
+  |
+4 | use crate::core::blackarch::ResourceCost;
+  |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: unused import: `warn`
+ --> src/core/sandbox.rs:6:21
+  |
+6 | use tracing::{info, warn, error};
+  |                     ^^^^
+
+warning: unused import: `collections::HashMap`
+ --> src/core/mcp/server.rs:8:43
+  |
+8 | use std::{convert::Infallible, sync::Arc, collections::HashMap, time::Duration};
+  |                                           ^^^^^^^^^^^^^^^^^^^^
+
+warning: unused import: `warn`
+  --> src/core/mcp/server.rs:12:28
+   |
+12 | use tracing::{info, error, warn};
+   |                            ^^^^
+
+warning: unused import: `JsonRpcResponse`
+  --> src/core/mcp/server.rs:15:50
+   |
+15 | use crate::core::mcp::protocol::{JsonRpcRequest, JsonRpcResponse, CallToolRequest...
+   |                                                  ^^^^^^^^^^^^^^^
+
+warning: unused imports: `debug` and `warn`
+ --> src/core/source_analyzer.rs:8:21
+  |
+8 | use tracing::{info, warn, debug};
+  |                     ^^^^  ^^^^^
+
+warning: unused import: `Context`
+ --> src/core/factory.rs:2:22
+  |
+2 | use anyhow::{Result, Context};
+  |                      ^^^^^^^
+
+warning: unused imports: `info` and `warn`
+ --> src/core/factory.rs:3:15
+  |
+3 | use tracing::{info, warn};
+  |               ^^^^  ^^^^
+
+warning: unused import: `error`
+ --> src/plugins/reconnaissance/osint/subfinder.rs:6:21
+  |
+6 | use tracing::{info, error, warn};
+  |                     ^^^^^
+
+warning: unused import: `tokio::process::Command`
+ --> src/plugins/reconnaissance/osint/subfinder.rs:8:5
+  |
+8 | use tokio::process::Command;
+  |     ^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: unused import: `warn`
+ --> src/plugins/reconnaissance/osint/uncover.rs:6:21
+  |
+6 | use tracing::{info, warn};
+  |                     ^^^^
+
+warning: unused import: `crate::utils::tool_detection::detect_tool`
+ --> src/plugins/reconnaissance/osint/osint.rs:3:5
+  |
+3 | use crate::utils::tool_detection::detect_tool;
+  |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: unused import: `error`
+ --> src/plugins/reconnaissance/passive/wayback.rs:6:21
+  |
+6 | use tracing::{info, error};
+  |                     ^^^^^
+
+warning: unused import: `warn`
+ --> src/plugins/reconnaissance/passive/trufflehog.rs:6:21
+  |
+6 | use tracing::{info, warn};
+  |                     ^^^^
+
+warning: unused import: `warn`
+ --> src/plugins/reconnaissance/active/httpx.rs:6:21
+  |
+6 | use tracing::{info, warn};
+  |                     ^^^^
+
+warning: unused import: `tokio::process::Command`
+ --> src/plugins/reconnaissance/active/httpx.rs:8:5
+  |
+8 | use tokio::process::Command;
+  |     ^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: unused import: `warn`
+ --> src/plugins/reconnaissance/active/naabu.rs:6:21
+  |
+6 | use tracing::{info, warn};
+  |                     ^^^^
+
+warning: unused import: `warn`
+ --> src/plugins/reconnaissance/active/dnsx.rs:6:21
+  |
+6 | use tracing::{info, warn};
+  |                     ^^^^
+
+warning: unused import: `crate::utils::tool_detection::detect_tool`
+ --> src/plugins/enumeration/web/web.rs:3:5
+  |
+3 | use crate::utils::tool_detection::detect_tool;
+  |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: unused import: `get_random_user_agent`
+  --> src/plugins/enumeration/web/web.rs:11:41
+   |
+11 | use crate::utils::common::{HumanJitter, get_random_user_agent};
+   |                                         ^^^^^^^^^^^^^^^^^^^^^
+
+warning: unused import: `error`
+ --> src/plugins/enumeration/web/ffuf.rs:6:21
+  |
+6 | use tracing::{info, error, warn};
+  |                     ^^^^^
+
+warning: unused import: `warn`
+ --> src/plugins/enumeration/web/feroxbuster.rs:6:21
+  |
+6 | use tracing::{info, warn};
+  |                     ^^^^
+
+warning: unused import: `error`
+ --> src/plugins/enumeration/web/arjun.rs:6:21
+  |
+6 | use tracing::{info, error, warn};
+  |                     ^^^^^
+
+warning: unused imports: `error` and `warn`
+ --> src/plugins/enumeration/web/katana.rs:6:21
+  |
+6 | use tracing::{info, error, warn};
+  |                     ^^^^^  ^^^^
+
+warning: unused import: `warn`
+ --> src/plugins/enumeration/web/crlfuzz.rs:6:21
+  |
+6 | use tracing::{info, warn};
+  |                     ^^^^
+
+warning: unused import: `BufReader`
+ --> src/plugins/enumeration/web/crlfuzz.rs:9:24
+  |
+9 | use std::io::{BufRead, BufReader};
+  |                        ^^^^^^^^^
+
+warning: unused import: `warn`
+ --> src/plugins/enumeration/web/gf.rs:6:21
+  |
+6 | use tracing::{info, warn};
+  |                     ^^^^
+
+warning: unused imports: `error` and `warn`
+ --> src/plugins/enumeration/web/snallygaster.rs:6:21
+  |
+6 | use tracing::{info, error, warn};
+  |                     ^^^^^  ^^^^
+
+warning: unused import: `error`
+ --> src/plugins/enumeration/web/nikto.rs:6:21
+  |
+6 | use tracing::{info, error, warn};
+  |                     ^^^^^
+
+warning: unused imports: `error` and `warn`
+ --> src/plugins/enumeration/web/wpsec.rs:6:21
+  |
+6 | use tracing::{info, error, warn};
+  |                     ^^^^^  ^^^^
+
+warning: unused imports: `Category` and `Severity`
+ --> src/plugins/enumeration/web/kiterunner.rs:2:42
+  |
+2 | use crate::models::{TargetHost, Finding, Severity, Category};
+  |                                          ^^^^^^^^  ^^^^^^^^
+
+warning: unused import: `error`
+ --> src/plugins/enumeration/web/whatweb.rs:6:21
+  |
+6 | use tracing::{info, error, warn};
+  |                     ^^^^^
+
+warning: unused import: `warn`
+ --> src/plugins/enumeration/web/gauplus.rs:6:21
+  |
+6 | use tracing::{info, warn};
+  |                     ^^^^
+
+warning: unused import: `Context`
+ --> src/plugins/enumeration/web/interactsh.rs:5:22
+  |
+5 | use anyhow::{Result, Context};
+  |                      ^^^^^^^
+
+warning: unused import: `warn`
+ --> src/plugins/enumeration/web/interactsh.rs:6:21
+  |
+6 | use tracing::{info, warn};
+  |                     ^^^^
+
+warning: unused import: `std::process::Stdio`
+ --> src/plugins/enumeration/web/interactsh.rs:7:5
+  |
+7 | use std::process::Stdio;
+  |     ^^^^^^^^^^^^^^^^^^^
+
+warning: unused import: `tokio::process::Command`
+ --> src/plugins/enumeration/web/interactsh.rs:8:5
+  |
+8 | use tokio::process::Command;
+  |     ^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: unused import: `std::process::Stdio`
+ --> src/plugins/enumeration/network/net.rs:7:5
+  |
+7 | use std::process::Stdio;
+  |     ^^^^^^^^^^^^^^^^^^^
+
+warning: unused import: `tokio::process::Command`
+ --> src/plugins/enumeration/network/net.rs:8:5
+  |
+8 | use tokio::process::Command;
+  |     ^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: unused import: `Evidence`
+ --> src/plugins/enumeration/network/rustscan.rs:2:62
+  |
+2 | use crate::models::{TargetHost, Finding, Severity, Category, Evidence};
+  |                                                              ^^^^^^^^
+
+warning: unused import: `warn`
+ --> src/plugins/enumeration/network/rustscan.rs:6:21
+  |
+6 | use tracing::{info, warn};
+  |                     ^^^^
+
+warning: unused import: `warn`
+ --> src/plugins/enumeration/cloud/cloudenum.rs:6:21
+  |
+6 | use tracing::{info, warn};
+  |                     ^^^^
+
+warning: unused import: `warn`
+ --> src/plugins/enumeration/cloud/cloudfox.rs:6:21
+  |
+6 | use tracing::{info, warn};
+  |                     ^^^^
+
+warning: unused import: `warn`
+ --> src/plugins/enumeration/cloud/cloudbrute.rs:6:21
+  |
+6 | use tracing::{info, warn};
+  |                     ^^^^
+
+warning: unused import: `error`
+ --> src/plugins/enumeration/cloud/prowler.rs:6:21
+  |
+6 | use tracing::{info, error};
+  |                     ^^^^^
+
+warning: unused import: `error`
+ --> src/plugins/enumeration/cloud/kubebench.rs:6:21
+  |
+6 | use tracing::{info, error};
+  |                     ^^^^^
+
+warning: unused import: `Context`
+ --> src/plugins/enumeration/cloud/pacu.rs:5:22
+  |
+5 | use anyhow::{Result, Context};
+  |                      ^^^^^^^
+
+warning: unused import: `warn`
+ --> src/plugins/enumeration/cloud/pacu.rs:6:21
+  |
+6 | use tracing::{info, warn};
+  |                     ^^^^
+
+warning: unused import: `std::process::Stdio`
+ --> src/plugins/enumeration/cloud/pacu.rs:7:5
+  |
+7 | use std::process::Stdio;
+  |     ^^^^^^^^^^^^^^^^^^^
+
+warning: unused import: `tokio::process::Command`
+ --> src/plugins/enumeration/cloud/pacu.rs:8:5
+  |
+8 | use tokio::process::Command;
+  |     ^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: unused import: `error`
+ --> src/plugins/exploitation/web/sqlmap.rs:6:21
+  |
+6 | use tracing::{info, error, warn};
+  |                     ^^^^^
+
+warning: unused import: `std::path::Path`
+  --> src/plugins/exploitation/web/sqlmap.rs:10:5
+   |
+10 | use std::path::Path;
+   |     ^^^^^^^^^^^^^^^
+
+warning: unused import: `error`
+ --> src/plugins/exploitation/web/wapiti.rs:6:21
+  |
+6 | use tracing::{info, error, warn};
+  |                     ^^^^^
+
+warning: unused import: `error`
+ --> src/plugins/exploitation/web/dalfox.rs:6:21
+  |
+6 | use tracing::{info, error, warn};
+  |                     ^^^^^
+
+warning: unused import: `Evidence`
+ --> src/plugins/exploitation/web/commix.rs:6:62
+  |
+6 | use crate::models::{TargetHost, Finding, Category, Severity, Evidence};
+  |                                                              ^^^^^^^^
+
+warning: unused import: `regex::Regex`
+  --> src/plugins/exploitation/web/commix.rs:10:5
+   |
+10 | use regex::Regex;
+   |     ^^^^^^^^^^^^
+
+warning: unused import: `std::collections::HashMap`
+  --> src/plugins/exploitation/web/commix.rs:11:5
+   |
+11 | use std::collections::HashMap;
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: unused imports: `error` and `warn`
+ --> src/plugins/exploitation/network/hydra.rs:6:21
+  |
+6 | use tracing::{info, error, warn};
+  |                     ^^^^^  ^^^^
+
+warning: unused import: `std::sync::Arc`
+ --> src/plugins/exploitation/network/hydra.rs:9:5
+  |
+9 | use std::sync::Arc;
+  |     ^^^^^^^^^^^^^^
+
+warning: unused import: `warn`
+ --> src/plugins/exploitation/network/netexec.rs:6:21
+  |
+6 | use tracing::{info, warn};
+  |                     ^^^^
+
+warning: unused import: `Context`
+ --> src/plugins/exploitation/network/responder.rs:5:22
+  |
+5 | use anyhow::{Result, Context};
+  |                      ^^^^^^^
+
+warning: unused import: `warn`
+ --> src/plugins/exploitation/network/responder.rs:6:21
+  |
+6 | use tracing::{info, warn};
+  |                     ^^^^
+
+warning: unused import: `std::process::Stdio`
+ --> src/plugins/exploitation/network/responder.rs:7:5
+  |
+7 | use std::process::Stdio;
+  |     ^^^^^^^^^^^^^^^^^^^
+
+warning: unused import: `tokio::process::Command`
+ --> src/plugins/exploitation/network/responder.rs:8:5
+  |
+8 | use tokio::process::Command;
+  |     ^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: unused import: `crate::utils::tool_detection::detect_tool`
+ --> src/plugins/exploitation/network/impacket.rs:3:5
+  |
+3 | use crate::utils::tool_detection::detect_tool;
+  |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: unused import: `warn`
+ --> src/plugins/exploitation/network/impacket.rs:6:21
+  |
+6 | use tracing::{info, warn};
+  |                     ^^^^
+
+warning: unused import: `warn`
+ --> src/plugins/exploitation/network/petitpotam.rs:6:21
+  |
+6 | use tracing::{info, warn};
+  |                     ^^^^
+
+warning: unused import: `warn`
+ --> src/plugins/lateral_movement/bloodhound.rs:6:21
+  |
+6 | use tracing::{info, warn};
+  |                     ^^^^
+
+warning: unused import: `Context`
+ --> src/plugins/lateral_movement/sliver.rs:5:22
+  |
+5 | use anyhow::{Result, Context};
+  |                      ^^^^^^^
+
+warning: unused import: `warn`
+ --> src/plugins/lateral_movement/sliver.rs:6:21
+  |
+6 | use tracing::{info, warn};
+  |                     ^^^^
+
+warning: unused import: `std::process::Stdio`
+ --> src/plugins/lateral_movement/sliver.rs:7:5
+  |
+7 | use std::process::Stdio;
+  |     ^^^^^^^^^^^^^^^^^^^
+
+warning: unused import: `tokio::process::Command`
+ --> src/plugins/lateral_movement/sliver.rs:8:5
+  |
+8 | use tokio::process::Command;
+  |     ^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: unused import: `Context`
+ --> src/plugins/lateral_movement/ligolo.rs:5:22
+  |
+5 | use anyhow::{Result, Context};
+  |                      ^^^^^^^
+
+warning: unused import: `warn`
+ --> src/plugins/lateral_movement/ligolo.rs:6:21
+  |
+6 | use tracing::{info, warn};
+  |                     ^^^^
+
+warning: unused import: `std::process::Stdio`
+ --> src/plugins/lateral_movement/ligolo.rs:7:5
+  |
+7 | use std::process::Stdio;
+  |     ^^^^^^^^^^^^^^^^^^^
+
+warning: unused import: `tokio::process::Command`
+ --> src/plugins/lateral_movement/ligolo.rs:8:5
+  |
+8 | use tokio::process::Command;
+  |     ^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: unused import: `warn`
+ --> src/plugins/persistence/havoc.rs:6:21
+  |
+6 | use tracing::{info, warn};
+  |                     ^^^^
+
+warning: unused import: `warn`
+ --> src/plugins/privilege_escalation/certipy.rs:6:21
+  |
+6 | use tracing::{info, warn};
+  |                     ^^^^
+
+warning: unused import: `Evidence`
+ --> src/plugins/privilege_escalation/privesc_hunter.rs:6:62
+  |
+6 | use crate::models::{TargetHost, Finding, Category, Severity, Evidence, TargetType};
+  |                                                              ^^^^^^^^
+
+warning: unused import: `crate::core::capability_layer::ScanLayer`
+ --> src/plugins/privilege_escalation/privesc_hunter.rs:8:5
+  |
+8 | use crate::core::capability_layer::ScanLayer;
+  |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: unused import: `std::collections::HashMap`
+  --> src/plugins/privilege_escalation/privesc_hunter.rs:10:5
+   |
+10 | use std::collections::HashMap;
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: unused import: `error`
+ --> src/plugins/intelligence/nuclei.rs:6:21
+  |
+6 | use tracing::{info, error, warn};
+  |                     ^^^^^
+
+warning: unused import: `error`
+ --> src/plugins/intelligence/jaeles.rs:6:21
+  |
+6 | use tracing::{info, error};
+  |                     ^^^^^
+
+warning: unused import: `error`
+ --> src/plugins/intelligence/searchsploit.rs:6:21
+  |
+6 | use tracing::{info, error};
+  |                     ^^^^^
+
+warning: unused import: `crate::utils::tool_detection::detect_tool`
+ --> src/plugins/verification/zap.rs:3:5
+  |
+3 | use crate::utils::tool_detection::detect_tool;
+  |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: unused import: `Context`
+ --> src/plugins/verification/zap.rs:5:22
+  |
+5 | use anyhow::{Result, Context};
+  |                      ^^^^^^^
+
+warning: unused import: `error`
+ --> src/plugins/verification/zap.rs:6:21
+  |
+6 | use tracing::{info, error, warn};
+  |                     ^^^^^
+
+warning: unused import: `crate::utils::tool_detection::detect_tool`
+ --> src/plugins/verification/burp.rs:3:5
+  |
+3 | use crate::utils::tool_detection::detect_tool;
+  |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: unused import: `Context`
+ --> src/plugins/verification/burp.rs:5:22
+  |
+5 | use anyhow::{Result, Context};
+  |                      ^^^^^^^
+
+warning: unused import: `error`
+ --> src/plugins/verification/burp.rs:6:21
+  |
+6 | use tracing::{info, error, warn};
+  |                     ^^^^^
+
+warning: unused imports: `Category` and `Severity`
+ --> src/plugins/compliance/kubescape.rs:2:42
+  |
+2 | use crate::models::{TargetHost, Finding, Severity, Category};
+  |                                          ^^^^^^^^  ^^^^^^^^
+
+warning: unused import: `crate::utils::tool_detection::detect_tool`
+ --> src/plugins/ffi.rs:3:5
+  |
+3 | use crate::utils::tool_detection::detect_tool;
+  |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: unused import: `tokio::process::Command`
+ --> src/utils/process_guard.rs:4:5
+  |
+4 | use tokio::process::Command;
+  |     ^^^^^^^^^^^^^^^^^^^^^^^
+
+error: `impl` item signature doesn't match `trait` item signature
+   --> src/plugins/ffi.rs:78:5
+    |
+ 78 |     fn name(&self) -> &str {
+    |     ^^^^^^^^^^^^^^^^^^^^^^ found `fn(&'1 FFIPluginWrapper) -> &'1 str`
+    |
+   ::: src/plugins/mod.rs:101:5
+    |
+101 |     fn name(&self) -> &'static str;
+    |     ------------------------------- expected `fn(&'1 FFIPluginWrapper) -> &'static str`
+    |
+    = note: expected signature `fn(&'1 FFIPluginWrapper) -> &'static str`
+               found signature `fn(&'1 FFIPluginWrapper) -> &'1 str`
+    = help: the lifetime requirements from the `impl` do not correspond to the requirements in the `trait`
+    = help: verify the lifetime relationships in the `trait` and `impl` between the `self` argument, the other inputs and its output
+
+warning: variable does not need to be mutable
+   --> src/core/swarm.rs:130:13
+    |
+130 |         let mut adaptive_context = AdaptiveContext::default();
+    |             ----^^^^^^^^^^^^^^^^
+    |             |
+    |             help: remove this `mut`
+    |
+    = note: `#[warn(unused_mut)]` (part of `#[warn(unused)]`) on by default
+
+warning: variable does not need to be mutable
+   --> src/core/pipeline.rs:184:13
+    |
+184 |         let mut final_sink = sink;
+    |             ----^^^^^^^^^^
+    |             |
+    |             help: remove this `mut`
+
+warning: variable does not need to be mutable
+   --> src/core/web_server.rs:186:9
+    |
+186 |     let mut rx = state.findings_tx.subscribe();
+    |         ----^^
+    |         |
+    |         help: remove this `mut`
+
+warning: variable does not need to be mutable
+   --> src/core/sandbox.rs:159:13
+    |
+159 |         let mut child = self.execute_tool_streamed(tool, args).await?;
+    |             ----^^^^^
+    |             |
+    |             help: remove this `mut`
+
+warning: unused import: `Row`
+ --> src/core/sink.rs:6:54
+  |
+6 | use sqlx::{SqlitePool, sqlite::SqliteConnectOptions, Row};
+  |                                                      ^^^
+
+warning: unused import: `Distribution`
+ --> src/utils/jitter.rs:1:29
+  |
+1 | use rand_distr::{LogNormal, Distribution};
+  |                             ^^^^^^^^^^^^
+
+warning: unused import: `std::os::unix::process::CommandExt`
+ --> src/core/sandbox.rs:8:5
+  |
+8 | use std::os::unix::process::CommandExt;
+  |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: unused import: `BufRead`
+ --> src/plugins/enumeration/web/crlfuzz.rs:9:15
+  |
+9 | use std::io::{BufRead, BufReader};
+  |               ^^^^^^^
+
+warning: unused import: `std::os::unix::process::CommandExt`
+  --> src/utils/common.rs:86:13
+   |
+86 |         use std::os::unix::process::CommandExt;
+   |             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: unused variable: `level`
+   --> src/core/swarm.rs:204:13
+    |
+204 |         let level = if finding.severity == Severity::Critical { RouteLevel::Prem...
+    |             ^^^^^ help: if this is intentional, prefix it with an underscore: `_level`
+    |
+    = note: `#[warn(unused_variables)]` (part of `#[warn(unused)]`) on by default
+
+warning: unused variable: `compressed`
+   --> src/core/agent.rs:175:13
+    |
+175 |         let compressed = ContextCompressor::compress_finding(finding, route_level);
+    |             ^^^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_compressed`
+
+warning: unused variable: `compressed`
+   --> src/core/agent.rs:227:13
+    |
+227 |         let compressed = ContextCompressor::compress_finding(finding, route_level);
+    |             ^^^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_compressed`
+
+warning: unused variable: `adaptive_context`
+   --> src/core/agent.rs:274:149
+    |
+274 | ... Option<&CapabilityGap>, adaptive_context: Option<&AdaptiveContext>, route_le...
+    |                             ^^^^^^^^^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_adaptive_context`
+
+warning: unused variable: `route_level`
+   --> src/core/agent.rs:274:193
+    |
+274 | ... Option<&AdaptiveContext>, route_level: crate::core::ai_cascade::RouteLevel) ...
+    |                               ^^^^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_route_level`
+
+warning: unused variable: `finding`
+   --> src/core/agent.rs:274:35
+    |
+274 | ...nc fn decide_action(&self, finding: &Finding, target: &TargetHost, plugins: &...
+    |                               ^^^^^^^ help: if this is intentional, prefix it with an underscore: `_finding`
+
+warning: unused variable: `target`
+   --> src/core/agent.rs:274:54
+    |
+274 | ...on(&self, finding: &Finding, target: &TargetHost, plugins: &[crate::plugins::...
+    |                                 ^^^^^^ help: if this is intentional, prefix it with an underscore: `_target`
+
+warning: unused variable: `plugins`
+   --> src/core/agent.rs:274:75
+    |
+274 | ...ding, target: &TargetHost, plugins: &[crate::plugins::PluginMetadata], _gap: ...
+    |                               ^^^^^^^ help: if this is intentional, prefix it with an underscore: `_plugins`
+
+warning: unused variable: `adaptive_context`
+   --> src/core/agent.rs:308:149
+    |
+308 | ... Option<&CapabilityGap>, adaptive_context: Option<&AdaptiveContext>, route_le...
+    |                             ^^^^^^^^^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_adaptive_context`
+
+warning: unused variable: `route_level`
+   --> src/core/agent.rs:308:193
+    |
+308 | ... Option<&AdaptiveContext>, route_level: crate::core::ai_cascade::RouteLevel) ...
+    |                               ^^^^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_route_level`
+
+warning: unused variable: `finding`
+   --> src/core/agent.rs:308:35
+    |
+308 | ...nc fn decide_action(&self, finding: &Finding, target: &TargetHost, plugins: &...
+    |                               ^^^^^^^ help: if this is intentional, prefix it with an underscore: `_finding`
+
+warning: unused variable: `target`
+   --> src/core/agent.rs:308:54
+    |
+308 | ...on(&self, finding: &Finding, target: &TargetHost, plugins: &[crate::plugins::...
+    |                                 ^^^^^^ help: if this is intentional, prefix it with an underscore: `_target`
+
+warning: unused variable: `plugins`
+   --> src/core/agent.rs:308:75
+    |
+308 | ...ding, target: &TargetHost, plugins: &[crate::plugins::PluginMetadata], _gap: ...
+    |                               ^^^^^^^ help: if this is intentional, prefix it with an underscore: `_plugins`
+
+warning: unused variable: `prompt`
+  --> src/core/poc_validator.rs:96:13
+   |
+96 |         let prompt = format!(
+   |             ^^^^^^ help: if this is intentional, prefix it with an underscore: `_prompt`
+
+warning: unused variable: `target`
+   --> src/core/ai_cascade.rs:198:54
+    |
+198 | ...m_context(finding: &Finding, target: &crate::models::TargetHost) -> serde_jso...
+    |                                 ^^^^^^ help: if this is intentional, prefix it with an underscore: `_target`
+
+warning: unused variable: `tx`
+   --> src/core/swarm.rs:265:9
+    |
+265 |         tx: &mut mpsc::Sender<Finding>,
+    |         ^^ help: if this is intentional, prefix it with an underscore: `_tx`
+
+warning: unused variable: `adaptive_ctx`
+   --> src/core/swarm.rs:266:9
+    |
+266 |         adaptive_ctx: &mut AdaptiveContext,
+    |         ^^^^^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_adaptive_ctx`
+
+warning: unused variable: `session_id`
+  --> src/core/mcp/server.rs:74:10
+   |
+74 |     Path(session_id): Path<String>,
+   |          ^^^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_session_id`
+
+warning: value assigned to `concurrency` is never read
+  --> src/core/factory.rs:14:31
+   |
+14 |         let mut concurrency = 10;
+   |                               ^^
+   |
+   = help: maybe it is overwritten before being read?
+   = note: `#[warn(unused_assignments)]` (part of `#[warn(unused)]`) on by default
+
+warning: value assigned to `soft_limit` is never read
+  --> src/core/factory.rs:15:30
+   |
+15 |         let mut soft_limit = 600;
+   |                              ^^^
+   |
+   = help: maybe it is overwritten before being read?
+
+warning: value assigned to `hard_limit` is never read
+  --> src/core/factory.rs:16:30
+   |
+16 |         let mut hard_limit = 900;
+   |                              ^^^
+   |
+   = help: maybe it is overwritten before being read?
+
+warning: variable does not need to be mutable
+  --> src/plugins/reconnaissance/active/dnsx.rs:54:13
+   |
+54 |         let mut child = Command::new(&self.binary_path)
+   |             ----^^^^^
+   |             |
+   |             help: remove this `mut`
+
+warning: variable does not need to be mutable
+  --> src/plugins/enumeration/web/feroxbuster.rs:56:13
+   |
+56 |         let mut child = Command::new(&self.binary_path)
+   |             ----^^^^^
+   |             |
+   |             help: remove this `mut`
+
+warning: variable does not need to be mutable
+  --> src/plugins/enumeration/web/snallygaster.rs:60:13
+   |
+60 |         let mut child = Command::new(&self.binary_path)
+   |             ----^^^^^
+   |             |
+   |             help: remove this `mut`
+
+warning: variable does not need to be mutable
+  --> src/plugins/enumeration/web/wpsec.rs:66:13
+   |
+66 |         let mut child = Command::new(&self.binary_path)
+   |             ----^^^^^
+   |             |
+   |             help: remove this `mut`
+
+warning: variable does not need to be mutable
+  --> src/plugins/enumeration/web/gauplus.rs:54:13
+   |
+54 |         let mut child = Command::new(&self.binary_path)
+   |             ----^^^^^
+   |             |
+   |             help: remove this `mut`
+
+warning: variable does not need to be mutable
+  --> src/plugins/enumeration/network/rustscan.rs:62:13
+   |
+62 |         let mut child = Command::new(&self.binary_path)
+   |             ----^^^^^
+   |             |
+   |             help: remove this `mut`
+
+warning: variable does not need to be mutable
+  --> src/plugins/enumeration/cloud/cloudbrute.rs:55:13
+   |
+55 |         let mut child = Command::new(&self.binary_path)
+   |             ----^^^^^
+   |             |
+   |             help: remove this `mut`
+
+warning: unused variable: `target`
+   --> src/plugins/exploitation/web/commix.rs:139:9
+    |
+139 |         target: &TargetHost,
+    |         ^^^^^^ help: if this is intentional, prefix it with an underscore: `_target`
+
+warning: unused variable: `body`
+   --> src/plugins/exploitation/web/commix.rs:166:17
+    |
+166 |             let body = response.text().await.unwrap_or_default();
+    |                 ^^^^ help: if this is intentional, prefix it with an underscore: `_body`
+
+warning: unnecessary `unsafe` block
+   --> src/plugins/ffi.rs:119:13
+    |
+119 |             unsafe { (ffi.scan)(plugin_ptr, target_ptr) }
+    |             ^^^^^^ unnecessary `unsafe` block
+    |
+    = note: `#[warn(unused_unsafe)]` (part of `#[warn(unused)]`) on by default
+
+warning: unnecessary `unsafe` block
+   --> src/plugins/ffi.rs:173:9
+    |
+173 |         unsafe {
+    |         ^^^^^^ unnecessary `unsafe` block
+
+warning: `redteam_rust_core` (lib) generated 154 warnings
+error: could not compile `redteam_rust_core` (lib) due to 1 previous error; 154 warnings emitted

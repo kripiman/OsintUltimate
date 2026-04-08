@@ -49,6 +49,9 @@ pub enum TargetType {
 pub struct TargetHost {
     pub host: String,
     pub ip: Option<String>,
+    /// V12 HARDENING: Permanent IP pinning for security tools (DNS Rebinding Mitigation).
+    #[serde(default)]
+    pub resolved_ip: Option<String>,
     pub status: TargetStatus,
     pub target_type: TargetType,
     pub findings: Arc<Vec<Finding>>,

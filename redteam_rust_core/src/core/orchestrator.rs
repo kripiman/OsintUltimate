@@ -194,6 +194,7 @@ impl Orchestrator {
                     let target_snapshot = TargetHost {
                         host: target_ref.host.clone(),
                         ip: target_ref.ip.clone(),
+                        resolved_ip: target_ref.resolved_ip.clone(),
                         target_type: target_ref.target_type,
                         status: TargetStatus::Scanning,
                         findings: Arc::new(Vec::new()),

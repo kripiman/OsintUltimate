@@ -73,6 +73,7 @@ pub fn check_cap_net_raw() -> bool {
 /// 1. env_clear(): Strips RUST_*, CARGO_*, and other parent env vars.
 /// 2. setsid/process_group: Decouples from the parent's process tree signaling.
 /// 3. Resource Limits: Enforces virtual memory constraints to protect the 1GB RAM host.
+/// 4. V12 Enterprise: Global Proxy Enforcement (ALL_PROXY)
 pub fn stealth_command(binary: &str) -> tokio::process::Command {
     let mut cmd = tokio::process::Command::new(binary);
     
@@ -80,6 +81,15 @@ pub fn stealth_command(binary: &str) -> tokio::process::Command {
        .env("PATH", "/usr/local/bin:/usr/bin:/bin")
        .env("HOME", "/tmp")
        .kill_on_drop(true);
+
+    // V12 HARDENING: Global Proxy Enforcement
+    // If the system has a proxy configured via environment, we propagate it.
+    // This is crucial for Oracle-to-DigitalOcean routing.
+    if let Ok(proxy) = std::env::var("GLOBAL_SCAN_PROXY") {
+        cmd.env("ALL_PROXY", proxy.clone())
+           .env("http_proxy", proxy.clone())
+           .env("https_proxy", proxy);
+    }
 
     #[cfg(unix)]
     {

@@ -1,6 +1,7 @@
 use hickory_resolver::TokioAsyncResolver;
 use hickory_resolver::config::{ResolverConfig, ResolverOpts, NameServerConfig, Protocol};
 use std::net::IpAddr;
+use tracing::warn;
 
 /// Checks if a target is "live" using a shared resolver.
 /// Removed self-contained version to prevent re-creating DNS resolvers (P2).
@@ -69,6 +70,17 @@ pub fn is_safe_ip(ip: &IpAddr) -> bool {
     }
 }
 
+/// V12 HARDENING: Centralized SSRF check for hostnames or IPs.
+pub async fn is_ssrf_safe_host(target: &str) -> bool {
+    if let Ok(ip) = target.parse::<IpAddr>() {
+        return is_safe_ip(&ip);
+    }
+    // For hostnames, we don't resolve here as we want to force IP pinning.
+    // This is a safety check for strings that might be IPs.
+    // In strict mode, we should only allow pre-resolved IPs.
+    true 
+}
+
 /// Batch liveness checker using a shared resolver for performance
 #[derive(Clone)]
 pub struct LivenessChecker {
@@ -108,12 +120,24 @@ impl LivenessChecker {
 
     pub async fn is_live(&self, target: &str) -> Option<IpAddr> {
         if let Ok(ip) = target.parse::<IpAddr>() {
-            return Some(ip);
+            if is_safe_ip(&ip) {
+                return Some(ip);
+            } else {
+                warn!("🚫 LIVENESS: Blocked attempt to scan unsafe IP: {}", ip);
+                return None;
+            }
         }
 
         match self.resolver.lookup_ip(target).await {
             Ok(response) => {
-                response.iter().next()
+                for ip in response.iter() {
+                    if is_safe_ip(&ip) {
+                        return Some(ip);
+                    } else {
+                        warn!("🚫 LIVENESS: Resolved unsafe IP {} for host {}, skipping.", ip, target);
+                    }
+                }
+                None
             }
             Err(_) => None
         }

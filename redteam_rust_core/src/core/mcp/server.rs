@@ -154,6 +154,7 @@ async fn handle_execute_plugin(state: &Arc<McpServer>, args: serde_json::Value) 
         let host = crate::models::TargetHost {
             host: target_real.clone(),
             ip: None, // El plugin lo resolverá si es necesario
+            resolved_ip: None,
             status: crate::models::TargetStatus::Scanning,
             target_type: crate::models::TargetType::Network, // Auto-detect later or assume net
             findings: Arc::new(Vec::new()),

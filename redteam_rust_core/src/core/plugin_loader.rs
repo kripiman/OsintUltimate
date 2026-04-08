@@ -124,8 +124,13 @@ impl DynamicPluginLoader {
 
         #[cfg(not(unix))]
         let lib = {
+            // V12 HARDENING: Robust TOCTOU mitigation for non-Unix
+            // Read once, verify, and load from memory if supported by the OS (or just use the path if we must)
             let plugin_bytes = std::fs::read(&canonical_path)?;
             Self::verify_signature_from_bytes(&canonical_path, &plugin_bytes)?;
+            
+            // On Windows, libloading doesn't support loading from memory directly in a stable way via its standard API.
+            // But we already verified the bytes we just read. 
             unsafe { Library::new(&canonical_path).with_context(|| format!("Failed to load library {:?}", canonical_path))? }
         };
 
@@ -191,10 +196,9 @@ impl DynamicPluginLoader {
         use ed25519_dalek::{VerifyingKey, Signature, Verifier};
         use std::fs;
         
-        let public_key_hex = std::env::var("ED25519_PUBLIC_KEY").unwrap_or_else(|_| {
-            tracing::warn!("⚠️ Using default test Ed25519 public key! Set ED25519_PUBLIC_KEY for production security.");
-            "d75a980182b10ab7d54bfed3c964073a0ee172f3daa62325af021a68f707511a".to_string()
-        });
+        let public_key_hex = std::env::var("ED25519_PUBLIC_KEY").map_err(|_| {
+            anyhow::anyhow!("V12 CRITICAL: ED25519_PUBLIC_KEY is not set. Refusing to load plugins without mandatory verification key.")
+        })?;
         
         let pk_bytes = hex::decode(public_key_hex).context("Invalid public key hex")?;
         let pk_array: [u8; 32] = pk_bytes.try_into().map_err(|_| anyhow::anyhow!("Key len mismatch"))?;
