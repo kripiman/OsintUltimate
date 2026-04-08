@@ -75,10 +75,8 @@ pub async fn is_ssrf_safe_host(target: &str) -> bool {
     if let Ok(ip) = target.parse::<IpAddr>() {
         return is_safe_ip(&ip);
     }
-    // For hostnames, we don't resolve here as we want to force IP pinning.
-    // This is a safety check for strings that might be IPs.
-    // In strict mode, we should only allow pre-resolved IPs.
-    true 
+    // Reject unresolved hostnames by default; only pre-resolved IPs are permitted for network operations.
+    false
 }
 
 /// Batch liveness checker using a shared resolver for performance
@@ -175,5 +173,18 @@ mod tests {
         assert!(!is_safe_ip(&"2001:db8::1".parse().unwrap())); // Documentation
         assert!(!is_safe_ip(&"2001:10::1".parse().unwrap()));  // ORCHIDv2
         assert!(!is_safe_ip(&"2002::1".parse().unwrap()));    // 6to4
+    }
+
+    #[test]
+    fn test_is_ssrf_safe_host_rejects_hostnames() {
+        let runtime = tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .expect("Failed to create tokio runtime");
+
+        runtime.block_on(async {
+            assert!(!is_ssrf_safe_host("example.com").await);
+            assert!(is_ssrf_safe_host("8.8.8.8").await);
+        });
     }
 }

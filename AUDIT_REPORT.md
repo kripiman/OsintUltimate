@@ -19,51 +19,43 @@ Aunque el endurecimiento de la fase V11 persiste (eliminación de binarios pelig
 
 Se confirma la persistencia de las protecciones de nivel básico, descartando regresiones en los siguientes puntos:
 
-- [**MITIGADA**] **Bypass de Whitelist**: `nc`, `python3` y `netcat` permanecen fuera de la whitelist de comandos permitidos. 
-  - *Evidencia*: `core/poc_validator.rs:138` (Lista estricta: `nmap`, `curl`, `ping`, `whois`, `dig`, `host`).
-- [**MITIGADA**] **SSRF Core Validation**: El motor de liveness ha sido expandido para bloquear rangos críticos (CGNAT, Documentation, Multicast).
-  - *Evidencia*: `utils/liveness.rs:14-71` (Hardening de `is_safe_ip`).
-- [**MITIGADA**] **Data Races en FFI**: Se utiliza un `Mutex<()>` global para serializar el acceso a plugins dinámicos.
-  - *Evidencia*: `plugins/ffi.rs:51, 111` (Uso de `sync_lock`).
+- [**MITIGADA**] **Bypass de Whitelist**: `nc`, `python3` y `netcat` permanecen fuera de la lista de binarios permitidos. El motor de `safe_command` reconstruye comandos a partir de plantillas fijas.
+  - *Evidencia*: `core/poc_validator.rs:147-169` (Rechazo de binarios no permitidos y plantillas estrictas de argumentos).
+- [**MITIGADA**] **SSRF Core Validation**: La lógica de liveness bloquea rangos críticos y el pipeline fija `resolved_ip` tras la verificación de conectividad.
+  - *Evidencia*: `utils/liveness.rs:14-71` (Hardening de `is_safe_ip`) y `core/pipeline.rs:144-147` (Pin IP antes de escaneo).
+- [**MITIGADA**] **Data Races en FFI**: Se utiliza un `Mutex<()>` para serializar cada ejecución de plugin FFI y evitar accesos concurrentes al bridge.
+  - *Evidencia*: `plugins/ffi.rs:51, 111-121` (Uso de `sync_lock` y `catch_unwind`).
 
 ---
 
 ## 3. HALLAZGOS ACTIVOS (Nivel Enterprise)
 
-### 3.1 [CRIT-001] — Argument Injection en Validación de PoC
-- **Archivo**: `core/poc_validator.rs` (Líneas 145-162)
+### 3.1 [CRIT-001] — SSRF por Redirección en `execute_http`
+- **Archivo**: `core/poc_validator.rs` (Líneas 231-267)
 - **Severidad**: 🔴 **CRÍTICO**
-- **Descripción**: Se ha implementado una validación semántica basada en **blacklist** (`forbidden_flags`). Aunque bloquea ataques obvios (`-o`, `--exec`), este enfoque es reactivo y permite bypasses mediante argumentos menos comunes o alias de herramientas (ej. `curl -K` para leer archivos locales).
+- **Descripción**: `execute_http` fija el IP resuelto y valida el rango contra SSRF, pero construye un `reqwest::Client` sin política de redirección explícita. La solicitud inicial usa la IP fijada, pero una cabecera `Location` maliciosa podría desencadenar una redirección hacia un host externo seguro, invalidando el pinning.
 - **Evidencia Técnica**:
-    ```rust
-    // poc_validator.rs:147
-    let forbidden_flags = ["-o", "--output", "-f", "--file", "--script", "--exec", ...];
-    for arg in &args[1..] {
-        if forbidden_flags.iter().any(|&f| lower_arg.starts_with(f)) { 
-            anyhow::bail!("Dangerous argument..."); 
-        }
-    }
-    ```
-- **Riesgo**: Persistencia de RCE limitado o exfiltración de archivos mediante herramientas autorizadas ("Living off the land").
+    - `reqwest::Client::builder().timeout(...).danger_accept_invalid_certs(true).build()?` en `core/poc_validator.rs:232-235`
+    - `request.send().await?` en `core/poc_validator.rs:263`
+- **Riesgo**: SSRF/Exfiltración a través del seguimiento automático de redirecciones.
 
-### 3.2 [HIGH-001] — DNS Rebinding Parcial (TOCTOU en Herramientas Externas)
-- **Archivo**: `core/poc_validator.rs` (Líneas 164-173 y 221-255)
+### 3.2 [HIGH-001] — Swarm Task Queue Growth / Agotamiento de Recursos
+- **Archivo**: `core/swarm.rs` (Líneas 148-197)
 - **Severidad**: 🟠 **ALTO**
-- **Descripción**: V12 introduce **IP Pinning** (sustitución manual de hostnames por IPs resueltas). Sin embargo, herramientas como `curl` o `nmap` pueden realizar resoluciones internas adicionales (ej. seguimiento de redirecciones o escaneos recursivos) si el pinning no se propaga a todas las sub-llamadas.
-- **Evidencia Técnica**: El pinning solo ocurre en el array de argumentos inicial, no en la configuración interna de la herramienta ni en la lógica de resolución recurrente del sistema operativo.
+- **Descripción**: Aunque el Swarm limita la concurrencia a 10 agentes activos, el `JoinSet` no está acotado y puede acumular una gran cantidad de tareas si `discovery_rx` produce muchos hallazgos. Esto crea un vector DoS de memoria/descriptores y mantiene reservas de tokens durante el tiempo de vida de cada tarea.
+- **Evidencia Técnica**:
+    - `let mut join_set = tokio::task::JoinSet::new();` en `core/swarm.rs:148`
+    - `join_set.spawn(...)` en `core/swarm.rs:181-196`
+    - `let agent_semaphore = Arc::new(tokio::sync::Semaphore::new(10));` en `core/swarm.rs:150`
+- **Nota**: `TokenBudget::new(0)` ya mitiga el bypass de presupuesto cero, pero no elimina el riesgo de acumulación de tareas.
 
-### 3.3 [HIGH-002] — Swarm Resource Exhaustion (DoS de Memoria/Tokens)
-- **Archivo**: `core/swarm.rs` (Líneas 42, 169)
-- **Severidad**: 🟠 **ALTO**
-- **Descripción**: 
-    1. Si `max_tokens` se configura como `0`, el sistema opera sin presupuesto, permitiendo un consumo infinito de fondos de la API ante un bucle infinito de la IA.
-    2. La reserva de 1000 tokens por agente es estática y no escala con la complejidad de la tarea.
-    3. No existe un límite estricto de hilos concurrentes en el `JoinSet` del Swarm, lo que podría llevar a un agotamiento de descriptores de archivos o memoria.
-
-### 3.4 [MED-001] — Escape de Aislamiento FFI (SIGSEGV/SIGKILL)
-- **Archivo**: `plugins/ffi.rs` (Línea 118)
+### 3.3 [MED-001] — Escape de Aislamiento FFI (SIGSEGV/SIGKILL)
+- **Archivo**: `plugins/ffi.rs` (Líneas 119-121)
 - **Severidad**: 🟡 **MEDIO**
-- **Descripción**: `catch_unwind` solo captura pánicos de Rust. Un error de memoria (C-style) o un SIGSEGV en una librería externa cargada vía FFI terminará inmediatamente el proceso de `OsintUltimate` sin posibilidad de recuperación.
+- **Descripción**: `catch_unwind` solo atrapa pánicos de Rust. Un fallo de memoria nativo en un plugin cargado vía FFI seguirá propagándose como SIGSEGV/SIGKILL y matará el proceso anfitrión.
+- **Evidencia Técnica**:
+    - `let result = catch_unwind(AssertUnwindSafe(move || { unsafe { (ffi.scan)(plugin_ptr, target_ptr) } }));` en `plugins/ffi.rs:119-122`
+- **Riesgo**: Crash del orquestador por plugins inseguros.
 
 ---
 
@@ -88,12 +80,10 @@ Se confirma la persistencia de las protecciones de nivel básico, descartando re
 
 | ID | Severidad | Hallazgo | Estado | Evidencia (Línea) |
 |----|-----------|----------|--------|-------------------|
-| CRIT-001 | 🔴 | Argument Injection (Blacklist) | **ACTIVO** | `poc_validator.rs:147` |
-| HIGH-001 | 🟠 | DNS Rebinding (TOCTOU) | **ACTIVO** | `poc_validator.rs:164` |
-| HIGH-002 | 🟠 | Swarm Resource DoS | **NUEVO** | `swarm.rs:42` |
-| HIGH-003 | 🟠 | Leak de IP en Nube (Oracle TOS) | **DISEÑO** | `pipeline.rs:174` |
-| MED-001 | 🟡 | Escape de Aislamiento FFI | **NUEVO** | `ffi.rs:118` |
+| CRIT-001 | 🔴 | SSRF por redirección en `execute_http` | **ACTIVO** | `core/poc_validator.rs:232-267` |
+| HIGH-001 | 🟠 | Swarm Task Queue Growth / DoS | **ACTIVO** | `core/swarm.rs:148-197` |
+| MED-001 | 🟡 | Escape de Aislamiento FFI | **NUEVO** | `plugins/ffi.rs:119-123` |
 
 ---
 
-> **Veredicto Final**: El sistema ha mejorado significativamente mediante la implementación de IP Pinning y validación semántica inicial. Sin embargo, persisten riesgos críticos derivados de la confianza en las entradas de la IA (Argument Injection) y la falta de aislamiento físico de los plugins FFI. **Se recomienda la migración inmediata a un modelo de validación basado en Templates (P0).**
+> **Veredicto Final**: El sistema muestra mejoras importantes en el control de binarios y en la fijación de IPs, pero la protección SSRF no está completa en `execute_http` y la arquitectura del Swarm aún presenta un vector de agotamiento de recursos. La prioridad inmediata debe ser cerrar el SSRF por redirección y aplicar límites de retención/tamaño al `JoinSet` de agentes.

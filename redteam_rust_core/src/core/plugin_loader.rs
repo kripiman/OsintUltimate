@@ -95,9 +95,14 @@ impl DynamicPluginLoader {
     fn load_plugin(&mut self, path: &Path) -> Result<Box<dyn ScannerPlugin>> {
         // FIX DE AISLAMIENTO: Verificar rutas permitidas y seguras (MED-001 canonicalize)
         let canonical_path = std::fs::canonicalize(path).with_context(|| format!("Failed to canonicalize path: {:?}", path))?;
+        let temp_dir = std::env::temp_dir();
+        if canonical_path.starts_with(&temp_dir) {
+            anyhow::bail!("Security Violation: Carga de plugin dinámico rechazada desde directorio temporal: {:?}", canonical_path);
+        }
+
         let path_str = canonical_path.to_string_lossy();
-        if path_str.starts_with("/tmp") || path_str.starts_with("/var/tmp") || path_str.starts_with("/dev/shm") || path_str.contains("..") {
-             anyhow::bail!("Security Violation: Carga de plugin dinámico rechazada. Ruta peligrosa (evita directorios temporales o escalada de rutas): {:?}", canonical_path);
+        if path_str.contains("..") {
+             anyhow::bail!("Security Violation: Carga de plugin dinámico rechazada. Ruta peligrosa (evita escalada de rutas): {:?}", canonical_path);
         }
         #[cfg(unix)]
         {

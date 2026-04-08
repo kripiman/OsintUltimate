@@ -159,9 +159,8 @@ impl PocValidator {
                     anyhow::bail!("V12 Policy Violation: Illegal characters or format in curl path.");
                 }
 
-                // Force IP, block redirects to other hosts, set strict timeout.
-                vec!["-I".to_string(), "-L".to_string(), "--max-redirs".to_string(), "3".to_string(), 
-                     "--max-time".to_string(), "10".to_string(), format!("http://{}{}", target_ip, path)]
+                // Force IP, disable redirects, and use a strict timeout.
+                vec!["-I".to_string(), "--fail".to_string(), "--max-time".to_string(), "10".to_string(), format!("http://{}{}", target_ip, path)]
             },
             "ping" => vec!["-c".to_string(), "3".to_string(), "-W".to_string(), "5".to_string(), target_ip.clone()],
             "dig" => vec!["+short".to_string(), target_ip.clone()],
@@ -187,7 +186,10 @@ impl PocValidator {
     async fn execute_tcp_check(&self, payload: &str, target: &TargetHost) -> Result<String> {
         let port = payload.parse::<u16>().context("Invalid port for tcp_check")?;
         // V12: Force IP for TCP checks (Priority resolved_ip)
-        let target_addr = target.resolved_ip.as_ref().or(target.ip.as_ref()).unwrap_or(&target.host);
+        let target_addr = target.resolved_ip.as_ref()
+            .or(target.ip.as_ref())
+            .context("V12: Target IP must be resolved before TCP check execution")?;
+        let _ip_addr = target_addr.parse::<std::net::IpAddr>().context("Invalid IP in target for TCP check")?;
         let addr = format!("{}:{}", target_addr, port);
         
         // SSRF Check for TCP stream
@@ -205,7 +207,10 @@ impl PocValidator {
     async fn execute_icmp_ping(&self, target: &TargetHost) -> Result<String> {
         let mut cmd = crate::utils::common::stealth_command("ping");
         // V12: Force IP for ICMP (Priority resolved_ip)
-        let target_addr = target.resolved_ip.as_ref().or(target.ip.as_ref()).unwrap_or(&target.host);
+        let target_addr = target.resolved_ip.as_ref()
+            .or(target.ip.as_ref())
+            .context("V12: Target IP must be resolved before ICMP ping execution")?;
+        let _ip_addr = target_addr.parse::<std::net::IpAddr>().context("Invalid IP in target for ICMP ping")?;
         
         if !crate::utils::liveness::is_ssrf_safe_host(target_addr).await {
             anyhow::bail!("V12 SSRF Blocked: Ping to restricted IP range.");
