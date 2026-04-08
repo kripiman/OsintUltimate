@@ -1,6 +1,6 @@
 use crate::models::{Finding, TargetHost, Category, Severity, AIAnalysis};
 use crate::core::pipeline::Pipeline;
-use crate::core::ai_cascade::{TieredAIRouter, AdaptiveContext, RouteLevel};
+use crate::core::ai::{TieredAIRouter, AdaptiveContext, RouteLevel};
 use crate::core::approval_gate::ApprovalGate;
 use anyhow::{Result, Context};
 use std::sync::Arc;
@@ -21,49 +21,76 @@ pub struct TokenBudget {
     pub total_tokens: AtomicU32,
     pub reserved_tokens: AtomicU32,
     pub max_tokens: u32,
+    pub max_per_agent: u32,
+    pub priority_boost: AtomicU32, // Reserved for high-priority tasks
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum TaskPriority {
+    High, // Planner
+    Normal, // Exploiter
+    Low, // Scout/Reporter
 }
 
 impl TokenBudget {
     pub fn new(max: u32) -> Self {
-        // V12 HARDENING (HIGH-002): Zero-budget prevention.
-        // If 0 is provided, we set a default safe floor (50k tokens) to prevent infinite loops.
         let safe_max = if max == 0 { 50_000 } else { max };
         Self {
             max_tokens: safe_max,
+            max_per_agent: safe_max / 2, // Default to 50% of budget per agent
             ..Default::default()
         }
     }
 
+    pub fn with_max_per_agent(mut self, max_per_agent: u32) -> Self {
+        self.max_per_agent = max_per_agent;
+        self
+    }
+
     pub fn add_usage(&self, usage: &crate::models::findings::TokenUsage) {
-        self.prompt_tokens.fetch_add(usage.prompt_tokens, Ordering::SeqCst);
-        self.completion_tokens.fetch_add(usage.completion_tokens, Ordering::SeqCst);
-        self.total_tokens.fetch_add(usage.total_tokens, Ordering::SeqCst);
+        self.prompt_tokens.fetch_add(usage.prompt_tokens, Ordering::Relaxed);
+        self.completion_tokens.fetch_add(usage.completion_tokens, Ordering::Relaxed);
+        self.total_tokens.fetch_add(usage.total_tokens, Ordering::Relaxed);
     }
 
-    /// Pre-reserve tokens before a long-running AI call to prevent over-spending
-    pub fn reserve_tokens(&self, amount: u32) -> bool {
-        // V12 HARDENING: No more bypass if max_tokens == 0 (handled in constructor)
-        let current = self.total_tokens.load(Ordering::SeqCst);
-        let reserved = self.reserved_tokens.load(Ordering::SeqCst);
-        
-        if current + reserved + amount > self.max_tokens {
-            warn!("🛑 SWARM BUDGET EXHAUSTED: Attempted to reserve {} tokens (Current: {}, Reserved: {}, Max: {})", 
-                  amount, current, reserved, self.max_tokens);
-            return false;
+    /// V12 HARDENING: Race-condition safe reservation using atomic compare_exchange.
+    pub fn reserve_tokens(&self, amount: u32, priority: TaskPriority) -> bool {
+        let mut current_reserved = self.reserved_tokens.load(Ordering::SeqCst);
+        loop {
+            let total = self.total_tokens.load(Ordering::SeqCst);
+            
+            // V13 HARDENING: Priority-based admission control
+            let threshold = match priority {
+                TaskPriority::High => self.max_tokens, // High priority can use full budget
+                TaskPriority::Normal => (self.max_tokens as f64 * 0.95) as u32, // Normal capped at 95%
+                TaskPriority::Low => (self.max_tokens as f64 * 0.85) as u32, // Low capped at 85%
+            };
+
+            if total + current_reserved + amount > threshold {
+                return false;
+            }
+            match self.reserved_tokens.compare_exchange_weak(
+                current_reserved,
+                current_reserved + amount,
+                Ordering::SeqCst,
+                Ordering::SeqCst,
+            ) {
+                Ok(_) => return true,
+                Err(new_val) => current_reserved = new_val,
+            }
         }
-        
-        self.reserved_tokens.fetch_add(amount, Ordering::SeqCst);
-        true
     }
 
-    /// Commit actual usage and release reservation
+    pub fn release_reservation(&self, amount: u32) {
+        self.reserved_tokens.fetch_sub(amount, Ordering::SeqCst);
+    }
+
     pub fn commit_usage(&self, actual: u32, reserved: u32) {
-        self.total_tokens.fetch_add(actual, Ordering::Relaxed);
-        self.reserved_tokens.fetch_sub(reserved, Ordering::Relaxed);
+        self.total_tokens.fetch_add(actual, Ordering::SeqCst);
+        self.reserved_tokens.fetch_sub(reserved, Ordering::SeqCst);
     }
 
     pub fn is_exhausted(&self) -> bool {
-        // V12 HARDENING: Strict budget enforcement (no zero-bypass)
         (self.total_tokens.load(Ordering::SeqCst) + self.reserved_tokens.load(Ordering::SeqCst)) >= self.max_tokens
     }
 
@@ -73,6 +100,45 @@ impl TokenBudget {
 
     pub fn current_effective_total(&self) -> u32 {
         self.total_tokens.load(Ordering::Relaxed) + self.reserved_tokens.load(Ordering::Relaxed)
+    }
+}
+
+/// V12 HARDENING: RAII Guard to ensure tokens are released even if an agent panics.
+pub struct TokenGuard {
+    budget: Arc<TokenBudget>,
+    amount: u32,
+    active: bool,
+}
+
+impl TokenGuard {
+    pub fn new(budget: Arc<TokenBudget>, amount: u32, priority: TaskPriority) -> Option<Self> {
+        // V13 HARDENING: Enforce per-agent limits
+        let safe_amount = if amount > budget.max_per_agent {
+            warn!("💸 SWARM: Requested tokens ({}) exceeds per-agent limit ({}). Capping.", amount, budget.max_per_agent);
+            budget.max_per_agent
+        } else {
+            amount
+        };
+
+        if budget.reserve_tokens(safe_amount, priority) {
+            Some(Self { budget, amount: safe_amount, active: true })
+        } else {
+            None
+        }
+    }
+
+    pub fn commit(mut self, actual: u32) {
+        self.budget.commit_usage(actual, self.amount);
+        self.active = false;
+    }
+}
+
+impl Drop for TokenGuard {
+    fn drop(&mut self) {
+        if self.active {
+            warn!("💸 SWARM: TokenGuard dropped without commitment. Releasing {} reserved tokens.", self.amount);
+            self.budget.release_reservation(self.amount);
+        }
     }
 }
 
@@ -99,6 +165,7 @@ pub struct SwarmOrchestrator {
     approval_gate: Arc<ApprovalGate>,
     budget: Arc<TokenBudget>,
     operator: crate::core::approval_gate::User,
+    proxy_manager: Option<Arc<crate::utils::proxy::ProxyManager>>,
 }
 
 impl SwarmOrchestrator {
@@ -107,6 +174,7 @@ impl SwarmOrchestrator {
         pipeline: Arc<Pipeline>,
         approval_gate: Arc<ApprovalGate>,
         max_tokens: u32,
+        proxy_manager: Option<Arc<crate::utils::proxy::ProxyManager>>,
     ) -> Self {
         let operator = crate::core::approval_gate::User {
             id: "swarm-orchestrator".to_string(),
@@ -120,6 +188,7 @@ impl SwarmOrchestrator {
             approval_gate,
             budget: Arc::new(TokenBudget::new(max_tokens)),
             operator,
+            proxy_manager,
         }
     }
 
@@ -148,8 +217,21 @@ impl SwarmOrchestrator {
         let mut join_set = tokio::task::JoinSet::new();
         // V12 HARDENING (HIGH-002): Concurrent Agent Limit (DoS prevention)
         let agent_semaphore = Arc::new(tokio::sync::Semaphore::new(10));
+        let max_pending_tasks = 50; // V12 FIX (HIGH-001): Limit JoinSet size to prevent DoS
 
         while let Some(finding) = discovery_rx.recv().await {
+            // V12 FIX: Limit JoinSet size to prevent DoS (HIGH-001)
+            while join_set.len() >= max_pending_tasks {
+                if let Some(res) = join_set.join_next().await {
+                     match res {
+                        Ok(Ok(_)) => {},
+                        Ok(Err(e)) => error!("🐝 SWARM [Agent Error]: {}", e),
+                        Err(e) => error!("🐝 SWARM [Task Error]: Join error: {}", e),
+                    }
+                } else {
+                    break;
+                }
+            }
             if self.budget.is_exhausted() {
                 warn!("💸 SWARM: Presupuesto de tokens agotado ({}). Deteniendo enjambre.", self.budget.current_total());
                 break;
@@ -172,26 +254,40 @@ impl SwarmOrchestrator {
             let sink_tx_clone = sink_tx.clone();
             let semaphore = agent_semaphore.clone();
 
-            // Optimistic Reservation: 1000 tokens per agent estimate
-            if !self.budget.reserve_tokens(1000) {
-                warn!("💸 SWARM: No hay presupuesto suficiente para spawnear agente para hallazgo {}. Skipping.", finding.id);
-                continue;
-            }
+            // V12 HARDENING: Use TokenGuard for RAII-based reservation
+            let priority = match role {
+                AgentRole::Planner => TaskPriority::High,
+                AgentRole::Exploiter => TaskPriority::Normal,
+                _ => TaskPriority::Low,
+            };
+
+            let guard = match TokenGuard::new(self.budget.clone(), 1000, priority) {
+                Some(g) => g,
+                None => {
+                    warn!("💸 SWARM: No hay presupuesto suficiente para spawnear agente {:?} (Hallazgo {}). Skipping.", role, finding.id);
+                    continue;
+                }
+            };
 
             join_set.spawn(async move {
                 let _permit = semaphore.acquire().await.ok();
-                let res = match role {
-                    AgentRole::Scout => orchestrator.execute_scout(finding_clone, &target_clone, &mut scout_tx, &mut ctx_clone, &sink_tx_clone).await,
-                    AgentRole::Exploiter => orchestrator.execute_exploiter(finding_clone, &target_clone, &mut scout_tx, &mut ctx_clone, &sink_tx_clone).await,
-                    AgentRole::GhostReporter => orchestrator.execute_reporter(finding_clone, &target_clone, &sink_tx_clone).await,
-                    AgentRole::Planner => Ok(()),
-                };
-                
-                // V12 FIX: Ensure reservation is ALWAYS cleared if not consumed by the agent's logic.
-                // commit_usage(0, 1000) effectively releases the 1000 reserved tokens.
-                if let AgentRole::GhostReporter | AgentRole::Planner = role {
-                     orchestrator.budget.commit_usage(0, 1000); 
+                // PFC-001/V12: Agent isolation via RAII and Panic handling
+                // V13: Strategic Pivot Check
+                if orchestrator.budget.current_effective_total() > (orchestrator.budget.max_tokens as f64 * 0.98) as u32 
+                   && role != AgentRole::GhostReporter {
+                    warn!("🛡️ SWARM: EMERGENCY PIVOT! Budget nearly exhausted. Transitioning to Passive Reporter for {}.", finding_clone.id);
+                    return orchestrator.execute_reporter(finding_clone, &target_clone, &sink_tx_clone, guard).await;
                 }
+
+                let res = match role {
+                    AgentRole::Scout => orchestrator.execute_scout(finding_clone, &target_clone, &mut scout_tx, &mut ctx_clone, &sink_tx_clone, guard).await,
+                    AgentRole::Exploiter => orchestrator.execute_exploiter(finding_clone, &target_clone, &mut scout_tx, &mut ctx_clone, &sink_tx_clone, guard).await,
+                    AgentRole::GhostReporter => orchestrator.execute_reporter(finding_clone, &target_clone, &sink_tx_clone, guard).await,
+                    AgentRole::Planner => {
+                        guard.commit(0);
+                        Ok(())
+                    },
+                };
                 res
             });
         }
@@ -218,7 +314,7 @@ impl SwarmOrchestrator {
 
     async fn plan_next_step(&self, finding: &Finding, target: &TargetHost) -> Result<AgentRole> {
         // V10: Use aggressive compression for planning to save tokens
-        let _compressed = crate::core::ai_cascade::ContextCompressor::compress_swarm_context(finding, target);
+        let _compressed = crate::core::ai::ContextCompressor::compress_swarm_context(finding, target);
         
         // En v4 el Planner usa Gemini Flash (Mid) o Local por defecto para ahorrar tokens.
         // Solo si el hallazgo es crítico escalamos a Premium.
@@ -242,17 +338,15 @@ impl SwarmOrchestrator {
         tx: &mut mpsc::Sender<Finding>,
         adaptive_ctx: &mut AdaptiveContext,
         sink_tx: &mpsc::Sender<TargetHost>,
+        guard: TokenGuard,
     ) -> Result<()> {
         info!("🔍 SWARM [Scout]: Profundizando en hallazgo de infraestructura: {}", finding.title);
         
-        // El Scout usa el Router para decidir qué herramienta de enumeración usar
         let metadata = self.pipeline.get_plugin_metadata();
         match self.router.decide_action(&finding, target, &metadata, Some(adaptive_ctx)).await {
             Ok(Some((action, tactical))) => {
-                // V12: Commit usage from decide_action (which calls the AI)
-                // Note: decide_action should provide usage in the next iteration of the API.
-                // For now, we commit 200 tokens as a reasonable average for a Flash-level decision.
-                self.budget.commit_usage(200, 1000); 
+                // V12: Commit usage and transition guard
+                guard.commit(200); 
 
                 let mut task_target = target.clone();
                 task_target.tactical_context = Arc::new(tactical);
@@ -263,15 +357,13 @@ impl SwarmOrchestrator {
                 }
             }
             Ok(None) => {
-                self.budget.commit_usage(0, 1000); // Release reservation
+                // Guard will auto-release on drop if not committed
             }
             Err(e) => {
-                self.budget.commit_usage(0, 1000); // Release reservation
                 return Err(e);
             }
         }
         
-        // Reportar hallazgo inicial procesado
         let mut sink_target = target.clone();
         sink_target.findings = Arc::new(vec![finding]);
         let _ = sink_tx.send(sink_target).await;
@@ -284,22 +376,23 @@ impl SwarmOrchestrator {
         mut finding: Finding,
         target: &TargetHost,
         tx: &mut mpsc::Sender<Finding>,
-        adaptive_ctx: &mut AdaptiveContext,
+        _adaptive_ctx: &mut AdaptiveContext,
         sink_tx: &mpsc::Sender<TargetHost>,
+        guard: TokenGuard,
     ) -> Result<()> {
         info!("💥 SWARM [Exploiter]: Intentando validación/explotación de: {}", finding.title);
         
-        // 1. Análisis Premium para generación de PoC
         match self.router.analyze(&finding, target).await {
             Ok(analysis) => {
-                self.budget.commit_usage(analysis.usage.total_tokens, 1000); // Commit against reservation
+                let usage = analysis.usage.total_tokens;
+                guard.commit(usage); 
                 finding = finding.with_ai_analysis(analysis.clone());
                 
-                // 2. Validación de PoC (PocValidator se encarga de aprobaciones)
                 let poc_validator = crate::core::poc_validator::PocValidator::new(
                     self.router.clone(),
                     self.approval_gate.clone(),
                     self.operator.clone(),
+                    self.proxy_manager.clone(),
                 );
                 
                 if analysis.risk_score >= 7 {
@@ -307,12 +400,10 @@ impl SwarmOrchestrator {
                 }
             }
             Err(e) => {
-                self.budget.commit_usage(0, 1000); // Release reservation on error
                 warn!("⚠️ SWARM [Exploiter]: Error en análisis de explotación: {}", e);
             }
         }
 
-        // Reportar
         let mut sink_target = target.clone();
         sink_target.findings = Arc::new(vec![finding]);
         let _ = sink_tx.send(sink_target).await;
@@ -325,8 +416,10 @@ impl SwarmOrchestrator {
         finding: Finding,
         target: &TargetHost,
         sink_tx: &mpsc::Sender<TargetHost>,
+        guard: TokenGuard,
     ) -> Result<()> {
         debug!("📝 SWARM [Reporter]: Archivando hallazgo informativo: {}", finding.title);
+        guard.commit(0);
         let mut sink_target = target.clone();
         sink_target.findings = Arc::new(vec![finding]);
         let _ = sink_tx.send(sink_target).await;
@@ -343,22 +436,22 @@ mod tests {
         let budget = TokenBudget::new(5000);
         
         // Reserve 2000 - should succeed
-        assert!(budget.reserve_tokens(2000));
+        assert!(budget.reserve_tokens(2000, TaskPriority::High));
         assert_eq!(budget.current_effective_total(), 2000);
         
         // Reserve another 2000 - should succeed
-        assert!(budget.reserve_tokens(2000));
+        assert!(budget.reserve_tokens(2000, TaskPriority::High));
         assert_eq!(budget.current_effective_total(), 4000);
         
         // Reserve 1500 - should fail (4000 + 1500 > 5000)
-        assert!(!budget.reserve_tokens(1500));
+        assert!(!budget.reserve_tokens(1500, TaskPriority::High));
         assert_eq!(budget.current_effective_total(), 4000);
     }
 
     #[test]
     fn test_token_budget_commitment() {
         let budget = TokenBudget::new(5000);
-        budget.reserve_tokens(1000);
+        budget.reserve_tokens(1000, TaskPriority::Normal);
         
         // Commit 800 tokens, releasing 1000 reservation
         budget.commit_usage(800, 1000);
@@ -371,10 +464,23 @@ mod tests {
     #[test]
     fn test_token_budget_exhaustion() {
         let budget = TokenBudget::new(1000);
-        budget.reserve_tokens(900);
+        budget.reserve_tokens(900, TaskPriority::High);
         assert!(!budget.is_exhausted());
         
-        budget.reserve_tokens(100);
+        budget.reserve_tokens(100, TaskPriority::High);
         assert!(budget.is_exhausted());
+    }
+
+    #[test]
+    fn test_token_budget_per_agent_limit() {
+        let budget = Arc::new(TokenBudget::new(10000).with_max_per_agent(1000));
+        
+        // Requesting 500 should succeed and stay 500
+        let guard1 = TokenGuard::new(budget.clone(), 500, TaskPriority::High).unwrap();
+        assert_eq!(guard1.amount, 500);
+        
+        // Requesting 2000 should be capped to 1000
+        let guard2 = TokenGuard::new(budget.clone(), 2000, TaskPriority::High).unwrap();
+        assert_eq!(guard2.amount, 1000);
     }
 }

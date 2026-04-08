@@ -164,4 +164,21 @@ impl DigitalOceanClient {
             .error_for_status()?;
         Ok(())
     }
+
+    pub async fn list_droplets(&self) -> Result<Vec<Droplet>> {
+        let response = self.client
+            .get("https://api.digitalocean.com/v2/droplets?tag_name=osint-ultimate")
+            .headers(self.headers()?)
+            .send()
+            .await?
+            .error_for_status()?;
+
+        #[derive(Deserialize)]
+        struct DropletsWrapper {
+            droplets: Vec<Droplet>,
+        }
+
+        let wrapper: DropletsWrapper = response.json().await?;
+        Ok(wrapper.droplets)
+    }
 }

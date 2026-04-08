@@ -1,111 +1,53 @@
-# 🛡️ Hardening y SIGILO (OPSEC)
+# 🛡️ Hardening Stealth y SIGILO (Protocolo V13)
 
-Este documento describe las medidas de seguridad interna y tácticas de evasión implementadas en OsintUltimate v4.0 para garantizar la **estabilidad del sistema** y la **invisibilidad operativa**.
-
----
-
-## 1. Protección de Recursos (Hardening de Memoria)
-
-Optimizado para entornos con **1GB de RAM** (ej. AWS t3.micro, Azure B1s, GCP f1-micro).
-
-### Vigilancia de Memoria Adaptativa y Backpressure
-Optimizado dinámicamente según el hardware detectado:
-- **UltraLowMemory Mode (Adaptativo)**:
-  - **Límite Suave (500MB)**: Activa el `Backpressure`. El orquestador pausa la lectura de nuevos objetivos.
-  - **Límite Duro (850MB)**: Provoca un apagado de emergencia (`Graceful Shutdown`) protegiendo al sistema operativo.
-  - **Concurrencia**: Capada automáticamente a un máximo de 5-10 hilos simultáneos.
-- **LocalPC/Server Default**:
-  - **Límite Suave (600MB)** / **Límite Duro (900MB)**.
-- **Logging**: El monitor registra el uso de RAM actual y el pico (`VmRSS`) en `/proc/self/status`.
-
-### Límites de Subprocesos (`rlimit`)
-OsintUltimate encapsula cada herramienta externa (Nmap, Nuclei, SqlMap) con restricciones estrictas de recursos:
-- **`libc::setrlimit(RLIMIT_AS, 512MB)`**: Ninguna herramienta individual puede consumir más de 512MB de memoria virtual.
-- **`libc::setsid()`**: Cada herramienta vive en su propia sesión de proceso aislada, evitando que señales accidentales (como un Ctrl+C mal capturado) afecten al motor principal.
+Este documento describe la arquitectura de endurecimiento y las tácticas de evasión de grado militar integradas en **OsintUltimate V13**. El objetivo es garantizar la invisibilidad operativa y la integridad del sistema ante contramedidas avanzadas de WAF, EDR y equipos de Blue Team.
 
 ---
 
-## 2. Evasión Avanzada (Sigilo)
+## 1. Protección de Egress y Evasión de RED
 
-OsintUltimate v3.0 implementa tácticas de evasión de grado militar para eludir WAFs (Web Application Firewalls) y EDRs (Endpoint Detection and Response).
+### Detección de Infraestructura OCI (P0)
+Si el motor detecta que se está ejecutando dentro de Oracle Cloud Infrastructure (`stealth_detect.rs`), activa automáticamente el **aislamiento de salida total**. Todas las conexiones ofensivas se enrutan imperativamente a través de la infraestructura efímera para evitar que el objetivo identifique la IP de origen del orquestador.
 
-### `HumanJitter` (LogNormal)
-Evitamos los "patrones de claqueo" (click patterns) predecibles. En lugar de una espera lineal de 2 segundos, utilizamos una **distribución LogNormal** con una media de ~7.4 segundos pero con una "cola larga" que puede llegar a 30 segundos. Esto simula de forma matemática el comportamiento de navegación humana errática.
-
-### Rotación de Identidad (`ProxyManager`)
-- **Huella de Red Dinámica**: Cada petición HTTP puede usar un proxy distinto si se proporciona una lista de proxies (`--proxies`).
-- **User-Agent Realista**: Rotación de una lista curada de User-Agents correspondientes a las versiones más recientes de Chrome y Firefox en Windows, Mac y Linux.
-- **Identity Bonding**: El sistema mantiene una correlación entre el User-Agent y el Proxy para una sesión dada, evitando inconsistencias que alertan a los sistemas anti-bot.
-
-### DNS sobre HTTPS (DoH)
-Las consultas DNS tradicionales a menudo son el primer punto de detección por parte de los Blue Teams (SOC/SIEM). OsintUltimate permite el uso de **DoH (DNS over HTTPS)** vía Cloudflare o Google, cifrando nuestras consultas de resolución de objetivos y haciéndolas indistinguibles del tráfico HTTPS normal.
-
-### Dynamic Infrastructure Stealth [NUEVO]
-El flag `--stealth` activa la orquestación de infraestructura efímera:
-- **DigitalOcean Nodes**: El sistema utiliza la API de DigitalOcean para crear un droplet en una región aleatoria (ej. `nyc1`, `ams3`).
-- **Proxy Iniection**: Una vez activo, el nodo se autodetecta y se inyecta en el `ProxyManager` como el nodo de salida primario.
-- **Auto-Destruction**: Al finalizar el escaneo, el motor destruye la infraestructura para eliminar el rastro y minimizar costos.
-
-### 🛡️ Evasión de WAF Adaptativa (Escalación de 4 Etapas)
-OsintUltimate v3.1 introduce un motor de evasión inteligente que reacciona automáticamente a bloqueos HTTP 403:
-1.  **Rotación de Cabeceras**: Cambia User-Agents y cabeceras de fingerprinting sin coste.
-2.  **Mutación de TLS**: Cambia el perfil de negociación TLS (Chrome, Firefox, Safari) para evadir firmas de nivel 4.
-3.  **Local AI Payload Rewrite**: Utiliza Ollama (Local) para reescribir payloads sospechosos antes de reintentar (OPSEC estricto).
-4.  **Rotación de IP Ephemeral**: Despliega un nuevo nodo en DigitalOcean para obtener una IP limpia y continuar la operación.
+### Aprovisionamiento Autónomo de Proxies (DigitalOcean)
+- **Despliegue Just-in-Time**: Se lanzan nodos de salida en regiones aleatorias de DigitalOcean ante detecciones de bloqueo (403/WAF).
+- **Auto-Destrucción Táctica**: Los nodos tienen un script de limpieza que los apaga tras 4 horas para eliminar rastros forenses y controlar costos.
+- **Enrutamiento por Proxy-Wrapping**: Las herramientas externas (nmap, curl, sqlmap) son invocadas mediante envoltorios que inyectan configuraciones de proxy SOCKS5 dinámicamente.
 
 ---
 
-## 3. Infraestructura Defensiva: Honeypot-Decoy Mapping [NUEVO]
+## 2. Hardening del Validador de PoC (`PocValidator`)
 
-### Hardware-Aware Resource Hardening [OPTIMIZADO]
+El sistema de validación de Proof-of-Concept ha sido rediseñado para evitar inyecciones y fugas:
 
-OsintUltimate v4.0 es ahora **autoconsciente** de su entorno de ejecución:
-1.  **Detección de RAM**: El motor clasifica el host (UltraLowMemory, LocalPC, Server).
-2.  **Backpressure Dinámico**: Si el `MemoryMonitor` detecta que la RAM libre cae por debajo de los 500MB (soft limit), el orquestador pausa automáticamente el procesamiento de nuevos objetivos.
-3.  **Concurrency Capping**: En sistemas de 1GB RAM, el motor limita la concurrencia a 10 hilos para garantizar la estabilidad de la red y evitar el kernel OOM-killer.
-- **Atribución**: Captura IPs de origen, User-Agents y hashes JA3 de los atacantes/analistas.
+1.  **Validación Semántica de Argumentos**: No se permiten argumentos de línea de comandos arbitrarios. Las herramientas se ejecutan bajo plantillas que validan cada flag contra una lista blanca (Whitelist).
+2.  **Pinning de IP de Destino**: Previene el **DNS Rebinding**. Una vez resuelto el dominio, la IP se fija internamente para todas las fases de escaneo y explotación.
+3.  **SSRF Shield Multinivel**: Bloqueo asíncrono de rangos de red internos, metadatos cloud (169.254.169.254) y direcciones no enrutables antes de iniciar cualquier conexión.
 
 ---
 
-## 4. Web Dashboard (Zero Trace) [NUEVO]
+## 3. Sigilo de Comportamiento (Behavioral OPSEC)
 
-El nuevo panel de control ha sido diseñado con el sigilo en mente:
-- **Localhost Bound**: Por defecto, el servidor Axum solo escucha en `127.0.0.1`, minimizando la superficie expuesta.
-- **SSE Efficiency**: La tecnología **Server-Sent Events** reduce drásticamente las conexiones repetitivas al servidor, haciendo que el tráfico interno sea indistinguible de la actividad normal del kernel.
-- **Embedded Assets**: Al no requerir un servidor web externo (Nginx/Apache), no deja rastros en los logs del sistema sobre instalaciones de dependencias web.
-- **Local AI Privacy**: Los reintentos de evasión generados vía Ollama se mantienen 100% locales, protegiendo las tácticas de exfiltración de ser analizadas por proveedores cloud.
+- **Jitter Log-Normal**: Los retrasos entre peticiones no son constantes; siguen una distribución matemática que imita la interacción humana.
+- **RT-Identity (Fingerprinting Consistent)**: El sistema vincula un `User-Agent` específico y una versión de `TLS` a cada IP de salida para mantener la coherencia de identidad durante toda la sesión contra un objetivo.
+- **Thompson Sampling**: El motor de evasión elige dinámicamente la mejor técnica de salto de WAF basándose en el éxito de ejecuciones previas.
 
 ---
 
-## 4. Prevención de Riesgos (Sandboxing)
+## 4. Gestión Adaptativa de Recursos
 
-### `ExternalToolGuard` (Prevención de Zombis)
-Los plugins que ejecutan binarios externos son gestionados por un guardián de procesos:
-1.  **Timeout Táctico**: Si una herramienta tarda más de lo esperado (ej. 300s para Nmap), el guardián actúa.
-2.  **PGID Kill**: En lugar de matar solo el proceso padre (nmap), enviamos una señal de muerte al **ID del Grupo de Procesos (PGID)** negativo. Esto garantiza que cualquier proceso hijo "huérfano" también sea eliminado de la memoria.
-3.  **Limpieza de Entorno**: Eliminamos todas las variables de entorno (`env_clear`) del sistema padre antes de ejecutar la herramienta, evitando fugas de información o interferencias de configuración.
-
----
-
-## 4. Protección SSRF (Server-Side Request Forgery)
-
-El núcleo implementa una validación asíncrona de liveness que protege al Red Team de escanear accidentalmente infraestructura interna del objetivo:
-- **Bloqueo `RFC1918`**: 10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16.
-- **Bloqueo `CGNAT` / Cloud Metadata**: 100.64.0.0/10 y 169.254.169.254.
-- **Bloqueo `IPv6`**: Rangos de documentación y metadatos IPv6.
+V13 implementa **Backpressure Autoconsciente**:
+- **Monitorización de RAM**: El hilo `MemoryMonitor` vigila el consumo del proceso.
+- **Límites Dinámicos**: Si el sistema detecta solo 1GB de RAM, se reduce la concurrencia a 5-10 hilos y se desactiva el sandboxing pesado (Docker) en favor de `ProcessGuard` nativo.
+- **Aislamiento `rlimit`**: Cada subproceso se lanza con límites de memoria virtual (`RLIMIT_AS`) de 512MB para evitar ataques de agotamiento de recursos por parte del objetivo.
 
 ---
 
-## 5. Auditoría de Despliegue (DevOps Hardening) [NUEVO]
+## 5. Salidas y Auditoría Inmutable
 
-### Docker de Grado Alpine
-Para entornos críticos de baja memoria, la imagen Docker ha sido migrada a **Alpine Linux**:
-- **Base Minimalista**: Reduce el consumo de RAM del contenedor base en un 70% comparado con Debian.
-- **Static linking (musl)**: El binario se compila estáticamente.
-
-### Advertencia Preventiva de Docker en 1GB
-En hardware de **1GB RAM**, OsintUltimate emite una advertencia crítica contra el uso de Docker. Se recomienda la ejecución nativa en estos casos.
+- **Lock-Free Sink**: Los hallazgos se escriben de forma no bloqueante utilizando `SegQueue`, evitando lags en el motor de escaneo.
+- **Audit Log**: Cada acción de alto riesgo (ej. ejecución de exploit) requiere aprobación manual vía **Approval Gate** y queda registrada con la identidad del operador y la justificación táctica.
 
 ---
 
-© 2026 RedTeam Lab | OsintUltimate v4.0 Documentation
+© 2026 RedTeam Lab | OsintUltimate V13 Hardening Protocol

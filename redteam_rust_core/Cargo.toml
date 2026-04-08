@@ -51,6 +51,7 @@ thiserror = "1.0"
 # Crypto
 ed25519-dalek = { version = "2.1", features = ["rand_core"] }
 hex = "0.4"
+sha2 = "0.10"
 
 
 # Files & Templating

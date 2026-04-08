@@ -9,7 +9,11 @@ pub mod tool_detection;
 pub mod memory_monitor;
 pub mod jitter;
 pub mod process_guard;
+pub mod security;
+pub mod stealth_detect;
 pub mod stealth_http;
+
+pub use security::{validate_target, is_ssrf_safe_host};
 
 pub use liveness::LivenessChecker;
 pub use report_gen::generate_report;

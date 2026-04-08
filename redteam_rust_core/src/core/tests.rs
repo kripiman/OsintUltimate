@@ -1,7 +1,8 @@
 use crate::core::sink::{DataSink, MultiSink};
 use crate::models::{TargetHost, TargetType, TargetStatus, Finding, Category, Severity};
-use crate::core::ai_cascade::{TieredAIRouter, RouteLevel};
+use crate::core::ai::{TieredAIRouter, RouteLevel};
 use anyhow::Result;
+use std::sync::Arc;
 
 #[cfg(test)]
 mod tests {
@@ -24,12 +25,13 @@ mod tests {
         let target = TargetHost {
             host: "test.local".to_string(),
             ip: None,
+            resolved_ip: None,
             status: TargetStatus::Pending,
             target_type: TargetType::Host,
-            findings: Vec::new(),
-            tool_suggestions: Vec::new(),
-            tactical_context: serde_json::json!({}),
-            extra_data: serde_json::json!({}),
+            findings: Arc::new(Vec::new()),
+            tool_suggestions: Arc::new(Vec::new()),
+            tactical_context: Arc::new(serde_json::json!({})),
+            extra_data: Arc::new(serde_json::json!({})),
         };
 
         multi.write(&target).await?;
@@ -45,15 +47,16 @@ mod tests {
         let target_waf = TargetHost {
             host: "waf.com".to_string(),
             ip: None,
+            resolved_ip: None,
             status: TargetStatus::Pending,
             target_type: TargetType::Web,
-            findings: vec![
+            findings: Arc::new(vec![
                 Finding::new(crate::models::FINDING_TECH_STACK, Category::TechnologyStack, Severity::Info, "desc", 
                     serde_json::json!({"plugins": {"Cloudflare": {}}}))
-            ],
-            tool_suggestions: Vec::new(),
-            tactical_context: serde_json::json!({}),
-            extra_data: serde_json::json!({}),
+            ]),
+            tool_suggestions: Arc::new(Vec::new()),
+            tactical_context: Arc::new(serde_json::json!({})),
+            extra_data: Arc::new(serde_json::json!({})),
         };
 
         let level = router.classify(&finding, &target_waf);

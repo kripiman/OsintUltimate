@@ -26,6 +26,8 @@ pub struct ProxyManager {
     identity_cache: Arc<DashMap<String, String>>,
     // QA-007 FIX: Store handle to abort the health checker task on drop
     _health_checker_handle: Option<tokio::task::AbortHandle>,
+    // Managed Exits (V13): IP addresses of DigitalOcean VPS nodes
+    managed_exits: Arc<DashMap<String, SystemTime>>,
 }
 
 impl ProxyManager {
@@ -49,6 +51,7 @@ impl ProxyManager {
             user_agents,
             identity_cache: Arc::new(DashMap::new()),
             _health_checker_handle: None,
+            managed_exits: Arc::new(DashMap::new()),
         };
 
         // Start background health checker if there can be proxies
@@ -213,9 +216,57 @@ impl ProxyManager {
              return available_proxies.choose(&mut rng).cloned();
         }
 
-        // Otherwise, pick the one with lowest average latency
+    // Otherwise, pick the one with lowest average latency
         available_proxies.into_iter()
             .min_by_key(|p| self.get_average_latency(p))
+    }
+
+    /// V13: Get a random available managed exit node formatted as a SOCKS5/4 URL.
+    pub fn get_best_socks_url(&self) -> Option<String> {
+        let managed: Vec<String> = self.managed_exits.iter()
+            .map(|e| e.key().clone())
+            .collect();
+            
+        if !managed.is_empty() {
+             let mut rng = rand::thread_rng();
+             use rand::seq::SliceRandom;
+             let ip = managed.choose(&mut rng)?;
+             // DigitalOcean managed nodes run danted on 1080
+             return Some(format!("socks5h://{}:1080", ip));
+        }
+        
+        // Fallback to static proxies if they are SOCKS
+        let best = self.pick_best_proxy()?;
+        if best.starts_with("socks") {
+            Some(best)
+        } else {
+            None
+        }
+    }
+
+    /// V13: Wraps a std::process::Command with tool-specific proxy flags.
+    pub fn wrap_command(&self, tool: &str, args: &mut Vec<String>) {
+        if let Some(proxy_url) = self.get_best_socks_url() {
+            match tool.to_lowercase().as_str() {
+                "curl" => {
+                    args.insert(0, "-x".to_string());
+                    args.insert(1, proxy_url);
+                }
+                "nmap" => {
+                    let nmap_proxy = proxy_url.replace("socks5h://", "socks4://");
+                    args.push("--proxies".to_string());
+                    args.push(nmap_proxy);
+                }
+                _ => {
+                    warn!("ProxyManager: No native wrapping for tool '{}'. Traffic may leak!", tool);
+                }
+            }
+        }
+    }
+
+    pub fn add_managed_exit(&self, ip: String) {
+        self.managed_exits.insert(ip.clone(), std::time::SystemTime::now());
+        info!("🚀 ProxyManager: Active DO Managed Exit added: {}", ip);
     }
 
     pub fn get_client(&self, host: &str) -> Option<(String, Client)> {

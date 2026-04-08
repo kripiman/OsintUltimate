@@ -18,8 +18,9 @@ pub struct Orchestrator {
     dashboard_targets: Arc<dashmap::DashMap<String, TargetHost>>,
     swarm_mode: bool,
     max_tokens: u32,
-    ai_router: Option<Arc<crate::core::ai_cascade::TieredAIRouter>>,
+    ai_router: Option<Arc<crate::core::ai::TieredAIRouter>>,
     sandbox: Arc<crate::core::sandbox::SandboxDispatcher>, // NUEVO
+    proxy_manager: Option<Arc<crate::utils::proxy::ProxyManager>>,
 }
 
 impl Orchestrator {
@@ -49,13 +50,15 @@ impl Orchestrator {
             max_tokens: 0,
             ai_router: None,
             sandbox,
+            proxy_manager: None,
         }
     }
 
-    pub fn with_swarm_mode(mut self, enabled: bool, max_tokens: u32, router: Arc<crate::core::ai_cascade::TieredAIRouter>) -> Self {
+    pub fn with_swarm_mode(mut self, enabled: bool, max_tokens: u32, router: Arc<crate::core::ai::TieredAIRouter>, proxy_manager: Option<Arc<crate::utils::proxy::ProxyManager>>) -> Self {
         self.swarm_mode = enabled;
         self.max_tokens = max_tokens;
         self.ai_router = Some(router);
+        self.proxy_manager = proxy_manager;
         self
     }
 
@@ -125,6 +128,7 @@ impl Orchestrator {
                     pipeline,
                     approval_gate.clone(),
                     self.max_tokens,
+                    self.proxy_manager.clone(),
                 );
 
                 // Use buffered stream to run swarm on each target
@@ -199,8 +203,8 @@ impl Orchestrator {
                         status: TargetStatus::Scanning,
                         findings: Arc::new(Vec::new()),
                         tool_suggestions: Arc::new(Vec::new()),
-                        tactical_context: target_ref.tactical_context.clone(), // Cheap now (Arc)
-                        extra_data: target_ref.extra_data.clone(),
+                        tactical_context: Arc::clone(&target_ref.tactical_context),
+                        extra_data: Arc::clone(&target_ref.extra_data),
                     };
                     let policy = policy;
                     let approval_gate = Arc::clone(&approval_gate);

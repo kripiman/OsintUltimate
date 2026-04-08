@@ -62,24 +62,26 @@ impl StealthClientBuilder {
 mod tests {
     use super::*;
     use crate::models::{TargetHost, TargetStatus, TargetType};
+    use std::sync::Arc;
 
     #[test]
     fn test_stealth_client_headers() -> Result<()> {
         let target = TargetHost {
             host: "test.com".to_string(),
             ip: None,
+            resolved_ip: None,
             status: TargetStatus::Pending,
             target_type: TargetType::Web,
-            findings: Vec::new(),
-            tool_suggestions: Vec::new(),
-            tactical_context: serde_json::json!({
+            findings: Arc::new(Vec::new()),
+            tool_suggestions: Arc::new(Vec::new()),
+            tactical_context: Arc::new(serde_json::json!({
                 "user_agent": "TacticalAgent/1.0",
                 "headers": {
                     "X-Bypass": "True",
                     "X-Experimental": "1"
                 }
-            }),
-            extra_data: serde_json::json!({}),
+            })),
+            extra_data: Arc::new(serde_json::json!({})),
         };
 
         let _client = StealthClientBuilder::build(&target)?;

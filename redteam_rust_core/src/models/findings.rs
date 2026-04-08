@@ -50,16 +50,34 @@ fn default_confidence() -> f32 { 0.5 }
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
 pub enum PocStrategy {
-    /// Restricted command execution without 'sh -c'. Payload is expected to be JSON array of [binary, arg1, arg2...]
+    /// Restricted command execution without 'sh -c'. 
     SafeCommand,
-    /// HTTP(S) request and pattern match. Payload is the sub-path or full URL.
+    /// HTTP(S) request and pattern match. 
     HttpPayload,
-    /// TCP connection check. Payload is "host:port".
+    /// TCP connection check.
     TcpCheck,
     /// ICMP echo request.
     IcmpPing,
     /// Integration with Nuclei engine.
     NucleiTemplate,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(tag = "type", rename_all = "snake_case")]
+pub enum ValidatedPoc {
+    Nmap { 
+        port: u16, 
+        flags: Vec<String> 
+    },
+    Curl { 
+        path: String, 
+        headers: Vec<(String, String)> 
+    },
+    Ping,
+    Dig,
+    TcpConnect { 
+        port: u16 
+    },
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

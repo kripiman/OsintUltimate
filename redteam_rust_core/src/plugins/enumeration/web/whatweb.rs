@@ -61,12 +61,13 @@ impl ScannerPlugin for WhatWebScanner {
 
 
     async fn scan(&self, target: &TargetHost) -> Result<Vec<Finding>> {
-        info!("WhatWebScanner: launching scan against {}", target.host);
+        let target_addr = target.pinned_addr()?;
+        info!("WhatWebScanner: launching scan against {} (via {})", target.host, target_addr);
 
-        let url = if target.host.starts_with("http") {
-            target.host.clone()
+        let url = if target_addr.starts_with("http") {
+            target_addr.to_string()
         } else {
-            format!("http://{}", target.host)
+            format!("http://{}", target_addr)
         };
 
         // We use a temporary file because some versions of WhatWeb don't support --log-json=- 

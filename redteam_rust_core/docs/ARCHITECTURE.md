@@ -1,132 +1,125 @@
-# 🏗️ Arquitectura Técnica OsintUltimate v4.0
+# 🏗️ Arquitectura Técnica OsintUltimate V13
 
-> **Motor de Evaluación de Red Team de Alto Rendimiento, Asíncrono y Autónomo**
+> **Protocolo de Hardening Stealth: Precisión Binaria y Evasión Autónoma**
 
-Este documento detalla el diseño interno, los flujos de datos y las garantías de seguridad del núcleo de **OsintUltimate v4.0**, re-arquitecturado íntegramente en Rust para máxima eficiencia, sigilo y adaptabilidad.
-
----
-
-## 1. Filosofía de Diseño: "Atomicidad y Concurrencia"
-
-OsintUltimate v3.0 no es solo un escáner; es un **orquestador de inteligencia**. Se basa en tres pilares:
-1.  **Costo Cero de Memoria**: Procesamiento de flujos (streaming) mediante `tokio::sync::mpsc` y `JSONL`, permitiendo miles de objetivos en hardware de 1GB RAM gracias al sistema de **Backpressure**.
-2.  **Aislamiento de Seguridad Híbrido**: El sistema evalúa el hardware disponible (`Hardware Tiering`) para decidir entre el aislamiento total por **Docker** (para sistemas >= 16GB) o aislamiento nativo por **PGID** (para sistemas <= 8GB), garantizando fluidez sin sacrificar seguridad.
-3.  **Decisión Autónoma y Estocástica**: Un sistema de IA en cascada (`TieredAIRouter`) y un motor de evasión probabilístico (`StochasticEvasionPolicy`) eligen la mejor ruta de ataque.
+Este documento detalla el diseño interno, la infraestructura de concurrencia y los mecanismos de evasión del núcleo de **OsintUltimate V13**. Esta versión representa la culminación de la transición hacia un modelo **puro de sigilo y arquitectura asíncrona modular**.
 
 ---
 
-## 2. El Pipeline Circular de 4 Fases
+## 1. Filosofía de Diseño: "Stealth First"
 
-A diferencia de los escáneres lineales, OsintUltimate utiliza un pipeline circular que expande dinámicamente la superficie de ataque.
+OsintUltimate V13 no es solo un escáner; es un **orquestador de inteligencia distribuido** diseñado para operar en entornos hostiles.
+
+### Pilares Fundamentales
+1.  **Aislamiento de Aplicación**: Uso de `io-uring` y `tokio` para I/O de red de alto rendimiento sin bloqueos de syscalls tradicionales.
+2.  **Infraestructura de Salida Autónoma**: Gestión dinámica de nodos de salida en la nube (DigitalOcean) para evitar la atribución.
+3.  **Hardening de Egress**: Políticas rígidas de validación de argumentos y pinning de IP para prevenir fugas accidentales y ataques de DNS Rebinding.
+
+---
+
+## 2. Diagrama de Arquitectura de Alto Nivel
+
+Este diagrama muestra la interacción entre los componentes principales del motor desde la ingesta de objetivos hasta la persistencia.
 
 ```mermaid
 graph TD
-    A[CLI/TUI Input] --> B(Capability Layer Policy)
-    B --> C(Approval Gate Check)
-    C --> D{Orchestrator}
-    D --> E[Fase 1: Descubrimiento OSINT]
-    E -- Nuevos Subdominios --> D
-    D --> F[Fase 2: Liveness & SSRF Protection]
-    F --> G[Fase 3: Escaneo Activo & Explotación]
-    G --> H[Fase 4: Data Sink & AI Analysis]
-    H -- Acciones Sugeridas --> D
-    H --> I[JSONL / HTML Report]
-    D -- Telemetría SSE --> J[Fase 5: Web Dashboard]
+    subgraph "Interface Layer"
+        CLI[Entrada CLI/TUI] --> CL(Capability Layer Policy)
+        CL --> AG(Approval Gate)
+    end
+
+    subgraph "Core Orchestration"
+        AG --> ORC{Orchestrator}
+        ORC --> SD[Stealth Detect OCI]
+        SD -->|Loop| DIS[Discovery Phase]
+        DIS -->|Expansion| ORC
+        ORC --> LIV[Liveness & SSRF Guard]
+    end
+
+    subgraph "Execution Suite"
+        LIV --> PM[ProxyManager]
+        PM --> PV[PocValidator]
+        PM --> EN[Engine Plugins]
+        PV --> SINK[Lock-Free Data Sink]
+        EN --> SINK
+    end
+
+    subgraph "Persistence & UI"
+        SINK --> DB[(SQLite WAL)]
+        SINK --> JSON[JSONL Stream]
+        ORC --> DASH[Web Dashboard Axum]
+    end
 ```
 
-### Fase 1: Descubrimiento (Expansion)
-*   **Plugins**: `OsintScanner`, `Subfinder`, `Amass`.
-*   **Deduplicación**: Implementada mediante `Bloom Filters` y `DashSet` globales para evitar ciclos infinitos.
-*   **Velocidad**: Resolución DNS asíncrona nativa (`hickory-resolver`) capaz de 10k+ QPS.
+---
 
-### Fase 2: Liveness & Seguridad
-*   **SSRF Shield**: Bloqueo estricto de IPs privadas (`RFC1918`), `CGNAT`, `169.254.x.x` y metadatos cloud.
-*   **Verificación Híbrida**: Ping ICMP + TCP Syn + DNS Over HTTPS (DoH) para validar hosts sin dejar rastro en logs de red local.
+## 3. Modelo de Concurrencia e Internals
 
-### Fase 3: Escaneo y Explotación (Capability Layers)
-El sistema organiza los plugins en capas de riesgo:
-1.  **Passive**: Solo fuentes externas.
-2.  **Discovery**: Enumeración ligera.
-3.  **Scanning**: Análisis de vulnerabilidades.
-4.  **Verification**: Confirmación de hallazgos (Burp/Zap).
-5.  **Exploitation**: Ejecución de exploits (SqlMap/Commix).
-6.  **Post-Exploitation**: Movimiento lateral y persistencia.
+V13 utiliza un modelo de comunicación basado en pasos de mensajes para evitar el overhead de bloqueos de memoria.
 
-### Fase 4: Data Sink & AI Cascade
-*   **Streaming Persistence**: Los resultados se escriben línea a línea en disco como `JSONL`, evitando picos de RAM.
-*   **Análisis Tiered**:
-    *   **Local (Ollama)**: Análisis rápido de hallazgos informativos y mutación de payloads para evasión de WAF (Thompson Sampling).
-    *   **Mid (Azure OpenAI)**: Triaje de vulnerabilidades medianas y correlación de ataques.
-    *   **Premium (Gemini Pro)**: Análisis profundo de cadenas de ataque críticas y generación de reportes ejecutivos.
+### Flujo de Concurrencia (Canales y Queues)
 
-### Fase 5: Command Center Dashboard v2.0 [OPTIMIZADO]
-Un servidor embebido **Axum** gestiona una interfaz táctica de alto rendimiento:
-*   **SSE (Server-Sent Events)**: Enrutamiento en tiempo real de hallazgos, latidos de sistema y solicitudes de aprobación.
-*   **Attack Correlation Graph (D3.js)**: Visualización interactiva de la superficie de ataque y relaciones entre vulnerabilidades mediante grafos de fuerza.
-*   **Swarm Monitoring**: Panel de control para supervisar el estado y consumo de tokens de los agentes autónomos (Planner/Scout/Exploiter/Reporter).
-*   **Interactive Approval Gate**: Interfaz de decisión para autorizar o abortar acciones de alto riesgo detectadas por el motor.
-*   **Zero Footprint**: Todos los assets (HTML/CSS/JS) están embebidos en el binario mediante `rust-embed`.
+```mermaid
+graph LR
+    subgraph "Main Thread"
+        ORC[Orchestrator]
+    end
 
-### Fase de Infraestructura: Adaptabilidad Automática [NUEVO]
-El sistema detecta el entorno de ejecución antes de iniciar (`detect_infrastructure`):
-- **UltraLowMemory (≤1.5GB RAM)**: Capa la concurrencia a 10 y activa límites estrictos.
-- **LocalPC**: Optimiza para 30 hilos y sigilo balanceado.
-- **Server**: Desbloquea escalabilidad masiva (100+ hilos).
+    subgraph "Worker Pool"
+        W1[Scanner 1]
+        W2[Scanner 2]
+        WN[Scanner N]
+    end
+
+    subgraph "Persistence Pipeline"
+        SQ((SegQueue Lock-Free))
+        SB[Sink Batcher]
+    end
+
+    ORC -->|tokio::spawn| W1
+    ORC -->|tokio::spawn| W2
+    ORC -->|tokio::spawn| WN
+
+    W1 -->|Push| SQ
+    W2 -->|Push| SQ
+    WN -->|Push| SQ
+
+    SQ -->|Pop Batch| SB
+    SB -->|Write| DB[(Storage)]
+
+    Note over SQ, SB: Zero-wait for workers
+```
 
 ---
 
-## 3. Componentes del Núcleo
+## 4. Innovaciones Técnicas (Vectores V13)
 
-### `Orchestrator`
-Gestiona la concurrencia a través de `Semaphores` y `RwLock`. Ahora es **Adaptativo**: ajusta su semáforo de memoria y número de hilos según el hardware detectado en el inicio. Utiliza `StreamExt::buffer_unordered` para maximizar el rendimiento.
+### Vector 1: Native io-uring Scanner
+Sustituye el modelo `fork/exec` para tareas de red críticas. Utiliza hilos de polling del kernel (`SQPOLL`) para enviar ráfagas de paquetes SYN, minimizando el impacto en el rendimiento del CPU y evitando la detección por análisis de tiempos de syscall.
 
-### `TacticalWebhookSink` [OPTIMIZADO]
-Diseñado para entornos de alta latencia (C2 remoto/VPS):
-- **Batching**: Acumula hasta 10 objetivos/hallazgos antes de realizar el envío.
-- **Compresión Gzip**: Comprime los payloads de red mediante `flate2` para minimizar el tráfico y la latencia.
+### Vector 2: Evasión Estocástica (Thompson Sampling)
+El motor de evasión aprende qué estrategias (Headers, TLS, Proxies) son más efectivas contra un objetivo específico en tiempo real, utilizando una distribución Beta para seleccionar la táctica con mayor probabilidad de éxito.
 
-### `SandboxDispatcher` (Inspirado en ExternalToolGuard)
-Es el componente encargado de la ejecución de binarios externos.
-- **Hardware Tiering**: Selecciona entre `Docker` o `Nativo` según la RAM.
-- **Explotación Segura**: Fuerza Docker para herramientas de explotación, incluso en entornos de bajos recursos.
-- **Resource Control**: Consulta al `SysResourceManager` para evitar colapsar la RAM del host.
-- **Zombie Prevention**: Mata el `PGID` completo si hay un timeout en modo nativo.
+### Vector 3: Detección OCI y Proxies Efímeros
+- **OCI Detection**: Si el motor detecta que corre en Oracle Cloud, fuerza el modo de proxy total.
+- **DO Provisioning**: Despliegue automático de nodos SOCKS5 en DigitalOcean con auto-destrucción programada.
 
-### `SourceAnalyzer` [NUEVO Vector 7]
-El componente encargado de la integración del código fuente en el ciclo de vida del escaneo.
-- **Git Connector**: Permite clonar repositorios efímeramente para análisis dinámico.
-- **Extractor de SAST Ligero**: Motor de detección de patrones orientado a endpoints y sinks peligrosos en JS/TS y Python.
-- **SAST-DAST Linker**: Colabora con el `CorrelationEngine` para elevar la confianza de hallazgos dinámicos basados en la lógica del código fuente.
-- **Minificador de Código**: Pre-procesa snippets para reducir el consumo de tokens en la IA antes del envío.
-
-### `DecoyController` [NUEVO]
-Gestiona el ciclo de vida de señuelos DNS (via Cloudflare) y tripwires persistentes (via SQLite WAL).
-
-### `WafEvasionEngine` [NUEVO]
-Máquina de estados reactiva que escala de Headers → TLS → Local AI → IP Rotation ante respuestas HTTP 403.
-
-### `MemoryMonitor`
-Hilo de fondo que vigila `/proc/self/status`. Implementa **Backpressure**: si el consumo de RAM supera el límite suave, el orquestador pausa la ingesta de nuevos objetivos hasta que la memoria se libere.
+### Vector 4: Hardening del Validador (CRIT-001)
+El `PocValidator` implementa validación semántica de argumentos. Por ejemplo, al ejecutar `nmap`, solo se permiten flags pre-aprobadas bajo una estructura de plantillas segura, eliminando la posibilidad de inyección de comandos.
 
 ---
 
-## 4. Evasión y Sigilo (OPSEC)
+## 5. Requerimientos de Sistema y Optimización
 
-1.  **Jitter LogNormal**: En lugar de pausas constantes, utiliza una distribución matemática que imita el comportamiento humano.
-2.  **Rotación de Proxies**: Pool de clientes `DashMap` que garantiza una rotación de IP efectiva por cada plugin.
-3.  **UA Randomization**: Rotación de User-Agents de navegadores modernos y reales.
-4.  **Behavioral Jitter**: Pequeñas variaciones en el orden de los escaneos y tiempos entre peticiones.
+Basado en la auditoría de hardware V13, el sistema se adapta dinámicamente:
 
----
-
-## 5. Salidas y Reportes
-
-*   **JSONL**: Formato base para procesamiento masivo y estabilidad.
-*   **SQLite**: Persistencia relacional para consultas complejas y gestión de estado.
-*   **Lock-Free Sink**: Uso de `SegQueue` para inserciones masivas sin bloqueos de Mutex en la base de datos.
-*   **HTML Visual**: Reporte tipo semáforo con tablas interactivas y clasificación CVSS.
-*   **Audit Log**: Registro inmutable de cada acción, quién la aprobó y por qué.
+| Recurso | Modo UltraLow (1GB RAM) | Modo Professional (8GB+ RAM) |
+| :--- | :--- | :--- |
+| **Concurrencia** | 5-10 hilos máx. | 100+ hilos. |
+| **Sandboxing** | Fluid (ProcessGuard native) | Strict (Docker ephimeral) |
+| **Backpressure** | Activo a los 500MB | Activo a los 4GB |
+| **Storage** | SSD recomendado | NVMe / SSD requerido |
 
 ---
 
-© 2026 RedTeam Lab | OsintUltimate v4.0 Documentation
+© 2026 RedTeam Lab | OsintUltimate V13 Architectural Spec

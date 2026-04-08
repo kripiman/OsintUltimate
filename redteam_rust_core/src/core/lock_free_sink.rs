@@ -104,12 +104,13 @@ mod tests {
             sink.enqueue(TargetHost {
                 host: format!("host-{}", i),
                 ip: None,
+                resolved_ip: None,
                 status: TargetStatus::Pending,
                 target_type: TargetType::Host,
-                findings: Vec::new(),
-                tool_suggestions: Vec::new(),
-                tactical_context: serde_json::json!({}),
-                extra_data: serde_json::json!({}),
+                findings: Arc::new(Vec::new()),
+                tool_suggestions: Arc::new(Vec::new()),
+                tactical_context: Arc::new(serde_json::json!({})),
+                extra_data: Arc::new(serde_json::json!({})),
             });
         }
 

@@ -157,7 +157,8 @@ impl ScannerPlugin for NmapScanner {
 
 
     async fn scan(&self, target: &TargetHost) -> Result<Vec<Finding>> {
-        info!("NmapScanner: launching scan against {}", target.host);
+        let target_addr = target.pinned_addr()?;
+        info!("NmapScanner: launching scan against {} (via {})", target.host, target_addr);
         
         // Defensive validation: ensure target.host is safe even if CLI parsing missed it
         if !TARGET_HOST_RE.is_match(&target.host) || target.host.starts_with('-') {
@@ -262,13 +263,9 @@ impl ScannerPlugin for NmapScanner {
         }
 
         // Final target argument - last index
-        // P2 FIX: Use resolved IP if available to avoid double-resolution
-        if let Some(ip) = &target.ip {
-             args.push(ip.clone());
-             info!("NmapScanner: Using resolved IP {} for target {}", ip, target.host);
-        } else {
-             args.push(target.host.clone());
-        }
+        // V12 FIX: Mandatory IP Pinning via target_addr() (DNS Rebinding Mitigation)
+        args.push(target_addr.to_string());
+        info!("NmapScanner: Using pinned address {} for scan.", target_addr);
 
         // --- HYBRID SANDBOX EXECUTION ---
         let tool_info = crate::core::blackarch::BlackArchTool {

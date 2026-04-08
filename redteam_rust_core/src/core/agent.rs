@@ -1,6 +1,6 @@
 use crate::models::{Finding, AIAnalysis, TargetHost};
 use crate::core::pipeline::Pipeline;
-use crate::core::ai_cascade::{ContextCompressor, AdaptiveContext};
+use crate::core::ai::{ContextCompressor, AdaptiveContext};
 use anyhow::{Result, Context};
 use serde_json::json;
 use std::sync::Arc;
@@ -11,7 +11,7 @@ use std::time::Duration;
 
 #[async_trait]
 pub trait LlmClient: Send + Sync {
-    async fn analyze(&self, finding: &Finding, target: &TargetHost, route_level: crate::core::ai_cascade::RouteLevel) -> Result<AIAnalysis>;
+    async fn analyze(&self, finding: &Finding, target: &TargetHost, route_level: crate::core::ai::RouteLevel) -> Result<AIAnalysis>;
     async fn decide_action(
         &self, 
         finding: &Finding, 
@@ -19,7 +19,7 @@ pub trait LlmClient: Send + Sync {
         plugins: &[crate::plugins::PluginMetadata],
         gap: Option<&CapabilityGap>,
         adaptive_context: Option<&AdaptiveContext>,
-        route_level: crate::core::ai_cascade::RouteLevel,
+        route_level: crate::core::ai::RouteLevel,
     ) -> Result<Option<(String, serde_json::Value)>>;
 }
 
@@ -47,7 +47,7 @@ impl OllamaClient {
 
 #[async_trait]
 impl LlmClient for OllamaClient {
-    async fn analyze(&self, finding: &Finding, target: &TargetHost, route_level: crate::core::ai_cascade::RouteLevel) -> Result<AIAnalysis> {
+    async fn analyze(&self, finding: &Finding, target: &TargetHost, route_level: crate::core::ai::RouteLevel) -> Result<AIAnalysis> {
         let compressed = ContextCompressor::compress_finding(finding, route_level);
         let prompt = format!(
             "### PROFESSIONAL RED TEAM ENGINE (v3.0) ###\n\
@@ -84,7 +84,7 @@ impl LlmClient for OllamaClient {
         plugins: &[crate::plugins::PluginMetadata],
         _gap: Option<&CapabilityGap>,
         adaptive_context: Option<&AdaptiveContext>,
-        route_level: crate::core::ai_cascade::RouteLevel,
+        route_level: crate::core::ai::RouteLevel,
     ) -> Result<Option<(String, serde_json::Value)>> {
         let compressed_finding = ContextCompressor::compress_finding(finding, route_level);
         let compressed_plugins = ContextCompressor::compress_plugins(plugins);
@@ -141,7 +141,7 @@ impl GeminiClient {
 
 #[async_trait]
 impl LlmClient for GeminiClient {
-    async fn analyze(&self, finding: &Finding, target: &TargetHost, route_level: crate::core::ai_cascade::RouteLevel) -> Result<AIAnalysis> {
+    async fn analyze(&self, finding: &Finding, target: &TargetHost, route_level: crate::core::ai::RouteLevel) -> Result<AIAnalysis> {
         let compressed = ContextCompressor::compress_finding(finding, route_level);
         let prompt = format!("Analyze this Red Team finding: {}. Target: {}. Provide JSON.", serde_json::to_string(&compressed)?, target.host);
         
@@ -171,7 +171,7 @@ impl LlmClient for GeminiClient {
         Err(anyhow::anyhow!("Gemini analyze failed: {:?}", last_error))
     }
 
-    async fn decide_action(&self, finding: &Finding, target: &TargetHost, plugins: &[crate::plugins::PluginMetadata], _gap: Option<&CapabilityGap>, adaptive_context: Option<&AdaptiveContext>, route_level: crate::core::ai_cascade::RouteLevel) -> Result<Option<(String, serde_json::Value)>> {
+    async fn decide_action(&self, finding: &Finding, target: &TargetHost, plugins: &[crate::plugins::PluginMetadata], _gap: Option<&CapabilityGap>, adaptive_context: Option<&AdaptiveContext>, route_level: crate::core::ai::RouteLevel) -> Result<Option<(String, serde_json::Value)>> {
         let compressed = ContextCompressor::compress_finding(finding, route_level);
         let prompt = format!("Decide next step for {}. History: {:?}. Finding: {}. Plugins: {}. Focus on WAF bypass.", target.host, adaptive_context, finding.id, plugins.len());
         
@@ -212,7 +212,7 @@ impl AzureOpenAIClient {
 
 #[async_trait]
 impl LlmClient for AzureOpenAIClient {
-    async fn analyze(&self, finding: &Finding, target: &TargetHost, route_level: crate::core::ai_cascade::RouteLevel) -> Result<AIAnalysis> {
+    async fn analyze(&self, finding: &Finding, target: &TargetHost, route_level: crate::core::ai::RouteLevel) -> Result<AIAnalysis> {
         let compressed = ContextCompressor::compress_finding(finding, route_level);
         let url = format!("{}/openai/deployments/{}/chat/completions?api-version={}", self.endpoint, self.deployment, self.api_version);
         let res = self.client.post(url).header("api-key", &self.key).json(&json!({
@@ -223,7 +223,7 @@ impl LlmClient for AzureOpenAIClient {
         Ok(serde_json::from_str(extract_json(text))?)
     }
 
-    async fn decide_action(&self, finding: &Finding, target: &TargetHost, plugins: &[crate::plugins::PluginMetadata], _gap: Option<&CapabilityGap>, adaptive_context: Option<&AdaptiveContext>, route_level: crate::core::ai_cascade::RouteLevel) -> Result<Option<(String, serde_json::Value)>> {
+    async fn decide_action(&self, finding: &Finding, target: &TargetHost, plugins: &[crate::plugins::PluginMetadata], _gap: Option<&CapabilityGap>, adaptive_context: Option<&AdaptiveContext>, route_level: crate::core::ai::RouteLevel) -> Result<Option<(String, serde_json::Value)>> {
         let compressed = ContextCompressor::compress_finding(finding, route_level);
         let url = format!("{}/openai/deployments/{}/chat/completions?api-version={}", self.endpoint, self.deployment, self.api_version);
         let res = self.client.post(url).header("api-key", &self.key).json(&json!({
@@ -256,7 +256,7 @@ impl AnthropicClient {
 
 #[async_trait]
 impl LlmClient for AnthropicClient {
-    async fn analyze(&self, finding: &Finding, target: &TargetHost, route_level: crate::core::ai_cascade::RouteLevel) -> Result<AIAnalysis> {
+    async fn analyze(&self, finding: &Finding, target: &TargetHost, route_level: crate::core::ai::RouteLevel) -> Result<AIAnalysis> {
         let compressed = ContextCompressor::compress_finding(finding, route_level);
         let res = self.client.post("https://api.anthropic.com/v1/messages")
             .header("x-api-key", &self.key)
@@ -271,7 +271,7 @@ impl LlmClient for AnthropicClient {
         Ok(serde_json::from_str(extract_json(text))?)
     }
 
-    async fn decide_action(&self, finding: &Finding, target: &TargetHost, plugins: &[crate::plugins::PluginMetadata], _gap: Option<&CapabilityGap>, adaptive_context: Option<&AdaptiveContext>, route_level: crate::core::ai_cascade::RouteLevel) -> Result<Option<(String, serde_json::Value)>> {
+    async fn decide_action(&self, finding: &Finding, target: &TargetHost, plugins: &[crate::plugins::PluginMetadata], _gap: Option<&CapabilityGap>, adaptive_context: Option<&AdaptiveContext>, route_level: crate::core::ai::RouteLevel) -> Result<Option<(String, serde_json::Value)>> {
         Ok(None)
     }
 }
@@ -291,7 +291,7 @@ impl OpenAIClient {
 
 #[async_trait]
 impl LlmClient for OpenAIClient {
-    async fn analyze(&self, finding: &Finding, target: &TargetHost, route_level: crate::core::ai_cascade::RouteLevel) -> Result<AIAnalysis> {
+    async fn analyze(&self, finding: &Finding, target: &TargetHost, route_level: crate::core::ai::RouteLevel) -> Result<AIAnalysis> {
         let compressed = ContextCompressor::compress_finding(finding, route_level);
         let res = self.client.post("https://api.openai.com/v1/chat/completions")
             .header("Authorization", format!("Bearer {}", self.key))
@@ -305,21 +305,27 @@ impl LlmClient for OpenAIClient {
         Ok(serde_json::from_str(extract_json(text))?)
     }
 
-    async fn decide_action(&self, finding: &Finding, target: &TargetHost, plugins: &[crate::plugins::PluginMetadata], _gap: Option<&CapabilityGap>, adaptive_context: Option<&AdaptiveContext>, route_level: crate::core::ai_cascade::RouteLevel) -> Result<Option<(String, serde_json::Value)>> {
+    async fn decide_action(&self, finding: &Finding, target: &TargetHost, plugins: &[crate::plugins::PluginMetadata], _gap: Option<&CapabilityGap>, adaptive_context: Option<&AdaptiveContext>, route_level: crate::core::ai::RouteLevel) -> Result<Option<(String, serde_json::Value)>> {
         Ok(None)
     }
 }
 
 pub struct AutonomousAgent {
-    router: Arc<crate::core::ai_cascade::TieredAIRouter>,
+    router: Arc<crate::core::ai::TieredAIRouter>,
     pipeline: Arc<Pipeline>,
     approval_gate: Arc<crate::core::approval_gate::ApprovalGate>,
     operator: crate::core::approval_gate::User,
     poc_validator: Arc<crate::core::poc_validator::PocValidator>,
+    proxy_manager: Option<Arc<crate::utils::proxy::ProxyManager>>,
 }
 
 impl AutonomousAgent {
-    pub fn new(router: Arc<crate::core::ai_cascade::TieredAIRouter>, pipeline: Arc<Pipeline>, approval_gate: Arc<crate::core::approval_gate::ApprovalGate>) -> Self {
+    pub fn new(
+        router: Arc<crate::core::ai::TieredAIRouter>, 
+        pipeline: Arc<Pipeline>, 
+        approval_gate: Arc<crate::core::approval_gate::ApprovalGate>,
+        proxy_manager: Option<Arc<crate::utils::proxy::ProxyManager>>,
+    ) -> Self {
         let operator = crate::core::approval_gate::User {
             id: "sentinel-agent".to_string(),
             name: "Sentinel-AI".to_string(),
@@ -330,8 +336,9 @@ impl AutonomousAgent {
             router.clone(),
             approval_gate.clone(),
             operator.clone(),
+            proxy_manager.clone(),
         ));
-        Self { router, pipeline, approval_gate, operator, poc_validator }
+        Self { router, pipeline, approval_gate, operator, poc_validator, proxy_manager }
     }
 
     pub async fn run_autopilot(&self, initial_target: TargetHost, sink_tx: mpsc::Sender<TargetHost>) -> Result<()> {

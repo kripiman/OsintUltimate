@@ -11,7 +11,7 @@ use anyhow::{Context, Result};
 use std::sync::Arc;
 use tokio::sync::mpsc;
 use tokio_util::sync::CancellationToken;
-use tracing::info;
+use tracing::{info, warn};
 use futures::stream::StreamExt;
 use serde_json::json;
 use bloomfilter::Bloom;
@@ -34,16 +34,40 @@ pub struct Pipeline {
     dashboard_targets: Option<Arc<dashmap::DashMap<String, TargetHost>>>,
     swarm_mode: bool,
     max_tokens: u32,
-    ai_router: Option<Arc<crate::core::ai_cascade::TieredAIRouter>>,
+    ai_router: Option<Arc<crate::core::ai::TieredAIRouter>>,
     sandbox: Arc<crate::core::sandbox::SandboxDispatcher>,
+    proxy_manager: Option<Arc<crate::utils::proxy::ProxyManager>>,
 }
-
 impl Pipeline {
     pub fn builder() -> PipelineBuilder {
         PipelineBuilder::new()
     }
 
-    /// Runs the 4-stage pipeline: Discovery -> Liveness -> Scanning -> Sink
+    pub fn new_minimal(plugins: Arc<Vec<Box<dyn ScannerPlugin>>>, sandbox: Arc<crate::core::sandbox::SandboxDispatcher>) -> Self {
+        Self {
+            concurrency: 1,
+            discovery_plugins: Arc::new(Vec::new()),
+            plugins,
+            sink: None, 
+            shutdown_token: tokio_util::sync::CancellationToken::new(),
+            liveness_checker: crate::utils::LivenessChecker::new(None, false),
+            command_line: "minimal".to_string(),
+            policy: crate::core::capability_layer::ScanLayerPolicy::preset_audit(),
+            approval_gate: Arc::new(crate::core::approval_gate::ApprovalGate::for_red_team()),
+            blackarch_bridge: Arc::new(crate::core::blackarch::BlackArchBridge::new()),
+            jitter: None,
+            fp_filter: Arc::new(crate::core::filter::FalsePositiveFilter::default()),
+            memory_monitor: Arc::new(crate::utils::memory_monitor::MemoryMonitor::new(100, 200)),
+            dashboard_tx: None,
+            dashboard_targets: None,
+            swarm_mode: false,
+            max_tokens: 0,
+            ai_router: None,
+            sandbox,
+            proxy_manager: None,
+        }
+    }
+
     pub async fn run(mut self, mut targets: futures::stream::BoxStream<'static, TargetHost>) -> Result<()> {
         info!("🚀 Starting Pipeline with {} plugins...", self.plugins.len());
         
@@ -142,11 +166,20 @@ impl Pipeline {
                 let checker = liveness_checker.clone(); let scan_tx = scan_tx_clone.clone(); let sink_tx = sink_tx_err.clone(); let token = liveness_token.clone();
                 async move {
                     if let Some(ip) = tokio::select! { res = checker.is_live(&target.host) => res, _ = token.cancelled() => return } {
-                        if !is_safe_ip(&ip) { target.status = TargetStatus::Dead; let _ = sink_tx.send(target).await; return; }
+                        if !is_safe_ip(&ip) { 
+                            warn!("🛡️ V13: Blocked unsafe IP {} for host {}", ip, target.host);
+                            target.status = TargetStatus::Dead; 
+                            let _ = sink_tx.send(target).await; 
+                            return; 
+                        }
                         target.ip = Some(ip.to_string()); 
                         target.resolved_ip = Some(ip.to_string()); // V12: Pin IP here
                         let _ = scan_tx.send(target).await;
-                    } else { target.status = TargetStatus::Dead; let _ = sink_tx.send(target).await; }
+                    } else { 
+                        warn!("⚠️ V13: Resolution failed for host {}. Aborting scan to prevent DNS Rebinding.", target.host);
+                        target.status = TargetStatus::Dead; 
+                        let _ = sink_tx.send(target).await; 
+                    }
                 }
             }).await;
         }));
@@ -176,7 +209,7 @@ impl Pipeline {
             }
             if self.swarm_mode {
                 if let Some(router) = self.ai_router.clone() {
-                    orchestrator = orchestrator.with_swarm_mode(true, self.max_tokens, router);
+                    orchestrator = orchestrator.with_swarm_mode(true, self.max_tokens, router, self.proxy_manager.clone());
                 }
             }
             orchestrator.run(scan_rx, sink_tx_stage3, scan_token).await;
@@ -218,29 +251,7 @@ impl Pipeline {
         Ok((tx, handle))
     }
 
-    pub fn new_minimal(plugins: Arc<Vec<Box<dyn ScannerPlugin>>>, sandbox: Arc<crate::core::sandbox::SandboxDispatcher>) -> Self {
-        Self {
-            concurrency: 10,
-            discovery_plugins: Arc::new(Vec::new()),
-            plugins,
-            sink: None,
-            shutdown_token: tokio_util::sync::CancellationToken::new(),
-            liveness_checker: LivenessChecker::new(None, false),
-            command_line: "OsintUltimate-Minimal".to_string(),
-            policy: crate::core::capability_layer::ScanLayerPolicy::preset_audit(),
-            approval_gate: Arc::new(crate::core::approval_gate::ApprovalGate::for_red_team()),
-            blackarch_bridge: Arc::new(crate::core::blackarch::BlackArchBridge::new()),
-            jitter: None,
-            fp_filter: Arc::new(crate::core::filter::FalsePositiveFilter::default()),
-            memory_monitor: Arc::new(crate::utils::memory_monitor::MemoryMonitor::new(8000, 10000)),
-            dashboard_tx: None,
-            dashboard_targets: None,
-            swarm_mode: false,
-            max_tokens: 0,
-            ai_router: None,
-            sandbox,
-        }
-    }
+
 
     pub async fn run_discovery(&self, target: &TargetHost, tx: mpsc::Sender<Finding>) -> Result<()> {
         info!("Pipeline: Running discovery for {}", target.host);
@@ -322,9 +333,10 @@ pub struct PipelineBuilder {
     dashboard_targets: Option<Arc<dashmap::DashMap<String, TargetHost>>>,
     swarm_mode: bool,
     max_tokens: u32,
-    ai_router: Option<Arc<crate::core::ai_cascade::TieredAIRouter>>,
+    ai_router: Option<Arc<crate::core::ai::TieredAIRouter>>,
     sandbox: Option<Arc<crate::core::sandbox::SandboxDispatcher>>,
     memory_monitor: Option<Arc<crate::utils::memory_monitor::MemoryMonitor>>,
+    proxy_manager: Option<Arc<crate::utils::proxy::ProxyManager>>,
 }
 
 impl Default for PipelineBuilder { fn default() -> Self { Self::new() } }
@@ -350,13 +362,15 @@ impl PipelineBuilder {
             max_tokens: 0,
             ai_router: None,
             sandbox: None,
+            proxy_manager: None,
         }
     }
 
-    pub fn with_swarm(mut self, enabled: bool, max_tokens: u32, router: Arc<crate::core::ai_cascade::TieredAIRouter>) -> Self {
+    pub fn with_swarm(mut self, enabled: bool, max_tokens: u32, router: Arc<crate::core::ai::TieredAIRouter>, proxy_manager: Option<Arc<crate::utils::proxy::ProxyManager>>) -> Self {
         self.swarm_mode = enabled;
         self.max_tokens = max_tokens;
         self.ai_router = Some(router);
+        self.proxy_manager = proxy_manager;
         self
     }
 
@@ -416,6 +430,7 @@ impl PipelineBuilder {
             max_tokens: self.max_tokens,
             ai_router: self.ai_router,
             sandbox,
+            proxy_manager: self.proxy_manager,
         })
     }
 }

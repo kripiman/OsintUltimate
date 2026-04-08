@@ -6,8 +6,8 @@ pub mod plugin_loader;
 pub mod capability_layer;
 pub mod approval_gate;
 pub mod blackarch;
-pub mod ai_cascade;
-pub mod waf_evasion;
+pub mod ai;
+pub mod waf;
 pub mod correlation;
 pub mod web_server;
 pub mod filter;
@@ -20,6 +20,7 @@ pub mod sandbox;
 pub mod mcp;
 pub mod source_analyzer;
 pub mod factory;
+pub mod engine;
 #[cfg(test)]
 pub mod tests;
 

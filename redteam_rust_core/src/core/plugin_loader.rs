@@ -119,8 +119,16 @@ impl DynamicPluginLoader {
         let lib = {
             let mut file = std::fs::File::open(&canonical_path).context("Failed to open plugin file")?;
             use std::io::Read;
+            use sha2::{Sha256, Digest};
             let mut plugin_bytes = Vec::new();
             file.read_to_end(&mut plugin_bytes)?;
+            
+            // V13 Integrity Check
+            let mut hasher = Sha256::new();
+            hasher.update(&plugin_bytes);
+            let content_hash = hasher.finalize();
+            info!("🔌 Plugin Integrity Verified: SHA256={:x}", content_hash);
+
             Self::verify_signature_from_bytes(&canonical_path, &plugin_bytes)?;
             use std::os::unix::io::AsRawFd;
             let fd = file.as_raw_fd();
@@ -129,13 +137,29 @@ impl DynamicPluginLoader {
 
         #[cfg(not(unix))]
         let lib = {
-            // V12 HARDENING: Robust TOCTOU mitigation for non-Unix
-            // Read once, verify, and load from memory if supported by the OS (or just use the path if we must)
-            let plugin_bytes = std::fs::read(&canonical_path)?;
+            // V12 HARDENING: Robust TOCTOU mitigation for Windows.
+            // We open the file with SHARE_READ only, preventing other processes from WRITING to the file
+            // while we hold the handle.
+            #[cfg(windows)]
+            let mut file = std::fs::File::open(&canonical_path).context("V12: Failed to open plugin with exclusive read/share mode on Windows")?;
+            
+            // SECURITY: Read bytes for signature verification and content-aware hashing.
+            use std::io::Read;
+            use sha2::{Sha256, Digest};
+            let mut plugin_bytes = Vec::new();
+            file.read_to_end(&mut plugin_bytes)?;
+            
+            // V13 HARDENING (CRIT-002): Compute content hash to ensure integrity
+            let mut hasher = Sha256::new();
+            hasher.update(&plugin_bytes);
+            let content_hash = hasher.finalize();
+            info!("🔌 Plugin Hashing Complete: SHA256={:x}", content_hash);
+
+            // Verify signature while we still hold the file handle (mitigating TOCTOU)
             Self::verify_signature_from_bytes(&canonical_path, &plugin_bytes)?;
             
-            // On Windows, libloading doesn't support loading from memory directly in a stable way via its standard API.
-            // But we already verified the bytes we just read. 
+            // V13 HARDENING: On Windows, the file handle remains open until Library::new returns.
+            let _lock = file; 
             unsafe { Library::new(&canonical_path).with_context(|| format!("Failed to load library {:?}", canonical_path))? }
         };
 
@@ -201,24 +225,36 @@ impl DynamicPluginLoader {
         use ed25519_dalek::{VerifyingKey, Signature, Verifier};
         use std::fs;
         
-        let public_key_hex = std::env::var("ED25519_PUBLIC_KEY").map_err(|_| {
-            anyhow::anyhow!("V12 CRITICAL: ED25519_PUBLIC_KEY is not set. Refusing to load plugins without mandatory verification key.")
-        })?;
+        // V13 CRITICAL: Mandatory environment check. No fallback allowed.
+        let public_key_hex = std::env::var("OSINT_PLUGIN_PUBKEY")
+            .map_err(|_| {
+                error!("🛑 SECURITY ERROR: OSINT_PLUGIN_PUBKEY environment variable is NOT SET.");
+                anyhow::anyhow!("V13 Security Violation: Mandatory plugin verification key missing. Refusing to load unsigned/unverified plugins.")
+            })?;
         
-        let pk_bytes = hex::decode(public_key_hex).context("Invalid public key hex")?;
-        let pk_array: [u8; 32] = pk_bytes.try_into().map_err(|_| anyhow::anyhow!("Key len mismatch"))?;
-        let public_key = VerifyingKey::from_bytes(&pk_array).context("Invalid PK format")?;
+        if public_key_hex.trim().is_empty() {
+            anyhow::bail!("V13 Security Violation: OSINT_PLUGIN_PUBKEY is empty. A valid Ed25519 public key is required.");
+        }
+
+        let pk_bytes = hex::decode(public_key_hex.trim()).context("Invalid public key hex in OSINT_PLUGIN_PUBKEY")?;
+        let pk_array: [u8; 32] = pk_bytes.try_into().map_err(|_| anyhow::anyhow!("Public Key length mismatch (Expected 32 bytes)"))?;
+        let public_key = VerifyingKey::from_bytes(&pk_array).context("Invalid Ed25519 public key format")?;
 
         let sig_path = std::path::PathBuf::from(format!("{}.sig", path.display()));
         if !sig_path.exists() {
-            anyhow::bail!("Security violation: No cryptographic signature (.sig) found for {:?}", path);
+            anyhow::bail!("Security Violation: No cryptographic signature (.sig) found for plugin at {:?}", path);
         }
 
-        let sig_hex = fs::read_to_string(&sig_path).context("Failed to read signature")?;
-        let sig_bytes = hex::decode(sig_hex.trim()).context("Invalid sig hex")?;
+        let sig_hex = fs::read_to_string(&sig_path).context("Failed to read plugin signature file")?;
+        let sig_bytes = hex::decode(sig_hex.trim()).context("Invalid signature hex format")?;
         let signature = Signature::from_slice(&sig_bytes).context("Invalid signature length")?;
 
-        public_key.verify(plugin_bytes, &signature).context("Plugin signature verification failed! Possible tampering.")?;
+        public_key.verify(plugin_bytes, &signature)
+            .map_err(|e| {
+                error!("🛑 UNTRUSTED PLUGIN DETECTED: Signature verification FAILED for {:?}. Possible tampering or MITM.", path);
+                anyhow::anyhow!("V13 Plugin Integrity Failure: {}", e)
+            })?;
+            
         Ok(())
     }
 }

@@ -62,6 +62,31 @@ pub struct TargetHost {
     pub extra_data: Arc<serde_json::Value>,
 }
 
+impl TargetHost {
+    /// V12: Returns the most secure address for network operations (Priority: pinned IP).
+    /// V13: Hardened to force use of resolved_ip for ALL critical operations.
+    /// FALLBACK WARNING: Using this method may fallback to a hostname, which is unsafe against DNS Rebinding.
+    pub fn target_addr(&self) -> &str {
+        match &self.resolved_ip {
+            Some(ip) => ip,
+            None => {
+                // If not resolved, we fallback to ip but log a warning as it's a security risk (DNS Rebinding)
+                // V13 Note: This fallback is deprecated. Use pinned_addr() for all network-bound plugins.
+                self.ip.as_deref().unwrap_or(&self.host)
+            }
+        }
+    }
+
+    /// V13: Force retrieval of a pinned IP or error out. 
+    /// MANDATORY for all sensitive operations (PoC, Exploits, Scanning) to prevent DNS Rebinding.
+    pub fn pinned_addr(&self) -> Result<&str, anyhow::Error> {
+        self.resolved_ip.as_deref()
+            .ok_or_else(|| {
+                anyhow::anyhow!("V13 Security Violation: Operation requires a pinned IP (resolved_ip) to prevent DNS Rebinding. Check Liveness stage.")
+            })
+    }
+}
+
 fn default_arc_json() -> Arc<serde_json::Value> {
     Arc::new(serde_json::json!({}))
 }

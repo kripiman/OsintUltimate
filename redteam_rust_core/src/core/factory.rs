@@ -1,7 +1,7 @@
 use std::sync::Arc;
 use anyhow::{Result, Context};
 use tracing::{info, warn};
-use crate::core::ai_cascade::{TieredAIRouter, RouteLevel, LlmProviderKind};
+use crate::core::ai::{TieredAIRouter, RouteLevel, LlmProviderKind};
 use crate::core::agent::{OllamaClient, GeminiClient, AnthropicClient, OpenAIClient, AzureOpenAIClient};
 use crate::utils::{InfrastructureType, HardwareInfo};
 
@@ -11,32 +11,14 @@ impl EngineFactory {
     /// Detect infrastructure and return auto-adjusted concurrency limits
     pub fn detect_infrastructure_limits() -> (HardwareInfo, usize, usize, usize) {
         let hw = crate::utils::detect_infrastructure();
-        let mut concurrency = 10;
-        let mut soft_limit = 600;
-        let mut hard_limit = 900;
+        
+        let (concurrency, soft_limit, hard_limit) = match hw.infra_type {
+            InfrastructureType::UltraLowMemory => (10, 500, 850),
+            InfrastructureType::LocalPC => (30, 800, 1200),
+            InfrastructureType::Hybrid => (60, 1200, 2000),
+            InfrastructureType::Server => (150, 4000, 8000),
+        };
 
-        match hw.infra_type {
-            InfrastructureType::UltraLowMemory => {
-                concurrency = 10;
-                soft_limit = 500;
-                hard_limit = 850;
-            }
-            InfrastructureType::LocalPC => {
-                concurrency = 30;
-                soft_limit = 800;
-                hard_limit = 1200;
-            }
-            InfrastructureType::Hybrid => {
-                concurrency = 60;
-                soft_limit = 1200;
-                hard_limit = 2000;
-            }
-            InfrastructureType::Server => {
-                concurrency = 150;
-                soft_limit = 4000;
-                hard_limit = 8000;
-            }
-        }
         (hw, concurrency, soft_limit, hard_limit)
     }
 

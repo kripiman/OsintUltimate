@@ -55,12 +55,13 @@ impl ScannerPlugin for RustScanScanner {
 
 
     async fn scan(&self, target: &TargetHost) -> Result<Vec<Finding>> {
-        info!("RustScanScanner: scanning ports for {}", target.host);
+        let target_addr = target.pinned_addr()?;
+        info!("RustScanScanner: scanning ports for {}", target_addr);
 
         // RustScan is extremely fast. We pass -a target and let it find open ports.
         // Then we can optionally pass those to nmap, but here we'll just report open ports found by rustscan.
         let mut child = Command::new(&self.binary_path)
-            .arg("-a").arg(&target.host)
+            .arg("-a").arg(target_addr)
             .arg("--ulimit").arg("5000")
             .arg("--quiet")
             .arg("--") // RustScan flags end here, then come nmap flags
@@ -83,7 +84,7 @@ impl ScannerPlugin for RustScanScanner {
                     crate::models::FINDING_PORT_OPEN,
                     Category::NetworkPort,
                     Severity::Low,
-                    &format!("RustScan detected an open port on {}: {}", target.host, line.trim()),
+                    &format!("RustScan detected an open port on {}: {}", target_addr, line.trim()),
                     serde_json::json!({ "output": line.trim() })
                 ));
             }
