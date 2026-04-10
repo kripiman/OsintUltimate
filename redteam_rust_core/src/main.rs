@@ -4,6 +4,7 @@ pub mod menu;
 
 use clap::Parser;
 use std::sync::Arc;
+use std::time::Duration;
 use redteam_rust_core::models::{TargetHost, TargetStatus};
 use redteam_rust_core::core::factory::EngineFactory;
 use redteam_rust_core::core::engine::{RedTeamEngine, app::EngineConfig};
@@ -156,6 +157,7 @@ async fn main() -> Result<()> {
         plugins_dir: args.plugins_dir.clone(),
         dashboard_port: args.dashboard,
         max_layer,
+        readiness_timeout: Duration::from_secs(180), // V13 Default: 3 min for DO exit nodes
     };
 
     let engine = RedTeamEngine::from_config(engine_config, &utils_config);

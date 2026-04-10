@@ -3,7 +3,7 @@ use anyhow::{Result, Context};
 use tracing::{info, warn};
 use crate::core::ai::{TieredAIRouter, RouteLevel, LlmProviderKind};
 use crate::core::agent::{OllamaClient, GeminiClient, AnthropicClient, OpenAIClient, AzureOpenAIClient};
-use crate::utils::{InfrastructureType, HardwareInfo};
+use crate::utils::{InfrastructureType, HardwareInfo, proxy::ProxyManager};
 
 pub struct EngineFactory;
 
@@ -23,13 +23,14 @@ impl EngineFactory {
     }
 
     /// Build a pre-configured AI Router based on available environment variables
-    pub fn build_default_router(ollama_url: String) -> Result<Arc<TieredAIRouter>> {
+    pub fn build_default_router(ollama_url: String, pm: Option<Arc<ProxyManager>>) -> Result<Arc<TieredAIRouter>> {
         let mut router = TieredAIRouter::new();
         
         // Tier 0: Local (Ollama)
         router.add_provider(RouteLevel::Local, LlmProviderKind::Local, 0, Arc::new(OllamaClient::new(
             ollama_url,
-            "qwen2.5-coder:7b".to_string()
+            "qwen2.5-coder:7b".to_string(),
+            pm.clone()
         )?));
 
         // Tier 1: Mid
@@ -38,14 +39,16 @@ impl EngineFactory {
                 endpoint,
                 key,
                 "gpt-4o-mini".to_string(),
-                "2024-02-01".to_string()
+                "2024-02-01".to_string(),
+                pm.clone()
             )?));
         }
 
         if let Ok(key) = std::env::var("OPENAI_API_KEY") {
             router.add_provider(RouteLevel::Mid, LlmProviderKind::OpenAI, 1, Arc::new(OpenAIClient::new(
                 key,
-                "gpt-4o-mini".to_string()
+                "gpt-4o-mini".to_string(),
+                pm.clone()
             )?));
         }
 
@@ -55,13 +58,15 @@ impl EngineFactory {
             if !keys.is_empty() {
                 router.add_provider(RouteLevel::Premium, LlmProviderKind::Gemini, 0, Arc::new(GeminiClient::new(
                     keys, 
-                    "gemini-1.5-pro".to_string()
+                    "gemini-1.5-pro".to_string(),
+                    pm.clone()
                 )?));
                 
                 // Also add Flash for Mid-tier if Gemini is available
                 router.add_provider(RouteLevel::Mid, LlmProviderKind::Gemini, 2, Arc::new(GeminiClient::new(
                     vec![std::env::var("GEMINI_API_KEYS").unwrap().split(',').next().unwrap().to_string()],
-                    "gemini-1.5-flash".to_string()
+                    "gemini-1.5-flash".to_string(),
+                    pm.clone()
                 )?));
             }
         }
@@ -69,7 +74,8 @@ impl EngineFactory {
         if let Ok(key) = std::env::var("ANTHROPIC_API_KEY") {
             router.add_provider(RouteLevel::Premium, LlmProviderKind::Anthropic, 1, Arc::new(AnthropicClient::new(
                 key,
-                "claude-3-5-sonnet-20240620".to_string()
+                "claude-3-5-sonnet-20240620".to_string(),
+                pm.clone()
             )?));
         }
 

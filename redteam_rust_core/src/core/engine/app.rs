@@ -35,8 +35,9 @@ pub struct EngineConfig {
     pub doh: bool,
     pub proxies: Option<Vec<String>>,
     pub plugins_dir: Option<String>,
-    pub dashboard_port: Option<u16>,
     pub max_layer: ScanLayer,
+    pub dashboard_port: Option<u16>,
+    pub readiness_timeout: Duration, // V13: Configurable infrastructure wait
 }
 
 pub struct RedTeamEngine {
@@ -101,8 +102,14 @@ impl RedTeamEngine {
     ) -> Result<()> {
         info!("🤖 SENTINEL: Activating Autonomous Agent with Native AI Cascade...");
         
-        let router = EngineFactory::build_default_router(self.config.ollama_url.clone())?;
+        let router = EngineFactory::build_default_router(self.config.ollama_url.clone(), Some(self.proxy_manager.clone()))?;
         
+        // V13: Readiness Gate - Prevent OPSEC leak by waiting for stealth readiness
+        if self.config.stealth {
+            self.proxy_manager.wait_for_readiness(self.config.readiness_timeout).await
+                .context(format!("Failed to establish stealth infrastructure readiness within {:?}", self.config.readiness_timeout))?;
+        }
+
         let mut builder = self.prepare_pipeline_builder(sink);
         let mut pipeline = builder.build()?;
         
@@ -140,8 +147,14 @@ impl RedTeamEngine {
 
         let mut builder = self.prepare_pipeline_builder(sink);
         
+        // V13: Readiness Gate - Prevent OPSEC leak by waiting for stealth readiness
+        if self.config.stealth {
+            self.proxy_manager.wait_for_readiness(self.config.readiness_timeout).await
+                .context(format!("Failed to establish stealth infrastructure readiness within {:?}", self.config.readiness_timeout))?;
+        }
+
         if swarm {
-            let router = EngineFactory::build_default_router(self.config.ollama_url.clone())?;
+            let router = EngineFactory::build_default_router(self.config.ollama_url.clone(), Some(self.proxy_manager.clone()))?;
             builder = builder.with_swarm(true, self.config.max_tokens, router, Some(self.proxy_manager.clone()));
         }
 
@@ -180,17 +193,32 @@ impl RedTeamEngine {
             loop {
                 if shutdown.is_cancelled() { break; }
                 
-                // If we have no managed exits, provision one
+                // If we have no available exits, provision one
                 if pm.is_empty() {
-                    info!("🚀 STEALTH: No exit nodes available. Provisioning new DigitalOcean droplet...");
-                    match do_client.create_droplet("stealth-exit-01", "nyc1").await {
+                    info!("🚀 STEALTH: No exit nodes available. Provisioning new DigitalOcean droplet (nyc1)...");
+                    match do_client.create_droplet(&format!("stealth-exit-{:x}", rand::random::<u32>()), "nyc1").await {
                         Ok(droplet) => {
                             info!("⏳ STEALTH: Waiting for droplet IP (Managed node ID: {})...", droplet.id);
                             match do_client.wait_for_ip(droplet.id).await {
                                 Ok(ip) => {
-                                    // Wait for cloud-init (danted) to finish (simple sleep for now)
-                                    tokio::time::sleep(Duration::from_secs(60)).await;
-                                    pm.add_managed_exit(ip);
+                                    // V13: Health check - Wait for danted SOCKS server to respond
+                                    info!("⏳ STEALTH: Provisioned IP {}. Waiting for SOCKS5 service initialization...", ip);
+                                    
+                                    let mut ready = false;
+                                    for _ in 0..15 { // Try for 30s
+                                        if let Ok(Ok(_)) = tokio::time::timeout(Duration::from_secs(2), tokio::net::TcpStream::connect(format!("{}:1080", ip))).await {
+                                            ready = true;
+                                            break;
+                                        }
+                                        tokio::time::sleep(Duration::from_secs(2)).await;
+                                    }
+
+                                    if ready {
+                                        pm.add_managed_exit(ip);
+                                    } else {
+                                        error!("❌ STEALTH: Droplet {} IP ready but SOCKS5 (danted) failed to start. Destroying.", ip);
+                                        let _ = do_client.destroy_droplet(droplet.id).await;
+                                    }
                                 }
                                 Err(e) => error!("❌ STEALTH: Failed to get IP for droplet: {}", e),
                             }
@@ -199,15 +227,18 @@ impl RedTeamEngine {
                     }
                 }
                 
-                tokio::time::sleep(Duration::from_secs(300)).await;
+                tokio::time::sleep(Duration::from_secs(60)).await; // Faster check while provisioning
             }
         });
 
         Ok(())
     }
-
     fn prepare_pipeline_builder(&self, sink: Box<dyn DataSink>) -> PipelineBuilder {
-        let liveness_checker = LivenessChecker::new(self.config.dns_servers.clone(), self.config.doh);
+        let liveness_checker = LivenessChecker::new_with_proxy(
+            self.config.dns_servers.clone(), 
+            self.config.doh, 
+            Some(self.proxy_manager.clone())
+        );
         let jitter = Arc::new(crate::utils::common::HumanJitter::new(100, 1500));
         
         let proxy_manager = Some(self.proxy_manager.clone());

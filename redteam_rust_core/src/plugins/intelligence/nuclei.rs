@@ -71,19 +71,23 @@ impl ScannerPlugin for NucleiScanner {
 
 
     async fn scan(&self, target: &TargetHost) -> Result<Vec<Finding>> {
-        info!("NucleiScanner: launching scan against {}", target.host);
+        // V13 HARDENING: Mandatory DNS Pinning (ResolvedIP) for all network-bound plugins.
+        let pinned_ip = target.pinned_addr()
+            .context("DNS Pinning Violation: Nuclei requires a resolved and pinned IP to prevent Rebinding.")?;
+        
+        info!("NucleiScanner: launching hardened scan against {} (Pinned: {})", target.host, pinned_ip);
 
-        let url = if target.host.starts_with("http") {
-            target.host.clone()
-        } else {
-            format!("http://{}", target.host)
-        };
+        let url = format!("http://{}", pinned_ip);
+        
+        // V13 HARDENING: Set Host header to the original hostname to support vhosts on pinned IP.
+        let host_header = format!("Host: {}", target.host);
 
         let temp_file = tempfile::NamedTempFile::new().context("Failed to create temp file for Nuclei")?;
         let temp_path = temp_file.path().to_string_lossy().to_string();
 
         let mut child = Command::new(&self.binary_path)
             .arg("-u").arg(&url)
+            .arg("-H").arg(&host_header)
             .arg("-jsonl")
             .arg("-o").arg(&temp_path)
             .arg("-silent")

@@ -32,16 +32,25 @@ pub struct CapabilityGap {
 pub struct OllamaClient {
     url: String,
     model: String,
-    client: reqwest::Client,
+    proxy_manager: Option<Arc<crate::utils::proxy::ProxyManager>>,
 }
 
 impl OllamaClient {
-    pub fn new(url: String, model: String) -> Result<Self> {
-        let client = reqwest::Client::builder()
-            .timeout(Duration::from_secs(60))
-            .build()
-            .context("Failed to build Ollama client")?;
-        Ok(Self { url, model, client })
+    pub fn new(url: String, model: String, pm: Option<Arc<crate::utils::proxy::ProxyManager>>) -> Result<Self> {
+        Ok(Self { url, model, proxy_manager: pm })
+    }
+
+    async fn get_client(&self) -> Result<reqwest::Client> {
+        if let Some(ref pm) = self.proxy_manager {
+            let host = url::Url::parse(&self.url)?.host_str().unwrap_or("localhost").to_string();
+            let (_, client) = pm.get_client_fail_closed(&host)?;
+            Ok(client)
+        } else {
+            reqwest::Client::builder()
+                .timeout(Duration::from_secs(60))
+                .build()
+                .context("Failed to build Ollama client")
+        }
     }
 }
 
@@ -58,9 +67,10 @@ impl LlmClient for OllamaClient {
             target.host, serde_json::to_string(&compressed)?, self.model
         );
 
-        let res = self.client.post(format!("{}/api/generate", self.url))
+        let client = self.get_client().await?;
+        let res: serde_json::Value = client.post(format!("{}/api/generate", self.url))
             .json(&json!({ "model": self.model, "prompt": prompt, "stream": false, "format": "json" }))
-            .send().await?.json::<serde_json::Value>().await?;
+            .send().await?.json().await?;
 
         let response_text = res["response"].as_str().context("Ollama response missing text")?;
         let mut analysis: AIAnalysis = serde_json::from_str(extract_json(response_text))?;
@@ -101,9 +111,10 @@ impl LlmClient for OllamaClient {
             target.host, serde_json::to_string(&compressed_finding)?, adaptive_json, serde_json::to_string(&compressed_plugins)?
         );
 
-        let res = self.client.post(format!("{}/api/generate", self.url))
+        let client = self.get_client().await?;
+        let res: serde_json::Value = client.post(format!("{}/api/generate", self.url))
             .json(&json!({ "model": self.model, "prompt": prompt, "stream": false, "format": "json" }))
-            .send().await?.json::<serde_json::Value>().await?;
+            .send().await?.json().await?;
 
         let text = res["response"].as_str().context("Ollama decision missing text")?;
         let json_val: serde_json::Value = serde_json::from_str(extract_json(text))?;
@@ -121,14 +132,21 @@ pub struct GeminiClient {
     keys: Vec<String>,
     current_key_idx: std::sync::atomic::AtomicUsize,
     model: String,
-    client: reqwest::Client,
+    proxy_manager: Option<Arc<crate::utils::proxy::ProxyManager>>,
 }
 
 impl GeminiClient {
-    pub fn new(keys: Vec<String>, model: String) -> Result<Self> {
+    pub fn new(keys: Vec<String>, model: String, pm: Option<Arc<crate::utils::proxy::ProxyManager>>) -> Result<Self> {
         if keys.is_empty() { anyhow::bail!("GeminiClient requires keys"); }
-        let client = reqwest::Client::builder().timeout(Duration::from_secs(60)).build()?;
-        Ok(Self { keys, current_key_idx: std::sync::atomic::AtomicUsize::new(0), model, client })
+        Ok(Self { keys, current_key_idx: std::sync::atomic::AtomicUsize::new(0), model, proxy_manager: pm })
+    }
+    async fn get_client(&self) -> Result<reqwest::Client> {
+        if let Some(ref pm) = self.proxy_manager {
+            let (_, client) = pm.get_client_fail_closed("generativelanguage.googleapis.com")?;
+            Ok(client)
+        } else {
+            Ok(reqwest::Client::builder().timeout(Duration::from_secs(60)).build()?)
+        }
     }
     fn get_key(&self) -> &str {
         let idx = self.current_key_idx.load(std::sync::atomic::Ordering::Relaxed);
@@ -146,9 +164,10 @@ impl LlmClient for GeminiClient {
         let prompt = format!("Analyze this Red Team finding: {}. Target: {}. Provide JSON.", serde_json::to_string(&compressed)?, target.host);
         
         let mut last_error = None;
+        let client = self.get_client().await?;
         for _ in 0..self.keys.len() {
             let url = format!("https://generativelanguage.googleapis.com/v1beta/models/{}:generateContent?key={}", self.model, self.get_key());
-            match self.client.post(url).json(&json!({ "contents": [{ "parts": [{ "text": prompt }] }], "generationConfig": { "response_mime_type": "application/json" } })).send().await {
+            match client.post(url).json(&json!({ "contents": [{ "parts": [{ "text": prompt }] }], "generationConfig": { "response_mime_type": "application/json" } })).send().await {
                 Ok(res) => {
                     let val = res.json::<serde_json::Value>().await?;
                     if let Some(text) = val["candidates"][0]["content"]["parts"][0]["text"].as_str() {
@@ -175,9 +194,10 @@ impl LlmClient for GeminiClient {
         let compressed = ContextCompressor::compress_finding(finding, route_level);
         let prompt = format!("Decide next step for {}. History: {:?}. Finding: {}. Plugins: {}. Focus on WAF bypass.", target.host, adaptive_context, finding.id, plugins.len());
         
+        let client = self.get_client().await?;
         for _ in 0..self.keys.len() {
             let url = format!("https://generativelanguage.googleapis.com/v1beta/models/{}:generateContent?key={}", self.model, self.get_key());
-            match self.client.post(url).json(&json!({ "contents": [{ "parts": [{ "text": prompt }] }], "generationConfig": { "response_mime_type": "application/json" } })).send().await {
+            match client.post(url).json(&json!({ "contents": [{ "parts": [{ "text": prompt }] }], "generationConfig": { "response_mime_type": "application/json" } })).send().await {
                 Ok(res) => {
                     let val = res.json::<serde_json::Value>().await?;
                     if let Some(text) = val["candidates"][0]["content"]["parts"][0]["text"].as_str() {
@@ -200,13 +220,21 @@ pub struct AzureOpenAIClient {
     key: String,
     deployment: String,
     api_version: String,
-    client: reqwest::Client,
+    proxy_manager: Option<Arc<crate::utils::proxy::ProxyManager>>,
 }
 
 impl AzureOpenAIClient {
-    pub fn new(endpoint: String, key: String, deployment: String, api_version: String) -> Result<Self> {
-        let client = reqwest::Client::builder().timeout(Duration::from_secs(60)).build()?;
-        Ok(Self { endpoint, key, deployment, api_version, client })
+    pub fn new(endpoint: String, key: String, deployment: String, api_version: String, pm: Option<Arc<crate::utils::proxy::ProxyManager>>) -> Result<Self> {
+        Ok(Self { endpoint, key, deployment, api_version, proxy_manager: pm })
+    }
+    async fn get_client(&self) -> Result<reqwest::Client> {
+        if let Some(ref pm) = self.proxy_manager {
+            let host = url::Url::parse(&self.endpoint)?.host_str().unwrap_or("openai.azure.com").to_string();
+            let (_, client) = pm.get_client_fail_closed(&host)?;
+            Ok(client)
+        } else {
+            Ok(reqwest::Client::builder().timeout(Duration::from_secs(60)).build()?)
+        }
     }
 }
 
@@ -214,8 +242,9 @@ impl AzureOpenAIClient {
 impl LlmClient for AzureOpenAIClient {
     async fn analyze(&self, finding: &Finding, target: &TargetHost, route_level: crate::core::ai::RouteLevel) -> Result<AIAnalysis> {
         let compressed = ContextCompressor::compress_finding(finding, route_level);
+        let client = self.get_client().await?;
         let url = format!("{}/openai/deployments/{}/chat/completions?api-version={}", self.endpoint, self.deployment, self.api_version);
-        let res = self.client.post(url).header("api-key", &self.key).json(&json!({
+        let res = client.post(url).header("api-key", &self.key).json(&json!({
             "messages": [{ "role": "system", "content": "Return strictly JSON analysis." }, { "role": "user", "content": format!("Target: {}, Finding: {}", target.host, serde_json::to_string(&compressed)?) }],
             "response_format": { "type": "json_object" }
         })).send().await?.json::<serde_json::Value>().await?;
@@ -225,8 +254,9 @@ impl LlmClient for AzureOpenAIClient {
 
     async fn decide_action(&self, finding: &Finding, target: &TargetHost, plugins: &[crate::plugins::PluginMetadata], _gap: Option<&CapabilityGap>, adaptive_context: Option<&AdaptiveContext>, route_level: crate::core::ai::RouteLevel) -> Result<Option<(String, serde_json::Value)>> {
         let compressed = ContextCompressor::compress_finding(finding, route_level);
+        let client = self.get_client().await?;
         let url = format!("{}/openai/deployments/{}/chat/completions?api-version={}", self.endpoint, self.deployment, self.api_version);
-        let res = self.client.post(url).header("api-key", &self.key).json(&json!({
+        let res = client.post(url).header("api-key", &self.key).json(&json!({
             "messages": [
                 { "role": "system", "content": "Return JSON: {\"action\": \"name\", \"tactical_context\": {}}" },
                 { "role": "user", "content": format!("Target: {}, Finding: {}, Context: {:?}", target.host, finding.id, adaptive_context) }
@@ -244,13 +274,20 @@ impl LlmClient for AzureOpenAIClient {
 pub struct AnthropicClient {
     key: String,
     model: String,
-    client: reqwest::Client,
+    proxy_manager: Option<Arc<crate::utils::proxy::ProxyManager>>,
 }
 
 impl AnthropicClient {
-    pub fn new(key: String, model: String) -> Result<Self> {
-        let client = reqwest::Client::builder().timeout(Duration::from_secs(60)).build()?;
-        Ok(Self { key, model, client })
+    pub fn new(key: String, model: String, pm: Option<Arc<crate::utils::proxy::ProxyManager>>) -> Result<Self> {
+        Ok(Self { key, model, proxy_manager: pm })
+    }
+    async fn get_client(&self) -> Result<reqwest::Client> {
+        if let Some(ref pm) = self.proxy_manager {
+            let (_, client) = pm.get_client_fail_closed("api.anthropic.com")?;
+            Ok(client)
+        } else {
+            Ok(reqwest::Client::builder().timeout(Duration::from_secs(60)).build()?)
+        }
     }
 }
 
@@ -258,7 +295,8 @@ impl AnthropicClient {
 impl LlmClient for AnthropicClient {
     async fn analyze(&self, finding: &Finding, target: &TargetHost, route_level: crate::core::ai::RouteLevel) -> Result<AIAnalysis> {
         let compressed = ContextCompressor::compress_finding(finding, route_level);
-        let res = self.client.post("https://api.anthropic.com/v1/messages")
+        let client = self.get_client().await?;
+        let res = client.post("https://api.anthropic.com/v1/messages")
             .header("x-api-key", &self.key)
             .header("anthropic-version", "2023-06-01")
             .json(&json!({
@@ -279,13 +317,20 @@ impl LlmClient for AnthropicClient {
 pub struct OpenAIClient {
     key: String,
     model: String,
-    client: reqwest::Client,
+    proxy_manager: Option<Arc<crate::utils::proxy::ProxyManager>>,
 }
 
 impl OpenAIClient {
-    pub fn new(key: String, model: String) -> Result<Self> {
-        let client = reqwest::Client::builder().timeout(Duration::from_secs(60)).build()?;
-        Ok(Self { key, model, client })
+    pub fn new(key: String, model: String, pm: Option<Arc<crate::utils::proxy::ProxyManager>>) -> Result<Self> {
+        Ok(Self { key, model, proxy_manager: pm })
+    }
+    async fn get_client(&self) -> Result<reqwest::Client> {
+        if let Some(ref pm) = self.proxy_manager {
+            let (_, client) = pm.get_client_fail_closed("api.openai.com")?;
+            Ok(client)
+        } else {
+            Ok(reqwest::Client::builder().timeout(Duration::from_secs(60)).build()?)
+        }
     }
 }
 
@@ -293,7 +338,8 @@ impl OpenAIClient {
 impl LlmClient for OpenAIClient {
     async fn analyze(&self, finding: &Finding, target: &TargetHost, route_level: crate::core::ai::RouteLevel) -> Result<AIAnalysis> {
         let compressed = ContextCompressor::compress_finding(finding, route_level);
-        let res = self.client.post("https://api.openai.com/v1/chat/completions")
+        let client = self.get_client().await?;
+        let res = client.post("https://api.openai.com/v1/chat/completions")
             .header("Authorization", format!("Bearer {}", self.key))
             .json(&json!({
                 "model": self.model,
@@ -337,6 +383,7 @@ impl AutonomousAgent {
             approval_gate.clone(),
             operator.clone(),
             proxy_manager.clone(),
+            proxy_manager.is_some(), // V13: Infer stealth from pm presence
         ));
         Self { router, pipeline, approval_gate, operator, poc_validator, proxy_manager }
     }

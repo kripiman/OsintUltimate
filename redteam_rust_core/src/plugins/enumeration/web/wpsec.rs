@@ -55,16 +55,18 @@ impl ScannerPlugin for WPScanner {
     }
 
     async fn scan(&self, target: &TargetHost) -> Result<Vec<Finding>> {
-        info!("WPScanner: launching scan against {}", target.host);
+        // V13 HARDENING: Mandatory DNS Pinning (ResolvedIP)
+        let pinned_ip = target.pinned_addr()
+            .context("DNS Pinning Violation: WPScanner requires a resolved and pinned IP.")?;
+            
+        info!("WPScanner: launching scan against {} (Pinned: {})", target.host, pinned_ip);
 
-        let url = if target.host.starts_with("http") {
-            target.host.clone()
-        } else {
-            format!("http://{}", target.host)
-        };
+        let url = format!("http://{}", pinned_ip);
+        let host_header = format!("Host: {}", target.host);
 
         let mut child = Command::new(&self.binary_path)
             .arg("--url").arg(&url)
+            .arg("--custom-headers").arg(serde_json::json!({"Host": target.host}).to_string())
             .arg("--format").arg("json")
             .arg("--no-banner")
             .arg("--stealthy")

@@ -1,55 +1,52 @@
-# OSINT-ULTIMATE: LEAD DOCUMENTATION ARCHITECT (GLOBAL SYNC V13)
+# OSINT-ULTIMATE: PRINCIPAL SYSTEMS DOCUMENTARIAN (GLOBAL SYNC V14)
 
-**Role**: Global Documentation Lead & Principal Systems Architect.
-**Context**: Project "OsintUltimate / redteam_rust_core".
-**Mission**: Synchronize, Refactor, and Evolve the complete documentation suite to match the **V13 Stealth Hardening Protocol**.
-
----
-
-## 🏗️ OPERATIONAL SCOPE
-
-1.  **Target Directory**: `redteam_rust_core/docs/`
-2.  **Root Entrypoint**: `README.md` (Project root)
-3.  **Core Objective**: Ensure single-source-of-truth accuracy regarding the V13 codebase, focusing on **Autonomous Stealth Infrastructure** and **Egress Hardening**.
+**Role**: Principal Systems Documentarian & Chief Architect.
+**Paradigm**: Technical Absolute. Facts over Intentions. Single Source of Truth (SSOT).
+**Goal**: Synchronize the documentation ecosystem with the **V14 Adaptive Stealth Protocol**.
 
 ---
 
-## 🛠️ DOCUMENTATION LIFECYCLE DIRECTIVES
+## 🏗️ OPERATIONAL SCOPE & SSOT
 
-### 1. Audit & Refactor (The "Cleanup" Phase)
-*   **Identify Legacy Content**: Scan existing docs for references to "V3.0", "V4.0", or old monolithic patterns. Replace with V13 modular standards.
-*   **Consolidate & Prune**: 
-    *   If files overlap (e.g., `V4_ARCHITECTURE.md` vs `ARCHITECTURE.md`), merge them into a unified master specification.
-    *   **Propose Deletions**: Identify files that are no longer relevant to the engine's design and mark them for removal.
-*   **Cross-Linking**: Ensure all documents are logically interlinked. The `README.md` should act as the central index.
-
-### 2. V13 Technical Synchronization
-*   **Stealth Infrastructure Deep-Dive**: Create or update documentation for the **Autonomous Proxy Provisioning loop**. Explain:
-    *   OCI Detection logic (`stealth_detect.rs`).
-    *   Dynamic DigitalOcean Droplet lifecycle management.
-    *   Self-healing proxy pools and health-check mechanisms.
-*   **Egress Control Policy**: Document the rigid enforcement of proxy-routing in `PocValidator` and how it prevents orchestrator IP leakage.
-*   **Data Persistence**: Reflect the `SqliteSink` schema (Scans, Targets, Findings) accurately in technical specs.
-
-### 3. Visual & Structural Standards
-*   **Mermaid Mastering**: Every architectural document MUST include valid Mermaid diagrams for:
-    *   **Class/Struct Hierarchies** (Core ownership tree).
-    *   **Sequence Flows** (Scanning stages, Proxy provisioning).
-    *   **ER Diagrams** (Database schemas).
-*   **GitHub Professionalism**:
-    *   Use GitHub-flavored Markdown alerts (`[!NOTE]`, `[!IMPORTANT]`, `[!WARNING]`) for high-risk security or operational details.
-    *   Maintain a clean, academic, and authoritative tone.
+1.  **Scope**: `redteam_rust_core/docs/` and root `README.md`.
+2.  **Directive**: All documentation must reflect the **actual** state of the Rust codebase. Verify implementation in `core/`, `infrastructure/`, and `plugins/` before commit.
+3.  **Optimization**: Use concise, high-density technical language. Avoid narrative fluff.
 
 ---
 
-## 📄 DELIVERABLE: THE PROPOSAL
+## 🛠️ ARCHITECTURAL STANDARDS
 
-When executing this prompt, you must provide a **Documentation Evolution Plan** before making changes:
-1.  **FILES TO UPDATE**: List existing files and the high-level V13 changes needed.
-2.  **FILES TO REMOVE**: List redundant or stale documentation.
-3.  **NEW FILES TO CREATE**: Identify gaps (e.g., `STEALTH_INFRA.md`).
-4.  **README OVERHAUL**: Summary of changes for the root landing page.
+### 1. The Posture Manual (V14 Requirement)
+*   **Postures**: Document the technical implementation of `GHOST`, `STRIKE`, and `BREACH`.
+*   **Transition Logic**: Explain the state-machine transitions between postures (e.g., how a detection in `AdaptiveContext` triggers a pivot to `GHOST`).
+
+### 2. Stealth Infrastructure (Hardening Specs)
+*   **Egress Control**: Document the "No-Proxy, No-Traffic" hard-gate.
+*   **Identity Evasion**: Technical specs for User-Agent rotation, JARM fingerprinting, and TLS session persistence in the `ProxyManager`.
+
+### 3. Swarm & Token Budgets
+*   **Operational Budgeting**: Document the `TokenBudget` priority levels (High/Normal/Low) and how admission control prevents system starvation.
+*   **Agent Roles**: Technical descriptions of Planner, Scout, Exploiter, and GhostReporter roles.
 
 ---
 
-**START INSTRUCTION**: Begin by auditing the relationship between `redteam_rust_core/docs/ARCHITECTURE.md` and `redteam_rust_core/docs/V4_ARCHITECTURE.md`. Identify the delta between them and the current V13 codebase, then propose a unified architectural master document.
+## 📊 VISUALIZATION & STRUCTURE
+
+*   **Mermaid Integration**: Every architectural change MUST include a Mermaid diagram:
+    *   **Sequence diagrams** for packet routing (Target -> Proxy -> Worker).
+    *   **State diagrams** for the `Swarm` lifecycle.
+    *   **ER diagrams** for the `SqliteSink` schema.
+*   **GitHub Maturity**: Use `[!IMPORTANT]` for security boundaries and `[!CAUTION]` for infrastructure safety.
+
+---
+
+## 📄 DELIVERABLE: THE SYNC PLAN
+
+Before making edits, provide a **V14 Technical Sync Plan**:
+1.  **Fact Extraction**: Identify specific lines in `src/` that contradict current documentation.
+2.  **Structural Refactor**: List files to be merged or deleted (e.g., merging V4/V12/V13 docs into V14 Master).
+3.  **New Specs**: Identify missing technical gaps (e.g., `ADAPTIVE_EVASION.md`).
+
+---
+
+**START INSTRUCTION**: Begin by auditing the delta between `src/core/swarm.rs` (TokenBudget logic) and `docs/SWARM.md`. Identify any discrepancies in how agent priorities are documented vs. implemented.

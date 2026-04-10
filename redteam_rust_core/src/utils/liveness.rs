@@ -1,7 +1,8 @@
-use hickory_resolver::TokioAsyncResolver;
-use hickory_resolver::config::{ResolverConfig, ResolverOpts, NameServerConfig, Protocol};
 use std::net::IpAddr;
-use tracing::warn;
+use tracing::{warn, info, error};
+use std::sync::Arc;
+use crate::utils::proxy::ProxyManager;
+use anyhow::{Result, Context};
 
 /// Checks if a target is "live" using a shared resolver.
 /// Removed self-contained version to prevent re-creating DNS resolvers (P2).
@@ -82,37 +83,40 @@ pub async fn is_ssrf_safe_host(target: &str) -> bool {
 /// Batch liveness checker using a shared resolver for performance
 #[derive(Clone)]
 pub struct LivenessChecker {
-    resolver: TokioAsyncResolver,
+    resolver: Arc<hickory_resolver::TokioAsyncResolver>,
+    proxy_manager: Option<Arc<ProxyManager>>,
 }
 
 impl LivenessChecker {
     pub fn new(custom_resolvers: Option<Vec<String>>, doh: bool) -> Self {
-        let resolver_opts = ResolverOpts::default();
-        let mut router_config = ResolverConfig::google();
+        Self::new_with_proxy(custom_resolvers, doh, None)
+    }
+
+    pub fn new_with_proxy(custom_resolvers: Option<Vec<String>>, doh: bool, pm: Option<Arc<ProxyManager>>) -> Self {
+        let resolver_opts = hickory_resolver::config::ResolverOpts::default();
+        let mut router_config = hickory_resolver::config::ResolverConfig::google();
 
         if let Some(servers) = custom_resolvers {
              let mut name_servers = Vec::new();
              for ip_str in servers {
                  if let Ok(ip) = ip_str.parse::<std::net::IpAddr>() {
                       let socket_addr = std::net::SocketAddr::new(ip, 53);
-                      name_servers.push(NameServerConfig::new(socket_addr, Protocol::Udp));
-                      name_servers.push(NameServerConfig::new(socket_addr, Protocol::Tcp));
+                      name_servers.push(hickory_resolver::config::NameServerConfig::new(socket_addr, hickory_resolver::config::Protocol::Udp));
+                      name_servers.push(hickory_resolver::config::NameServerConfig::new(socket_addr, hickory_resolver::config::Protocol::Tcp));
                  }
              }
              if !name_servers.is_empty() {
-                 router_config = ResolverConfig::from_parts(None, vec![], name_servers);
+                 router_config = hickory_resolver::config::ResolverConfig::from_parts(None, vec![], name_servers);
              }
         } else if doh {
-             // P1 FIX: Use DNS over HTTPS (DoH) for encrypted requests
-             router_config = ResolverConfig::google_https();
-             // Note: Depending on hickory version, there might be TLS requirements.
-             // If this fails to compile, we may need to enable "webpki-roots" or "native-certs" features in Cargo.toml for hickory-resolver.
+             router_config = hickory_resolver::config::ResolverConfig::google_https();
         }
 
         let resolver = hickory_resolver::TokioAsyncResolver::tokio(router_config, resolver_opts);
 
         Self {
-            resolver
+            resolver: Arc::new(resolver),
+            proxy_manager: pm,
         }
     }
 
@@ -123,6 +127,19 @@ impl LivenessChecker {
             } else {
                 warn!("🚫 LIVENESS: Blocked attempt to scan unsafe IP: {}", ip);
                 return None;
+            }
+        }
+
+        // V13: Mandatory proxied DNS in stealth mode
+        if let Some(ref pm) = self.proxy_manager {
+            if !pm.is_empty() {
+                return match self.proxied_lookup(target, pm).await {
+                    Ok(ip) => Some(ip),
+                    Err(e) => {
+                        warn!("⚠️ V13: Proxied DNS lookup failed for {}: {}", target, e);
+                        None
+                    }
+                };
             }
         }
 
@@ -139,6 +156,41 @@ impl LivenessChecker {
             }
             Err(_) => None
         }
+    }
+
+    /// V13: Performs a DNS lookup through a SOCKS5 proxy using Google DoH API.
+    /// This ensures 100% isolation as the request is an encrypted HTTP call routed through the SOCKS tunnel.
+    async fn proxied_lookup(&self, target: &str, pm: &ProxyManager) -> Result<IpAddr> {
+        // We use Google's JSON DoH API as it's the easiest to route through a standard reqwest client.
+        // Step 1: Get a proxied client pinned to dns.google (8.8.8.8)
+        let dns_host = "dns.google";
+        let (_, client) = pm.get_client_fail_closed(dns_host)?;
+        
+        // Step 2: Query the DoH API
+        let url = format!("https://{}/resolve?name={}&type=A", dns_host, target);
+        info!("🛡️ V13: Routing stealth DNS query for {} through SOCKS5 DoH...", target);
+        
+        let resp = client.get(url)
+            .header("Host", dns_host)
+            .send().await
+            .context("Stealth DoH request failed")?;
+        
+        let json: serde_json::Value = resp.json().await.context("Invalid DoH response JSON")?;
+        
+        // Parse the answer
+        if let Some(answers) = json["Answer"].as_array() {
+            for answer in answers {
+                if let Some(data) = answer["data"].as_str() {
+                    if let Ok(ip) = data.parse::<IpAddr>() {
+                        if is_safe_ip(&ip) {
+                            return Ok(ip);
+                        }
+                    }
+                }
+            }
+        }
+        
+        anyhow::bail!("No safe IP addresses found for host {} via stealth DoH", target)
     }
 }
 

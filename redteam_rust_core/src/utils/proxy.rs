@@ -1,5 +1,6 @@
 use reqwest::{Client, Proxy, header::HeaderValue};
 use std::net::{IpAddr, SocketAddr};
+use tokio_socks::tcp::Socks5Stream;
 use std::sync::Arc;
 use dashmap::DashMap;
 use std::time::{SystemTime, UNIX_EPOCH, Duration};
@@ -76,22 +77,24 @@ impl ProxyManager {
     fn start_health_checker(&mut self) {
         let blacklist = self.blacklist.clone();
         let duration = self.blacklist_duration_sec;
+        let managed_exits = self.managed_exits.clone();
         
         // QA-007 FIX: Store AbortHandle so the task is cancelled when ProxyManager is dropped
         let handle = tokio::spawn(async move {
             loop {
                 let sleep_secs = {
                     let mut rng = rand::thread_rng();
-                    rand::Rng::gen_range(&mut rng, 45..120)
+                    rand::Rng::gen_range(&mut rng, 30..60) // V13: Faster auditing for supervisor
                 };
                 tokio::time::sleep(Duration::from_secs(sleep_secs)).await;
 
-                let now = SystemTime::now().duration_since(UNIX_EPOCH).unwrap_or_default().as_secs();
+                let now_ts = SystemTime::now().duration_since(UNIX_EPOCH).unwrap_or_default().as_secs();
                 
+                // --- Part 1: Blacklist Recovery ---
                 let to_remove: Vec<String> = {
                     let mut keys = Vec::new();
                     for entry in blacklist.iter() {
-                        if now - *entry.value() >= duration {
+                        if now_ts - *entry.value() >= duration {
                             keys.push(entry.key().clone());
                         }
                     }
@@ -102,10 +105,26 @@ impl ProxyManager {
                     blacklist.remove(&key);
                     info!("Proxy {} recovered from blacklist (jittered health check)", key);
                 }
+
+                // --- Part 2: Managed Exit Auditing (V13 Supervisor) ---
+                // In a real scenario, we'd ping the SOCKS5 port here.
+                // For now, we prune nodes older than 24h if they aren't refreshed.
+                let to_prune: Vec<String> = managed_exits.iter()
+                    .filter(|e| {
+                        let elapsed = e.value().elapsed().unwrap_or(Duration::from_secs(0));
+                        elapsed.as_secs() > 86400 // 24h
+                    })
+                    .map(|e| e.key().clone())
+                    .collect();
+
+                for ip in to_prune {
+                    warn!("🛡️ SUPERVISOR: Pruning stale managed exit node: {}", ip);
+                    managed_exits.remove(&ip);
+                }
             }
         });
         self._health_checker_handle = Some(handle.abort_handle());
-}
+    }
 
     /// Internal method to lazily build a reqwest::Client for a specific proxy
     fn build_client(&self, proxy_str: &str, user_agent: String) -> Result<Client> {
@@ -192,32 +211,44 @@ impl ProxyManager {
 
     /// Selection intelligence: finds the best available proxy based on latency
     /// but keeps a small chance of picking a random one to discover improvements.
+    /// V13: Now includes Managed Exits (DigitalOcean VPS) in the pool.
     fn pick_best_proxy(&self) -> Option<String> {
         let now = SystemTime::now().duration_since(UNIX_EPOCH).unwrap_or_default().as_secs();
         
-        let proxies_lock = self.lock_proxies();
-        let available_proxies: Vec<String> = proxies_lock.iter()
-            .filter(|p| {
-                if let Some(entry) = self.blacklist.get(*p) {
-                    if now < *entry.value() {
-                        return false;
+        let mut candidates: Vec<String> = {
+            let proxies_lock = self.lock_proxies();
+            proxies_lock.iter()
+                .filter(|p| {
+                    if let Some(entry) = self.blacklist.get(*p) {
+                        if now < *entry.value() {
+                            return false;
+                        }
                     }
-                }
-                true
-            })
-            .cloned()
-            .collect();
+                    true
+                })
+                .cloned()
+                .collect()
+        };
 
-        if available_proxies.is_empty() { return None; }
+        // Inject managed exits into candidates
+        for entry in self.managed_exits.iter() {
+            let ip = entry.key();
+            let proxy_url = format!("socks5h://{}:1080", ip);
+            // Managed exits are generally high priority, don't blacklist them here 
+            // unless we implement a separate VPS health check
+            candidates.push(proxy_url);
+        }
+
+        if candidates.is_empty() { return None; }
 
         // 10% chance to pick purely random for discovery
         let mut rng = rand::thread_rng();
         if rand::Rng::gen_bool(&mut rng, 0.1) {
-             return available_proxies.choose(&mut rng).cloned();
+             return candidates.choose(&mut rng).cloned();
         }
 
-    // Otherwise, pick the one with lowest average latency
-        available_proxies.into_iter()
+        // Otherwise, pick the one with lowest average latency
+        candidates.into_iter()
             .min_by_key(|p| self.get_average_latency(p))
     }
 
@@ -270,7 +301,7 @@ impl ProxyManager {
     }
 
     pub fn get_client(&self, host: &str) -> Option<(String, Client)> {
-        if self.lock_proxies().is_empty() { return None; }
+        if self.is_empty() { return None; }
 
         let p_url = self.pick_best_proxy()?;
         
@@ -303,8 +334,40 @@ impl ProxyManager {
         }
     }
 
+    /// V13: Fail-Closed client acquisition. Refuses to return a local client if stealth is active and proxies are down.
+    pub fn get_client_fail_closed(&self, host: &str) -> Result<(String, Client)> {
+        self.get_client(host)
+            .context(format!("V13 OPSEC Violation: No proxy available for host {}. Aborting to prevent leak.", host))
+    }
+
+    /// V13: Establishes a raw TCP connection through a random available SOCKS5 manager node.
+    pub async fn tcp_connect_proxied(&self, target_host: &str, target_port: u16) -> Result<tokio::net::TcpStream> {
+        let proxy_url = self.get_best_socks_url()
+            .context("V13 OPSEC Violation: No SOCKS5 proxy available for TCP connection.")?;
+        
+        let proxy_addr = proxy_url.strip_prefix("socks5h://")
+            .or_else(|| proxy_url.strip_prefix("socks5://"))
+            .unwrap_or(&proxy_url);
+        
+        // Split IP:Port
+        let proxy_sock_addr: SocketAddr = if proxy_addr.contains(':') {
+            proxy_addr.parse()?
+        } else {
+            format!("{}:1080", proxy_addr).parse()?
+        };
+
+        info!("🛡️ V13: Routing TCP connection to {}:{} via {}", target_host, target_port, proxy_addr);
+        
+        // Use tokio-socks for the handshake
+        let stream = Socks5Stream::connect(proxy_sock_addr, (target_host, target_port)).await
+            .map_err(|e| anyhow::anyhow!("SOCKS5 Handshake failed: {}", e))?;
+        
+        // Convert Socks5Stream to inner TcpStream (tokio-socks' Socks5Stream wraps a TcpStream)
+        Ok(stream.into_inner())
+    }
+
     pub fn get_client_pinned(&self, host: &str, ip: IpAddr, port: u16) -> Option<(String, Client)> {
-        if self.lock_proxies().is_empty() { return None; }
+        if self.is_empty() { return None; }
 
         let p_url = self.pick_best_proxy()?;
         
@@ -393,8 +456,26 @@ impl ProxyManager {
         }
     }
 
+    /// V13: Re-checks if the manager has any available egress path (static or managed).
     pub fn is_empty(&self) -> bool {
-        self.lock_proxies().is_empty()
+        self.lock_proxies().is_empty() && self.managed_exits.is_empty()
+    }
+
+    /// V13: Readiness Gate. Blocks until at least one proxy (static or managed) is available.
+    pub async fn wait_for_readiness(&self, timeout: Duration) -> Result<()> {
+        let start = std::time::Instant::now();
+        info!("⏳ STEALTH: Waiting for Egress Readiness Gate...");
+        
+        while self.is_empty() {
+            if start.elapsed() >= timeout {
+                anyhow::bail!("Timeout exceeded waiting for stealth infrastructure readiness");
+            }
+            tokio::time::sleep(Duration::from_secs(2)).await;
+        }
+        
+        info!("🛡️ STEALTH: Egress readiness verified. {} nodes available.", 
+            self.lock_proxies().len() + self.managed_exits.len());
+        Ok(())
     }
 }
 
@@ -497,5 +578,24 @@ mod tests {
         for h in handles {
             let _ = h.await;
         }
+    }
+
+    #[tokio::test]
+    async fn test_proxy_manager_managed_exit_selection() {
+        // No static proxies
+        let pm = ProxyManager::new(vec![], true);
+        assert!(pm.is_empty());
+        assert!(pm.get_best_socks_url().is_none());
+
+        // Add a managed exit
+        let ip = "192.168.1.100".to_string();
+        pm.add_managed_exit(ip.clone());
+
+        assert!(!pm.is_empty());
+        let socks_url = pm.get_best_socks_url().unwrap();
+        assert_eq!(socks_url, "socks5h://192.168.1.100:1080");
+
+        // Verify it gets picked by get_client
+        let (_, _client) = pm.get_client("test.com").unwrap();
     }
 }

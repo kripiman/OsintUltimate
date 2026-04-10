@@ -1,71 +1,47 @@
-# OSINT-ULTIMATE: AUDIT REPORT (V13: Architectural Excellence)
+# OSINT-ULTIMATE: HOLISTIC SYSTEMIC SENTINEL & STEALTH AUDIT (V13)
 
 **Role**: Lead Systems Architect & Offensive Security Strategist.
-**Status**: **V13 ARCHITECTURAL EXCELLENCE** (Audit Complete - Hardening Required)
+**Status**: **V13 ARCHITECTURAL SOVEREIGNTY (Post-Audit Stage)**
+**Protocol**: Holistic Systemic Sentinel.
 
 ---
 
-## 🛡️ V12 HARDENING STATUS (Remediated)
+## 🏛️ STRATEGIC ARCHITECTURAL DOMAINS
 
-All critical findings from the V12 Security Audit have been remediated using the **Hardening Protocol**.
+### 1. Egress & Stealth Sovereignty (Network Isolation)
+*   **[STEALTH-SOVEREIGNTY] OTLP Telemetry Leak**: Internal audit of `utils/telemetry.rs` confirms that OpenTelemetry traffic (OTLP over gRPC/Tonic) is initialized and exported without `ProxyManager` awareness. **High Risk**: The real host IP is leaked to telemetry backends even when `--stealth` is active.
+*   **[INTEGRITY-GAP] Liveness DNS Fallback**: `utils/liveness.rs` features a local fallback resolver (`hickory_resolver`). While the `RedTeamEngine` gates execution on proxy readiness, the utility itself does not hard-fail if called outside the pipeline, potentially leaking target metadata to default DNS servers.
+*   **[RESILIENCE] Exit Lifecycle Contention**: Managed infrastructure (`infrastructure/digital_ocean.rs`) provisioning is atomic but suffers from single-provider dependency. Digital Ocean API rate-limiting or outages currently represent a single point of failure for Stealth Mode.
 
-*   **[POC_VALIDATOR]**: **FIXED (CRIT-001)**. Transitioned to strict, type-safe templates and Enums. Arbitrary argument injection is now architecturally impossible.
-*   **[SWARM]**: **FIXED (HIGH-002)**. `TokenBudget` refactored with atomic loops to prevent race conditions. `TokenGuard` (RAII) now ensures budget release on agent panic or failure.
-*   **[PLUGIN_LOADER]**: **FIXED (CRIT-002)**. Mandatory Ed25519 signing enforced from environment variables. Windows TOCTOU mitigated via exclusive share-mode file locks.
-*   **[DNS_PINNING]**: **FIXED (HIGH-001)**. Pipeline now enforces `resolved_ip` for all network-bound operations.
+### 2. Orchestration & High-Performance State
+*   **[PERFORMANCE-CORE] Proxy Selection Contention**: The `ProxyManager` uses a `Mutex<Vec<String>>` for its candidate pool. Under ultra-high concurrency (>1000 workers), the pick-best-proxy logic could become a contention bottleneck in the actor loop.
+*   **[SYSTEMIC-DEBT] Infrastructure Supervision**: Provisioning tasks in `RedTeamEngine` are spawned using unmonitored `tokio::spawn`. A panic in the VPS lifecycle manager would leave the engine in a permanently "Waiting for Readiness" state without a clear error signal to the supervisor.
 
----
+### 3. Plugin Ecosystem & Execution Integrity
+*   **[INTEGRITY-GAP] POC Template Rigidity**: The `PocValidator` enforces a hardcoded binary/flag whitelist. While this ensures absolute command-injection safety, it introduces systemic debt by preventing plugins from defining their own validated execution templates.
+*   **[VERIFIED] Cryptographic Enforcement**: `core/plugin_loader.rs` correctly implements Ed25519 signature verification with mandatory `OSINT_PLUGIN_PUBKEY` checks. TOCTOU mitigations via FD-locks on Unix/Windows are operational.
 
-## 🏛️ V13: ARCHITECTURAL EXCELLENCE & STEALTH HARDENING
-
-### 1.1 High-Performance Rust Systems
-
-*   **Zero-Cost Abstractions**: 
-    *   **Finding**: `NativeScanner` trait implementation uses `Box<dyn ...>` in hot paths.
-    *   **Recommendation [OPTIMIZATION]**: Move to static dispatch (Generics/Enums) where possible to enable LLVM inlining.
-*   **Memory Efficiency**: 
-    *   **Finding**: `Arc<String>` patterns cause double indirection.
-    *   **Recommendation [OPTIMIZATION]**: Use `Arc<str>` or `Cow<'static, str>` to flatten memory layout.
-*   **Concurrency Patterns**: 
-    *   **Finding**: `IoUringScanner` uses blocking `std::sync::Mutex` in an async context.
-    *   **Recommendation [OPTIMIZATION]**: Transition to an Actor model or `tokio::sync::Mutex`.
-
-### 1.2 Egress Isolation & Stealth Enforcement (CRITICAL)
-
-*   **Managed Exit Leakage**:
-    *   **Finding**: `ProxyManager::get_client` and `get_client_pinned` ignore `managed_exits` (VPS).
-    *   **Observation [STEALTH-LEAK]**: Reqwest-based plugins and AI analysis currently bypass the stealth infrastructure if static proxies are not provided, leaking the Orchestrator's real IP.
-    *   **Recommendation [STEALTH-UPGRADE]**: Integrate `managed_exits` (SOCKS5/VPS) into the core client selection logic.
-*   **Provisioning Logic Error**:
-    *   **Finding**: `ProxyManager::is_empty()` only checks static proxies.
-    *   **Observation [RESILIENCE-BUG]**: In `--stealth` mode, the engine will redundantly spawn DigitalOcean droplets every 5 minutes because it fails to recognize its own active managed exits.
-    *   **Recommendation [DEBT-REDUCTION]**: Refactor `is_empty()` to be state-aware of dynamic VPS infrastructure.
-*   **Initial Egress Protection**:
-    *   **Finding**: Pipeline starts scanning before proxy readiness.
-    *   **Observation [OPSEC-LEAK]**: There is a 60-120s window where the real IP can leak before the first VPS droplet is ready.
-    *   **Recommendation [RESILIENCE]**: Implement a `wait_for_readiness()` block in `RedTeamEngine`.
-
-### 1.3 AI-Native Autonomy & Sentinel Integration
-
-*   **WAF Evasion Generalization**:
-    *   **Finding**: `WafEvasionEngine` is strictly coupled with HTTP (Headers, URL mutation). This prevents its use in SSH, SMB, or custom protocol scanning.
-    *   **Recommendation [STEALTH-UPGRADE]**: Abstract the evasion logic into a `ProtocolEvasion` trait to support non-HTTP services.
-*   **Sentinel Agent Logic**:
-    *   **Finding**: Agent loop doesn't handle "Dead-Ends" (proxy exhaustion or repeated blocks).
-    *   **Recommendation [STEALTH-UPGRADE]**: Implement a "Strategic Pivot" behavior where the agent switches from active scanning to passive reconnaissance or emergency kill-switch upon WAF detection.
-*   **Swarm Fair-Share**:
-    *   **Finding**: Swarm agents share a single resource semaphore without prioritization.
-    *   **Recommendation [OPTIMIZATION]**: Implement priority-based scheduling for swarm nodes.
+### 4. AI-Native Autonomy & MCP Safety
+*   **[SECURITY-GAP] MCP Authorization Deficit**: The `McpServer` (`core/mcp/server.rs`) lacks an authentication layer (Bearer tokens or API keys). In multi-user or Docker environments, this exposes sensitive offensive tools to unauthorized local clients.
+*   **[STEALTH-SOVEREIGNTY] Sanitizer Masking Incompleteness**: `DataSanitizer` in its V13-alpha state only masks IPv4 and simple domains. It lacks IPv6 support and more importantly, it does not mask software fingerprints (UA, Server headers) or system-specific metadata, allowing for remote attribution by the AI provider.
 
 ---
 
-## 🛠️ V13 KEY ACTION ITEMS
+## 🔗 SYSTEMIC RISK ANALYSIS
 
-1.  **[STEALTH-UPGRADE]** **Egress Isolation Fix**: Map `managed_exits` into `ProxyManager::get_client` selection.
-2.  **[RESILIENCE]** **Redundant Provisioning Fix**: Update `ProxyManager::is_empty` to consider VPS nodes.
-3.  **[STEALTH-UPGRADE]** **Readiness Gates**: Enforce scanning delays until stealth infrastructure is verified operational.
-4.  **[OPTIMIZATION]** **Trait Refactoring**: Decouple `NativeScanner` from dynamic dispatch in performance-critical paths.
+*   **The Telemetry-Egress Cascade**: A failure to route OTLP traffic through the proxy layer creates a "Side-Channel Identity Leak." Even if 100% of the scanner traffic is proxied, the orchestrator's location is leaked via the observability stack.
+*   **Credential-State Correlation**: If the `OSINT_PLUGIN_PUBKEY` is compromised or improperly managed within the CI/CD pipeline, the integrity of the entire **Plugin Ecosystem** collapses, allowing for malicious code execution within the hardened `SandboxDispatcher`.
+*   **Sanitization Fingerprinting**: Insufficient masking in the **MCP Layer** allows the AI model (Kimi/Flash/Claude) to triangulate target architecture through unmasked secondary metadata, potentially triggering "Safe Usage" blocks or provider-side logging of offensive intent.
 
 ---
 
-> **V13 Final Verdict**: OsintUltimate is reaching **Architectural Excellence**, but the current Egress Isolation model requires urgent hardening of state-management for Managed Exit nodes to prevent IP leakage.
+## 🔍 STRATEGIC AUDIT TARGETS (V13 Status)
+
+1.  **Orchestration Logic**: `src/core/orchestrator.rs` -> **[STABLE]** (Pending Actor Supervision)
+2.  **Egress Hardening**: `src/infrastructure/proxy.rs` -> **[STABLE]** (Requires Telemetry Integration)
+3.  **Execution Safety**: `src/core/poc_validator.rs` -> **[HARDENED]** (Binary Whitelist enforced)
+4.  **Autonomy Layer**: `src/core/mcp/` -> **[RE-AUDIT REQUIRED]** (Missing Auth & Advanced Masking)
+
+---
+
+> **V13 ARCHITECTURAL VERDICT**: **REMEDIATION PENDING**. While core offensive traffic is successfully isolated, the "Observability Side-Channel" (OTLP) and "Autonomy-Interface" (MCP Auth) represent the final barriers to total Architectural Sovereignty.

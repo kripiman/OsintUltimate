@@ -16,6 +16,7 @@ pub struct PocValidator {
     approval_gate: Arc<ApprovalGate>,
     operator: User,
     proxy_manager: Option<Arc<crate::utils::proxy::ProxyManager>>,
+    stealth: bool, // V13: Mandatory stealth-awareness
 }
 
 impl PocValidator {
@@ -24,8 +25,9 @@ impl PocValidator {
         approval_gate: Arc<ApprovalGate>, 
         operator: User,
         proxy_manager: Option<Arc<crate::utils::proxy::ProxyManager>>,
+        stealth: bool,
     ) -> Self {
-        Self { router, approval_gate, operator, proxy_manager }
+        Self { router, approval_gate, operator, proxy_manager, stealth }
     }
 
     /// Intenta validar un hallazgo ejecutando un PoC generado por IA.
@@ -155,27 +157,33 @@ impl PocValidator {
                 let port = port_val.trim_matches('"').parse::<u16>()
                     .map_err(|_| anyhow::anyhow!("V13 Policy Violation: Illegal port format in nmap template."))?;
                 
-                // V13: Semantic Flag Whitelist
+                // V13: Semantic Flag Whitelist (Professional Hardware & Stealth focus)
                 let mut extra_flags = Vec::new();
                 if let Some(flags) = params["flags"].as_array() {
-                    let allowed_flags = ["-sV", "-Pn", "-n", "--open", "--version-light", "-sS", "-F"];
+                    // Strictly allowed flags only. Professional recon & stealth supported.
+                    let allowed_flags = [
+                        "-sV", "-Pn", "-n", "--open", "--version-light", 
+                        "-sS", "-F", "--reason", "-T4", "-A", "-sC", "-p-",
+                        "--min-rate", "--max-retries", "-O"
+                    ];
                     for flag in flags {
                         let flag_str = flag.as_str().context("Flag must be a string")?;
-                        if allowed_flags.contains(&flag_str) {
+                        if allowed_flags.contains(&flag_str) || flag_str.starts_with("--min-rate") {
                             extra_flags.push(flag_str.to_string());
                         } else {
-                            anyhow::bail!("V13 Security Violation: Flag '{}' is not in the nmap whitelist.", flag_str);
+                            anyhow::bail!("V13 Security Violation: Flag '{}' is not in the professional nmap whitelist.", flag_str);
                         }
                     }
                 }
                 ValidatedPoc::Nmap { port, flags: extra_flags }
             },
             "curl" => {
-                let path = params["path"].as_str().unwrap_or("/");
+                let path = params["path"].as_str().context("Missing 'path' field for curl")?;
                 // V13: Strict semantic validation (Regex + Logic)
-                static PATH_RE: Lazy<Regex> = Lazy::new(|| Regex::new(r"^[a-zA-Z0-9\-\._/~%\?&=]+$").unwrap());
+                // Hardened regex: strictly alphanumeric + common path chars, no spaces or control chars.
+                static PATH_RE: Lazy<Regex> = Lazy::new(|| Regex::new(r"^[a-zA-Z0-9\-\._/~%\?&=+]+$").unwrap());
                 if !PATH_RE.is_match(path) || path.contains("..") || !path.starts_with('/') {
-                    anyhow::bail!("V13 Policy Violation: Illegal characters or format in curl path.");
+                    anyhow::bail!("V13 Policy Violation: Illegal characters or format in curl path: '{}'", path);
                 }
                 
                 let mut headers = Vec::new();
@@ -183,8 +191,11 @@ impl PocValidator {
                    static HEADER_NAME_RE: Lazy<Regex> = Lazy::new(|| Regex::new(r"^[a-zA-Z0-9\-]+$").unwrap());
                    for (name, value) in h_map {
                        let val_str = value.as_str().context("Header value must be a string")?;
+                       // Prevent header injection and ensure valid names
                        if HEADER_NAME_RE.is_match(name) && !val_str.contains('\n') && !val_str.contains('\r') {
                            headers.push((name.clone(), val_str.to_string()));
+                       } else {
+                           anyhow::bail!("V13 Security Violation: Illegal header name or value: '{}'", name);
                        }
                    }
                 }
@@ -192,7 +203,7 @@ impl PocValidator {
             },
             "ping" => ValidatedPoc::Ping,
             "dig" => ValidatedPoc::Dig,
-            _ => anyhow::bail!("V13 Policy Violation: Binary '{}' is not supported.", binary_str),
+            _ => anyhow::bail!("V13 Policy Violation: Binary '{}' is not supported in POC_VALIDATOR whitelist.", binary_str),
         };
 
         // V13 HARDENING: Final Command Construction from ONLY Validated Types
@@ -244,18 +255,32 @@ impl PocValidator {
     }
 
     async fn execute_tcp_check(&self, payload: &str, target: &TargetHost) -> Result<String> {
-        let port = payload.parse::<u16>().context("Invalid port for tcp_check")?;
-        // V12: Force IP for TCP checks (Priority resolved_ip)
+        let port = payload.trim().parse::<u16>().context("Invalid port for tcp_check")?;
         let target_addr = target.pinned_addr()
-            .context("V12: Target IP must be resolved and pinned before TCP check execution")?;
-        let _ip_addr = target_addr.parse::<std::net::IpAddr>().context("Invalid IP in target for TCP check")?;
-        let addr = format!("{}:{}", target_addr, port);
+            .context("V13: Target IP must be resolved and pinned before TCP check execution")?;
         
         // SSRF Check for TCP stream
         if !crate::utils::liveness::is_ssrf_safe_host(target_addr).await {
-            anyhow::bail!("V12 SSRF Blocked: TCP check to restricted IP range.");
+            anyhow::bail!("V13 SSRF Blocked: TCP check to restricted IP range.");
         }
 
+        // V13: Use proxied TCP connect if proxy manager is available (Stealth Hardening)
+        if let Some(ref pm) = self.proxy_manager {
+            if !pm.is_empty() {
+                info!("🛡️ V13: Routing TCP check for {}:{} through SOCKS5 supervisor...", target_addr, port);
+                return match tokio::time::timeout(Duration::from_secs(7), pm.tcp_connect_proxied(target_addr, port)).await {
+                    Ok(Ok(_)) => Ok(format!("TCP Port {} is OPEN on {} (Verified via Proxy)", port, target_addr)),
+                    Ok(Err(e)) => Ok(format!("TCP Port {} is CLOSED Or Filtered on {} (Proxy Result: {})", port, target_addr, e)),
+                    Err(_) => Ok(format!("TCP Port {} connection to {} TIMED OUT via Proxy", port, target_addr)),
+                };
+            } else if self.stealth {
+                anyhow::bail!("V13 OPSEC Violation: Stealth active but no proxies available for TCP check.");
+            }
+        } else if self.stealth {
+             anyhow::bail!("V13 OPSEC Violation: Stealth active but no ProxyManager configured.");
+        }
+
+        let addr = format!("{}:{}", target_addr, port);
         match tokio::time::timeout(Duration::from_secs(5), tokio::net::TcpStream::connect(&addr)).await {
             Ok(Ok(_)) => Ok(format!("TCP Port {} is OPEN on {}", port, target_addr)),
             Ok(Err(e)) => Ok(format!("TCP Port {} is CLOSED Or Filtered on {}: {}", port, target_addr, e)),
@@ -264,16 +289,29 @@ impl PocValidator {
     }
 
     async fn execute_icmp_ping(&self, target: &TargetHost) -> Result<String> {
-        let mut cmd = crate::utils::common::stealth_command("ping");
-        // V12: Force IP for ICMP (Priority resolved_ip)
         let target_addr = target.pinned_addr()
-            .context("V12: Target IP must be resolved and pinned before ICMP ping execution")?;
-        let _ip_addr = target_addr.parse::<std::net::IpAddr>().context("Invalid IP in target for ICMP ping")?;
+            .context("V13: Target IP must be resolved and pinned before ICMP ping execution")?;
         
         if !crate::utils::liveness::is_ssrf_safe_host(target_addr).await {
-            anyhow::bail!("V12 SSRF Blocked: Ping to restricted IP range.");
+            anyhow::bail!("V13 SSRF Blocked: Ping to restricted IP range.");
         }
 
+        // V13: SOCKS5 does not support ICMP. If stealth is active, replace with a safe TCP fallback to 80/443.
+        if self.stealth {
+            info!("🛡️ V13: ICMP not supported over SOCKS. Downgrading to safe TCP-Connect fallback for {}.", target_addr);
+            match self.execute_tcp_check("443", target).await {
+                Ok(res) if res.contains("OPEN") => return Ok(format!("Host {} is LIVE (Verified via TCP-443 fallback in Stealth Mode)", target_addr)),
+                _ => {
+                    // Try 80 as well
+                    match self.execute_tcp_check("80", target).await {
+                        Ok(res) if res.contains("OPEN") => return Ok(format!("Host {} is LIVE (Verified via TCP-80 fallback in Stealth Mode)", target_addr)),
+                        _ => return Ok(format!("Host {} status UNKNOWN (ICMP restricted, TCP 80/443 closed)", target_addr)),
+                    }
+                }
+            }
+        }
+
+        let mut cmd = crate::utils::common::stealth_command("ping");
         cmd.arg("-c").arg("3").arg(target_addr);
         
         let res = tokio::time::timeout(Duration::from_secs(10), cmd.output()).await;
@@ -291,18 +329,16 @@ impl PocValidator {
         let target_ip = target.pinned_addr()
             .context("V13: Target IP must be pinned (ResolvedIP) before HTTP PoC execution to prevent DNS Rebinding.")?;
             
-        // V13 Stealth Infrastructure: Use ProxyManager for HTTP PoCs
+        // V13 Stealth Infrastructure: Use ProxyManager for HTTP PoCs (FAIL-CLOSED)
         let client = if let Some(ref pm) = self.proxy_manager {
             if let Some((_proxy, client)) = pm.get_client_pinned(&target.host, target_ip.parse()?, 80) {
                 client
             } else {
-                reqwest::Client::builder()
-                    .timeout(Duration::from_secs(10))
-                    .danger_accept_invalid_certs(true)
-                    .redirect(reqwest::redirect::Policy::none())
-                    .build()?
+                // V13: Fail-Closed. Do NOT fallback to local interface if proxy is expected but fails.
+                anyhow::bail!("V13 OPSEC Violation: ProxyManager failed to provide a client for {}. Aborting to prevent real IP leak.", target.host);
             }
         } else {
+            // Only allowed if no ProxyManager is configured (e.g. local-only mode)
             reqwest::Client::builder()
                 .timeout(Duration::from_secs(10))
                 .danger_accept_invalid_certs(true)
@@ -322,14 +358,13 @@ impl PocValidator {
              payload.to_string()
         };
 
-        // Path Sanitization (Defense in Depth)
-        let safe_path = if path.contains("..") || path.contains(' ') {
-            warn!("V13: Detected suspicious path in HTTP PoC: {}. Normalizing.", path);
+        // V13 HARDENING: Rigid path sanitization using standard validator regex.
+        static PATH_RE: Lazy<Regex> = Lazy::new(|| Regex::new(r"^[a-zA-Z0-9\-\._/~%\?&=+]+$").unwrap());
+        let safe_path = if PATH_RE.is_match(&path) && !path.contains("..") {
+            if path.starts_with('/') { path } else { format!("/{}", path) }
+        } else {
+            warn!("V13 Security: Detected illegal characters or format in HTTP PoC path: '{}'. Normalizing to root.", path);
             "/".to_string()
-        } else if path.starts_with('/') { 
-            path 
-        } else { 
-            format!("/{}", path) 
         };
 
         let url = format!("http://{}{}", target_ip, safe_path);

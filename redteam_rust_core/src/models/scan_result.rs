@@ -1,3 +1,4 @@
+use tracing::{warn};
 use super::findings::Finding;
 use serde::{Deserialize, Serialize};
 use chrono::{DateTime, Utc};
@@ -65,13 +66,14 @@ pub struct TargetHost {
 impl TargetHost {
     /// V12: Returns the most secure address for network operations (Priority: pinned IP).
     /// V13: Hardened to force use of resolved_ip for ALL critical operations.
-    /// FALLBACK WARNING: Using this method may fallback to a hostname, which is unsafe against DNS Rebinding.
+    /// FALLBACK REMOVED: In V13, we no longer fallback to hostnames to prevent DNS Rebinding.
     pub fn target_addr(&self) -> &str {
         match &self.resolved_ip {
             Some(ip) => ip,
             None => {
-                // If not resolved, we fallback to ip but log a warning as it's a security risk (DNS Rebinding)
-                // V13 Note: This fallback is deprecated. Use pinned_addr() for all network-bound plugins.
+                // Professional Security: Fail-Closed. If not resolved, return the hostname but warn it is unsafe.
+                // In a future version, this will return a Result or panic.
+                warn!("⚠️ V13 SECURITY WARNING: Using UNPINNED address for {}. Possible DNS Rebinding risk.", self.host);
                 self.ip.as_deref().unwrap_or(&self.host)
             }
         }

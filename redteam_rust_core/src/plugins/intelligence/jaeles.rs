@@ -55,13 +55,14 @@ impl ScannerPlugin for JaelesScanner {
     }
 
     async fn scan(&self, target: &TargetHost) -> Result<Vec<Finding>> {
-        info!("JaelesScanner: scanning {}", target.host);
+        // V13 HARDENING: Mandatory DNS Pinning (ResolvedIP) for all network-bound plugins.
+        let pinned_ip = target.pinned_addr()
+            .context("DNS Pinning Violation: Jaeles requires a resolved and pinned IP to prevent Rebinding.")?;
         
-        let url = if target.host.starts_with("http") {
-            target.host.clone()
-        } else {
-            format!("http://{}", target.host)
-        };
+        info!("JaelesScanner: scanning {} (Pinned: {})", target.host, pinned_ip);
+
+        let url = format!("http://{}", pinned_ip);
+        let host_header = format!("Host: {}", target.host);
 
         // Jaeles output is usually to stdout or a file. We'll use a temp file.
         let temp_file = tempfile::NamedTempFile::new().context("Failed to create temp file for Jaeles")?;
@@ -70,6 +71,7 @@ impl ScannerPlugin for JaelesScanner {
         let mut child = Command::new(&self.binary_path)
             .arg("scan")
             .arg("-u").arg(&url)
+            .arg("-H").arg(&host_header)
             .arg("-o").arg(&temp_path)
             .stdin(Stdio::null())
             .stdout(Stdio::null())

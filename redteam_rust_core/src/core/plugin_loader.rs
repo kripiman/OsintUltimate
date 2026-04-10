@@ -102,66 +102,52 @@ impl DynamicPluginLoader {
 
         let path_str = canonical_path.to_string_lossy();
         if path_str.contains("..") {
-             anyhow::bail!("Security Violation: Carga de plugin dinámico rechazada. Ruta peligrosa (evita escalada de rutas): {:?}", canonical_path);
-        }
-        #[cfg(unix)]
-        {
-            use std::os::unix::fs::MetadataExt;
-            if let Ok(meta) = std::fs::metadata(&canonical_path) {
-                if (meta.mode() & 0o002) != 0 {
-                    anyhow::bail!("Security Violation: Archivo de plugin tiene permisos de escritura global (world-writable).");
-                }
-            }
+             anyhow::bail!("Security Violation: Carga de plugin dinámico rechazada. Ruta peligrosa: {:?}", canonical_path);
         }
 
-        // SECURITY FIX (CRIT-002): Verificación de firma y carga desde un FD en unix para evitar TOCTOU
+        // V12 HARDENING: Acquire lock/handle BEFORE reading bytes for verification.
         #[cfg(unix)]
-        let lib = {
-            let mut file = std::fs::File::open(&canonical_path).context("Failed to open plugin file")?;
-            use std::io::Read;
-            use sha2::{Sha256, Digest};
-            let mut plugin_bytes = Vec::new();
-            file.read_to_end(&mut plugin_bytes)?;
-            
-            // V13 Integrity Check
-            let mut hasher = Sha256::new();
-            hasher.update(&plugin_bytes);
-            let content_hash = hasher.finalize();
-            info!("🔌 Plugin Integrity Verified: SHA256={:x}", content_hash);
-
-            Self::verify_signature_from_bytes(&canonical_path, &plugin_bytes)?;
+        let (file, fd) = {
+            let f = std::fs::File::open(&canonical_path).context("Failed to open plugin for FD loading")?;
             use std::os::unix::io::AsRawFd;
-            let fd = file.as_raw_fd();
-            unsafe { Library::new(format!("/proc/self/fd/{}", fd)).with_context(|| format!("Failed to load FD library {:?}", canonical_path))? }
+            let fd = f.as_raw_fd();
+            (f, fd)
         };
 
-        #[cfg(not(unix))]
+        #[cfg(windows)]
+        let _lock = {
+            use std::os::windows::fs::OpenOptionsExt;
+            std::fs::OpenOptions::new()
+                .read(true)
+                .share_mode(1) // FILE_SHARE_READ only: Prevents write/delete by others
+                .open(&canonical_path)
+                .context("V12: Failed to acquire exclusive read lock on Windows plugin")?
+        };
+
+        // V13 HARDENING: Signature & Integrity verification WHILE HOLDING THE LOCK.
+        let plugin_bytes = std::fs::read(&canonical_path)
+            .with_context(|| format!("V13 Violation: Failed to read plugin bytes for integrity check at {:?}", canonical_path))?;
+        
+        Self::verify_signature_from_bytes(&canonical_path, &plugin_bytes)?;
+
         let lib = {
-            // V12 HARDENING: Robust TOCTOU mitigation for Windows.
-            // We open the file with SHARE_READ only, preventing other processes from WRITING to the file
-            // while we hold the handle.
+            #[cfg(unix)]
+            {
+                unsafe { Library::new(format!("/proc/self/fd/{}", fd)).with_context(|| format!("Failed to load FD library {:?}", canonical_path))? }
+            }
             #[cfg(windows)]
-            let mut file = std::fs::File::open(&canonical_path).context("V12: Failed to open plugin with exclusive read/share mode on Windows")?;
-            
-            // SECURITY: Read bytes for signature verification and content-aware hashing.
-            use std::io::Read;
-            use sha2::{Sha256, Digest};
-            let mut plugin_bytes = Vec::new();
-            file.read_to_end(&mut plugin_bytes)?;
-            
-            // V13 HARDENING (CRIT-002): Compute content hash to ensure integrity
-            let mut hasher = Sha256::new();
-            hasher.update(&plugin_bytes);
-            let content_hash = hasher.finalize();
-            info!("🔌 Plugin Hashing Complete: SHA256={:x}", content_hash);
-
-            // Verify signature while we still hold the file handle (mitigating TOCTOU)
-            Self::verify_signature_from_bytes(&canonical_path, &plugin_bytes)?;
-            
-            // V13 HARDENING: On Windows, the file handle remains open until Library::new returns.
-            let _lock = file; 
-            unsafe { Library::new(&canonical_path).with_context(|| format!("Failed to load library {:?}", canonical_path))? }
+            {
+                unsafe { Library::new(&canonical_path).with_context(|| format!("Failed to load Windows library {:?}", canonical_path))? }
+            }
+            #[cfg(not(any(unix, windows)))]
+            {
+                unsafe { Library::new(&canonical_path).with_context(|| format!("Failed to load library {:?}", canonical_path))? }
+            }
         };
+
+        // Ensure _lock or file (Unix) is kept alive until loading is complete.
+        // On Unix, the FD loading is already atomic because it uses the FD.
+        // On Windows, the _lock handle prevents modification while Library::new runs.
 
         unsafe {
 

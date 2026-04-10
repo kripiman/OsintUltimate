@@ -54,29 +54,37 @@ impl TokenBudget {
     }
 
     /// V12 HARDENING: Race-condition safe reservation using atomic compare_exchange.
+    /// Added overflow protection and strict threshold validation.
     pub fn reserve_tokens(&self, amount: u32, priority: TaskPriority) -> bool {
         let mut current_reserved = self.reserved_tokens.load(Ordering::SeqCst);
         loop {
             let total = self.total_tokens.load(Ordering::SeqCst);
             
-            // V13 HARDENING: Priority-based admission control
+            // V13 HARDENING: Priority-based admission control with overflow check.
+            // Professional safety: Low-priority tasks are throttled earlier to reserve space for critical analysis.
             let threshold = match priority {
-                TaskPriority::High => self.max_tokens, // High priority can use full budget
-                TaskPriority::Normal => (self.max_tokens as f64 * 0.95) as u32, // Normal capped at 95%
-                TaskPriority::Low => (self.max_tokens as f64 * 0.85) as u32, // Low capped at 85%
+                TaskPriority::High => self.max_tokens,
+                TaskPriority::Normal => (self.max_tokens as f64 * 0.90) as u32,
+                TaskPriority::Low => (self.max_tokens as f64 * 0.75) as u32,
             };
 
-            if total + current_reserved + amount > threshold {
-                return false;
-            }
-            match self.reserved_tokens.compare_exchange_weak(
-                current_reserved,
-                current_reserved + amount,
-                Ordering::SeqCst,
-                Ordering::SeqCst,
-            ) {
-                Ok(_) => return true,
-                Err(new_val) => current_reserved = new_val,
+            // Safe overflow check: total + current_reserved + amount
+            let projected = total.checked_add(current_reserved)
+                .and_then(|sum| sum.checked_add(amount));
+
+            match projected {
+                Some(p) if p <= threshold => {
+                    match self.reserved_tokens.compare_exchange_weak(
+                        current_reserved,
+                        current_reserved + amount,
+                        Ordering::SeqCst,
+                        Ordering::SeqCst,
+                    ) {
+                        Ok(_) => return true,
+                        Err(new_val) => current_reserved = new_val,
+                    }
+                }
+                _ => return false, // Overflow or over threshold
             }
         }
     }
@@ -272,23 +280,38 @@ impl SwarmOrchestrator {
             join_set.spawn(async move {
                 let _permit = semaphore.acquire().await.ok();
                 // PFC-001/V12: Agent isolation via RAII and Panic handling
-                // V13: Strategic Pivot Check
-                if orchestrator.budget.current_effective_total() > (orchestrator.budget.max_tokens as f64 * 0.98) as u32 
-                   && role != AgentRole::GhostReporter {
-                    warn!("🛡️ SWARM: EMERGENCY PIVOT! Budget nearly exhausted. Transitioning to Passive Reporter for {}.", finding_clone.id);
-                    return orchestrator.execute_reporter(finding_clone, &target_clone, &sink_tx_clone, guard).await;
-                }
+                
+                // V13 HARDENING: Explicit catch_unwind to prevent any state leakage from panicked agents.
+                use std::panic::AssertUnwindSafe;
+                use futures::FutureExt;
 
-                let res = match role {
-                    AgentRole::Scout => orchestrator.execute_scout(finding_clone, &target_clone, &mut scout_tx, &mut ctx_clone, &sink_tx_clone, guard).await,
-                    AgentRole::Exploiter => orchestrator.execute_exploiter(finding_clone, &target_clone, &mut scout_tx, &mut ctx_clone, &sink_tx_clone, guard).await,
-                    AgentRole::GhostReporter => orchestrator.execute_reporter(finding_clone, &target_clone, &sink_tx_clone, guard).await,
-                    AgentRole::Planner => {
-                        guard.commit(0);
-                        Ok(())
-                    },
-                };
-                res
+                let finding_id = finding_clone.id.clone();
+                let result = AssertUnwindSafe(async {
+                    // V13: Strategic Pivot Check (Professional Egress Management)
+                    if orchestrator.budget.current_effective_total() > (orchestrator.budget.max_tokens as f64 * 0.95) as u32 
+                       && role != AgentRole::GhostReporter {
+                        warn!("🛡️ SWARM: CRITICAL BUDGET LIMIT! Tokens > 95%. Forcing emergency pivot to Passive Reporter for {}.", finding_id);
+                        return orchestrator.execute_reporter(finding_clone, &target_clone, &sink_tx_clone, guard).await;
+                    }
+
+                    match role {
+                        AgentRole::Scout => orchestrator.execute_scout(finding_clone, &target_clone, &mut scout_tx, &mut ctx_clone, &sink_tx_clone, guard).await,
+                        AgentRole::Exploiter => orchestrator.execute_exploiter(finding_clone, &target_clone, &mut scout_tx, &mut ctx_clone, &sink_tx_clone, guard).await,
+                        AgentRole::GhostReporter => orchestrator.execute_reporter(finding_clone, &target_clone, &sink_tx_clone, guard).await,
+                        AgentRole::Planner => {
+                            guard.commit(0);
+                            Ok(())
+                        },
+                    }
+                }).catch_unwind().await;
+
+                match result {
+                    Ok(res) => res,
+                    Err(_) => {
+                        error!("🛑 SWARM CRITICAL: Agent {:?} for finding {} caught a PANIC. Isolating.", role, finding_id);
+                        anyhow::bail!("Agent panicked")
+                    }
+                }
             });
         }
         
@@ -393,6 +416,7 @@ impl SwarmOrchestrator {
                     self.approval_gate.clone(),
                     self.operator.clone(),
                     self.proxy_manager.clone(),
+                    self.proxy_manager.is_some(), // V13: Infer stealth from pm presence
                 );
                 
                 if analysis.risk_score >= 7 {

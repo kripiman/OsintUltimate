@@ -55,10 +55,14 @@ impl ScannerPlugin for SnallygasterScanner {
     }
 
     async fn scan(&self, target: &TargetHost) -> Result<Vec<Finding>> {
-        info!("SnallygasterScanner: launching scan against {}", target.host);
+        // V13 HARDENING: Mandatory DNS Pinning (ResolvedIP)
+        let pinned_ip = target.pinned_addr()
+            .context("DNS Pinning Violation: Snallygaster requires a resolved and pinned IP to prevent Rebinding.")?;
+            
+        info!("SnallygasterScanner: launching scan against {} (Pinned: {})", target.host, pinned_ip);
 
         let mut child = Command::new(&self.binary_path)
-            .arg(&target.host)
+            .arg(pinned_ip)
             .stdin(Stdio::null())
             .stdout(Stdio::piped())
             .stderr(Stdio::null())

@@ -1,0 +1,21 @@
+# Evitar que la IA indexe basura
+target/
+debug/
+release/
+.git/
+.claude/
+.idea/
+.vscode/
+*.log
+*.meta
+*.bak
+*.tmp
+Library/
+Temp/
+dist/
+node_modules/
+doc/
+docs/*.html
+docs/*.json
+Cargo.lock
+!.repomixignore

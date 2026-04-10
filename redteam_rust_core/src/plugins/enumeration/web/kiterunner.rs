@@ -55,17 +55,19 @@ impl ScannerPlugin for KiterunnerScanner {
 
 
     async fn scan(&self, target: &TargetHost) -> Result<Vec<Finding>> {
-        info!("KiterunnerScanner: launching scan against {}", target.host);
+        // V13 HARDENING: Mandatory DNS Pinning (ResolvedIP)
+        let pinned_ip = target.pinned_addr()
+            .context("DNS Pinning Violation: Kiterunner requires a resolved and pinned IP.")?;
+            
+        info!("KiterunnerScanner: launching scan against {} (Pinned: {})", target.host, pinned_ip);
 
-        let url = if target.host.starts_with("http") {
-            target.host.clone()
-        } else {
-            format!("http://{}", target.host)
-        };
+        let url = format!("http://{}", pinned_ip);
+        let host_header = format!("Host: {}", target.host);
 
         let mut child = Command::new(&self.binary_path)
             .arg("scan")
             .arg(&url)
+            .arg("-H").arg(&host_header)
             .arg("-o").arg("json")
             .stdin(Stdio::null())
             .stdout(Stdio::piped())
