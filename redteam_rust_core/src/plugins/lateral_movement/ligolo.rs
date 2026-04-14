@@ -5,12 +5,15 @@ use crate::utils::tool_detection::detect_tool;
 use async_trait::async_trait;
 use anyhow::{Result, Context};
 use tracing::{info, warn};
-pub struct LigoloScanner {
+use crate::utils::executor::{StealthExecutor, ExecutorMode};
+
+pub struct LigoloScanner<M: ExecutorMode> {
     binary_path: String,
-    executor: std::sync::Arc<crate::utils::executor::StealthExecutor>,
+    executor: Arc<StealthExecutor<M>>,
 }
-impl LigoloScanner {
-    pub fn new(executor: std::sync::Arc<crate::utils::executor::StealthExecutor>) -> Self {
+
+impl<M: ExecutorMode> LigoloScanner<M> {
+    pub fn new(executor: Arc<StealthExecutor<M>>) -> Self {
         let path = detect_tool("ligolo-proxy");
         Self {
             binary_path: path,
@@ -19,7 +22,7 @@ impl LigoloScanner {
     }
 }
 #[async_trait]
-impl ScannerPlugin for LigoloScanner {
+impl<M: ExecutorMode> ScannerPlugin for LigoloScanner<M> {
     fn name(&self) -> &'static str {
         crate::models::PLUGIN_LIGOLO
     }

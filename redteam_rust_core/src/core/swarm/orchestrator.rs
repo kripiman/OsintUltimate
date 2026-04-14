@@ -11,6 +11,8 @@ use std::collections::HashSet;
 
 use super::budget::{TokenBudget, TokenGuard, TaskPriority};
 
+use crate::utils::executor::{StealthExecutor, ExecutorMode};
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum AgentRole {
     Planner,
@@ -21,25 +23,25 @@ pub enum AgentRole {
 }
 
 #[derive(Clone)]
-pub struct SwarmOrchestrator {
+pub struct SwarmOrchestrator<M: ExecutorMode = crate::utils::executor::GhostMode> {
     pub router: Arc<TieredAIRouter>,
-    pub pipeline: Arc<Pipeline>,
+    pub pipeline: Arc<Pipeline<M>>,
     pub approval_gate: Arc<ApprovalGate>,
     pub budget: Arc<TokenBudget>,
     pub operator: crate::core::approval_gate::User,
     pub proxy_manager: Option<Arc<crate::utils::proxy::ProxyManager>>,
-    pub executor: Arc<crate::utils::executor::StealthExecutor>,
+    pub executor: Arc<StealthExecutor<M>>,
     pub policy: Arc<dyn crate::core::policy::PolicyProvider>,
 }
 
-impl SwarmOrchestrator {
+impl<M: ExecutorMode> SwarmOrchestrator<M> {
     pub fn new(
         router: Arc<TieredAIRouter>,
-        pipeline: Arc<Pipeline>,
+        pipeline: Arc<Pipeline<M>>,
         approval_gate: Arc<ApprovalGate>,
         max_tokens: u32,
         proxy_manager: Option<Arc<crate::utils::proxy::ProxyManager>>,
-        executor: Arc<crate::utils::executor::StealthExecutor>,
+        executor: Arc<StealthExecutor<M>>,
         policy: Arc<dyn crate::core::policy::PolicyProvider>,
     ) -> Self {
         let operator = crate::core::approval_gate::User {
@@ -310,7 +312,7 @@ impl SwarmOrchestrator {
                 guard.commit(usage); 
                 finding = finding.with_ai_analysis(analysis.clone());
                 
-                let poc_validator = crate::core::PocValidator::new(
+                let poc_validator = crate::core::validation::PocValidator::new(
                     self.router.clone(),
                     self.approval_gate.clone(),
                     self.operator.clone(),

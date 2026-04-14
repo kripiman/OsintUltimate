@@ -8,14 +8,15 @@ use tracing::{info, warn};
 use std::process::Stdio;
 use tokio::process::Command;
 use std::sync::Arc;
+use crate::utils::executor::{StealthExecutor, ExecutorMode};
 
-pub struct HavocScanner {
+pub struct HavocScanner<M: ExecutorMode> {
     binary_path: String,
-    executor: Arc<crate::utils::executor::StealthExecutor>,
+    executor: Arc<StealthExecutor<M>>,
 }
 
-impl HavocScanner {
-    pub fn new(executor: Arc<crate::utils::executor::StealthExecutor>) -> Self {
+impl<M: ExecutorMode> HavocScanner<M> {
+    pub fn new(executor: Arc<StealthExecutor<M>>) -> Self {
         let path = detect_tool("havoc");
         Self {
             binary_path: path,
@@ -38,7 +39,7 @@ impl HavocScanner {
 }
 
 #[async_trait]
-impl C2Operator for HavocScanner {
+impl<M: ExecutorMode> C2Operator for HavocScanner<M> {
     async fn prepare_payload(&self, target: &TargetHost) -> Result<String> {
         let pm = self.executor.get_proxy_manager()
             .context("Havoc requires a ProxyManager for callback tracking")?;
@@ -155,7 +156,7 @@ impl C2Operator for HavocScanner {
 }
 
 #[async_trait]
-impl ScannerPlugin for HavocScanner {
+impl<M: ExecutorMode> ScannerPlugin for HavocScanner<M> {
     fn name(&self) -> &'static str {
         crate::models::PLUGIN_HAVOC
     }

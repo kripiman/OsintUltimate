@@ -155,16 +155,18 @@ impl PluginRegistry {
 }
 
 
+use crate::utils::executor::{StealthExecutor, ExecutorMode};
+
 /// Global configuration shared across all plugins to ensure consistency and streamline initialization.
 #[derive(Clone)]
-pub struct GlobalConfig {
+pub struct GlobalConfig<M: ExecutorMode = crate::utils::executor::GhostMode> {
     pub insecure: bool,
     pub jitter: std::sync::Arc<crate::utils::common::HumanJitter>,
     pub proxy_manager: std::sync::Arc<crate::utils::proxy::ProxyManager>,
     pub nmap_options: NmapOptions,
     pub sandbox: std::sync::Arc<crate::core::sandbox::SandboxDispatcher>,
     pub policy: std::sync::Arc<dyn crate::core::policy::PolicyProvider>,
-    pub executor: std::sync::Arc<crate::utils::executor::StealthExecutor>,
+    pub executor: std::sync::Arc<StealthExecutor<M>>,
     pub correlation_engine: std::sync::Arc<tokio::sync::Mutex<crate::core::correlation::CorrelationEngine>>,
 }
 
@@ -180,7 +182,7 @@ pub struct NmapOptions {
     pub vuln_scan: bool,
 }
 
-pub fn get_all_scanners(config: GlobalConfig) -> Vec<Box<dyn ScannerPlugin>> {
+pub fn get_all_scanners<M: ExecutorMode>(config: GlobalConfig<M>) -> Vec<Box<dyn ScannerPlugin>> {
     use crate::plugins::enumeration::network::net::NmapScanner;
     use crate::plugins::enumeration::web::web::WebFuzzer;
     use crate::plugins::enumeration::web::whatweb::WhatWebScanner;
@@ -243,7 +245,7 @@ pub fn get_all_scanners(config: GlobalConfig) -> Vec<Box<dyn ScannerPlugin>> {
             config.nmap_options.scripts, config.nmap_options.stealth, config.nmap_options.service_detection, config.nmap_options.scan_type, config.nmap_options.fragment, config.nmap_options.decoy, config.nmap_options.ports, config.nmap_options.vuln_scan, config.executor.clone())), Box::new(WhatWebScanner::new()), Box::new(SqlMapScanner::new()), Box::new(HydraScanner::new(None, None, None)), Box::new(WapitiScanner::new()), Box::new(ZapScanner::new(None, None, None)), Box::new(BurpScanner::new(None, None)), Box::new(NucleiScanner::new()), Box::new(FfufScanner::new(None)), Box::new(ArjunScanner::new()), Box::new(RustScanScanner::new()), Box::new(NetExecScanner::new()), Box::new(TruffleHogScanner::new()), Box::new(DalfoxScanner::new()), Box::new(KatanaScanner::new()), Box::new(BloodHoundScanner::new(config.executor.clone(), config.correlation_engine.clone())), Box::new(ResponderScanner::new()), Box::new(ImpacketScanner::new()), Box::new(CertipyScanner::new()), Box::new(PetitPotamScanner::new()), Box::new(SliverScanner::new(config.executor.clone())), Box::new(LigoloScanner::new(config.executor.clone())), Box::new(PacuScanner::new()), Box::new(CloudEnumScanner::new()), Box::new(HttpxScanner::new()), Box::new(NaabuScanner::new()), Box::new(InteractshScanner::new()), Box::new(HavocScanner::new(config.executor.clone())), Box::new(CloudFoxScanner::new()), Box::new(KiterunnerScanner::new()), Box::new(KubescapeScanner::new()), Box::new(GitleaksScanner::new()), Box::new(TsunamiScanner::new()), Box::new(CheckovScanner::new()), Box::new(JwtToolScanner::new()), Box::new(GoWitnessScanner::new()), Box::new(SearchsploitScanner::new()), Box::new(TrivyScanner::new()), Box::new(FeroxbusterScanner::new()), Box::new(GauPlusScanner::new()), Box::new(DnsxScanner::new()), Box::new(CloudBruteScanner::new()), Box::new(NiktoScanner::new()), Box::new(WPScanner::new()), Box::new(SnallygasterScanner::new()), Box::new(WaybackScanner::new()), Box::new(JaelesScanner::new()), Box::new(ProwlerScanner::new()), Box::new(KubeBenchScanner::new()), Box::new(OSVScanner::new()), Box::new(CRLFScanner::new()), Box::new(GfScanner::new()), Box::new(CommixScanner::new()), Box::new(PrivescHunterScanner::new(PrivescCheckLevel::Moderate)), Box::new(GraphQLCopScanner::new()), Box::new(CoercerScanner::new()), ]
 }
 
-pub fn get_all_discovery(config: GlobalConfig) -> Vec<Box<dyn DiscoveryPlugin>> {
+pub fn get_all_discovery<M: ExecutorMode>(config: GlobalConfig<M>) -> Vec<Box<dyn DiscoveryPlugin>> {
     use crate::plugins::reconnaissance::osint::osint::OsintScanner;
     use crate::plugins::reconnaissance::osint::subfinder::SubfinderScanner;
     use crate::plugins::reconnaissance::osint::amass::AmassScanner;
@@ -252,7 +254,7 @@ pub fn get_all_discovery(config: GlobalConfig) -> Vec<Box<dyn DiscoveryPlugin>> 
     vec![Box::new(OsintScanner::new(config.proxy_manager.clone())), Box::new(SubfinderScanner::new()), Box::new(AmassScanner::new()), Box::new(UncoverScanner::new()), ]
 }
 
-pub fn get_registry(config: GlobalConfig) -> PluginRegistry {
+pub fn get_registry<M: ExecutorMode>(config: GlobalConfig<M>) -> PluginRegistry {
     let mut registry = PluginRegistry::new();
     
     for scanner in get_all_scanners(config.clone()) {

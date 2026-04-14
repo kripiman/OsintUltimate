@@ -47,6 +47,7 @@ pub struct Evidence {
 
 fn default_confidence() -> f32 { 0.5 }
 
+#[non_exhaustive]
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
 pub enum PocStrategy {

@@ -5,8 +5,9 @@ use futures::stream::StreamExt;
 use tracing::{info, error, warn};
 use crate::core::capability_layer::ScanLayerPolicy;
 use crate::core::approval_gate::ApprovalGate;
+use crate::utils::executor::{StealthExecutor, ExecutorMode};
 
-pub struct Orchestrator {
+pub struct Orchestrator<M: ExecutorMode> {
     plugins: Arc<Vec<Box<dyn ScannerPlugin>>>,
     concurrency: usize,
     layer_policy: ScanLayerPolicy,
@@ -22,10 +23,10 @@ pub struct Orchestrator {
     sandbox: Arc<crate::core::sandbox::SandboxDispatcher>,
     proxy_manager: Option<Arc<crate::utils::proxy::ProxyManager>>,
     policy: Arc<dyn crate::core::policy::PolicyProvider>,
-    executor: Arc<crate::utils::executor::StealthExecutor>,
+    executor: Arc<StealthExecutor<M>>,
 }
 
-impl Orchestrator {
+impl<M: ExecutorMode> Orchestrator<M> {
     pub fn new(
         plugins: Arc<Vec<Box<dyn ScannerPlugin>>>,
         concurrency: usize,
@@ -35,7 +36,7 @@ impl Orchestrator {
         memory_monitor: Arc<crate::utils::memory_monitor::MemoryMonitor>,
         sandbox: Arc<crate::core::sandbox::SandboxDispatcher>,
         policy: Arc<dyn crate::core::policy::PolicyProvider>,
-        executor: Arc<crate::utils::executor::StealthExecutor>,
+        executor: Arc<StealthExecutor<M>>,
     ) -> Self {
         let hard_limit = memory_monitor.hard_limit_mb();
         let memory_semaphore = Arc::new(tokio::sync::Semaphore::new(hard_limit as usize));

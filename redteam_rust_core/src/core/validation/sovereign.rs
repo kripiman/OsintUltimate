@@ -5,11 +5,11 @@ use crate::models::{TargetHost, Finding};
 use crate::models::findings::PocDefinition;
 use crate::core::c2::C2Operator;
 use crate::core::approval_gate::ApprovalStatus::Approved;
-use crate::core::validation::PocValidator;
+use crate::utils::executor::ExecutorMode;
 
-impl PocValidator {
+impl<M: ExecutorMode> PocValidator<M> {
     pub(crate) async fn deploy_c2(&self, target: &TargetHost) -> Result<()> {
-        let sliver = crate::plugins::lateral_movement::sliver::SliverScanner::new(self.executor.clone());
+        let sliver = crate::plugins::lateral_movement::sliver::SliverScanner::<M>::new(self.executor.clone());
         
         match sliver.prepare_payload(target).await {
             Ok(payload_path) => {

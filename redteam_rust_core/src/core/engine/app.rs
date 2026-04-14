@@ -40,7 +40,9 @@ pub struct EngineConfig {
     pub readiness_timeout: Duration, // V13: Configurable infrastructure wait
 }
 
-pub struct RedTeamEngine {
+use crate::utils::executor::{StealthExecutor, ExecutorMode};
+
+pub struct RedTeamEngine<M: ExecutorMode = crate::utils::executor::GhostMode> {
     config: EngineConfig,
     shutdown_token: CancellationToken,
     memory_monitor: Arc<MemoryMonitor>,
@@ -48,11 +50,11 @@ pub struct RedTeamEngine {
     approval_gate: Arc<ApprovalGate>,
     proxy_manager: Arc<crate::utils::proxy::ProxyManager>,
     policy: Arc<dyn crate::core::policy::PolicyProvider>,
-    executor: Arc<crate::utils::executor::StealthExecutor>,
+    executor: Arc<StealthExecutor<M>>,
     correlation_engine: Arc<tokio::sync::Mutex<crate::core::correlation::CorrelationEngine>>,
 }
 
-impl RedTeamEngine {
+impl RedTeamEngine<crate::utils::executor::GhostMode> {
     pub fn new(config: EngineConfig, soft_limit: usize, hard_limit: usize) -> Self {
         let shutdown_token = CancellationToken::new();
         let memory_monitor = Arc::new(MemoryMonitor::new(soft_limit as u32, hard_limit as u32));
@@ -69,7 +71,6 @@ impl RedTeamEngine {
             policy.clone(),
             Some(proxy_manager.clone()),
             config.stealth,
-            None
         ));
         
         let correlation_engine = Arc::new(tokio::sync::Mutex::new(crate::core::correlation::CorrelationEngine::new()));
@@ -106,7 +107,6 @@ impl RedTeamEngine {
             policy.clone(),
             Some(proxy_manager.clone()),
             config.stealth,
-            None
         ));
         
         Self {
@@ -121,8 +121,9 @@ impl RedTeamEngine {
             correlation_engine,
         }
     }
+}
 
-    pub async fn run_autopilot(
+impl<M: ExecutorMode> RedTeamEngine<M> {
         &self, 
         mut target_hosts: futures::stream::BoxStream<'static, TargetHost>,
         sink: Box<dyn DataSink>
@@ -265,7 +266,7 @@ impl RedTeamEngine {
 
         Ok(())
     }
-    fn prepare_pipeline_builder(&self, sink: Box<dyn DataSink>) -> PipelineBuilder {
+    fn prepare_pipeline_builder(&self, sink: Box<dyn DataSink>) -> PipelineBuilder<M> {
         let liveness_checker = LivenessChecker::new_with_proxy(
             self.config.dns_servers.clone(), 
             self.config.doh, 

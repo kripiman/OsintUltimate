@@ -66,16 +66,18 @@ write_files:
       user.privileged: root
       user.unprivileged: nobody
       
-      client method: none
+      client method: username
       client pass {{
           from: 0.0.0.0/0
           to: 0.0.0.0/0
+          socksmethod: username
       }}
       
       socks pass {{
           from: 0.0.0.0/0
           to: 0.0.0.0/0
           protocol: tcp udp
+          socksmethod: username
       }}
 runcmd:
   - useradd -M -s /usr/sbin/nologin {user}

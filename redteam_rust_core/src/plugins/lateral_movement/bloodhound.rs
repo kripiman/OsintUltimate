@@ -4,14 +4,16 @@ use crate::utils::tool_detection::detect_tool;
 use async_trait::async_trait;
 use anyhow::Result;
 use tracing::{info, warn};
-use std::sync::Arc;
-pub struct BloodHoundScanner {
+use crate::utils::executor::{StealthExecutor, ExecutorMode};
+
+pub struct BloodHoundScanner<M: ExecutorMode> {
     binary_path: String,
-    executor: Arc<crate::utils::executor::StealthExecutor>,
+    executor: Arc<StealthExecutor<M>>,
     correlation_engine: Arc<tokio::sync::Mutex<crate::core::correlation::CorrelationEngine>>,
 }
-impl BloodHoundScanner {
-    pub fn new(executor: Arc<crate::utils::executor::StealthExecutor>, ce: Arc<tokio::sync::Mutex<crate::core::correlation::CorrelationEngine>>) -> Self {
+
+impl<M: ExecutorMode> BloodHoundScanner<M> {
+    pub fn new(executor: Arc<StealthExecutor<M>>, ce: Arc<tokio::sync::Mutex<crate::core::correlation::CorrelationEngine>>) -> Self {
         let path = detect_tool("bloodhound-python");
         Self {
             binary_path: path,
@@ -56,7 +58,7 @@ impl BloodHoundScanner {
     }
 }
 #[async_trait]
-impl ScannerPlugin for BloodHoundScanner {
+impl<M: ExecutorMode> ScannerPlugin for BloodHoundScanner<M> {
     fn name(&self) -> &'static str {
         crate::models::PLUGIN_BLOODHOUND
     }

@@ -9,13 +9,15 @@ use std::sync::Arc;
 use tokio::process::Command;
 use std::process::Stdio;
 
-pub struct SliverScanner {
+use crate::utils::executor::{StealthExecutor, ExecutorMode};
+
+pub struct SliverScanner<M: ExecutorMode> {
     binary_path: String,
-    executor: Arc<crate::utils::executor::StealthExecutor>,
+    executor: Arc<StealthExecutor<M>>,
 }
 
-impl SliverScanner {
-    pub fn new(executor: Arc<crate::utils::executor::StealthExecutor>) -> Self {
+impl<M: ExecutorMode> SliverScanner<M> {
+    pub fn new(executor: Arc<StealthExecutor<M>>) -> Self {
         let path = detect_tool("sliver-server");
         Self {
             binary_path: path,
@@ -38,7 +40,7 @@ impl SliverScanner {
 }
 
 #[async_trait]
-impl C2Operator for SliverScanner {
+impl<M: ExecutorMode> C2Operator for SliverScanner<M> {
     async fn prepare_payload(&self, target: &TargetHost) -> Result<String> {
         let output_path = format!("/tmp/sliver_implant_{}_{}", 
             target.host.replace('.', "_"),
@@ -175,7 +177,7 @@ impl C2Operator for SliverScanner {
 }
 
 #[async_trait]
-impl ScannerPlugin for SliverScanner {
+impl<M: ExecutorMode> ScannerPlugin for SliverScanner<M> {
     fn name(&self) -> &'static str {
         crate::models::PLUGIN_SLIVER
     }

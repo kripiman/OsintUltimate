@@ -60,15 +60,3 @@ impl RemoteExecutor for SshExecutor {
     }
 }
 
-/// Exploit-based Remote Executor (Bridge for successful PoC vectors)
-pub struct ExploitExecutor {
-    // This would be linked to the PocValidator's validated PoC cache
-}
-
-#[async_trait]
-impl RemoteExecutor for ExploitExecutor {
-    async fn execute(&self, target: &TargetHost, _cmd: &str) -> Result<String> {
-        // TODO: Implement bridge to PocValidator to re-run successful RCE exploits
-        anyhow::bail!("ExploitExecutor not yet implemented for target {}", target.host)
-    }
-}

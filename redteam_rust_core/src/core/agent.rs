@@ -6,21 +6,23 @@ use std::sync::Arc;
 use tokio::sync::mpsc;
 use tracing::info;
 
-pub struct AutonomousAgent {
+use crate::utils::executor::{StealthExecutor, ExecutorMode};
+
+pub struct AutonomousAgent<M: ExecutorMode = crate::utils::executor::GhostMode> {
     router: Arc<crate::core::ai::TieredAIRouter>,
-    pipeline: Arc<Pipeline>,
+    pipeline: Arc<Pipeline<M>>,
     approval_gate: Arc<crate::core::approval_gate::ApprovalGate>,
     operator: crate::core::approval_gate::User,
-    poc_validator: Arc<crate::core::PocValidator>,
+    poc_validator: Arc<crate::core::validation::PocValidator<M>>,
 }
 
-impl AutonomousAgent {
+impl<M: ExecutorMode> AutonomousAgent<M> {
     pub fn new(
         router: Arc<crate::core::ai::TieredAIRouter>, 
-        pipeline: Arc<Pipeline>, 
+        pipeline: Arc<Pipeline<M>>, 
         approval_gate: Arc<crate::core::approval_gate::ApprovalGate>,
         proxy_manager: Option<Arc<crate::utils::proxy::ProxyManager>>,
-        executor: Arc<crate::utils::executor::StealthExecutor>,
+        executor: Arc<StealthExecutor<M>>,
         policy: Arc<dyn crate::core::policy::PolicyProvider>,
     ) -> Self {
         let operator = crate::core::approval_gate::User {
@@ -29,7 +31,7 @@ impl AutonomousAgent {
             role: crate::core::approval_gate::UserRole::RedTeamFull,
             authorized_at: chrono::Utc::now(),
         };
-        let poc_validator = Arc::new(crate::core::PocValidator::new(
+        let poc_validator = Arc::new(crate::core::validation::PocValidator::new(
             router.clone(),
             approval_gate.clone(),
             operator.clone(),

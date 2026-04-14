@@ -6,41 +6,86 @@ use crate::utils::proxy::ProxyManager;
 use tracing::info;
 use std::process::Stdio;
 
+/// Marker trait for executor modes.
+pub trait ExecutorMode: Send + Sync + 'static {}
+
+/// GHOST mode: Basic stealth execution without remote exploitation capabilities.
+pub struct GhostMode;
+impl ExecutorMode for GhostMode {}
+
+/// BREACH mode: Advanced execution with mandatory remote coordination capabilities.
+pub struct BreachMode;
+impl ExecutorMode for BreachMode {}
+
 /// V14.1 Unified Stealth Executor: The only authorized way to interact with OS binaries.
 /// Enforces policy-first, proxy-mandatory execution.
-pub struct StealthExecutor {
+/// Generic over the executor mode M for compile-time enforcement of capabilities.
+pub struct StealthExecutor<M: ExecutorMode = GhostMode> {
     policy: Arc<dyn PolicyProvider>,
     proxy_manager: Option<Arc<ProxyManager>>,
     stealth_mode: bool,
     remote_executor: Option<Arc<dyn crate::core::validation::remote::RemoteExecutor>>,
+    _marker: std::marker::PhantomData<M>,
 }
 
-impl StealthExecutor {
+impl StealthExecutor<GhostMode> {
     pub fn new(
         policy: Arc<dyn PolicyProvider>,
         proxy_manager: Option<Arc<ProxyManager>>,
         stealth_mode: bool,
-        remote_executor: Option<Arc<dyn crate::core::validation::remote::RemoteExecutor>>,
     ) -> Self {
         // V14.1 LEAK-003: Verify proxychains4 availability on construction when stealth_mode is active
-        if stealth_mode {
-            match std::process::Command::new("proxychains4")
-                .arg("-h")
-                .stdout(std::process::Stdio::null())
-                .stderr(std::process::Stdio::null())
-                .status() 
-            {
-                Ok(status) if status.success() || status.code() == Some(1) => {
-                    info!("✅ V14.1 EXECUTOR: 'proxychains4' verified and ready for stealth operations.");
-                }
-                _ => {
-                    tracing::error!("⚠️ V14.1 OPSEC CRITICAL: stealth_mode is active but 'proxychains4' was not found or failed to execute. All proxied tool executions will fail.");
-                }
+        verify_proxychains(stealth_mode);
+
+        Self { 
+            policy, 
+            proxy_manager, 
+            stealth_mode, 
+            remote_executor: None,
+            _marker: std::marker::PhantomData 
+        }
+    }
+}
+
+#[cfg(feature = "breach-exploit-executor")]
+impl StealthExecutor<BreachMode> {
+    pub fn new_breach(
+        policy: Arc<dyn PolicyProvider>,
+        proxy_manager: Option<Arc<ProxyManager>>,
+        stealth_mode: bool,
+        remote_executor: Arc<dyn crate::core::validation::remote::RemoteExecutor>,
+    ) -> Self {
+        verify_proxychains(stealth_mode);
+
+        Self { 
+            policy, 
+            proxy_manager, 
+            stealth_mode, 
+            remote_executor: Some(remote_executor),
+            _marker: std::marker::PhantomData 
+        }
+    }
+}
+
+fn verify_proxychains(stealth_mode: bool) {
+    if stealth_mode {
+        match std::process::Command::new("proxychains4")
+            .arg("-h")
+            .stdout(std::process::Stdio::null())
+            .stderr(std::process::Stdio::null())
+            .status() 
+        {
+            Ok(status) if status.success() || status.code() == Some(1) => {
+                info!("✅ V14.1 EXECUTOR: 'proxychains4' verified and ready for stealth operations.");
+            }
+            _ => {
+                tracing::error!("⚠️ V14.1 OPSEC CRITICAL: stealth_mode is active but 'proxychains4' was not found or failed to execute. All proxied tool executions will fail.");
             }
         }
-
-        Self { policy, proxy_manager, stealth_mode, remote_executor }
     }
+}
+
+impl<M: ExecutorMode> StealthExecutor<M> {
 
     pub fn get_proxy_manager(&self) -> Option<Arc<ProxyManager>> {
         self.proxy_manager.clone()

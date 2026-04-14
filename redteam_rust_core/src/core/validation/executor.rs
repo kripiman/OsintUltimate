@@ -1,8 +1,8 @@
 use anyhow::{Result, Context};
 use crate::models::TargetHost;
-use crate::core::validation::PocValidator;
+use crate::utils::executor::ExecutorMode;
 
-impl PocValidator {
+impl<M: ExecutorMode> PocValidator<M> {
     pub(crate) async fn execute_raw_payload(&self, payload: &str, _target: &TargetHost) -> Result<String> {
         let parts: Vec<String> = payload.split_whitespace().map(|s| s.to_string()).collect();
         if parts.is_empty() { anyhow::bail!("Empty payload."); }

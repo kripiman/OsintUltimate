@@ -89,6 +89,9 @@ zip = "8.5.1"
 # Persistence & Swarm
 # RocksDB and Chitchat removed as they were not used in the final v4.0 architecture and caused build failures.
 
+[features]
+breach-exploit-executor = []
+
 [profile.release]
 opt-level = 3
 lto = true

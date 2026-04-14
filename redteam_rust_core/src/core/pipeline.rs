@@ -1,22 +1,7 @@
 use crate::core::orchestrator::Orchestrator;
-use crate::core::sink::DataSink;
-use crate::models::{TargetHost, TargetStatus, Finding, Category, Severity, ScanMetadata};
-use crate::plugins::{ScannerPlugin, DiscoveryPlugin};
-use crate::utils::{LivenessChecker, JitterSleep};
-use crate::utils::liveness::is_safe_ip;
-use crate::core::capability_layer::ScanLayerPolicy;
-use crate::core::approval_gate::ApprovalGate;
-use crate::core::filter::FalsePositiveFilter;
-use anyhow::{Context, Result};
-use std::sync::Arc;
-use tokio::sync::mpsc;
-use tokio_util::sync::CancellationToken;
-use tracing::{info, warn};
-use futures::stream::StreamExt;
-use serde_json::json;
-use bloomfilter::Bloom;
+use crate::utils::executor::{StealthExecutor, ExecutorMode};
 
-pub struct Pipeline {
+pub struct Pipeline<M: ExecutorMode = crate::utils::executor::GhostMode> {
     concurrency: usize,
     discovery_plugins: Arc<Vec<Box<dyn DiscoveryPlugin>>>,
     plugins: Arc<Vec<Box<dyn ScannerPlugin>>>,
@@ -38,14 +23,16 @@ pub struct Pipeline {
     sandbox: Arc<crate::core::sandbox::SandboxDispatcher>,
     proxy_manager: Option<Arc<crate::utils::proxy::ProxyManager>>,
     policy: Arc<dyn crate::core::policy::PolicyProvider>,
-    executor: Arc<crate::utils::executor::StealthExecutor>,
+    executor: Arc<StealthExecutor<M>>,
 }
-impl Pipeline {
-    pub fn builder() -> PipelineBuilder {
+
+impl<M: ExecutorMode> Pipeline<M> {
+    pub fn builder() -> PipelineBuilder<M> {
         PipelineBuilder::new()
     }
 
     pub fn new_minimal(plugins: Arc<Vec<Box<dyn ScannerPlugin>>>, sandbox: Arc<crate::core::sandbox::SandboxDispatcher>) -> Self {
+        let policy = Arc::new(crate::core::policy::StaticPolicy::new());
         Self {
             concurrency: 1,
             discovery_plugins: Arc::new(Vec::new()),
@@ -67,12 +54,11 @@ impl Pipeline {
             ai_router: None,
             sandbox,
             proxy_manager: None,
-            policy: Arc::new(crate::core::policy::StaticPolicy::new()),
+            policy: policy.clone(),
             executor: Arc::new(crate::utils::executor::StealthExecutor::new(
-                Arc::new(crate::core::policy::StaticPolicy::new()), 
+                policy, 
                 None, 
                 false,
-                None
             )),
         }
     }
@@ -337,7 +323,7 @@ impl Pipeline {
 }
 
 
-pub struct PipelineBuilder {
+pub struct PipelineBuilder<M: ExecutorMode = crate::utils::executor::GhostMode> {
     concurrency: usize,
     discovery_plugins: Vec<Box<dyn DiscoveryPlugin>>,
     plugins: Vec<Box<dyn ScannerPlugin>>,
@@ -358,7 +344,7 @@ pub struct PipelineBuilder {
     memory_monitor: Option<Arc<crate::utils::memory_monitor::MemoryMonitor>>,
     proxy_manager: Option<Arc<crate::utils::proxy::ProxyManager>>,
     policy: Option<Arc<dyn crate::core::policy::PolicyProvider>>,
-    executor: Option<Arc<crate::utils::executor::StealthExecutor>>,
+    executor: Option<Arc<crate::utils::executor::StealthExecutor<M>>>,
 }
 
 impl Default for PipelineBuilder { fn default() -> Self { Self::new() } }
@@ -390,7 +376,7 @@ impl PipelineBuilder {
         }
     }
 
-    pub fn with_swarm(mut self, enabled: bool, max_tokens: u32, router: Arc<crate::core::ai::TieredAIRouter>, proxy_manager: Option<Arc<crate::utils::proxy::ProxyManager>>, executor: Arc<crate::utils::executor::StealthExecutor>, policy: Arc<dyn crate::core::policy::PolicyProvider>) -> Self {
+    pub fn with_swarm(mut self, enabled: bool, max_tokens: u32, router: Arc<crate::core::ai::TieredAIRouter>, proxy_manager: Option<Arc<crate::utils::proxy::ProxyManager>>, executor: Arc<crate::utils::executor::StealthExecutor<M>>, policy: Arc<dyn crate::core::policy::PolicyProvider>) -> Self {
         self.swarm_mode = enabled;
         self.max_tokens = max_tokens;
         self.ai_router = Some(router);
@@ -427,7 +413,7 @@ impl PipelineBuilder {
     pub fn command_line(mut self, cmd: String) -> Self { self.command_line = cmd; self }
     pub fn sandbox(mut self, s: Arc<crate::core::sandbox::SandboxDispatcher>) -> Self { self.sandbox = Some(s); self }
 
-    pub fn build(self) -> Result<Pipeline> {
+    pub fn build(self) -> Result<Pipeline<M>> {
         let sink = self.sink.context("Pipeline requires a configured sink")?;
         let liveness_checker = self.liveness_checker.context("Pipeline requires a configured liveness checker")?;
         let layer_policy = self.layer_policy.unwrap_or(ScanLayerPolicy::preset_audit());

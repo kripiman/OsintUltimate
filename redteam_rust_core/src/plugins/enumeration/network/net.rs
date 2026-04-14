@@ -1,19 +1,8 @@
 use crate::plugins::{ScannerPlugin, Capability};
 use crate::models::{TargetHost, Finding};
-use crate::utils::{tool_detection::detect_tool, executor::StealthExecutor};
-use crate::plugins::enumeration::network::nmap::parse_nmap_xml;
-use async_trait::async_trait;
-use anyhow::{Result, Context};
-use tracing::{info, warn, error};
-use std::sync::Arc;
-use once_cell::sync::Lazy;
+use crate::utils::{tool_detection::detect_tool, executor::{StealthExecutor, ExecutorMode}};
 
-// V14.1 HARDENING: Domain-specific regexes for argument validation (Consulted before spawn)
-static TARGET_HOST_RE: Lazy<regex::Regex> = Lazy::new(|| regex::Regex::new(r"^[a-zA-Z0-9.\-:]+$").unwrap());
-static DECOY_RE: Lazy<regex::Regex> = Lazy::new(|| regex::Regex::new(r"^[a-zA-Z0-9.,_]+$").unwrap());
-static SCRIPT_RE: Lazy<regex::Regex> = Lazy::new(|| regex::Regex::new(r"^[a-zA-Z0-9,-]+$").unwrap());
-
-pub struct NmapScanner {
+pub struct NmapScanner<M: ExecutorMode> {
     scripts: Option<String>,
     stealth: bool,
     service_detection: bool,
@@ -22,10 +11,10 @@ pub struct NmapScanner {
     decoy: Option<String>,
     ports: Option<String>,
     vuln_scan: bool,
-    executor: Arc<StealthExecutor>,
+    executor: Arc<StealthExecutor<M>>,
 }
 
-impl NmapScanner {
+impl<M: ExecutorMode> NmapScanner<M> {
     pub fn new(
         scripts: Option<String>, 
         stealth: bool, 
@@ -35,7 +24,7 @@ impl NmapScanner {
         decoy: Option<String>,
         ports: Option<String>,
         vuln_scan: bool,
-        executor: Arc<StealthExecutor>,
+        executor: Arc<StealthExecutor<M>>,
     ) -> Self {
         Self {
             scripts,
@@ -51,8 +40,20 @@ impl NmapScanner {
     }
 }
 
+use crate::plugins::enumeration::network::nmap::parse_nmap_xml;
+use async_trait::async_trait;
+use anyhow::{Result, Context};
+use tracing::{info, warn, error};
+use std::sync::Arc;
+use once_cell::sync::Lazy;
+
+// V14.1 HARDENING: Domain-specific regexes for argument validation (Consulted before spawn)
+static TARGET_HOST_RE: Lazy<regex::Regex> = Lazy::new(|| regex::Regex::new(r"^[a-zA-Z0-9.\-:]+$").unwrap());
+static DECOY_RE: Lazy<regex::Regex> = Lazy::new(|| regex::Regex::new(r"^[a-zA-Z0-9.,_]+$").unwrap());
+static SCRIPT_RE: Lazy<regex::Regex> = Lazy::new(|| regex::Regex::new(r"^[a-zA-Z0-9,-]+$").unwrap());
+
 #[async_trait]
-impl ScannerPlugin for NmapScanner {
+impl<M: ExecutorMode> ScannerPlugin for NmapScanner<M> {
     fn name(&self) -> &'static str {
         crate::models::PLUGIN_NMAP
     }
