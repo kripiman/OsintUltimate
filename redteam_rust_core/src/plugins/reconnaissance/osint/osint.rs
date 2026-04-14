@@ -1,17 +1,17 @@
 use crate::plugins::{DiscoveryPlugin, Capability};
 use crate::models::TargetHost;
-use crate::utils::tool_detection::detect_tool;
 use async_trait::async_trait;
 use anyhow::Result;
 use tracing::{info, warn, debug};
 use reqwest::Client;
 use serde::Deserialize;
+use std::sync::Arc;
 use std::collections::HashSet;
 
 // V5 FIX (Stealth): Removed LivenessChecker and Jitter from OsintScanner.
 // A passive OSINT phase should never touch the target's infrastructure directly.
 pub struct OsintScanner {
-    client: Client,
+    proxy_manager: Arc<crate::utils::proxy::ProxyManager>,
 }
 
 #[derive(Deserialize, Debug)]
@@ -20,14 +20,13 @@ struct CrtShEntry {
 }
 
 impl OsintScanner {
-    pub fn new() -> Self {
-        let client = Client::builder()
-            .timeout(std::time::Duration::from_secs(10))
-            .redirect(reqwest::redirect::Policy::none()) // QA-004: Prevent API key leak via Referer on 302
-            .build()
-            .expect("Failed to build HTTP client for OSINT");
-            
-        Self { client }
+    pub fn new(pm: Arc<crate::utils::proxy::ProxyManager>) -> Self {
+        Self { proxy_manager: pm }
+    }
+
+    async fn get_client(&self, host: &str) -> Result<Client> {
+        let (_, client) = self.proxy_manager.get_client_fail_closed(host)?;
+        Ok(client)
     }
 
     async fn query_crt_sh(&self, domain: &str) -> Result<HashSet<String>> {
@@ -35,7 +34,8 @@ impl OsintScanner {
         debug!("Querying crt.sh for {}", domain);
         
         // crt.sh can be slow/flaky, retry logic recommended but keeping simple for now
-        let resp = self.client.get(&url).send().await?;
+        let client = self.get_client("crt.sh").await?;
+        let resp = client.get(&url).send().await?;
         
         if !resp.status().is_success() {
              warn!("crt.sh returned status: {}", resp.status());
@@ -70,7 +70,8 @@ impl OsintScanner {
         let url = format!("https://api.shodan.io/dns/domain/{}?key={}", domain, api_key);
         debug!("Querying Shodan for {} with key redacted", domain);
 
-        let resp = self.client.get(&url).send().await?;
+        let client = self.get_client("api.shodan.io").await?;
+        let resp = client.get(&url).send().await?;
         
         if !resp.status().is_success() {
              warn!("Shodan returned status: {}", resp.status());

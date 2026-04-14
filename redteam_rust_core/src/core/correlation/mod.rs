@@ -1,7 +1,9 @@
-use crate::models::{Finding, Category, Severity};
+use crate::models::{Finding, Category};
 use std::collections::{HashMap, HashSet};
 use serde::{Deserialize, Serialize};
 use tracing::info;
+
+pub mod ad_ingestor;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AttackPath {
@@ -48,6 +50,11 @@ impl CorrelationEngine {
         if is_new {
             self.correlate_new_finding(&finding);
         }
+    }
+
+    pub fn add_edge(&mut self, source_id: &str, target_id: &str) {
+        info!("🔱 V14.1 SOVEREIGN: Manually adding AttackGraph edge: {} -> {}", source_id, target_id);
+        self.graph.add_edge(source_id, target_id);
     }
 
     fn correlate_new_finding(&mut self, new_finding: &Finding) {

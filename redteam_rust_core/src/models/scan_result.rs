@@ -55,6 +55,8 @@ pub struct TargetHost {
     pub resolved_ip: Option<String>,
     pub status: TargetStatus,
     pub target_type: TargetType,
+    #[serde(default)]
+    pub user: Option<String>,
     pub findings: Arc<Vec<Finding>>,
     pub tool_suggestions: Arc<Vec<String>>,
     #[serde(default = "default_arc_json")]
@@ -93,8 +95,5 @@ fn default_arc_json() -> Arc<serde_json::Value> {
     Arc::new(serde_json::json!({}))
 }
 
-fn default_arc_vec<T>() -> Arc<Vec<T>> {
-    Arc::new(Vec::new())
-}
 
 

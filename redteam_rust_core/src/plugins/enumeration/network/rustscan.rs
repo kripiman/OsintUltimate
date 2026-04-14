@@ -1,9 +1,9 @@
 use crate::plugins::{ScannerPlugin, Capability};
-use crate::models::{TargetHost, Finding, Severity, Category, Evidence};
+use crate::models::{TargetHost, Finding, Severity, Category};
 use crate::utils::tool_detection::detect_tool;
 use async_trait::async_trait;
 use anyhow::{Result, Context};
-use tracing::{info, warn};
+use tracing::info;
 use std::process::Stdio;
 use tokio::process::Command;
 
@@ -60,7 +60,7 @@ impl ScannerPlugin for RustScanScanner {
 
         // RustScan is extremely fast. We pass -a target and let it find open ports.
         // Then we can optionally pass those to nmap, but here we'll just report open ports found by rustscan.
-        let mut child = Command::new(&self.binary_path)
+        let child = Command::new(&self.binary_path)
             .arg("-a").arg(target_addr)
             .arg("--ulimit").arg("5000")
             .arg("--quiet")

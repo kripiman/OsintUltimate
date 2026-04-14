@@ -1,6 +1,5 @@
 use std::sync::Arc;
-use anyhow::{Result, Context};
-use tracing::{info, warn};
+use anyhow::Result;
 use crate::core::ai::{TieredAIRouter, RouteLevel, LlmProviderKind};
 use crate::core::ai::{OllamaClient, GeminiClient, AnthropicClient, OpenAIClient, AzureOpenAIClient};
 use crate::utils::{InfrastructureType, HardwareInfo, proxy::ProxyManager};

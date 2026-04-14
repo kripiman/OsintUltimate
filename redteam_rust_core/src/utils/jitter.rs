@@ -1,4 +1,4 @@
-use rand_distr::{LogNormal, Distribution};
+use rand_distr::LogNormal;
 use std::time::Duration;
 
 #[derive(Clone)]

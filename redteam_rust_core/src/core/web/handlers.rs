@@ -9,9 +9,7 @@ use futures::stream::{self, Stream};
 use std::convert::Infallible;
 use std::sync::Arc;
 use tokio::sync::broadcast;
-use tracing::debug;
 
-use crate::models::Finding;
 use super::state::{DashboardState, ValidatedOperator};
 use super::models::{DashboardStats, SwarmAgentStatus, SwarmStatusResponse};
 
@@ -36,7 +34,7 @@ pub async fn findings_stream(
     _auth: ValidatedOperator,
     State(state): State<Arc<DashboardState>>,
 ) -> Sse<impl Stream<Item = Result<Event, Infallible>>> {
-    let mut rx = state.findings_tx.subscribe();
+    let rx = state.findings_tx.subscribe();
 
     let stream = stream::unfold((rx, state), |(mut rx, state)| async move {
         loop {

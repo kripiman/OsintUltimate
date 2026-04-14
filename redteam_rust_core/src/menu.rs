@@ -1,6 +1,6 @@
 use crate::Args;
 use anyhow::Result;
-use inquire::{Select, Text, Confirm, MultiSelect, validator::Validation};
+use inquire::{Text, Confirm, MultiSelect, validator::Validation};
 
 pub fn show_menu() -> Result<Option<Args>> {
     println!("🛡️  Bienvenido a OsintUltimate v3.0 - Unified Wizard");

@@ -1,5 +1,5 @@
 use anyhow::{Result, Context};
-use crate::models::{TargetHost, Finding};
+use crate::models::TargetHost;
 use crate::core::validation::PocValidator;
 
 impl PocValidator {
@@ -50,13 +50,11 @@ impl PocValidator {
         let port = payload.trim().parse::<u16>()?;
         let target_addr = target.pinned_addr()?;
         
-        if let Some(ref pm) = self.proxy_manager {
-            let _ = pm.tcp_connect_proxied(target_addr, port).await?;
-            Ok(format!("TCP Port {} is OPEN (Proxy Verified)", port))
-        } else {
-            let _ = tokio::net::TcpStream::connect(format!("{}:{}", target_addr, port)).await?;
-            Ok(format!("TCP Port {} is OPEN", port))
-        }
+        let pm = self.proxy_manager.as_ref()
+            .context("V13 OPSEC Violation: TCP check requires ProxyManager in Sovereign Stealth mode.")?;
+        
+        let _ = pm.tcp_connect_proxied(target_addr, port).await?;
+        Ok(format!("TCP Port {} is OPEN (Proxy Verified)", port))
     }
 
     pub(crate) async fn execute_icmp_ping(&self, target: &TargetHost) -> Result<String> {
@@ -69,11 +67,10 @@ impl PocValidator {
         let target_ip = target.pinned_addr()?;
         if !self.policy.is_path_safe(payload) { anyhow::bail!("Policy Block: Unsafe path in HTTP PoC"); }
         
-        let client = if let Some(ref pm) = self.proxy_manager {
-            pm.get_client_fail_closed(&target.host)?.1
-        } else {
-             reqwest::Client::new()
-        };
+        let pm = self.proxy_manager.as_ref()
+            .context("V13 OPSEC Violation: HTTP PoC requires ProxyManager in Sovereign Stealth mode.")?;
+        
+        let (_, client) = pm.get_client_fail_closed(&target.host)?;
 
         let res = client.get(format!("http://{}{}", target_ip, payload)).send().await?;
         Ok(format!("Status: {}\nBody: {}", res.status(), res.text().await?.chars().take(1000).collect::<String>()))

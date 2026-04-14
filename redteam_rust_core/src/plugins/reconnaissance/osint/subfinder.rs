@@ -3,9 +3,8 @@ use crate::models::TargetHost;
 use crate::utils::tool_detection::detect_tool;
 use async_trait::async_trait;
 use anyhow::{Result, Context};
-use tracing::{info, error, warn};
+use tracing::{info, warn};
 use std::process::Stdio;
-use tokio::process::Command;
 
 pub struct SubfinderScanner {
     binary_path: String,

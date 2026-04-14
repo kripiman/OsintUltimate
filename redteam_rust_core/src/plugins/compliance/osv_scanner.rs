@@ -37,8 +37,8 @@ struct OSVVulnerability {
     summary: Option<String>,
     details: Option<String>,
     modified: String,
-    published: Option<String>,
-    database_specific: Option<serde_json::Value>,
+    _published: Option<String>,
+    _database_specific: Option<serde_json::Value>,
 }
 
 pub struct OSVScanner {

@@ -3,9 +3,9 @@ use crate::core::resource_manager::SysResourceManager;
 use crate::models::findings::Category;
 use anyhow::{Result, Context};
 use tokio::process::{Command, Child};
-use tracing::{info, warn, error};
+use tracing::{info, error};
 #[cfg(unix)]
-use std::os::unix::process::CommandExt;
+
 
 #[derive(Debug, PartialEq)]
 pub enum ExecutionTier {
@@ -156,7 +156,7 @@ impl SandboxDispatcher {
     }
 
     pub async fn execute_tool(&self, tool: &BlackArchTool, args: &[String]) -> Result<String> {
-        let mut child = self.execute_tool_streamed(tool, args).await?;
+        let child = self.execute_tool_streamed(tool, args).await?;
         let output = child.wait_with_output().await.context("Error esperando salida del sandbox")?;
         
         if !output.status.success() {

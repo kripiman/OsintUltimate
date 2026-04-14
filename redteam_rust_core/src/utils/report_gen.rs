@@ -1,7 +1,7 @@
 use crate::models::{ScanMetadata, TargetHost, Finding};
 use anyhow::Result;
 use handlebars::Handlebars;
-use serde::{Deserialize, Serialize};
+use serde::Serialize;
 use tokio::io::{AsyncBufReadExt, BufReader};
 use tokio::fs::File;
 
@@ -244,11 +244,6 @@ struct TargetVM {
     findings: Vec<Finding>,
 }
 
-#[derive(Deserialize)]
-struct JsonlLine {
-    metadata: Option<ScanMetadata>,
-    host: Option<String>,
-}
 
 pub async fn generate_report(jsonl_path: &str, output_path: &str) -> Result<()> {
     let out_path = std::path::Path::new(output_path);

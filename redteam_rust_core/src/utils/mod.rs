@@ -13,9 +13,11 @@ pub mod security;
 pub mod stealth_detect;
 pub mod stealth_http;
 pub mod executor;
+pub mod payload_server;
 
 pub use security::{validate_target, is_ssrf_safe_host};
 pub use executor::StealthExecutor;
+pub use payload_server::PayloadServer;
 
 pub use liveness::LivenessChecker;
 pub use report_gen::generate_report;

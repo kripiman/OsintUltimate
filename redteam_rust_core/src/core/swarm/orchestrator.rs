@@ -67,9 +67,18 @@ impl SwarmOrchestrator {
     pub async fn run(&self, initial_target: TargetHost, sink_tx: mpsc::Sender<TargetHost>) -> Result<()> {
         info!("🐝 SWARM: Iniciando enjambre multi-agente para {}", initial_target.host);
         
+        // 🔱 V14.1 READINESS GATE (Professional Grade)
+        if let Some(ref pm) = self.proxy_manager {
+            info!("⏳ SWARM: Verificando integridad de egreso (ProxyManager readiness)...");
+            pm.wait_for_readiness(std::time::Duration::from_secs(30))
+                .await
+                .context("V14.1 OPSEC Block: Swarm cannot start without healthy egress proxies.")?;
+            info!("✅ SWARM: Egress verificado. Sparking the swarm.");
+        }
+        
         let mut seen_finding_ids = HashSet::new();
         let adaptive_context = AdaptiveContext::default();
-        let correlation_engine = Arc::new(tokio::sync::Mutex::new(crate::core::CorrelationEngine::new()));
+        let correlation_engine = Arc::new(tokio::sync::Mutex::new(crate::core::correlation::CorrelationEngine::new()));
         
         let (discovery_tx, mut discovery_rx) = mpsc::channel(100);
         let pipeline = self.pipeline.clone();
@@ -285,7 +294,7 @@ impl SwarmOrchestrator {
         mut finding: Finding,
         target: &TargetHost,
         attack_context: Option<String>,
-        tx: &mut mpsc::Sender<Finding>,
+        _tx: &mut mpsc::Sender<Finding>,
         adaptive_ctx: &mut AdaptiveContext,
         sink_tx: &mpsc::Sender<TargetHost>,
         guard: TokenGuard,

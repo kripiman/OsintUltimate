@@ -187,6 +187,7 @@ impl WafEvasionEngine {
             resolved_ip: None,
             status: crate::models::TargetStatus::Scanning,
             target_type: crate::models::TargetType::Web,
+            user: None,
             findings: Arc::new(Vec::new()),
             tool_suggestions: Arc::new(Vec::new()),
             tactical_context: Arc::new(serde_json::json!({})),

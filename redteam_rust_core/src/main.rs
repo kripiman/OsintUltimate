@@ -180,7 +180,7 @@ async fn main() -> Result<()> {
         if let Ok(parsed_url) = url::Url::parse(&c2_env) {
             if parsed_url.scheme() == "https" && is_ssrf_safe_host(parsed_url.host_str().unwrap_or("")) {
                 let c2_token = std::env::var("C2_TOKEN").ok();
-                multi_sink.add(Box::new(TacticalWebhookSink::new(parsed_url.to_string(), c2_token)?));
+                multi_sink.add(Box::new(TacticalWebhookSink::new(parsed_url.to_string(), c2_token, engine.proxy_manager())?));
             }
         }
     }
@@ -245,6 +245,7 @@ async fn main() -> Result<()> {
 
             TargetHost {
                 host: t, ip: None, resolved_ip: None, status: TargetStatus::Pending, target_type,
+                user: None,
                 findings: Arc::new(Vec::new()), tool_suggestions: Arc::new(Vec::new()),
                 tactical_context: Arc::new(serde_json::json!({})), extra_data: Arc::new(serde_json::json!({})),
             }

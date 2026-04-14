@@ -14,7 +14,6 @@ static DECOY_RE: Lazy<regex::Regex> = Lazy::new(|| regex::Regex::new(r"^[a-zA-Z0
 static SCRIPT_RE: Lazy<regex::Regex> = Lazy::new(|| regex::Regex::new(r"^[a-zA-Z0-9,-]+$").unwrap());
 
 pub struct NmapScanner {
-    nmap_path: String,
     scripts: Option<String>,
     stealth: bool,
     service_detection: bool,
@@ -38,9 +37,7 @@ impl NmapScanner {
         vuln_scan: bool,
         executor: Arc<StealthExecutor>,
     ) -> Self {
-        let path = detect_tool("nmap");
         Self {
-            nmap_path: path,
             scripts,
             stealth,
             service_detection,
@@ -158,8 +155,6 @@ impl ScannerPlugin for NmapScanner {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::core::policy::StaticPolicy;
-    use crate::utils::executor::StealthExecutor;
 
     #[tokio::test]
     async fn test_nmap_target_validation() {

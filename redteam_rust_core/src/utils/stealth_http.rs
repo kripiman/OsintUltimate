@@ -6,18 +6,18 @@ use std::time::Duration;
 pub struct StealthClientBuilder;
 
 impl StealthClientBuilder {
-    pub fn build(target: &TargetHost) -> Result<Client> {
-        Self::create_builder(target)?.build().context("Failed to build Stealth HTTP Client")
+    pub fn build(target: &TargetHost, pm: &crate::utils::proxy::ProxyManager) -> Result<Client> {
+        Self::create_builder(target, pm)?.build().context("Failed to build Stealth HTTP Client")
     }
 
-    pub fn build_pinned(target: &TargetHost, host: &str, addr: std::net::SocketAddr) -> Result<Client> {
-        Self::create_builder(target)?
+    pub fn build_pinned(target: &TargetHost, pm: &crate::utils::proxy::ProxyManager, host: &str, addr: std::net::SocketAddr) -> Result<Client> {
+        Self::create_builder(target, pm)?
             .resolve(host, addr)
             .build()
             .context("Failed to build Pinned Stealth HTTP Client")
     }
 
-    fn create_builder(target: &TargetHost) -> Result<reqwest::ClientBuilder> {
+    fn create_builder(target: &TargetHost, pm: &crate::utils::proxy::ProxyManager) -> Result<reqwest::ClientBuilder> {
         let mut headers = HeaderMap::new();
         
         // 1. Extract tactical context
@@ -54,7 +54,8 @@ impl StealthClientBuilder {
             .timeout(Duration::from_secs(30))
             .danger_accept_invalid_certs(true); // Red teaming often needs this for internal/expired certs
 
-        Ok(builder)
+        // 6. Mandatory Proxy Injection (Fail-Closed)
+        pm.configure_client_builder(builder)
     }
 }
 
@@ -72,6 +73,7 @@ mod tests {
             resolved_ip: None,
             status: TargetStatus::Pending,
             target_type: TargetType::Web,
+            user: None,
             findings: Arc::new(Vec::new()),
             tool_suggestions: Arc::new(Vec::new()),
             tactical_context: Arc::new(serde_json::json!({
@@ -84,7 +86,8 @@ mod tests {
             extra_data: Arc::new(serde_json::json!({})),
         };
 
-        let _client = StealthClientBuilder::build(&target)?;
+        let pm = crate::utils::proxy::ProxyManager::new(Vec::new(), true);
+        let _client = StealthClientBuilder::build(&target, &pm)?;
         Ok(())
     }
 }

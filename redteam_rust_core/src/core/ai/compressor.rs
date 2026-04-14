@@ -89,7 +89,7 @@ impl ContextCompressor {
     }
 
     /// NEW V4: Ultra-aggressive compression for Swarm Planner
-    pub fn compress_swarm_context(finding: &Finding, target: &TargetHost) -> serde_json::Value {
+    pub fn compress_swarm_context(finding: &Finding, _target: &TargetHost) -> serde_json::Value {
         let mut base = Self::compress_finding(finding, RouteLevel::Local);
         
         // Planner only needs high-level telemetry, not raw body samples

@@ -5,7 +5,6 @@ use crate::core::ai::{LlmClient, ContextCompressor, AdaptiveContext, RouteLevel,
 use crate::utils::common::extract_json;
 use serde_json::json;
 use std::sync::Arc;
-use std::time::Duration;
 
 pub struct GeminiClient {
     pub keys: Vec<String>,
@@ -20,12 +19,11 @@ impl GeminiClient {
         Ok(Self { keys, current_key_idx: std::sync::atomic::AtomicUsize::new(0), model, proxy_manager: pm })
     }
     async fn get_client(&self) -> Result<reqwest::Client> {
-        if let Some(ref pm) = self.proxy_manager {
-            let (_, client) = pm.get_client_fail_closed("generativelanguage.googleapis.com")?;
-            Ok(client)
-        } else {
-            Ok(reqwest::Client::builder().timeout(Duration::from_secs(60)).build()?)
-        }
+        let pm = self.proxy_manager.as_ref()
+            .context("V13 OPSEC Violation: GeminiClient requires an active ProxyManager for Sovereign Stealth.")?;
+        
+        let (_, client) = pm.get_client_fail_closed("generativelanguage.googleapis.com")?;
+        Ok(client)
     }
     fn get_key(&self) -> &str {
         let idx = self.current_key_idx.load(std::sync::atomic::Ordering::Relaxed);

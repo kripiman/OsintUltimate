@@ -3,7 +3,7 @@ use crate::models::{TargetHost, Finding, Severity, Category, PLUGIN_KUBE_BENCH};
 use crate::utils::tool_detection::detect_tool;
 use async_trait::async_trait;
 use anyhow::{Result, Context};
-use tracing::{info, error};
+use tracing::info;
 use std::process::Stdio;
 use tokio::process::Command;
 use std::time::Duration;
@@ -71,8 +71,8 @@ impl ScannerPlugin for KubeBenchScanner {
         let content = String::from_utf8_lossy(&output.stdout);
         // Kube-bench output contains multiple sections.
         if let Ok(results) = serde_json::from_str::<serde_json::Value>(&content) {
-            if let Some(Totals) = results["Totals"].as_object() {
-                if let Some(fail_count) = Totals["total_fail"].as_u64() {
+            if let Some(totals) = results["Totals"].as_object() {
+                if let Some(fail_count) = totals["total_fail"].as_u64() {
                     if fail_count > 0 {
                         findings.push(Finding::new(
                             "KUBE-BENCH-FAILURES",

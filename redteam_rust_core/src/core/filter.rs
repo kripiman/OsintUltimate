@@ -1,4 +1,4 @@
-use crate::models::{Finding, Severity, Category};
+use crate::models::{Finding, Severity};
 
 /// A lightweight filter to reduce noise and false positives in findings
 pub struct FalsePositiveFilter {

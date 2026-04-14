@@ -3,7 +3,6 @@
 // ⚡ Permite workflows pasivos vs. activos vs. explotación
 
 use serde::{Deserialize, Serialize};
-use std::cmp::Ordering;
 
 /// Define el nivel de "agresividad" o intrusión de un plugin
 /// Esto permite workflows graduales y control sobre riesgos

@@ -107,7 +107,7 @@ impl DynamicPluginLoader {
 
         // V12 HARDENING: Acquire lock/handle BEFORE reading bytes for verification.
         #[cfg(unix)]
-        let (file, fd) = {
+        let (_file, fd) = {
             let f = std::fs::File::open(&canonical_path).context("Failed to open plugin for FD loading")?;
             use std::os::unix::io::AsRawFd;
             let fd = f.as_raw_fd();

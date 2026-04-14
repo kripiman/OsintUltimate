@@ -5,7 +5,6 @@ use crate::core::ai::{LlmClient, ContextCompressor, AdaptiveContext, RouteLevel,
 use crate::utils::common::extract_json;
 use serde_json::json;
 use std::sync::Arc;
-use std::time::Duration;
 
 pub struct OpenAIClient {
     pub key: String,
@@ -18,12 +17,11 @@ impl OpenAIClient {
         Ok(Self { key, model, proxy_manager: pm })
     }
     async fn get_client(&self) -> Result<reqwest::Client> {
-        if let Some(ref pm) = self.proxy_manager {
-            let (_, client) = pm.get_client_fail_closed("api.openai.com")?;
-            Ok(client)
-        } else {
-            Ok(reqwest::Client::builder().timeout(Duration::from_secs(60)).build()?)
-        }
+        let pm = self.proxy_manager.as_ref()
+            .context("V13 OPSEC Violation: OpenAIClient requires an active ProxyManager for Sovereign Stealth.")?;
+        
+        let (_, client) = pm.get_client_fail_closed("api.openai.com")?;
+        Ok(client)
     }
 }
 

@@ -93,7 +93,6 @@ pub fn stealth_command(binary: &str) -> tokio::process::Command {
 
     #[cfg(unix)]
     {
-        use std::os::unix::process::CommandExt;
         // Setsid / process group 0 to prevent Ctrl-C or parent signals from killing children
         // independently of our orchestrator's explicit management.
         unsafe {

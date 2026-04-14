@@ -14,6 +14,13 @@ const DEFAULT_BLACKLIST_DURATION: u64 = 300;
 
 use std::sync::Mutex;
 
+#[derive(Debug, Clone)]
+pub struct ManagedExit {
+    pub last_seen: SystemTime,
+    pub user: Option<String>,
+    pub pass: Option<String>,
+}
+
 pub struct ProxyManager {
     proxies: Arc<Mutex<Vec<String>>>,
     clients: Arc<DashMap<String, Client>>,
@@ -28,7 +35,7 @@ pub struct ProxyManager {
     // QA-007 FIX: Store handle to abort the health checker task on drop
     _health_checker_handle: Option<tokio::task::AbortHandle>,
     // Managed Exits (V13): IP addresses of DigitalOcean VPS nodes
-    managed_exits: Arc<DashMap<String, SystemTime>>,
+    managed_exits: Arc<DashMap<String, ManagedExit>>,
 }
 
 impl ProxyManager {
@@ -111,7 +118,7 @@ impl ProxyManager {
                 // For now, we prune nodes older than 24h if they aren't refreshed.
                 let to_prune: Vec<String> = managed_exits.iter()
                     .filter(|e| {
-                        let elapsed = e.value().elapsed().unwrap_or(Duration::from_secs(0));
+                        let elapsed = e.value().last_seen.elapsed().unwrap_or(Duration::from_secs(0));
                         elapsed.as_secs() > 86400 // 24h
                     })
                     .map(|e| e.key().clone())
@@ -127,11 +134,8 @@ impl ProxyManager {
     }
 
     /// Internal method to lazily build a reqwest::Client for a specific proxy
-    fn build_client(&self, proxy_str: &str, user_agent: String) -> Result<Client> {
-        let proxy = Proxy::all(proxy_str).context("Invalid proxy URL")?;
-        
-        let client = reqwest::Client::builder()
-            .proxy(proxy)
+    fn build_client(&self, proxy_str: Option<&str>, user_agent: String) -> Result<Client> {
+        let mut builder = reqwest::Client::builder()
             .user_agent(user_agent)
             .default_headers({
                 let mut h = reqwest::header::HeaderMap::new();
@@ -148,11 +152,14 @@ impl ProxyManager {
                 h
             })
             .danger_accept_invalid_certs(self.insecure)
-            .timeout(Duration::from_secs(15))
-            .build()
-            .context("Failed to build reqwest client for proxy")?;
+            .timeout(Duration::from_secs(15));
+
+        if let Some(p_str) = proxy_str {
+            let proxy = Proxy::all(p_str).context("Invalid proxy URL")?;
+            builder = builder.proxy(proxy);
+        }
             
-        Ok(client)
+        builder.build().context("Failed to build reqwest client")
     }
 
     /// Build a host-pinned client for a specific proxy
@@ -233,7 +240,12 @@ impl ProxyManager {
         // Inject managed exits into candidates
         for entry in self.managed_exits.iter() {
             let ip = entry.key();
-            let proxy_url = format!("socks5h://{}:1080", ip);
+            let exit = entry.value();
+            let proxy_url = if let (Some(u), Some(p)) = (&exit.user, &exit.pass) {
+                format!("socks5h://{}:{}@{}:1080", u, p, ip)
+            } else {
+                format!("socks5h://{}:1080", ip)
+            };
             // Managed exits are generally high priority, don't blacklist them here 
             // unless we implement a separate VPS health check
             candidates.push(proxy_url);
@@ -262,6 +274,13 @@ impl ProxyManager {
              let mut rng = rand::thread_rng();
              use rand::seq::SliceRandom;
              let ip = managed.choose(&mut rng)?;
+             
+             if let Some(exit) = self.managed_exits.get(ip) {
+                 if let (Some(u), Some(p)) = (&exit.user, &exit.pass) {
+                     return Some(format!("socks5h://{}:{}@{}:1080", u, p, ip));
+                 }
+             }
+             
              // DigitalOcean managed nodes run danted on 1080
              return Some(format!("socks5h://{}:1080", ip));
         }
@@ -275,8 +294,8 @@ impl ProxyManager {
         }
     }
 
-    /// V13: Wraps a std::process::Command with tool-specific proxy flags.
-    pub fn wrap_command(&self, tool: &str, args: &mut Vec<String>) {
+    /// V13: Wraps a std::process::Command with tool-specific proxy flags or proxychains.
+    pub fn wrap_command(&self, tool: &str, args: &mut Vec<String>) -> Result<()> {
         if let Some(proxy_url) = self.get_best_socks_url() {
             match tool.to_lowercase().as_str() {
                 "curl" => {
@@ -289,15 +308,47 @@ impl ProxyManager {
                     args.push(nmap_proxy);
                 }
                 _ => {
-                    warn!("ProxyManager: No native wrapping for tool '{}'. Traffic may leak!", tool);
+                    // Professional Mode: Use proxychains-ng for everything else
+                    info!("🛡️ ProxyManager: Wrapping '{}' with proxychains-ng via {}", tool, proxy_url);
+                    // Check if proxychains is available in PATH is done by StealthExecutor
+                    // Here we just modify the args for the generic wrapper
+                    args.insert(0, tool.to_string());
+                    // In professional mode, StealthExecutor should actually change the binary to 'proxychains4'
                 }
             }
+            Ok(())
+        } else {
+            anyhow::bail!("V13 OPSEC Violation: No proxy available for command wrapping.")
         }
     }
 
+    /// V14.1 Professional: Applies the best available proxy to a ClientBuilder.
+    pub fn configure_client_builder(&self, mut builder: reqwest::ClientBuilder) -> Result<reqwest::ClientBuilder> {
+        let proxy_url = self.pick_best_proxy()
+            .context("V14.1 OPSEC Violation: No proxy available for client configuration.")?;
+        
+        let proxy = Proxy::all(proxy_url).context("Invalid proxy URL")?;
+        builder = builder.proxy(proxy);
+        
+        Ok(builder)
+    }
+
+    pub fn add_managed_exit_with_auth(&self, ip: String, user: &str, pass: &str) {
+        self.managed_exits.insert(ip.clone(), ManagedExit {
+            last_seen: SystemTime::now(),
+            user: Some(user.to_string()),
+            pass: Some(pass.to_string()),
+        });
+        info!("🚀 ProxyManager: Active DO Managed Exit added with professional authentication: {}", ip);
+    }
+
     pub fn add_managed_exit(&self, ip: String) {
-        self.managed_exits.insert(ip.clone(), std::time::SystemTime::now());
-        info!("🚀 ProxyManager: Active DO Managed Exit added: {}", ip);
+        self.managed_exits.insert(ip.clone(), ManagedExit {
+            last_seen: SystemTime::now(),
+            user: None,
+            pass: None,
+        });
+        info!("🚀 ProxyManager: Active DO Managed Exit added (Anonymous): {}", ip);
     }
     
     pub fn get_managed_exits(&self) -> Vec<String> {
@@ -323,7 +374,7 @@ impl ProxyManager {
                 Some((p_url, oe.get().clone()))
             }
             Entry::Vacant(ve) => {
-                match self.build_client(&p_url, ua) {
+                match self.build_client(Some(&p_url), ua) {
                     Ok(client) => {
                         ve.insert(client.clone());
                         Some((p_url, client))
@@ -336,6 +387,16 @@ impl ProxyManager {
                 }
             }
         }
+    }
+
+    /// V14.1 Professional: Returns a client guaranteed to bypass proxies for loopback/internal traffic.
+    pub fn get_localhost_client(&self, host: &str) -> Result<(String, Client)> {
+        let ua = self.identity_cache.entry(host.to_string())
+            .or_insert_with(|| self.pick_user_agent())
+            .clone();
+
+        let client = self.build_client(None, ua.clone())?;
+        Ok(("localhost".to_string(), client))
     }
 
     /// V13: Fail-Closed client acquisition. Refuses to return a local client if stealth is active and proxies are down.

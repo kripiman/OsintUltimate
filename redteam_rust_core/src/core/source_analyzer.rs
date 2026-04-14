@@ -5,7 +5,7 @@ use std::process::Command;
 use uuid::Uuid;
 use regex::Regex;
 use std::fs;
-use tracing::{info, warn, debug};
+use tracing::info;
 
 pub struct SourceAnalyzer {
     pub root_dir: PathBuf,

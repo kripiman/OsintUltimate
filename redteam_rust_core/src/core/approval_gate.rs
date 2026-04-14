@@ -220,6 +220,11 @@ impl ApprovalGate {
             }
             sleep(Duration::from_millis(1000)).await;
         }
+        
+        // V14.1 AGT-001: Explicitly expire the request on timeout to prevent late approval race
+        self.approval_cache.insert(request_id.to_string(), ApprovalStatus::Expired);
+        self.pending_approvals.remove(request_id);
+        
         false
     }
     

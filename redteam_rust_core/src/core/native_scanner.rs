@@ -86,16 +86,16 @@ impl IoUringScanner {
         let src_octets = self.local_ip.octets();
         let dest_octets = dest_ip.octets();
         
-        sum += (u16::from_be_bytes([src_octets[0], src_octets[1]]) as u32);
-        sum += (u16::from_be_bytes([src_octets[2], src_octets[3]]) as u32);
-        sum += (u16::from_be_bytes([dest_octets[0], dest_octets[1]]) as u32);
-        sum += (u16::from_be_bytes([dest_octets[2], dest_octets[3]]) as u32);
+        sum += u16::from_be_bytes([src_octets[0], src_octets[1]]) as u32 ;
+        sum += u16::from_be_bytes([src_octets[2], src_octets[3]]) as u32 ;
+        sum += u16::from_be_bytes([dest_octets[0], dest_octets[1]]) as u32 ;
+        sum += u16::from_be_bytes([dest_octets[2], dest_octets[3]]) as u32 ;
         sum += 6u32; // Protocol TCP
-        sum += (tcp_header.len() as u32);
+        sum += tcp_header.len() as u32 ;
         
         // TCP Header
         for chunk in tcp_header.chunks_exact(2) {
-            sum += (u16::from_be_bytes([chunk[0], chunk[1]]) as u32);
+            sum += u16::from_be_bytes([chunk[0], chunk[1]]) as u32 ;
         }
         
         while sum > 0xffff {
@@ -159,8 +159,7 @@ impl NativeScanner for IoUringScanner {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-    use std::net::Ipv4Addr;
+    // Imports removed as they were unused.
 
     #[test]
     fn test_tcp_checksum_logic() {

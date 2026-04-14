@@ -71,7 +71,8 @@ impl Pipeline {
             executor: Arc::new(crate::utils::executor::StealthExecutor::new(
                 Arc::new(crate::core::policy::StaticPolicy::new()), 
                 None, 
-                false
+                false,
+                None
             )),
         }
     }
@@ -134,6 +135,7 @@ impl Pipeline {
                                     resolved_ip: None,
                                     status: TargetStatus::Pending, 
                                     target_type: crate::models::TargetType::Web,
+                                    user: None,
                                     findings: Arc::new(Vec::new()),
                                     tool_suggestions: Arc::new(Vec::new()),
                                     tactical_context: Arc::new(serde_json::json!({})),
@@ -227,7 +229,7 @@ impl Pipeline {
         drop(sink_tx);
 
         // --- STAGE 4: Sink (v4 Lock-Free) ---
-        let mut final_sink = sink;
+        let final_sink = sink;
         let v4_sink = Arc::new(crate::core::lock_free_sink::LockFreeResultSink::new());
         let fp_filter = self.fp_filter.clone();
         

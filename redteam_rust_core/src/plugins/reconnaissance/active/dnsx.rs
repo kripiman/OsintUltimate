@@ -3,7 +3,7 @@ use crate::models::{TargetHost, Finding, Severity, Category};
 use crate::utils::tool_detection::detect_tool;
 use async_trait::async_trait;
 use anyhow::{Result, Context};
-use tracing::{info, warn};
+use tracing::info;
 use std::process::Stdio;
 use tokio::process::Command;
 pub struct DnsxScanner {
@@ -51,7 +51,7 @@ impl ScannerPlugin for DnsxScanner {
         // dnsx execution
         // -resp-only: Only show results
         // -a, -aaaa, -cname, -ptr, -ns, -mx, -txt, -soa: Query all types
-        let mut child = Command::new(&self.binary_path)
+        let child = Command::new(&self.binary_path)
             .arg("-d")
             .arg(&target.host)
             .arg("-a")

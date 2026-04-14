@@ -1,6 +1,5 @@
 use crate::plugins::{ScannerPlugin, Capability};
 use crate::models::{TargetHost, Finding, Severity, Category};
-use crate::utils::tool_detection::detect_tool;
 use async_trait::async_trait;
 use anyhow::{Result, Context};
 use tracing::{info, warn};
@@ -8,7 +7,7 @@ use reqwest::Client;
 use serde::Deserialize;
 use std::sync::Arc;
 use std::net::{IpAddr, SocketAddr};
-use crate::utils::common::{HumanJitter, get_random_user_agent};
+use crate::utils::common::HumanJitter;
 use crate::utils::proxy::ProxyManager;
 use rand::seq::SliceRandom; 
 use futures::StreamExt;
@@ -36,7 +35,7 @@ impl WebSignature {
 }
 
 pub struct WebFuzzer {
-    insecure: bool,
+    _insecure: bool,
     signatures: Vec<WebSignature>,
     jitter: Arc<HumanJitter>,
     proxy_manager: Option<Arc<ProxyManager>>,
@@ -49,7 +48,7 @@ impl WebFuzzer {
         proxy_manager: Option<Arc<ProxyManager>>
     ) -> Self {
         Self {
-            insecure,
+            _insecure: insecure,
             signatures: WebSignature::load_default(),
             jitter,
             proxy_manager,
@@ -213,16 +212,20 @@ impl ScannerPlugin for WebFuzzer {
 
         let ip: IpAddr = ip_str.parse().context("Failed to parse target IP")?;
 
+        let pm = self.proxy_manager.as_ref().context("V14.1 OPSEC Violation: WebFuzzer requires ProxyManager for tactical execution")?;
+
         // SSRF FIX: Build host-pinned clients to prevent DNS rebinding for both HTTP and HTTPS
         // Use StealthClientBuilder to apply tactical context (AI bypass suggestions)
         let pinned_http = crate::utils::stealth_http::StealthClientBuilder::build_pinned(
             target, 
+            pm,
             &target.host, 
             SocketAddr::new(ip, 80)
         ).context("Failed to build tactical pinned client (HTTP)")?;
 
         let pinned_https = crate::utils::stealth_http::StealthClientBuilder::build_pinned(
             target, 
+            pm,
             &target.host, 
             SocketAddr::new(ip, 443)
         ).context("Failed to build tactical pinned client (HTTPS)")?;

@@ -1,15 +1,14 @@
 use crate::plugins::{ScannerPlugin, Capability};
 use crate::models::{TargetHost, Finding, Severity, Category};
-use crate::utils::tool_detection::detect_tool;
 use async_trait::async_trait;
-use anyhow::{Result, Context};
-use tracing::{info, error, warn};
+use anyhow::Result;
+use tracing::{info, warn};
 use reqwest::Client;
 
 pub struct ZapScanner {
     api_key: String,
     api_url: String,
-    base_target: String,
+    _base_target: String,
 }
 
 impl ZapScanner {
@@ -17,7 +16,7 @@ impl ZapScanner {
         Self {
             api_key: api_key.unwrap_or_else(|| std::env::var("ZAP_API_KEY").unwrap_or_default()),
             api_url: api_url.unwrap_or_else(|| "http://localhost:8080".into()),
-            base_target: base_target.unwrap_or_default(),
+            _base_target: base_target.unwrap_or_default(),
         }
     }
 }

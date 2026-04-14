@@ -3,7 +3,7 @@ use crate::models::{TargetHost, Finding, Severity, Category};
 use crate::utils::tool_detection::detect_tool;
 use async_trait::async_trait;
 use anyhow::{Result, Context};
-use tracing::{info, error, warn};
+use tracing::info;
 use std::process::Stdio;
 use tokio::process::Command;
 use std::time::Duration;
@@ -62,9 +62,9 @@ impl ScannerPlugin for WPScanner {
         info!("WPScanner: launching scan against {} (Pinned: {})", target.host, pinned_ip);
 
         let url = format!("http://{}", pinned_ip);
-        let host_header = format!("Host: {}", target.host);
+        let _host_header = format!("Host: {}", target.host);
 
-        let mut child = Command::new(&self.binary_path)
+        let child = Command::new(&self.binary_path)
             .arg("--url").arg(&url)
             .arg("--custom-headers").arg(serde_json::json!({"Host": target.host}).to_string())
             .arg("--format").arg("json")

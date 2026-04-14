@@ -12,6 +12,10 @@ pub struct Droplet {
     pub name: String,
     pub networks: Networks,
     pub status: String,
+    #[serde(skip)]
+    pub socks_user: Option<String>,
+    #[serde(skip)]
+    pub socks_pass: Option<String>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -47,7 +51,8 @@ struct CreateDropletRequest {
     user_data: Option<String>,
 }
 
-const PROXY_USER_DATA: &str = r#"#cloud-config
+fn generate_proxy_user_data(user: &str, pass: &str) -> String {
+    format!(r#"#cloud-config
 package_update: true
 packages:
   - dante-server
@@ -57,21 +62,28 @@ write_files:
       logoutput: stderr
       internal: 0.0.0.0 port = 1080
       external: eth0
-      socksmethod: none
-      clientmethod: none
-      client pass {
+      socksmethod: username
+      user.privileged: root
+      user.unprivileged: nobody
+      
+      client method: none
+      client pass {{
           from: 0.0.0.0/0
           to: 0.0.0.0/0
-      }
-      socks pass {
+      }}
+      
+      socks pass {{
           from: 0.0.0.0/0
           to: 0.0.0.0/0
           protocol: tcp udp
-      }
+      }}
 runcmd:
+  - useradd -M -s /usr/sbin/nologin {user}
+  - echo "{user}:{pass}" | chpasswd
   - systemctl restart danted
   - shutdown -h +240
-"#;
+"#, user = user, pass = pass)
+}
 
 pub struct DigitalOceanClient {
     proxy_manager: Arc<ProxyManager>,
@@ -102,17 +114,20 @@ impl DigitalOceanClient {
     }
 
     pub async fn create_droplet(&self, name: &str, region: &str) -> Result<Droplet> {
+        let socks_user = "operator"; 
+        let socks_pass = uuid::Uuid::new_v4().to_string()[..12].to_string(); // Professional entropy
+
         let request = CreateDropletRequest {
             name: name.to_string(),
             region: region.to_string(),
-            size: "s-1vcpu-1gb".to_string(), // Cheapest option: $6/mo
+            size: "s-1vcpu-1gb".to_string(),
             image: "ubuntu-22-04-x64".to_string(),
-            ssh_keys: vec![], // TODO: Add SSH key support
+            ssh_keys: vec![], 
             backups: false,
             ipv6: false,
             monitoring: true,
             tags: vec!["osint-ultimate".to_string(), "ephemeral".to_string()],
-            user_data: Some(PROXY_USER_DATA.to_string()),
+            user_data: Some(generate_proxy_user_data(socks_user, &socks_pass)),
         };
 
         let response = self.get_client()?
@@ -128,7 +143,10 @@ impl DigitalOceanClient {
             droplet: Droplet,
         }
 
-        let wrapper: DropletWrapper = response.json().await?;
+        let mut wrapper: DropletWrapper = response.json().await?;
+        wrapper.droplet.socks_user = Some(socks_user.to_string());
+        wrapper.droplet.socks_pass = Some(socks_pass);
+        
         Ok(wrapper.droplet)
     }
 

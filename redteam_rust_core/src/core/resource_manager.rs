@@ -1,11 +1,10 @@
 use sysinfo::System;
 use std::sync::{Arc, Mutex};
 use tracing::{info, warn};
-use crate::core::blackarch::ResourceCost;
 
 #[derive(Clone)]
 pub struct SysResourceManager {
-    sys: Arc<Mutex<System>>,
+    _sys: Arc<Mutex<System>>,
     pub total_ram_mb: u64,
     pub strict_threshold_mb: u64, 
     available_ram_mb: Arc<std::sync::atomic::AtomicU64>,
@@ -42,7 +41,7 @@ impl SysResourceManager {
         });
 
         Self {
-            sys: sys_arc,
+            _sys: sys_arc,
             total_ram_mb,
             strict_threshold_mb: threshold,
             available_ram_mb,

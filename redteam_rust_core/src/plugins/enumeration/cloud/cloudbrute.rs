@@ -3,7 +3,7 @@ use crate::models::{TargetHost, Finding, Severity, Category};
 use crate::utils::tool_detection::detect_tool;
 use async_trait::async_trait;
 use anyhow::{Result, Context};
-use tracing::{info, warn};
+use tracing::info;
 use std::process::Stdio;
 use tokio::process::Command;
 pub struct CloudBruteScanner {
@@ -52,7 +52,7 @@ impl ScannerPlugin for CloudBruteScanner {
         // -d: domain
         // -k: keyword (usually domain without TLD)
         let keyword = target.host.split('.').next().unwrap_or(&target.host);
-        let mut child = Command::new(&self.binary_path)
+        let child = Command::new(&self.binary_path)
             .arg("-d")
             .arg(&target.host)
             .arg("-k")

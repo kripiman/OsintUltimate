@@ -117,7 +117,7 @@ impl Orchestrator {
 
         // Process concurrently up to `concurrency` limit
         let lp = self.layer_policy;
-        let policy = self.policy.clone();
+        let _policy = self.policy.clone();
         let approval_gate = self.approval_gate.clone();
         let blackarch_bridge = self.blackarch_bridge.clone();
         let memory_semaphore = self.memory_semaphore.clone();
@@ -207,6 +207,7 @@ impl Orchestrator {
                         ip: target_ref.ip.clone(),
                         resolved_ip: target_ref.resolved_ip.clone(),
                         target_type: target_ref.target_type,
+            user: None,
                         status: TargetStatus::Scanning,
                         findings: Arc::new(Vec::new()),
                         tool_suggestions: Arc::new(Vec::new()),

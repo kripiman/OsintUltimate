@@ -3,7 +3,7 @@ use crate::models::{TargetHost, Finding, Severity, Category, PLUGIN_JAELES};
 use crate::utils::tool_detection::detect_tool;
 use async_trait::async_trait;
 use anyhow::{Result, Context};
-use tracing::{info, error};
+use tracing::info;
 use std::process::Stdio;
 use tokio::process::Command;
 use std::time::Duration;

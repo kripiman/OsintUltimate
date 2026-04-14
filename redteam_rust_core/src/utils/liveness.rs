@@ -1,5 +1,5 @@
 use std::net::IpAddr;
-use tracing::{warn, info, error};
+use tracing::{warn, info};
 use std::sync::Arc;
 use crate::utils::proxy::ProxyManager;
 use anyhow::{Result, Context};

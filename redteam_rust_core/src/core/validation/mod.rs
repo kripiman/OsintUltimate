@@ -11,6 +11,7 @@ use tracing::{info, warn, error};
 mod executor;
 mod generator;
 mod sovereign;
+pub mod remote;
 
 pub struct PocValidator {
     pub(crate) router: Arc<TieredAIRouter>,

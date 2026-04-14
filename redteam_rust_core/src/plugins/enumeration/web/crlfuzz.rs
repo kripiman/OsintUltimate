@@ -3,10 +3,10 @@ use crate::models::{TargetHost, Finding, Severity, Category, TargetType, PLUGIN_
 use crate::utils::tool_detection::detect_tool;
 use async_trait::async_trait;
 use anyhow::{Result, Context};
-use tracing::{info, warn};
+use tracing::info;
 use std::process::Stdio;
 use tokio::process::Command;
-use std::io::{BufRead, BufReader};
+
 
 pub struct CRLFScanner {
     binary_path: String,

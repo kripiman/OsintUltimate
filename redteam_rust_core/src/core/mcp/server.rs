@@ -5,14 +5,14 @@ use axum::{
     Json, Router,
 };
 use futures::stream::Stream;
-use std::{convert::Infallible, sync::Arc, collections::HashMap, time::Duration};
+use std::{convert::Infallible, sync::Arc, time::Duration};
 use tokio::sync::mpsc;
 use tokio_stream::wrappers::ReceiverStream;
 use tokio_stream::StreamExt;
-use tracing::{info, error, warn};
+use tracing::{info, error};
 use serde_json::json;
 
-use crate::core::mcp::protocol::{JsonRpcRequest, JsonRpcResponse, CallToolRequest, CallToolResult, McpContent};
+use crate::core::mcp::protocol::{JsonRpcRequest, CallToolRequest, CallToolResult, McpContent};
 use crate::plugins::GlobalConfig;
 use crate::core::mcp::sanitizer::DataSanitizer;
 
@@ -71,7 +71,7 @@ async fn sse_handler(
 
 async fn message_handler(
     State(state): State<Arc<McpServer>>,
-    Path(session_id): Path<String>,
+    Path(_session_id): Path<String>,
     Json(payload): Json<JsonRpcRequest>,
 ) -> impl IntoResponse {
     let response = match payload.method.as_str() {
@@ -156,7 +156,8 @@ async fn handle_execute_plugin(state: &Arc<McpServer>, args: serde_json::Value) 
             ip: None, // El plugin lo resolverá si es necesario
             resolved_ip: None,
             status: crate::models::TargetStatus::Scanning,
-            target_type: crate::models::TargetType::Network, // Auto-detect later or assume net
+            target_type: crate::models::TargetType::Network,
+            user: None, // Auto-detect later or assume net
             findings: Arc::new(Vec::new()),
             tool_suggestions: Arc::new(Vec::new()),
             tactical_context: Arc::new(json!({})),

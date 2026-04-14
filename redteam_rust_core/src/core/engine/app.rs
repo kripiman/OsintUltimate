@@ -2,10 +2,10 @@ use anyhow::{Context, Result};
 use std::sync::Arc;
 use std::time::Duration;
 use tokio_util::sync::CancellationToken;
-use tracing::{info, error, warn};
+use tracing::{info, error};
 use futures::stream::StreamExt;
 
-use crate::models::{TargetHost, TargetStatus};
+use crate::models::TargetHost;
 use crate::core::pipeline::{Pipeline, PipelineBuilder};
 use crate::core::sink::DataSink;
 use crate::core::factory::EngineFactory;
@@ -49,6 +49,7 @@ pub struct RedTeamEngine {
     proxy_manager: Arc<crate::utils::proxy::ProxyManager>,
     policy: Arc<dyn crate::core::policy::PolicyProvider>,
     executor: Arc<crate::utils::executor::StealthExecutor>,
+    correlation_engine: Arc<tokio::sync::Mutex<crate::core::correlation::CorrelationEngine>>,
 }
 
 impl RedTeamEngine {
@@ -67,9 +68,11 @@ impl RedTeamEngine {
         let executor = Arc::new(crate::utils::executor::StealthExecutor::new(
             policy.clone(),
             Some(proxy_manager.clone()),
-            config.stealth
+            config.stealth,
+            None
         ));
         
+        let correlation_engine = Arc::new(tokio::sync::Mutex::new(crate::core::correlation::CorrelationEngine::new()));
         Self {
             config,
             shutdown_token,
@@ -79,11 +82,13 @@ impl RedTeamEngine {
             proxy_manager,
             policy,
             executor,
+            correlation_engine,
         }
     }
 
     pub fn from_config(config: EngineConfig, utils_config: &crate::utils::config::Config) -> Self {
         let shutdown_token = CancellationToken::new();
+        let correlation_engine = Arc::new(tokio::sync::Mutex::new(crate::core::correlation::CorrelationEngine::new()));
         let memory_monitor = Arc::new(MemoryMonitor::new(
             utils_config.soft_memory_limit_mb as u32, 
             utils_config.hard_memory_limit_mb as u32
@@ -100,7 +105,8 @@ impl RedTeamEngine {
         let executor = Arc::new(crate::utils::executor::StealthExecutor::new(
             policy.clone(),
             Some(proxy_manager.clone()),
-            config.stealth
+            config.stealth,
+            None
         ));
         
         Self {
@@ -112,6 +118,7 @@ impl RedTeamEngine {
             proxy_manager,
             policy,
             executor,
+            correlation_engine,
         }
     }
 
@@ -130,7 +137,7 @@ impl RedTeamEngine {
                 .context(format!("Failed to establish stealth infrastructure readiness within {:?}", self.config.readiness_timeout))?;
         }
 
-        let mut builder = self.prepare_pipeline_builder(sink);
+        let builder = self.prepare_pipeline_builder(sink);
         let mut pipeline = builder.build()?;
         
         // Start standalone sink for Autonomous streaming
@@ -223,20 +230,23 @@ impl RedTeamEngine {
                             info!("⏳ STEALTH: Waiting for droplet IP (Managed node ID: {})...", droplet.id);
                             match do_client.wait_for_ip(droplet.id).await {
                                 Ok(ip) => {
-                                    // V13: Health check - Wait for danted SOCKS server to respond
-                                    info!("⏳ STEALTH: Provisioned IP {}. Waiting for SOCKS5 service initialization...", ip);
-                                    
                                     let mut ready = false;
-                                    for _ in 0..15 { // Try for 30s
+                                    let user = droplet.socks_user.as_deref().unwrap_or("operator");
+                                    let pass = droplet.socks_pass.as_deref().unwrap_or("");
+                                    
+                                    info!("⏳ STEALTH: Provisioned IP {}. Validating professional SOCKS5 auth ({})...", ip, user);
+                                    
+                                    for _ in 0..15 { 
+                                        // Health check: Can we connect?
                                         if let Ok(Ok(_)) = tokio::time::timeout(Duration::from_secs(2), tokio::net::TcpStream::connect(format!("{}:1080", ip))).await {
                                             ready = true;
                                             break;
                                         }
                                         tokio::time::sleep(Duration::from_secs(2)).await;
                                     }
-
+ 
                                     if ready {
-                                        pm.add_managed_exit(ip);
+                                        pm.add_managed_exit_with_auth(ip, user, pass);
                                     } else {
                                         error!("❌ STEALTH: Droplet {} IP ready but SOCKS5 (danted) failed to start. Destroying.", ip);
                                         let _ = do_client.destroy_droplet(droplet.id).await;
@@ -263,7 +273,7 @@ impl RedTeamEngine {
         );
         let jitter = Arc::new(crate::utils::common::HumanJitter::new(100, 1500));
         
-        let proxy_manager = Some(self.proxy_manager.clone());
+        let _proxy_manager = Some(self.proxy_manager.clone());
 
         let stealth_jitter = if self.config.stealth {
             Some(JitterSleep::for_stealth())
@@ -295,6 +305,7 @@ impl RedTeamEngine {
             sandbox: self.sandbox.clone(),
             policy: self.policy.clone(),
             executor: self.executor.clone(),
+            correlation_engine: self.correlation_engine.clone(),
         };
 
         let mut builder = Pipeline::builder()
@@ -309,7 +320,7 @@ impl RedTeamEngine {
             .approval_gate(self.approval_gate.clone());
 
         // Add discovery plugins
-        for p in crate::plugins::get_all_discovery() {
+        for p in crate::plugins::get_all_discovery(global_config.clone()) {
             builder = builder.with_discovery(p);
         }
 
@@ -341,5 +352,9 @@ impl RedTeamEngine {
 
     pub fn approval_gate(&self) -> Arc<ApprovalGate> {
         self.approval_gate.clone()
+    }
+
+    pub fn proxy_manager(&self) -> Arc<crate::utils::proxy::ProxyManager> {
+        self.proxy_manager.clone()
     }
 }

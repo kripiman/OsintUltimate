@@ -3,11 +3,9 @@
 // ⚡ Detects common Windows privesc vectors (Rust native, no PowerShell required)
 
 use async_trait::async_trait;
-use crate::models::{TargetHost, Finding, Category, Severity, Evidence, TargetType};
+use crate::models::{TargetHost, Finding, Category, Severity, TargetType};
 use crate::plugins::ScannerPlugin;
-use crate::core::capability_layer::ScanLayer;
 use anyhow::Result;
-use std::collections::HashMap;
 
 pub struct PrivescHunterScanner {
     // Configurable preset security levels

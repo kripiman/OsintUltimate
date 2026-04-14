@@ -3,7 +3,7 @@ use crate::models::{TargetHost, Finding, Severity, Category};
 use crate::utils::tool_detection::detect_tool;
 use async_trait::async_trait;
 use anyhow::{Result, Context};
-use tracing::{info, warn};
+use tracing::info;
 use std::process::Stdio;
 use tokio::process::Command;
 pub struct FeroxbusterScanner {
@@ -53,7 +53,7 @@ impl ScannerPlugin for FeroxbusterScanner {
         // -q: quiet mode
         // -n: no recursion (optional, but let's keep it professional and recursive by default if not specified)
         // For professional use, we might want to limit depth or use a specific wordlist.
-        let mut child = Command::new(&self.binary_path)
+        let child = Command::new(&self.binary_path)
             .arg("-u")
             .arg(&target.host)
             .arg("--quiet")

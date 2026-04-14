@@ -5,7 +5,6 @@ use crate::core::ai::{LlmClient, ContextCompressor, AdaptiveContext, RouteLevel,
 use crate::utils::common::extract_json;
 use serde_json::json;
 use std::sync::Arc;
-use std::time::Duration;
 
 pub struct AzureOpenAIClient {
     pub endpoint: String,
@@ -20,13 +19,12 @@ impl AzureOpenAIClient {
         Ok(Self { endpoint, key, deployment, api_version, proxy_manager: pm })
     }
     async fn get_client(&self) -> Result<reqwest::Client> {
-        if let Some(ref pm) = self.proxy_manager {
-            let host = url::Url::parse(&self.endpoint)?.host_str().unwrap_or("openai.azure.com").to_string();
-            let (_, client) = pm.get_client_fail_closed(&host)?;
-            Ok(client)
-        } else {
-            Ok(reqwest::Client::builder().timeout(Duration::from_secs(60)).build()?)
-        }
+        let pm = self.proxy_manager.as_ref()
+            .context("V13 OPSEC Violation: AzureOpenAIClient requires an active ProxyManager for Sovereign Stealth.")?;
+        
+        let host = url::Url::parse(&self.endpoint)?.host_str().unwrap_or("openai.azure.com").to_string();
+        let (_, client) = pm.get_client_fail_closed(&host)?;
+        Ok(client)
     }
 }
 

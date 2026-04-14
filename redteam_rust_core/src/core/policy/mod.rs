@@ -1,4 +1,4 @@
-use anyhow::{Result, Context};
+use anyhow::Result;
 use once_cell::sync::Lazy;
 use regex::Regex;
 use std::collections::HashSet;
@@ -51,7 +51,7 @@ impl PolicyProvider for StaticPolicy {
             for arg in args {
                 if arg.starts_with('-') {
                     // Extract flag part (e.g. -p80 -> -p)
-                    let flag = if arg.len() >= 2 && !arg.starts_with("--") {
+                    let _flag = if arg.len() >= 2 && !arg.starts_with("--") {
                         &arg[0..2]
                     } else if arg.contains('=') {
                          arg.split('=').next().unwrap_or(arg)

@@ -2,10 +2,8 @@ use crate::plugins::{ScannerPlugin, Capability};
 use crate::models::{TargetHost, Finding, Severity, Category};
 use crate::utils::tool_detection::detect_tool;
 use async_trait::async_trait;
-use anyhow::{Result, Context};
-use tracing::{info, warn};
-use std::process::Stdio;
-use tokio::process::Command;
+use anyhow::Result;
+use tracing::info;
 pub struct PacuScanner {
     binary_path: String,
 }

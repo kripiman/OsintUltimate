@@ -1,6 +1,6 @@
-use crate::models::{Finding, AIAnalysis, TargetHost};
+use crate::models::TargetHost;
 use crate::core::pipeline::Pipeline;
-use crate::core::ai::{AdaptiveContext, CapabilityGap};
+use crate::core::ai::AdaptiveContext;
 use anyhow::Result;
 use std::sync::Arc;
 use tokio::sync::mpsc;

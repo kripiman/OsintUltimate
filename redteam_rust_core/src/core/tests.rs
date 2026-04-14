@@ -28,6 +28,7 @@ mod tests {
             resolved_ip: None,
             status: TargetStatus::Pending,
             target_type: TargetType::Host,
+            user: None,
             findings: Arc::new(Vec::new()),
             tool_suggestions: Arc::new(Vec::new()),
             tactical_context: Arc::new(serde_json::json!({})),
@@ -50,6 +51,7 @@ mod tests {
             resolved_ip: None,
             status: TargetStatus::Pending,
             target_type: TargetType::Web,
+            user: None,
             findings: Arc::new(vec![
                 Finding::new(crate::models::FINDING_TECH_STACK, Category::TechnologyStack, Severity::Info, "desc", 
                     serde_json::json!({"plugins": {"Cloudflare": {}}}))

@@ -1,17 +1,15 @@
-use anyhow::{Result, Context};
+use anyhow::Result;
 use tracing::{info, warn};
 use std::time::Duration;
 use crate::models::{TargetHost, Finding};
 use crate::models::findings::PocDefinition;
 use crate::core::c2::C2Operator;
-use crate::core::approval_gate::{ApprovalStatus, ApprovalStatus::Approved};
+use crate::core::approval_gate::ApprovalStatus::Approved;
 use crate::core::validation::PocValidator;
 
 impl PocValidator {
     pub(crate) async fn deploy_c2(&self, target: &TargetHost) -> Result<()> {
-        let pm = self.proxy_manager.clone()
-            .context("V14.1 SOVEREIGN: ProxyManager is mandatory for C2 deployment.")?;
-        let sliver = crate::plugins::lateral_movement::sliver::SliverScanner::new(pm);
+        let sliver = crate::plugins::lateral_movement::sliver::SliverScanner::new(self.executor.clone());
         
         match sliver.prepare_payload(target).await {
             Ok(payload_path) => {

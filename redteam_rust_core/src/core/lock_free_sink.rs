@@ -1,6 +1,5 @@
 use crate::models::TargetHost;
 use crate::core::sink::DataSink;
-use anyhow::Result;
 use crossbeam::queue::SegQueue;
 use std::sync::Arc;
 use tokio::sync::Notify;
@@ -75,6 +74,7 @@ impl LockFreeResultSink {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use anyhow::Result;
     use crate::core::sink::DataSink;
     use crate::models::{TargetHost, TargetStatus, TargetType};
     use std::sync::Mutex;
@@ -107,6 +107,7 @@ mod tests {
                 resolved_ip: None,
                 status: TargetStatus::Pending,
                 target_type: TargetType::Host,
+            user: None,
                 findings: Arc::new(Vec::new()),
                 tool_suggestions: Arc::new(Vec::new()),
                 tactical_context: Arc::new(serde_json::json!({})),

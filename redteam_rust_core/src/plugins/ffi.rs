@@ -1,11 +1,9 @@
 use std::sync::Mutex;
 use std::os::raw::c_char;
-use crate::utils::tool_detection::detect_tool;
 use crate::models::{TargetHost, Finding};
 use anyhow::Result;
 use std::panic::{catch_unwind, AssertUnwindSafe};
-use once_cell::sync::Lazy;
-use dashmap::DashSet;
+
 
 /// V11 HARDENING: ABI Versioning to prevent memory corruption from incompatible plugins.
 /// Incremented to 2 to reflect the addition of struct-level destructors for FFI.
@@ -51,7 +49,6 @@ pub struct FFIPluginWrapper {
     sync_lock: Mutex<()>,
 }
 
-static PLUGIN_NAME_CACHE: Lazy<DashSet<String>> = Lazy::new(DashSet::new);
 
 impl FFIPluginWrapper {
     pub fn new(ffi: ScannerPluginFFI) -> Result<Self> {
@@ -118,7 +115,7 @@ impl crate::plugins::ScannerPlugin for FFIPluginWrapper {
 
         // PFC-001: Bridge de pánico para evitar que un bug en el plugin mate al orquestador
         let result = catch_unwind(AssertUnwindSafe(move || {
-            unsafe { (ffi.scan)(plugin_ptr, target_ptr) }
+            (ffi.scan)(plugin_ptr, target_ptr)
         }));
 
         match result {
@@ -172,9 +169,7 @@ impl crate::plugins::ScannerPlugin for FFIPluginWrapper {
 
 impl Drop for FFIPluginWrapper {
     fn drop(&mut self) {
-        unsafe {
-            (self.ffi.destroy)(self.ffi.plugin_ptr);
-        }
+        (self.ffi.destroy)(self.ffi.plugin_ptr);
     }
 }
 
