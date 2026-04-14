@@ -1,53 +1,52 @@
-# 🛡️ OsintUltimate (V13 Stealth Hardening Protocol)
+# 🛡️ OsintUltimate (V14 Adaptive Stealth Protocol)
 
-> **Motor de Evaluación de Red Team de Alto Rendimiento, Asíncrono y Autónomo**
+> **Autonomous Red Team Orchestration & Sovereign Offensive Operations**
 > 
-> *Sigilo Absoluto. Seguridad Atómica. Concurrencia Lock-Free.*
-> *Arquitectura V13: Infraestructura Stealth, I/O io-uring y Agente Sentinel.*
+> *Binary Precision. Fail-Closed Egress. Sovereign Command.*
+> *V14 Protocol: Adaptive Posture Management, Priority Swarm Dynamics, and C2 Sovereignty.*
 
 ---
 
-## 🚀 Vista General
+## 🚀 Operational Overview
 
-**OsintUltimate V13** es la evolución definitiva del motor de Red Team, diseñado para operaciones encubiertas de alta intensidad. Esta versión introduce una infraestructura de sigilo autoconsciente y un pipeline de red ultra-eficiente basado en `io-uring`.
+**OsintUltimate V14** is a production-grade autonomous operator designed for sovereign offensive security. This version transitions from a simple "Scanner" to a **Multi-Agent Swarm** capable of independent strategic planning, vulnerability validation, and post-exploitation persistence under a strict "No-Proxy, No-Traffic" hard-gate.
 
-### Novedades en V13:
-- **Infraestructura Stealth Autónoma**: Detección nativa de Oracle Cloud (OCI) y despliegue automático de proxies en DigitalOcean para evasión de IP.
-- **Egress Hardening Rígido**: Validación semántica de argumentos y Pinning de IP obligatorio en `PocValidator` para prevenir DNS Rebinding.
-- **Pipeline Lock-Free**: Ingesta de resultados mediante `SegQueue` desacoplada, eliminando bloqueos de base de datos durante escaneos masivos.
-- **Native io-uring Scanner**: Escaneo de red de alto rendimiento que bypassa el modelo `fork/exec` utilizando `SQPOLL` en el kernel de Linux.
-- **Agente Sentinel V13**: IA táctica con capacidad de validación de PoC intrusivos bajo control manual (`Approval Gate`).
-
----
-
-## 📚 Documentación Técnica (Single Source of Truth)
-
-Consulta los documentos maestros para profundizar en el diseño:
-
-*   [🏗️ Arquitectura V13 (Master)](redteam_rust_core/docs/ARCHITECTURE.md): Diseño asíncrono, flujos de concurrencia y diagramas Mermaid.
-*   [🕵️ Infraestructura Stealth](redteam_rust_core/docs/STEALTH_INFRA.md): Detección OCI, proxies DigitalOcean y control de egress.
-*   [📊 Esquema de Persistencia](redteam_rust_core/docs/PERSISTENCE_SCHEMA.md): Detalles del esquema SQLite y motor lock-free.
-*   [🛡️ Hardening y SIGILO](redteam_rust_core/docs/HARDENING_AND_OPSEC.md): Protocolos de evasión, jitter adaptativo y seguridad OPSEC.
-*   [🧠 Orquestación de IA (Sentinel)](redteam_rust_core/docs/AI_ORCHESTRATION.md): Tiered AI Router y toma de decisiones autónoma.
-*   [🧩 Desarrollo de Plugins](redteam_rust_core/docs/PLUGIN_DEVELOPMENT.md): Guía para extender las capacidades del núcleo.
+### V14 Adaptive Highlights:
+- **Adaptive Posture Management**: Dynamic state-machine transitions between `GHOST`, `STRIKE`, and `BREACH` postures based on target sensitivity.
+- **Priority-Aware Swarm**: Atomic token admission control (`TokenBudget`) ensuring critical analysis survives starvation.
+- **Fail-Closed Egress**: V14 Hard-gate: Functionality aborts instantly if stealth infrastructure (Proxies/Managed Exits) is compromised.
+- **C2 Sovereignty**: Native integration with autonomous C2 operators for persistent session maintenance and lateral movement.
+- **Lock-Free Pipeline**: High-throughput telemetry ingesta using lock-free data structures and `io-uring`.
 
 ---
 
-## 💻 Requisitos del Sistema
+## 📚 Technical Documentation (Single Source of Truth)
 
-### Hardware (Optimización Dinámica)
-OsintUltimate V13 se adapta automáticamente a tu hardware para garantizar estabilidad:
+All documentation is synchronized with the **V14 Adaptive Stealth Protocol**:
 
-| Recurso | Mínimo (Modo UltraLow) | Recomendado (Enterprise) |
+*   [🏗️ V14 Core Architecture (Master)](redteam_rust_core/docs/V14_CORE_ARCHITECTURE.md): System topology, concurrent agent pool, and Master SSOT component graph.
+*   [🐝 Swarm Dynamics & Budgeting](redteam_rust_core/docs/SWARM_DYNAMICS.md): Token reservation, admission thresholds, and agent role specifications.
+*   [🎭 Adaptive Evasion: The Posture Manual](redteam_rust_core/docs/ADAPTIVE_EVASION.md): Technical specs for GHOST/STRIKE/BREACH transitions and Proxy isolation.
+*   [🛡️ Hardening & OPSEC](redteam_rust_core/docs/HARDENING_AND_OPSEC.md): Jitter distributions, User-Agent pinning, and security boundaries.
+*   [🧩 Plugin Development](redteam_rust_core/docs/PLUGIN_DEVELOPMENT.md): Technical guide for extending the core offensive capabilities.
+*   [📊 Persistence Schema](redteam_rust_core/docs/PERSISTENCE_SCHEMA.md): Database WAL engine and result archival specifications.
+
+---
+
+## 💻 System Requirements (V14 Hardened)
+
+The V14 engine scales dynamically based on available resources:
+
+| Resource | Mode: UltraLow (1GB RAM) | Mode: Sovereign (8GB+ RAM) |
 | :--- | :--- | :--- |
-| **CPU** | Dual-core (x86_64/ARM64) | Quad-core o superior |
-| **RAM** | 1 GB | 8 GB+ |
-| **Disco** | SSD (Indispensable para WAL) | NVMe SSD |
-| **Red** | 10 Mbps (Baja latencia) | 1 Gbps+ |
+| **Concurrency** | 5-10 Workers | 100+ Workers |
+| **Sandboxing** | ProcessGuard Native | Strict Docker Ephemeral |
+| **Backpressure** | Active @ 500MB | Active @ 4GB |
+| **Storage** | SSD Recommended | NVMe Required |
 
 ---
 
-## 🛠️ Instalación y Construcción
+## 🛠️ Build & Deploy
 
 ```bash
 git clone https://github.com/kripiman/OsintUltimate
@@ -55,26 +54,11 @@ cd OsintUltimate/redteam_rust_core
 cargo build --release
 ```
 
-El binario optimizado estará en `target/release/redteam_rust_core`.
+The V14 binary is optimized for minimal footprint and maximum OPSEC.
 
 ---
 
-## 🛡️ Características Principales V13
+## 📜 Governance
 
--   **⚡ Alto Rendimiento**: Impulsado por `tokio` e `io-uring`. Escanea miles de hosts con una huella de memoria mínima (~20MB RAM).
--   **🕵️ Evasión Avanzada**: 
-    - Jitter Log-Normal (comportamiento humano).
-    - Rotación de identidades (User-Agents y TLS Fingerprinting).
-    - Thompson Sampling para selección de payloads WAF.
--   **🔒 Seguridad por Diseño**:
-    - Garantías de seguridad de Rust (Memory Safety).
-    - Protección SSRF estricta contra rangos privados y metadatos cloud.
-    - Sandboxing híbrido (Docker vs ProcessGuard) basado en RAM disponible.
--   **🤖 Sentinel AI Agent**: Pentesting autónomo con orquestación de LLMs en cascada (Gemini Pro/Claude/OpenAI).
-
----
-
-## 📜 Licencia
-
-Privado y Confidencial - Solo para uso interno del Red Team.
-© 2026 RedTeam Lab | OsintUltimate V13
+Private & Confidential - Sovereign Offensive Operations Only.
+© 2026 RedTeam Lab | OsintUltimate V14 Protocol
