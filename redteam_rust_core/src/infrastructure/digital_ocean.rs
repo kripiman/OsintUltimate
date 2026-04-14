@@ -1,6 +1,8 @@
 use serde::{Deserialize, Serialize};
 use reqwest::header::{HeaderMap, HeaderValue, AUTHORIZATION, CONTENT_TYPE};
 use anyhow::{Result, Context};
+use std::sync::Arc;
+use crate::utils::proxy::ProxyManager;
 use std::time::Duration;
 use tokio::time::sleep;
 
@@ -72,16 +74,21 @@ runcmd:
 "#;
 
 pub struct DigitalOceanClient {
-    client: reqwest::Client,
+    proxy_manager: Arc<ProxyManager>,
     token: String,
 }
 
 impl DigitalOceanClient {
-    pub fn new(token: String) -> Self {
+    pub fn new(token: String, pm: Arc<ProxyManager>) -> Self {
         Self {
-            client: reqwest::Client::new(),
+            proxy_manager: pm,
             token,
         }
+    }
+
+    fn get_client(&self) -> Result<reqwest::Client> {
+        let (_, client) = self.proxy_manager.get_client_fail_closed("api.digitalocean.com")?;
+        Ok(client)
     }
 
     fn headers(&self) -> Result<HeaderMap> {
@@ -108,7 +115,7 @@ impl DigitalOceanClient {
             user_data: Some(PROXY_USER_DATA.to_string()),
         };
 
-        let response = self.client
+        let response = self.get_client()?
             .post("https://api.digitalocean.com/v2/droplets")
             .headers(self.headers()?)
             .json(&request)
@@ -126,7 +133,7 @@ impl DigitalOceanClient {
     }
 
     pub async fn get_droplet(&self, id: u64) -> Result<Droplet> {
-        let response = self.client
+        let response = self.get_client()?
             .get(format!("https://api.digitalocean.com/v2/droplets/{}", id))
             .headers(self.headers()?)
             .send()
@@ -156,7 +163,7 @@ impl DigitalOceanClient {
     }
 
     pub async fn destroy_droplet(&self, id: u64) -> Result<()> {
-        self.client
+        self.get_client()?
             .delete(format!("https://api.digitalocean.com/v2/droplets/{}", id))
             .headers(self.headers()?)
             .send()
@@ -166,7 +173,7 @@ impl DigitalOceanClient {
     }
 
     pub async fn list_droplets(&self) -> Result<Vec<Droplet>> {
-        let response = self.client
+        let response = self.get_client()?
             .get("https://api.digitalocean.com/v2/droplets?tag_name=osint-ultimate")
             .headers(self.headers()?)
             .send()

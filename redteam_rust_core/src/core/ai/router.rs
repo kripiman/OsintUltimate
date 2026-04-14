@@ -8,7 +8,7 @@ use once_cell::sync::Lazy;
 use anyhow::{Result, anyhow};
 use crate::models::{Finding, AIAnalysis, TargetHost};
 use crate::plugins::PluginMetadata;
-use crate::core::agent::LlmClient;
+use crate::core::ai::traits::LlmClient;
 use super::types::{RouteLevel, LlmProviderKind, ProviderEntry, AdaptiveContext, CacheMetrics};
 use super::compressor::ContextCompressor;
 
@@ -16,7 +16,6 @@ use super::compressor::ContextCompressor;
 pub struct TieredAIRouter {
     pub providers: std::collections::HashMap<RouteLevel, Vec<ProviderEntry>>,
     analysis_cache: Cache<String, AIAnalysis>, // TACTICAL CACHE: Prevents Azure credit bleed
-    decision_cache: Cache<String, Option<String>>, // TACTICAL CACHE: Autonomous logic reuse
     metrics: Arc<CacheMetrics>,
 }
 
@@ -27,10 +26,6 @@ impl TieredAIRouter {
             analysis_cache: Cache::builder()
                 .max_capacity(5000)
                 .time_to_live(Duration::from_secs(7200)) // 2h TTL
-                .build(),
-            decision_cache: Cache::builder()
-                .max_capacity(1000)
-                .time_to_live(Duration::from_secs(1800)) // 30m TTL
                 .build(),
             metrics: Arc::new(CacheMetrics::default()),
         }
@@ -98,12 +93,12 @@ impl TieredAIRouter {
         level
     }
 
-    pub async fn analyze(&self, finding: &Finding, target: &TargetHost) -> Result<AIAnalysis> {
+    pub async fn analyze(&self, finding: &Finding, target: &TargetHost, attack_context: Option<&str>) -> Result<AIAnalysis> {
         let level = self.classify(finding, target);
-        self.analyze_with_level(finding, target, level).await
+        self.analyze_with_level(finding, target, attack_context, level).await
     }
 
-    pub async fn analyze_with_level(&self, finding: &Finding, target: &TargetHost, target_level: RouteLevel) -> Result<AIAnalysis> {
+    pub async fn analyze_with_level(&self, finding: &Finding, target: &TargetHost, attack_context: Option<&str>, target_level: RouteLevel) -> Result<AIAnalysis> {
         let cache_key = Self::calculate_finding_cache_key(finding, target);
         if let Some(cached) = self.analysis_cache.get(&cache_key) {
             self.metrics.hits.fetch_add(1, Ordering::Relaxed);
@@ -122,7 +117,7 @@ impl TieredAIRouter {
 
             if let Some(providers) = self.providers.get(&current_level) {
                 for entry in providers {
-                    match entry.client.analyze(finding, target, current_level).await {
+                    match entry.client.analyze(finding, target, attack_context, current_level).await {
                         Ok(analysis) => {
                             let mut analysis = analysis;
                             analysis.model = format!("{} (Tiered: {:?}, Provider: {:?})", analysis.model, current_level, entry.kind);
@@ -145,6 +140,7 @@ impl TieredAIRouter {
         finding: &Finding,
         target: &TargetHost,
         plugins: &[PluginMetadata],
+        attack_context: Option<&str>,
         adaptive_context: Option<&AdaptiveContext>,
     ) -> Result<Option<(String, serde_json::Value)>> {
         let target_level = self.classify(finding, target);
@@ -159,7 +155,7 @@ impl TieredAIRouter {
 
             if let Some(providers) = self.providers.get(&current_level) {
                 for entry in providers {
-                    match entry.client.decide_action(finding, target, plugins, None, adaptive_context, current_level).await {
+                    match entry.client.decide_action(finding, target, plugins, attack_context, None, adaptive_context, current_level).await {
                         Ok(Some((action, context))) => {
                             return Ok(Some((action, context)));
                         }

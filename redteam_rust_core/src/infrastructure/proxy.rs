@@ -1,4 +1,4 @@
-use anyhow::Result;
+
 
 pub struct ProxyConfig {
     pub host: String,

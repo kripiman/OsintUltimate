@@ -45,6 +45,8 @@ tracing-opentelemetry = "0.22"
 opentelemetry = "0.21"
 opentelemetry_sdk = { version = "0.21", features = ["rt-tokio"] }
 opentelemetry-otlp = "0.14"
+tonic = "0.9"
+tower = "0.4"
 anyhow = "1.0"
 thiserror = "1.0"
 
@@ -82,6 +84,7 @@ siphasher = "0.3"
 aya = "0.13"
 socket2 = "0.5"
 tokio-socks = "0.5.2"
+zip = "8.5.1"
 
 # Persistence & Swarm
 # RocksDB and Chitchat removed as they were not used in the final v4.0 architecture and caused build failures.

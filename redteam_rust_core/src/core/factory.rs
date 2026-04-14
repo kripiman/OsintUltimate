@@ -2,7 +2,7 @@ use std::sync::Arc;
 use anyhow::{Result, Context};
 use tracing::{info, warn};
 use crate::core::ai::{TieredAIRouter, RouteLevel, LlmProviderKind};
-use crate::core::agent::{OllamaClient, GeminiClient, AnthropicClient, OpenAIClient, AzureOpenAIClient};
+use crate::core::ai::{OllamaClient, GeminiClient, AnthropicClient, OpenAIClient, AzureOpenAIClient};
 use crate::utils::{InfrastructureType, HardwareInfo, proxy::ProxyManager};
 
 pub struct EngineFactory;

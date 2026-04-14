@@ -24,7 +24,7 @@ pub struct Pipeline {
     shutdown_token: CancellationToken,
     liveness_checker: LivenessChecker,
     command_line: String,
-    policy: ScanLayerPolicy,
+    layer_policy: ScanLayerPolicy,
     approval_gate: Arc<ApprovalGate>,
     blackarch_bridge: Arc<crate::core::blackarch::BlackArchBridge>,
     jitter: Option<JitterSleep>,
@@ -37,6 +37,8 @@ pub struct Pipeline {
     ai_router: Option<Arc<crate::core::ai::TieredAIRouter>>,
     sandbox: Arc<crate::core::sandbox::SandboxDispatcher>,
     proxy_manager: Option<Arc<crate::utils::proxy::ProxyManager>>,
+    policy: Arc<dyn crate::core::policy::PolicyProvider>,
+    executor: Arc<crate::utils::executor::StealthExecutor>,
 }
 impl Pipeline {
     pub fn builder() -> PipelineBuilder {
@@ -52,7 +54,7 @@ impl Pipeline {
             shutdown_token: tokio_util::sync::CancellationToken::new(),
             liveness_checker: crate::utils::LivenessChecker::new(None, false),
             command_line: "minimal".to_string(),
-            policy: crate::core::capability_layer::ScanLayerPolicy::preset_audit(),
+            layer_policy: crate::core::capability_layer::ScanLayerPolicy::preset_audit(),
             approval_gate: Arc::new(crate::core::approval_gate::ApprovalGate::for_red_team()),
             blackarch_bridge: Arc::new(crate::core::blackarch::BlackArchBridge::new()),
             jitter: None,
@@ -65,6 +67,12 @@ impl Pipeline {
             ai_router: None,
             sandbox,
             proxy_manager: None,
+            policy: Arc::new(crate::core::policy::StaticPolicy::new()),
+            executor: Arc::new(crate::utils::executor::StealthExecutor::new(
+                Arc::new(crate::core::policy::StaticPolicy::new()), 
+                None, 
+                false
+            )),
         }
     }
 
@@ -187,7 +195,7 @@ impl Pipeline {
         // --- STAGE 3: Scanning ---
         let plugins = self.plugins.clone();
         let concurrency = self.concurrency;
-        let policy = self.policy;
+        let layer_policy = self.layer_policy;
         let approval_gate = self.approval_gate.clone();
         let blackarch_bridge = self.blackarch_bridge.clone();
         let scan_rx = scan_rx;
@@ -198,11 +206,13 @@ impl Pipeline {
             let mut orchestrator = Orchestrator::new(
                 plugins, 
                 concurrency,
-                policy,
+                layer_policy,
                 approval_gate,
                 blackarch_bridge,
                 memory_monitor,
-                self.sandbox.clone(), // NUEVO
+                self.sandbox.clone(),
+                self.policy.clone(),
+                self.executor.clone(),
             );
             if let (Some(tx), Some(targets)) = (self.dashboard_tx, self.dashboard_targets) {
                 orchestrator.with_dashboard_preconfigured(tx, targets);
@@ -276,11 +286,13 @@ impl Pipeline {
         let orchestrator = Orchestrator::new(
             self.plugins.clone(), 
             self.concurrency,
-            self.policy,
+            self.layer_policy,
             self.approval_gate.clone(),
             self.blackarch_bridge.clone(),
             self.memory_monitor.clone(),
-            self.sandbox.clone(), // NUEVO
+            self.sandbox.clone(),
+            self.policy.clone(),
+            self.executor.clone(),
         );
         let token = self.shutdown_token.clone();
         
@@ -314,6 +326,12 @@ impl Pipeline {
             anyhow::bail!("Plugin '{}' not found", plugin_name)
         }
     }
+
+    pub fn get_c2_operators(&self) -> Vec<&dyn crate::core::c2::C2Operator> {
+        self.plugins.iter()
+            .filter_map(|p| p.as_c2_operator())
+            .collect()
+    }
 }
 
 
@@ -325,7 +343,7 @@ pub struct PipelineBuilder {
     shutdown_token: CancellationToken,
     liveness_checker: Option<LivenessChecker>,
     command_line: String,
-    policy: Option<ScanLayerPolicy>,
+    layer_policy: Option<ScanLayerPolicy>,
     approval_gate: Option<Arc<ApprovalGate>>,
     jitter: Option<JitterSleep>,
     fp_filter: Option<Arc<FalsePositiveFilter>>,
@@ -337,6 +355,8 @@ pub struct PipelineBuilder {
     sandbox: Option<Arc<crate::core::sandbox::SandboxDispatcher>>,
     memory_monitor: Option<Arc<crate::utils::memory_monitor::MemoryMonitor>>,
     proxy_manager: Option<Arc<crate::utils::proxy::ProxyManager>>,
+    policy: Option<Arc<dyn crate::core::policy::PolicyProvider>>,
+    executor: Option<Arc<crate::utils::executor::StealthExecutor>>,
 }
 
 impl Default for PipelineBuilder { fn default() -> Self { Self::new() } }
@@ -351,7 +371,7 @@ impl PipelineBuilder {
             shutdown_token: CancellationToken::new(),
             liveness_checker: None,
             command_line: "OsintUltimate".to_string(),
-            policy: None,
+            layer_policy: None,
             approval_gate: None,
             jitter: None,
             fp_filter: None,
@@ -363,14 +383,18 @@ impl PipelineBuilder {
             ai_router: None,
             sandbox: None,
             proxy_manager: None,
+            policy: None,
+            executor: None,
         }
     }
 
-    pub fn with_swarm(mut self, enabled: bool, max_tokens: u32, router: Arc<crate::core::ai::TieredAIRouter>, proxy_manager: Option<Arc<crate::utils::proxy::ProxyManager>>) -> Self {
+    pub fn with_swarm(mut self, enabled: bool, max_tokens: u32, router: Arc<crate::core::ai::TieredAIRouter>, proxy_manager: Option<Arc<crate::utils::proxy::ProxyManager>>, executor: Arc<crate::utils::executor::StealthExecutor>, policy: Arc<dyn crate::core::policy::PolicyProvider>) -> Self {
         self.swarm_mode = enabled;
         self.max_tokens = max_tokens;
         self.ai_router = Some(router);
         self.proxy_manager = proxy_manager;
+        self.executor = Some(executor);
+        self.policy = Some(policy);
         self
     }
 
@@ -389,7 +413,7 @@ impl PipelineBuilder {
 
     pub fn memory_monitor(mut self, monitor: Arc<crate::utils::memory_monitor::MemoryMonitor>) -> Self { self.memory_monitor = Some(monitor); self }
 
-    pub fn policy(mut self, policy: ScanLayerPolicy) -> Self { self.policy = Some(policy); self }
+    pub fn layer_policy(mut self, policy: ScanLayerPolicy) -> Self { self.layer_policy = Some(policy); self }
     pub fn approval_gate(mut self, gate: Arc<ApprovalGate>) -> Self { self.approval_gate = Some(gate); self }
 
     pub fn liveness_checker(mut self, checker: LivenessChecker) -> Self { self.liveness_checker = Some(checker); self }
@@ -404,7 +428,7 @@ impl PipelineBuilder {
     pub fn build(self) -> Result<Pipeline> {
         let sink = self.sink.context("Pipeline requires a configured sink")?;
         let liveness_checker = self.liveness_checker.context("Pipeline requires a configured liveness checker")?;
-        let policy = self.policy.unwrap_or(ScanLayerPolicy::preset_audit());
+        let layer_policy = self.layer_policy.unwrap_or(ScanLayerPolicy::preset_audit());
         let approval_gate = self.approval_gate.unwrap_or(Arc::new(ApprovalGate::for_red_team()));
         let blackarch_bridge = Arc::new(crate::core::blackarch::BlackArchBridge::new());
 
@@ -418,7 +442,7 @@ impl PipelineBuilder {
             shutdown_token: self.shutdown_token,
             liveness_checker,
             command_line: self.command_line,
-            policy,
+            layer_policy,
             approval_gate,
             blackarch_bridge,
             jitter: self.jitter,
@@ -431,6 +455,8 @@ impl PipelineBuilder {
             ai_router: self.ai_router,
             sandbox,
             proxy_manager: self.proxy_manager,
+            policy: self.policy.context("Pipeline requires a policy provider")?,
+            executor: self.executor.context("Pipeline requires an executor")?,
         })
     }
 }

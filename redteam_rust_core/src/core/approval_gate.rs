@@ -39,7 +39,7 @@ pub struct ApprovalRequest {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum ApprovalStatus {
     Pending,
-    Approved { by: String, at: DateTime<Utc>, reason: String },
+    Approved { by: String, at: DateTime<Utc>, reason: String, handover_payload: Option<String> },
     Rejected { by: String, at: DateTime<Utc>, reason: String },
     Expired,
 }
@@ -53,12 +53,12 @@ pub struct ApprovalGate {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-struct AuditLogEntry {
-    timestamp: DateTime<Utc>,
-    user: String,
-    action: String,
-    result: String,
-    details: serde_json::Value,
+pub struct AuditLogEntry {
+    pub timestamp: DateTime<Utc>,
+    pub user: String,
+    pub action: String,
+    pub result: String,
+    pub details: serde_json::Value,
 }
 
 impl ApprovalGate {
@@ -137,6 +137,7 @@ impl ApprovalGate {
         request_id: &str,
         approver: &User,
         reason: &str,
+        handover_payload: Option<String>,
     ) -> Result<()> {
         if approver.role != UserRole::Administrator && approver.role != UserRole::CISO {
             return Err(anyhow!("User {} not authorized to approve requests", approver.name));
@@ -146,6 +147,7 @@ impl ApprovalGate {
             by: approver.name.clone(),
             at: Utc::now(),
             reason: reason.to_string(),
+            handover_payload: handover_payload.clone(),
         };
         
         self.approval_cache.insert(request_id.to_string(), status);
@@ -201,6 +203,10 @@ impl ApprovalGate {
             return matches!(*status, ApprovalStatus::Approved { .. });
         }
         false
+    }
+    
+    pub fn approval_cache(&self) -> Arc<DashMap<String, ApprovalStatus>> {
+        self.approval_cache.clone()
     }
     
     /// Bloquea temporalmente hasta que se apruebe o rechace una solicitud

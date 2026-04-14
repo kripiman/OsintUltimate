@@ -184,3 +184,33 @@ mod tests {
         // Pass
     }
 }
+pub fn extract_json(text: &str) -> &str {
+    let start_curly = text.find('{');
+    let start_bracket = text.find('[');
+
+    match (start_curly, start_bracket) {
+        (Some(c), Some(b)) => {
+            if c < b {
+                if let Some(end) = text.rfind('}') {
+                    return &text[c..=end];
+                }
+            } else {
+                if let Some(end) = text.rfind(']') {
+                    return &text[b..=end];
+                }
+            }
+        }
+        (Some(c), None) => {
+            if let Some(end) = text.rfind('}') {
+                return &text[c..=end];
+            }
+        }
+        (None, Some(b)) => {
+            if let Some(end) = text.rfind(']') {
+                return &text[b..=end];
+            }
+        }
+        (None, None) => {}
+    }
+    text
+}

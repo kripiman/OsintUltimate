@@ -1,6 +1,7 @@
 use crate::models::{Finding, Category, Severity};
 use std::collections::{HashMap, HashSet};
 use serde::{Deserialize, Serialize};
+use tracing::info;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AttackPath {
@@ -59,7 +60,6 @@ impl CorrelationEngine {
             // Rule 1: Port -> Service/Tech -> Vulnerability -> Exploit
             match (&existing.category, &new_finding.category) {
                 (Category::NetworkPort, Category::TechnologyStack) => {
-                    // Check if they relate to the same port/service (would need more evidence parsing in real world)
                     self.graph.add_edge(&existing.id, &new_finding.id);
                 },
                 (Category::TechnologyStack, Category::Vulnerability) | (Category::Misconfiguration, Category::Vulnerability) => {
@@ -68,8 +68,22 @@ impl CorrelationEngine {
                 (Category::Vulnerability, Category::CredentialLeak) | (Category::Vulnerability, Category::ExposedAsset) => {
                     self.graph.add_edge(&existing.id, &new_finding.id);
                 },
+                (Category::Windows, Category::Vulnerability) | (Category::Windows, Category::CredentialLeak) => {
+                    // AD Sovereignty: Link discovered AD objects to potential strike vectors
+                    self.graph.add_edge(&existing.id, &new_finding.id);
+                },
+                (Category::Windows, Category::Windows) => {
+                    // V14.1 AD Path Ingestion: Link related AD objects (e.g. User belongs to Group, Group has admin on Computer)
+                    if let (Some(u_sid), Some(c_sid)) = (existing.evidence.data.get("SID"), new_finding.evidence.data.get("SID")) {
+                         if u_sid != c_sid {
+                             info!("🔱 V14.1 SOVEREIGN: Correlation AD relationship detected between {} and {}", existing.id, new_finding.id);
+                             self.graph.add_edge(&existing.id, &new_finding.id);
+                         }
+                    }
+                },
                 _ => {}
             }
+
 
             // Rule 4: SAST Endpoint -> DAST Finding (Source-Aware Correlation)
             if let (Some(a_type), Some(b_type)) = (existing.evidence.data.get("type"), new_finding.evidence.data.get("type")) {
@@ -77,7 +91,6 @@ impl CorrelationEngine {
                     let a_end = existing.evidence.data.get("endpoint").and_then(|v| v.as_str());
                     let b_end = new_finding.evidence.data.get("endpoint").and_then(|v| v.as_str());
                     
-                    // Si ambos tienen el mismo endpoint (uno SAST, otro DAST)
                     if let (Some(ae), Some(be)) = (a_end, b_end) {
                         if ae.to_lowercase().contains(&be.to_lowercase()) || be.to_lowercase().contains(&ae.to_lowercase()) {
                             self.graph.add_edge(&existing.id, &new_finding.id);
@@ -95,6 +108,9 @@ impl CorrelationEngine {
                     self.graph.add_edge(&new_finding.id, &existing.id);
                 },
                 (Category::Vulnerability, Category::CredentialLeak) | (Category::Vulnerability, Category::ExposedAsset) => {
+                    self.graph.add_edge(&new_finding.id, &existing.id);
+                },
+                (Category::Windows, Category::Vulnerability) | (Category::Windows, Category::CredentialLeak) => {
                     self.graph.add_edge(&new_finding.id, &existing.id);
                 },
                 _ => {}
@@ -124,6 +140,25 @@ impl CorrelationEngine {
         } else {
             false
         }
+    }
+
+    pub fn get_context_summary(&self, finding_id: &str) -> Option<String> {
+        let paths = self.get_attack_paths();
+        // Buscar la ruta más relevante (mayor CVSS o más larga) que contenga este hallazgo
+        let relevant_path = paths.iter()
+            .filter(|p| p.nodes.contains(&finding_id.to_string()))
+            .next()?;
+
+        // Truncar la ruta hasta el hallazgo actual para dar contexto de "cómo llegamos aquí"
+        let mut context_nodes = Vec::new();
+        for node_id in &relevant_path.nodes {
+            if let Some(node) = self.graph.nodes.get(node_id) {
+                context_nodes.push(format!("{:?}", node.category));
+            }
+            if node_id == finding_id { break; }
+        }
+
+        Some(context_nodes.join(" -> "))
     }
 
     fn dfs_paths(&self, current: &str, current_path: &mut Vec<String>, all_paths: &mut Vec<AttackPath>, visited: &mut HashSet<String>) {

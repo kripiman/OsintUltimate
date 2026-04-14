@@ -47,6 +47,8 @@ pub struct RedTeamEngine {
     sandbox: Arc<SandboxDispatcher>,
     approval_gate: Arc<ApprovalGate>,
     proxy_manager: Arc<crate::utils::proxy::ProxyManager>,
+    policy: Arc<dyn crate::core::policy::PolicyProvider>,
+    executor: Arc<crate::utils::executor::StealthExecutor>,
 }
 
 impl RedTeamEngine {
@@ -60,6 +62,13 @@ impl RedTeamEngine {
             config.proxies.clone().unwrap_or_default(),
             config.insecure
         ));
+
+        let policy = Arc::new(crate::core::policy::StaticPolicy::new());
+        let executor = Arc::new(crate::utils::executor::StealthExecutor::new(
+            policy.clone(),
+            Some(proxy_manager.clone()),
+            config.stealth
+        ));
         
         Self {
             config,
@@ -68,6 +77,8 @@ impl RedTeamEngine {
             sandbox,
             approval_gate,
             proxy_manager,
+            policy,
+            executor,
         }
     }
 
@@ -84,6 +95,13 @@ impl RedTeamEngine {
             config.proxies.clone().unwrap_or_default(),
             config.insecure
         ));
+
+        let policy = Arc::new(crate::core::policy::StaticPolicy::new());
+        let executor = Arc::new(crate::utils::executor::StealthExecutor::new(
+            policy.clone(),
+            Some(proxy_manager.clone()),
+            config.stealth
+        ));
         
         Self {
             config,
@@ -92,6 +110,8 @@ impl RedTeamEngine {
             sandbox,
             approval_gate,
             proxy_manager,
+            policy,
+            executor,
         }
     }
 
@@ -121,7 +141,9 @@ impl RedTeamEngine {
             router,
             pipeline_arc,
             self.approval_gate.clone(),
-            Some(self.proxy_manager.clone())
+            Some(self.proxy_manager.clone()),
+            self.executor.clone(),
+            self.policy.clone(),
         );
 
         while let Some(target) = target_hosts.next().await {
@@ -155,7 +177,7 @@ impl RedTeamEngine {
 
         if swarm {
             let router = EngineFactory::build_default_router(self.config.ollama_url.clone(), Some(self.proxy_manager.clone()))?;
-            builder = builder.with_swarm(true, self.config.max_tokens, router, Some(self.proxy_manager.clone()));
+            builder = builder.with_swarm(true, self.config.max_tokens, router, Some(self.proxy_manager.clone()), self.executor.clone(), self.policy.clone());
         }
 
         let pipeline = builder.build()?;
@@ -175,7 +197,7 @@ impl RedTeamEngine {
         }
 
         info!("🛡️ V13: Stealth Mode Active. Ensuring DigitalOcean exit nodes...");
-        let do_client = Arc::new(DigitalOceanClient::new(do_token));
+        let do_client = Arc::new(DigitalOceanClient::new(do_token, self.proxy_manager.clone()));
         let pm = self.proxy_manager.clone();
         let shutdown = self.shutdown_token.clone();
 
@@ -259,7 +281,7 @@ impl RedTeamEngine {
         let global_config = GlobalConfig {
             insecure: self.config.insecure,
             jitter: jitter.clone(),
-            proxy_manager,
+            proxy_manager: self.proxy_manager.clone(),
             nmap_options: crate::plugins::NmapOptions {
                 scripts: self.config.scripts.clone(),
                 stealth: self.config.stealth,
@@ -271,6 +293,8 @@ impl RedTeamEngine {
                 vuln_scan: self.config.vuln_scan,
             },
             sandbox: self.sandbox.clone(),
+            policy: self.policy.clone(),
+            executor: self.executor.clone(),
         };
 
         let mut builder = Pipeline::builder()
@@ -281,7 +305,7 @@ impl RedTeamEngine {
             .with_jitter(stealth_jitter)
             .memory_monitor(self.memory_monitor.clone())
             .sandbox(self.sandbox.clone())
-            .policy(policy)
+            .layer_policy(policy)
             .approval_gate(self.approval_gate.clone());
 
         // Add discovery plugins

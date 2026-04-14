@@ -95,7 +95,7 @@ impl OffPathAiEngine {
                 let cache = cache_clone.clone();
                 tokio::spawn(async move {
                     let _permit = permit;
-                    if let Ok(analysis) = router.analyze(&req.finding, &req.target).await {
+                    if let Ok(analysis) = router.analyze(&req.finding, &req.target, None).await {
                         cache.insert_mutation(&req.payload, analysis.summary);
                     }
                 });

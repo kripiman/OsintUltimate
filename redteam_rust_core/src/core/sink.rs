@@ -1,4 +1,4 @@
-use crate::models::{TargetHost, ScanMetadata, TargetStatus, Finding};
+use crate::models::{TargetHost, ScanMetadata};
 use anyhow::{Context, Result};
 use async_trait::async_trait;
 use tokio::io::AsyncWriteExt;

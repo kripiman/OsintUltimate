@@ -1,14 +1,14 @@
 use serde::{Deserialize, Serialize};
 use std::fmt;
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, PartialOrd, Ord, Hash)]
 #[serde(rename_all = "snake_case")]
 pub enum Severity {
-    Critical,
-    High,
-    Medium,
-    Low,
     Info,
+    Low,
+    Medium,
+    High,
+    Critical,
 }
 
 impl fmt::Display for Severity {
@@ -60,6 +60,8 @@ pub enum PocStrategy {
     IcmpPing,
     /// Integration with Nuclei engine.
     NucleiTemplate,
+    /// Human-provided verified exploit handover (Sovereign Mode).
+    HumanVerified,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -87,6 +89,8 @@ pub struct PocDefinition {
     pub expected_pattern: String,
     #[serde(default)]
     pub is_intrusive: bool,
+    #[serde(default)]
+    pub complexity_score: u8, // 0-100 rating
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]

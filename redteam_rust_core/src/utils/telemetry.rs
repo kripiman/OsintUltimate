@@ -5,8 +5,12 @@ use opentelemetry_sdk::{trace, Resource};
 use tracing_subscriber::{layer::SubscriberExt, EnvFilter, Registry};
 use tracing_subscriber::fmt;
 use std::io;
+use std::sync::Arc;
 use once_cell::sync::Lazy;
 use regex::Regex;
+use tonic::transport::Endpoint;
+use tower::service_fn;
+use crate::utils::proxy::ProxyManager;
 
 static SENSITIVE_REGEX: Lazy<Regex> = Lazy::new(|| {
     // Patterns for: Proxy Auth (user:pass@), Shodan/Censys Keys (32 chars hex), etc.
@@ -58,25 +62,59 @@ impl<'a> fmt::MakeWriter<'a> for MaskingMakeWriter {
     }
 }
 
-pub fn init_telemetry(endpoint: Option<String>, json_logs: bool) -> Result<()> {
+pub fn init_telemetry(endpoint: Option<String>, json_logs: bool, pm: Option<Arc<ProxyManager>>) -> Result<()> {
     let env_filter = EnvFilter::try_from_default_env()
         .unwrap_or_else(|_| "redteam_rust_core=info".into());
 
     if let Some(endpoint_url) = endpoint {
         // OpenTelemetry Setup
-        let tracer_result = opentelemetry_otlp::new_pipeline()
-            .tracing()
-            .with_exporter(
-                opentelemetry_otlp::new_exporter()
-                    .tonic()
-                    .with_endpoint(&endpoint_url),
-            )
-            .with_trace_config(
-                trace::config().with_resource(Resource::new(vec![
-                    KeyValue::new("service.name", "redteam_rust_core"),
-                ])),
-            )
-            .install_batch(opentelemetry_sdk::runtime::Tokio);
+        let tracer_result = if let Some(ref proxy_mgr) = pm {
+            // PROXY-AWARE TELEMETRY (V14.1)
+            let pm_inner = proxy_mgr.clone();
+            let endpoint_url_clone = endpoint_url.clone();
+            
+            let channel = Endpoint::from_shared(endpoint_url.clone())?
+                .connect_with_connector_lazy(service_fn(move |_| {
+                    let pm = pm_inner.clone();
+                    let url = endpoint_url_clone.clone();
+                    async move {
+                        let parsed = url::Url::parse(&url).map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))?;
+                        let host = parsed.host_str().unwrap_or("localhost");
+                        let port = parsed.port_or_known_default().unwrap_or(4317);
+                        pm.tcp_connect_proxied(host, port).await
+                            .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))
+                    }
+                }));
+
+            opentelemetry_otlp::new_pipeline()
+                .tracing()
+                .with_exporter(
+                    opentelemetry_otlp::new_exporter()
+                        .tonic()
+                        .with_channel(channel),
+                )
+                .with_trace_config(
+                    trace::config().with_resource(Resource::new(vec![
+                        KeyValue::new("service.name", "redteam_rust_core"),
+                    ])),
+                )
+                .install_batch(opentelemetry_sdk::runtime::Tokio)
+        } else {
+            // Direct connection (only for non-stealth or local debug)
+            opentelemetry_otlp::new_pipeline()
+                .tracing()
+                .with_exporter(
+                    opentelemetry_otlp::new_exporter()
+                        .tonic()
+                        .with_endpoint(&endpoint_url),
+                )
+                .with_trace_config(
+                    trace::config().with_resource(Resource::new(vec![
+                        KeyValue::new("service.name", "redteam_rust_core"),
+                    ])),
+                )
+                .install_batch(opentelemetry_sdk::runtime::Tokio)
+        };
 
         match tracer_result {
             Ok(tracer) => {

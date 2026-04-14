@@ -9,7 +9,7 @@ use crate::core::approval_gate::ApprovalGate;
 pub struct Orchestrator {
     plugins: Arc<Vec<Box<dyn ScannerPlugin>>>,
     concurrency: usize,
-    policy: ScanLayerPolicy,
+    layer_policy: ScanLayerPolicy,
     approval_gate: Arc<ApprovalGate>,
     blackarch_bridge: Arc<crate::core::blackarch::BlackArchBridge>,
     memory_semaphore: Arc<tokio::sync::Semaphore>,
@@ -19,19 +19,23 @@ pub struct Orchestrator {
     swarm_mode: bool,
     max_tokens: u32,
     ai_router: Option<Arc<crate::core::ai::TieredAIRouter>>,
-    sandbox: Arc<crate::core::sandbox::SandboxDispatcher>, // NUEVO
+    sandbox: Arc<crate::core::sandbox::SandboxDispatcher>,
     proxy_manager: Option<Arc<crate::utils::proxy::ProxyManager>>,
+    policy: Arc<dyn crate::core::policy::PolicyProvider>,
+    executor: Arc<crate::utils::executor::StealthExecutor>,
 }
 
 impl Orchestrator {
     pub fn new(
         plugins: Arc<Vec<Box<dyn ScannerPlugin>>>,
         concurrency: usize,
-        policy: ScanLayerPolicy,
+        layer_policy: ScanLayerPolicy,
         approval_gate: Arc<ApprovalGate>,
         blackarch_bridge: Arc<crate::core::blackarch::BlackArchBridge>,
         memory_monitor: Arc<crate::utils::memory_monitor::MemoryMonitor>,
         sandbox: Arc<crate::core::sandbox::SandboxDispatcher>,
+        policy: Arc<dyn crate::core::policy::PolicyProvider>,
+        executor: Arc<crate::utils::executor::StealthExecutor>,
     ) -> Self {
         let hard_limit = memory_monitor.hard_limit_mb();
         let memory_semaphore = Arc::new(tokio::sync::Semaphore::new(hard_limit as usize));
@@ -39,7 +43,7 @@ impl Orchestrator {
         Self {
             plugins,
             concurrency,
-            policy,
+            layer_policy,
             approval_gate,
             blackarch_bridge,
             memory_semaphore,
@@ -51,6 +55,8 @@ impl Orchestrator {
             ai_router: None,
             sandbox,
             proxy_manager: None,
+            policy,
+            executor,
         }
     }
 
@@ -110,7 +116,8 @@ impl Orchestrator {
         tokio::pin!(stream);
 
         // Process concurrently up to `concurrency` limit
-        let policy = self.policy;
+        let lp = self.layer_policy;
+        let policy = self.policy.clone();
         let approval_gate = self.approval_gate.clone();
         let blackarch_bridge = self.blackarch_bridge.clone();
         let memory_semaphore = self.memory_semaphore.clone();
@@ -119,8 +126,8 @@ impl Orchestrator {
         let dashboard_tx = self.dashboard_tx.clone();
         let dashboard_targets = self.dashboard_targets.clone();
 
-        if self.swarm_mode {
-            if let (Some(router), Some(out_tx)) = (self.ai_router.clone(), Some(output_tx.clone())) {
+        match (self.swarm_mode, self.ai_router.clone(), Some(output_tx.clone())) {
+            (true, Some(router), Some(out_tx)) => {
                 info!("🐝 ORCHESTRATOR: Entering Swarm Mode (Max Tokens: {})", self.max_tokens);
                 let pipeline = Arc::new(crate::core::pipeline::Pipeline::new_minimal(plugins.clone(), self.sandbox.clone()));
                 let swarm = crate::core::swarm::SwarmOrchestrator::new(
@@ -129,36 +136,36 @@ impl Orchestrator {
                     approval_gate.clone(),
                     self.max_tokens,
                     self.proxy_manager.clone(),
+                    self.executor.clone(),
+                    self.policy.clone(),
                 );
 
-                // Use buffered stream to run swarm on each target
                 let swarm_stream = stream.map(move |target| {
                     let swarm = swarm.clone();
                     let out_tx = out_tx.clone();
                     async move {
                         let _ = swarm.run(target.clone(), out_tx).await;
-                        target // Return original to keep stream moving if needed
+                        target
                     }
                 }).buffer_unordered(self.concurrency);
 
                 tokio::pin!(swarm_stream);
                 while let Some(_) = swarm_stream.next().await {}
                 info!("🐝 ORCHESTRATOR: Swarm processing finished.");
-                return;
             }
-        }
-
-        let mut processed_stream = stream.map(move |mut target| {
-            let plugins = plugins.clone();
-            let policy = policy;
-            let approval_gate = approval_gate.clone();
-            let blackarch_bridge = blackarch_bridge.clone();
-            let memory_semaphore = memory_semaphore.clone();
-            let memory_monitor = memory_monitor.clone();
-            let dashboard_tx = dashboard_tx.clone();
-            let dashboard_targets = dashboard_targets.clone();
-            
-            async move {
+            _ => {
+                let mut processed_stream = stream.map(move |target| {
+                    let mut target = target; 
+                    let plugins = plugins.clone();
+                    let lp = lp;
+                    let approval_gate = approval_gate.clone();
+                    let blackarch_bridge = blackarch_bridge.clone();
+                    let memory_semaphore = memory_semaphore.clone();
+                    let memory_monitor = memory_monitor.clone();
+                    let dashboard_tx = dashboard_tx.clone();
+                    let dashboard_targets = dashboard_targets.clone();
+                    
+                    async move {
                 // MEMORY-BACKPRESSURE: Wait if memory is critical 
                 if memory_monitor.is_critical() {
                     warn!("MEMORY CRITICAL [{}MB]: Throttling scan for {}", memory_monitor.current_mb(), target.host);
@@ -206,7 +213,7 @@ impl Orchestrator {
                         tactical_context: Arc::clone(&target_ref.tactical_context),
                         extra_data: Arc::clone(&target_ref.extra_data),
                     };
-                    let policy = policy;
+                    let lp = lp;
                     let approval_gate = Arc::clone(&approval_gate);
                     let memory_semaphore_clone = memory_semaphore.clone();
                     let memory_monitor_clone = memory_monitor.clone();
@@ -215,11 +222,11 @@ impl Orchestrator {
                         let p = &plugins_clone[i];
                         let meta = p.metadata();
                         
-                        if !policy.is_plugin_allowed(meta.layer) {
+                        if !lp.is_plugin_allowed(meta.layer) {
                             return (p.name().to_string(), Ok(Vec::new()));
                         }
 
-                        if policy.needs_approval(meta.layer) {
+                        if lp.needs_approval(meta.layer) {
                             if !approval_gate.is_approved(p.name()).await {
                                 return (p.name().to_string(), Ok(Vec::new()));
                             }
@@ -353,5 +360,7 @@ impl Orchestrator {
         }
         
         info!("Orchestrator finished processing.");
+            }
+        }
     }
 }

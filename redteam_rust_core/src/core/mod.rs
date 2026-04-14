@@ -9,11 +9,11 @@ pub mod blackarch;
 pub mod ai;
 pub mod waf;
 pub mod correlation;
-pub mod web_server;
+pub mod web;
 pub mod filter;
 pub mod lock_free_sink;
 pub mod native_scanner;
-pub mod poc_validator;
+pub mod validation;
 pub mod swarm;
 pub mod resource_manager;
 pub mod sandbox;
@@ -21,6 +21,8 @@ pub mod mcp;
 pub mod source_analyzer;
 pub mod factory;
 pub mod engine;
+pub mod c2;
+pub mod policy;
 #[cfg(test)]
 pub mod tests;
 
@@ -29,5 +31,5 @@ pub use pipeline::{Pipeline, PipelineBuilder};
 pub use sink::{DataSink, JsonlSink, SqliteSink};
 pub use correlation::{CorrelationEngine, AttackGraph, AttackPath};
 pub use filter::FalsePositiveFilter;
-pub use poc_validator::PocValidator;
+pub use validation::PocValidator;
 

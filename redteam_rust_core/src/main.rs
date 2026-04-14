@@ -94,7 +94,7 @@ async fn main() -> Result<()> {
     }
 
     // Initialize Telemetry
-    redteam_rust_core::utils::init_telemetry(args.otel_endpoint.clone(), args.json_logs)
+    redteam_rust_core::utils::init_telemetry(args.otel_endpoint.clone(), args.json_logs, None)
         .context("Failed to initialize telemetry")?;
 
     // --- ENGINE INITIALIZATION ---
@@ -187,7 +187,7 @@ async fn main() -> Result<()> {
 
     // --- DASHBOARD ---
     if let Some(port) = args.dashboard {
-        use redteam_rust_core::core::web_server::{DashboardState, DashboardAuth, generate_dashboard_token};
+        use redteam_rust_core::core::web::{DashboardState, DashboardAuth, generate_dashboard_token};
         use ed25519_dalek::SigningKey;
         use rand::RngCore;
 
@@ -213,7 +213,7 @@ async fn main() -> Result<()> {
             budget: None,
             auth: auth.clone(),
         });
-        tokio::spawn(redteam_rust_core::core::web_server::start_dashboard(dashboard_state, port));
+        tokio::spawn(redteam_rust_core::core::web::start_dashboard(dashboard_state, port));
     }
 
     // --- TARGETS ---
