@@ -1,6 +1,6 @@
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
-use crate::core::agent::LlmClient;
+use crate::core::ai::traits::LlmClient;
 use std::sync::atomic::AtomicU64;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
@@ -10,6 +10,18 @@ pub enum RouteLevel {
     Premium = 2, // Gemini Pro / GPT-4o / Claude 3.5
 }
 
+/// V14 Posture: Represents the operational state of the engagement.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
+pub enum Posture {
+    /// Passive reconnaissance, ultra-low noise, full proxy isolation.
+    #[default]
+    Ghost,
+    /// Active vulnerability validation, high-precision scanning.
+    Strike,
+    /// Post-exploitation, C2 session maintenance, and lateral expansion.
+    Breach,
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum LlmProviderKind {
     Local,
@@ -17,6 +29,12 @@ pub enum LlmProviderKind {
     Anthropic,
     OpenAI,
     AzureOpenAI,
+}
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct CapabilityGap {
+    pub covered_capabilities: std::collections::HashSet<crate::plugins::Capability>,
+    pub recommended_capabilities: Vec<crate::plugins::Capability>,
 }
 
 pub struct ProviderEntry {
@@ -37,6 +55,8 @@ pub struct AdaptiveContext {
     pub evasion_stage: u8,
     /// URL that triggered the last WAF block
     pub last_blocked_url: Option<String>,
+    /// V14 Posture state management
+    pub posture: Posture,
 }
 
 #[derive(Default)]
