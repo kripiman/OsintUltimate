@@ -57,15 +57,20 @@ flowchart TD
 
 ### 🛰️ Components
 
-#### 1. OsintScanner (`src/plugins/reconnaissance/osint/osint.rs`)
-The primary passive discovery engine. It gathers subdomain and asset data purely from third-party APIs.
-- **Data Sources**: `crt.sh` (Certificate Transparency logs) and `Shodan`.
-- **Egress Integrity**: Uses `ProxyManager::get_client_fail_closed()` for all API calls, ensuring the scanner node's real IP is never exposed to API providers.
+#### 1. SovereignReconScanner: The Sentinel Orchestrator (`src/plugins/reconnaissance/osint/sovereign_recon.rs`)
+The backbone of passive discovery. It manages a multi-phase "Waterfall" pipeline to maximize data coverage while minimizing credit usage.
+- **Data Waterfall**:
+    - **Phase 0 (Instant Free)**: Wayback Machine & HackerTarget for deep historical asset discovery.
+    - **Phase 1 (Chaos PD)**: Ultra-fast discovery of known subdomains via ProjectDiscovery.
+    - **Phase 2 (SecurityTrails)**: Comprehensive historical DNS mapping.
+    - **Phase 3 (Netlas - Paid)**: High-precision deep dive (SSL/Response) with **Credit Budgeting**.
+    - **Phase 4 (Shodan)**: Infrastructure intelligence and banner correlation.
+    - **Phase 5 (Emergency Fallback)**: Automatic triggering of `Subfinder` ONLY if primary phases return zero results.
+- **Egress Integrity**: All phases utilize `ProxyManager::get_client_fail_closed()` for strict OPSEC.
+- **Budgeting**: Implements a daily credit gate (Sentinel) to ensure long-running 24/7 freelancer tier sustainability.
 
-#### 2. WaybackScanner (`src/plugins/reconnaissance/passive/wayback.rs`)
-Retrieves historical URL data to map hidden directories and legacy endpoints.
-- **Tooling**: Leverages `waybackurls` and `gau`.
-- **Execution**: Discovered URLs are ingested into the `CorrelationEngine` to identify "forgotten" attack surfaces.
+#### 2. OsintScanner (`src/plugins/reconnaissance/osint/osint.rs`)
+Modular component utilized for specialized certificate transparency monitoring (crt.sh).
 
 #### 3. TruffleHogScanner (`src/plugins/reconnaissance/passive/trufflehog.rs`)
 Scans public repositories and documentation for leaked credentials.
@@ -81,27 +86,29 @@ The following diagram illustrates the strict non-attributable data collection fl
 ```mermaid
 sequenceDiagram
     participant SO as SwarmOrchestrator
-    participant OS as OsintScanner
-    participant PM as ProxyManager
+    participant SN as SovereignRecon (Sentinel)
+    participant ST as Subfinder (Fallback)
     participant ME as Managed Exit (SOCKS5)
-    participant API as Third-Party API (crt.sh/Shodan)
+    participant API as Passive APIs (Chaos/Netlas)
 
-    Note over SO, API: PHASE 0: PASSIVE OSINT (Zero Target Interaction)
+    Note over SO, API: PHASE 0: PASSIVE WATERFALL DISCOVERY
 
-    SO->>OS: Trigger Discovery (Target: domain.com)
-    OS->>PM: get_client_fail_closed("crt.sh")
+    SO->>SN: Trigger Orchestrated Recon
+    SN->>SN: Check Credit Manager (Sentinel Gate)
     
-    alt Proxy Available
-        PM-->>OS: Return Proxied reqwest::Client
-        OS->>ME: Encrypted SOCKS5 Tunnel
-        ME->>API: GET /?q=%.domain.com (Source: Managed Exit IP)
-        API-->>ME: Data Response
-        ME-->>OS: Proxied JSON Content
-        OS-->>SO: Findings (Discovered Subdomains)
-    else No Proxy Available (Fail-Closed)
-        PM-->>OS: Return Error (V13 OPSEC Violation)
-        Note right of OS: Discovery Aborted to Prevent Leak
+    SN->>ME: Phase 1: Free Strike (Chaos)
+    ME->>API: Discovery Call
+    API-->>SN: Result Found?
+    
+    alt Results == 0 (Emergency)
+        SN->>ST: Trigger Subfinder Fallback
+        ST->>ME: Deep Multi-Source Scan
+        ME->>API: Multi-API Cluster Call
+        API-->>ST: Deep Results
+        ST-->>SN: Consolidate
     end
+
+    SN-->>SO: Aggregated Findings (Total Assets)
 ```
 
 ### 🛡️ Sovereign Integrity Audit: Phase 0

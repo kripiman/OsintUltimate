@@ -130,6 +130,7 @@ impl RedTeamEngine<crate::utils::executor::GhostMode> {
 }
 
 impl<M: ExecutorMode> RedTeamEngine<M> {
+    pub async fn run_autopilot(
         &self, 
         mut target_hosts: futures::stream::BoxStream<'static, TargetHost>,
         sink: Box<dyn DataSink>

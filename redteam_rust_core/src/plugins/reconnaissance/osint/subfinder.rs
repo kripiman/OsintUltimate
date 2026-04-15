@@ -28,7 +28,7 @@ impl DiscoveryPlugin for SubfinderScanner {
         fn metadata(&self) -> crate::plugins::PluginMetadata {
         crate::plugins::PluginMetadata {
             name: self.name().to_string(),
-            description: "Automated security analysis using this plugin.".to_string(),
+            description: "Subfinder: Subdomain discovery tool (Emergency Fallback for Sovereign Recon).".to_string(),
             target_type: crate::plugins::TargetType::Osint,
             risk_level: crate::plugins::RiskLevel::Safe,
             layer: crate::core::capability_layer::ScanLayer::Passive,

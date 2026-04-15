@@ -250,8 +250,15 @@ pub fn get_all_discovery<M: ExecutorMode>(config: GlobalConfig<M>) -> Vec<Box<dy
     use crate::plugins::reconnaissance::osint::subfinder::SubfinderScanner;
     use crate::plugins::reconnaissance::osint::amass::AmassScanner;
     use crate::plugins::reconnaissance::osint::uncover::UncoverScanner;
+    use crate::plugins::reconnaissance::osint::sovereign_recon::SovereignReconScanner;
 
-    vec![Box::new(OsintScanner::new(config.proxy_manager.clone())), Box::new(SubfinderScanner::new()), Box::new(AmassScanner::new()), Box::new(UncoverScanner::new()), ]
+    vec![
+        Box::new(SovereignReconScanner::new(&crate::utils::config::Config::from_env(), config.proxy_manager.clone())),
+        Box::new(OsintScanner::new(config.proxy_manager.clone())), 
+        Box::new(SubfinderScanner::new()), 
+        Box::new(AmassScanner::new()), 
+        Box::new(UncoverScanner::new()), 
+    ]
 }
 
 pub fn get_registry<M: ExecutorMode>(config: GlobalConfig<M>) -> PluginRegistry {

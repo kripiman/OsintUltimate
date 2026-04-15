@@ -54,6 +54,11 @@ To reach Phase 4 & Phase 5 of the offensive lifecycle, the following must be ins
   - `ANTHROPIC_API_KEY` (Used for code/context-heavy exploit generation).
 - **OSINT Enrichment**:
   - `SHODAN_API_KEY`
+  - `NETLAS_API_KEY` (Optimized for Freelancer tier).
+  - `CHAOS_API_KEY` (Free ProjectDiscovery tokens).
+  - `SECURITYTRAILS_API_KEY`
+  - `CRIMINALIP_API_KEY`
+  - `NETLAS_DAILY_BUDGET` (Default: 33).
   - `CENSYS_API_ID` & `CENSYS_API_SECRET`
   - `GITHUB_TOKEN` (Crucial for `TruffleHogScanner` and `GitleaksScanner` authenticated deep-dives without rate limits).
 

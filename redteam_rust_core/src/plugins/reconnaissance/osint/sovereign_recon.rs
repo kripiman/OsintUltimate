@@ -2,11 +2,11 @@ use crate::plugins::{DiscoveryPlugin, Capability, PluginMetadata, RiskLevel, Tar
 use crate::models::{TargetHost, PLUGIN_SOVEREIGN_RECON};
 use crate::core::capability_layer::ScanLayer;
 use crate::utils::proxy::ProxyManager;
-use crate::utils::jitter::HumanJitter;
+use crate::utils::common::HumanJitter;
 use async_trait::async_trait;
-use anyhow::{Result, Context};
+use anyhow::Result;
 use tracing::{info, warn, debug, error};
-use serde::{Deserialize, Serialize};
+use serde::Deserialize;
 use std::sync::{Arc, Mutex};
 use std::collections::HashSet;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
@@ -79,6 +79,55 @@ impl SovereignReconScanner {
     async fn get_client(&self, host: &str) -> Result<Client> {
         let (_, client) = self.proxy_manager.get_client_fail_closed(host)?;
         Ok(client)
+    }
+
+    // --- Phase 0: Wayback Machine (URL History) ---
+    async fn query_wayback(&self, domain: &str) -> HashSet<String> {
+        let mut subdomains = HashSet::new();
+        debug!("🕰️ Phase 0: Wayback Machine historical URL discovery for {}", domain);
+        let url = format!("http://web.archive.org/cdx/search/cdx?url=*.{}/*&output=json&collapse=urlkey&fl=original", domain);
+        
+        if let Ok(client) = self.get_client("web.archive.org").await {
+            if let Ok(resp) = client.get(&url).send().await {
+                if let Ok(data) = resp.json::<Vec<Vec<String>>>().await {
+                    for entry in data.into_iter().skip(1) { // Skip header
+                        if let Some(target_url) = entry.get(0) {
+                            if let Ok(parsed) = url::Url::parse(target_url) {
+                                if let Some(host) = parsed.host_str() {
+                                    if host.ends_with(domain) {
+                                        subdomains.insert(host.to_string());
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        subdomains
+    }
+
+    // --- Phase 0.5: HackerTarget ---
+    async fn query_hackertarget(&self, domain: &str) -> HashSet<String> {
+        let mut subdomains = HashSet::new();
+        debug!("🎯 Phase 0.5: HackerTarget host search for {}", domain);
+        let url = format!("https://api.hackertarget.com/hostsearch/?q={}", domain);
+        
+        if let Ok(client) = self.get_client("api.hackertarget.com").await {
+            if let Ok(resp) = client.get(&url).send().await {
+                if let Ok(text) = resp.text().await {
+                    for line in text.lines() {
+                        let parts: Vec<&str> = line.split(',').collect();
+                        if let Some(host) = parts.get(0) {
+                            if host.ends_with(domain) {
+                                subdomains.insert(host.to_string());
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        subdomains
     }
 
     // --- Phase 1: Chaos (PD) ---
@@ -271,31 +320,67 @@ impl DiscoveryPlugin for SovereignReconScanner {
         
         let mut all_results = HashSet::new();
 
-        // 1. Chaos (Fast & Free)
+        // Phase 0: Instant Free Aggregates
+        info!("🕰️ Phase 0: Wayback & HackerTarget historical lookup...");
+        let wayback = self.query_wayback(&target.host).await;
+        if !wayback.is_empty() {
+            info!("  ✅ Wayback Machine found {} unique subdomains", wayback.len());
+            all_results.extend(wayback);
+        }
+        
+        let ht = self.query_hackertarget(&target.host).await;
+        if !ht.is_empty() {
+            info!("  ✅ HackerTarget found {} unique hosts", ht.len());
+            all_results.extend(ht);
+        }
+
+        // 1. Chaos (Fast & Free) - STRATEGIC PRIORITY
+        info!("🚀 Phase 1/5: Chaos strike (Fast/Free)...");
         let chaos = self.query_chaos(&target.host).await;
-        info!("  - Chaos found {} subdomains", chaos.len());
-        all_results.extend(chaos);
+        if !chaos.is_empty() {
+            info!("  ✅ Chaos captured {} subdomains", chaos.len());
+            all_results.extend(chaos);
+        } else {
+            warn!("  ⚠️ Phase 1: No subdomains found in Chaos.");
+        }
 
         // 2. SecurityTrails
         self.jitter.human_delay().await;
+        info!("🛰️ Phase 2/5: SecurityTrails mapping...");
         let st = self.query_securitytrails(&target.host).await;
-        info!("  - SecurityTrails found {} subdomains", st.len());
-        all_results.extend(st);
+        if !st.is_empty() {
+            info!("  ✅ SecurityTrails captured {} subdomains", st.len());
+            all_results.extend(st);
+        }
 
         // 3. Netlas (Paid - Precision)
         self.jitter.human_delay().await;
+        info!("💎 Phase 3/5: Netlas High-Precision Deep Dive...");
         let netlas = self.query_netlas(&target.host).await;
-        info!("  - Netlas found {} subdomains", netlas.len());
-        all_results.extend(netlas);
+        if !netlas.is_empty() {
+            info!("  ✅ Netlas captured {} subdomains", netlas.len());
+            all_results.extend(netlas);
+        }
 
         // 4. Shodan
         self.jitter.human_delay().await;
+        info!("🔭 Phase 4/5: Shodan infrastructure discovery...");
         let shodan = self.query_shodan(&target.host).await;
-        info!("  - Shodan found {} subdomains", shodan.len());
-        all_results.extend(shodan);
+        if !shodan.is_empty() {
+            info!("  ✅ Shodan captured {} subdomains", shodan.len());
+            all_results.extend(shodan);
+        }
 
-        // 5. Criminal IP (Reputation for main target only) – Optional per project logic
-        // self.query_criminalip(&target.host).await;
+        // 5. Automatic Fallback: Subfinder (Emergency)
+        if all_results.is_empty() {
+            warn!("⚠️ SOVEREIGN RECON: All primary phases returned ZERO results. Triggering Subfinder Emergency Fallback...");
+            use crate::plugins::reconnaissance::osint::subfinder::SubfinderScanner;
+            let subfinder = SubfinderScanner::new();
+            if let Ok(subs) = subfinder.discover(target).await {
+                info!("  🚑 Subfinder Fallback captured {} subdomains", subs.len());
+                all_results.extend(subs);
+            }
+        }
 
         let final_list: Vec<String> = all_results.into_iter().collect();
         info!("✅ SOVEREIGN RECON COMPLETE: Captured {} total assets for {}", final_list.len(), target.host);

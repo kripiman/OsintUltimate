@@ -14,6 +14,7 @@
 ### V14.1 Sovereign Highlights:
 - **Adaptive Posture Management**: Dynamic state-machine transitions between `GHOST`, `STRIKE`, and `BREACH` postures based on target sensitivity.
 - **Priority-Aware Swarm**: Atomic token admission control (`TokenBudget`) ensuring critical analysis survives starvation.
+- **Sentinel Sovereign Orchestrator**: Multi-phase "Waterfall" discovery (Wayback -> Chaos -> Netlas -> Shodan) with automatic fallback and credit management.
 - **Fail-Closed Egress**: Zero-trust networking: Functionality aborts instantly if stealth infrastructure (Proxies/Managed Exits) is compromised.
 - **AttackGraph Correlation**: DFS-based pathfinding for automated escalation and pivoting, specifically optimized for Active Directory environments.
 - **High-Speed Autonomous Proxies**: Integrated support for **Shadowsocks** and **Hysteria (QUIC/UDP)** with pre-warmed Droplet pools for zero-latency rotation and evasion.
@@ -26,7 +27,7 @@
 
 All documentation is synchronized with the **V14.1 Sovereign Sync**:
 
-*   [🔱 Sovereign Systems V14.1 Sync](redteam_rust_core/docs/SOVEREIGN_SYSTEMS_V14.1.md): **Core Master Spec** for Layers 0-5, AD Ingestion, and Egress Flow.
+*   [🔱 Sovereign Systems V14.1 Sync](redteam_rust_core/docs/SOVEREIGN_SYSTEMS.md): **Core Master Spec** for Layers 0-5, AD Ingestion, and Egress Flow.
 *   [🏗️ V14 Core Architecture (Master)](redteam_rust_core/docs/V14_CORE_ARCHITECTURE.md): System topology, concurrent agent pool, and Master SSOT component graph.
 *   [🐝 Swarm Dynamics & Budgeting](redteam_rust_core/docs/SWARM_DYNAMICS.md): Token reservation, admission thresholds, and agent role specifications.
 *   [🎭 Adaptive Evasion: The Posture Manual](redteam_rust_core/docs/ADAPTIVE_EVASION.md): Technical specs for GHOST/STRIKE/BREACH transitions and Proxy isolation.
