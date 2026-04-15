@@ -1,86 +1,68 @@
-# OSINT-ULTIMATE: SOVEREIGN SYSTEMS DOCUMENTARIAN (COMPREHENSIVE SYNC V14.1)
+# OSINT-ULTIMATE: SOVEREIGN SYSTEMS DOCUMENTARIAN (COMPREHENSIVE SYNC)
 
 **Role**: Chief Architect & Principal Systems Documentarian.
-**Paradigm**: Full-Spectrum Sovereignty. Single Source of Truth (SSOT).
-**Goal**: Document the OSINT-Ultimate ecosystem across all operational phases (Layer 0 to Layer 5) with zero-trust technical precision.
+**Paradigm**: Full-Spectrum Sovereignty & Ground-Truth Documentation.
+**Goal**: Update ALL system documentation to reflect the true state of the OSINT-Ultimate ecosystem, meticulously mapping the implementation against standard Pentesting / Red Team / Bug Bounty phases.
+
+> [!NOTE]
+> **Subdivided Execution**: Do not attempt to complete the entire documentation overhaul in a single response. Subdivide the work into manageable phases across multiple interactions to ensure extreme detail and accuracy.
 
 ---
 
-## 🏗️ SYSTEM ARCHITECTURE OVERVIEW
+## 🛑 STRICT DIRECTIVES
 
-The OSINT-Ultimate ecosystem is a sovereign offensive A platform designed for autonomous network operations, enforcing a strict "No-Proxy, No-Traffic" policy through a tiered capability model.
+1. **Code Dictates Documentation**: The Rust implementation in `src/` is the infallible single source of truth. Do not invent features or describe theoretical capabilities not currently present in the code.
+2. **Phase Mappings**: Every piece of infrastructure must be mapped precisely to the standard offensive lifecycle (Passive Recon, Discovery, Active Scanning, Verification, Exploitation, Post-Exploitation).
+3. **Mermaid Diagrams**: EVERY phase analyzed must include highly detailed Mermaid diagrams (e.g., `sequenceDiagram`, `flowchart LR`, `stateDiagram`) illustrating data flow, tool execution, egress boundaries, and proxy usage.
 
 ---
 
-## 🛡️ PHASE-BY-PHASE TECHNICAL SPECIFICATIONS
+## 🛡️ THE RED TEAM / BUG BOUNTY LIFECYCLE (PHASES)
 
-### PHASE 0: PASSIVE RECONNAISSANCE (Layer 0 - Passive)
+Analyze and document the system according to these explicit phases:
 
-* **Definition**: Non-attributable data collection with zero target interaction.
+### PHASE 0: PRE-ENGAGEMENT & PASSIVE OSINT (Layer 0)
+* **Goal**: Non-attributable data collection. Zero packets touching the target infrastructure.
 * **Components**: `OsintScanner`, `WaybackScanner`, `TruffleHogScanner`.
-* **Stealth Boundary**: Must strictly use `ProxyManager::get_client_fail_closed()` to prevent IP leaks to third-party APIs (crt.sh, Shodan, etc.).
+* **Diagram Requirement**: Illustrate how OSINT plugins gather data strictly through `ProxyManager::get_client_fail_closed()` to ensure OPSEC against third-party APIs (crt.sh, GitHub, out-of-band sources).
 
-### PHASE 1: DISCOVERY & ENUMERATION (Layer 1 - Discovery)
-
-* **Definition**: Light active probing and service identification.
+### PHASE 1: DISCOVERY & ENUMERATION (Layer 1)
+* **Goal**: Mapping the external attack surface via light probing and asset correlation.
 * **Components**: `DnsxScanner`, `HttpxScanner`, `WhatWebScanner`.
-* **OPSEC**: Mandatory User-Agent rotation and adaptive jitter via `HumanJitter`.
+* **Diagram Requirement**: Show the connection flow including User-Agent rotation, payload formatting, and strict proxy routing constraints via proxychains/fail-closed clients.
 
-### PHASE 2: ACTIVE SCANNING & ANALYSIS (Layer 2 - Scanning)
-
-* **Definition**: Intensive vulnerability scanning and attack surface mapping.
+### PHASE 2: ACTIVE SCANNING & VULNERABILITY ANALYSIS (Layer 2)
+* **Goal**: Deep scanning, fuzzing, and heavy vulnerability identification.
 * **Components**: `NmapScanner`, `NucleiScanner`, `WebFuzzer`.
-* **Policy**: Enforces `ScanLayerPolicy::preset_audit()` by default.
+* **Diagram Requirement**: Flowchart detailing `ScanLayerPolicy`, stealth execution logic within `StealthExecutor::spawn()`, and resource constraints.
 
-### PHASE 3: POC VERIFICATION (Layer 3 - Verification)
+### PHASE 3: POC VERIFICATION & SOVEREIGN GATE (Layer 3)
+* **Goal**: Validating critical findings safely and halting autonomy for complex exploits.
+* **Components**: `PocValidator`, `ApprovalGate`.
+* **Diagram Requirement**: Sequence diagram of the "Sovereign Handover" process where high-complexity exploits (RiskLevel >= 70) halt the autonomous loop and wait for explicit human operator verification/payload provision.
 
-* **Definition**: Safe, non-destructive vulnerability validation.
-* **Components**: `PocValidator`, `ZapScanner`, `BurpScanner`.
-* **Gate**: All Phase 3 actions require human-in-the-loop verification if `RiskLevel > 80`.
+### PHASE 4: INITIAL ACCESS & EXPLOITATION (Layer 4)
+* **Goal**: Striking the target and achieving validated code execution.
+* **Components**: `SqlMapScanner`, `ImpacketScanner`, `CommixScanner`, `RemoteExecutor`.
+* **Diagram Requirement**: Diagram detailing how validated payloads are safely delivered and executed through the `StealthExecutor`'s remote dispatch pipelines.
 
-### PHASE 4: ACTIVE EXPLOITATION (Layer 4 - Exploitation)
-
-* **Definition**: Gaining initial access and system-altering actions.
-* **Components**: `SqlMapScanner`, `ImpacketScanner`, `CommixScanner`.
-* **Handover**: High-complexity exploits require explicit "Exploit Handover" via `ApprovalGate`.
-
-### PHASE 5: POST-EXPLOITATION & PIVOTING (Layer 5 - Post-Exp)
-
-* **Definition**: Domain dominance, persistence, and lateral movement.
-* **Components**: `BloodHoundScanner`, `SliverScanner`, `HavocScanner`, `LigoloScanner`.
-* **Managed Egress**: Mandatory routing through Managed Exit Nodes (DigitalOcean VPS) via `StealthExecutor::spawn()`.
+### PHASE 5: POST-EXPLOITATION, C2 & PIVOTING (Layer 5)
+* **Goal**: Establishing persistence, managing Command and Control, AD mapping, and lateral movement.
+* **Components**: `SliverScanner`, `HavocScanner`, `LigoloScanner`, `BloodHoundScanner`.
+* **Diagram Requirement**: Complex flowchart showing the One-Time-Token (OTT) `PayloadServer` staging, remote delivery to managed proxy exits, TeamServer REST API session verification, and autonomous AD graph ingest (`AdIngestor` -> `CorrelationEngine`).
 
 ---
 
-## 🛠️ CORE INFRASTRUCTURE SPECS
+## 🛠️ CORE INFRASTRUCTURE INTEGRATION
 
-### 1. Stealth Sovereignty (`utils/`)
-
-* **ProxyManager**: Multi-tier egress management with managed exit node provisioning.
-* **StealthExecutor**: The "Hard Gate" for OS binary interaction. Enforces policy validation and proxychains4 wrapping.
-* **Fail-Closed Policy**: "No-Proxy, No-Traffic". Binary execution fails if `proxychains4` is not verified.
-
-### 2. Swarm Orchestration (`core/swarm/`)
-
-* **Orchestrator**: Priority-driven agent allocation based on `TokenBudget`.
-* **AutonomousAgent**: LLM-driven decision loop with `TieredAIRouter` support.
-* **Route Context**: Context compression and CVSS-weighted path analysis.
-
-### 3. Tactical Context & Graph (`core/correlation/`)
-
-* **AttackGraph**: DFS-based pathfinding for Domain Admin escalation.
-* **ADIngestor**: Automated BloodHound JSON ingestion into the graph.
+During the phase documentation, explicitly detail how these core systems underpin operations:
+* **StealthExecutor & ProxyManager**: The failsafe boundary. How `wrap_command()` prevents unproxied execution.
+* **SwarmOrchestrator**: How token budgets (`TokenBudget`), priority mechanisms, and the context compressor (`ContextCompressor`) guide autonomous agent assignment.
+* **CorrelationEngine / AttackGraph**: How ingested edges and nodes interact to provide DFS-based attack paths (e.g., "Path to Domain Admin").
 
 ---
 
-## 📊 DOCUMENTATION GUIDELINES
-
-* **Mermaid Integration**: Every architectural change MUST include:
-  * **Phase Flow**: `graph LR` showing data flow between layers.
-  * **Egress Path**: `sequenceDiagram` for tool -> executor -> proxy -> target.
-* **SSOT Enforcement**: If the documentation contradicts the Rust implementation, the implementation is the truth. Update the docs to match `src/`.
-* **GitHub Alerts**: Use `> [!IMPORTANT]` for OPSEC boundaries and `> [!CAUTION]` for destructive capability warnings.
-
----
-
-**START INSTRUCTION**: Begin by auditing the end-to-end flow from `BloodHoundScanner` data collection (Phase 5) to `AttackGraph` path computation. Document how AD edges influence the `SwarmOrchestrator`'s role assignment logic.
+**START INSTRUCTION**: Begin the documentation process by creating the comprehensive System Overview and fully detailing **PHASE 0 (Pre-engagement & Passive OSINT)**. 
+1. Review the related code in `src/`.
+2. Generate the detailed description, technical specifications, and corresponding Mermaid diagrams for Phase 0 based *strictly* on current code logic.
+3. Pause, summarize your completion of Phase 0, and wait for my instruction to continue to the next phase.

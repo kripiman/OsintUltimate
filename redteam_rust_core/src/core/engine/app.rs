@@ -38,6 +38,8 @@ pub struct EngineConfig {
     pub max_layer: ScanLayer,
     pub dashboard_port: Option<u16>,
     pub readiness_timeout: Duration, // V13: Configurable infrastructure wait
+    pub proxy_mode: crate::utils::config::ProxyMode,
+    pub proxy_pool_size: u32,
 }
 
 use crate::utils::executor::{StealthExecutor, ExecutorMode};
@@ -63,7 +65,9 @@ impl RedTeamEngine<crate::utils::executor::GhostMode> {
         let approval_gate = Arc::new(ApprovalGate::for_red_team());
         let proxy_manager = Arc::new(crate::utils::proxy::ProxyManager::new(
             config.proxies.clone().unwrap_or_default(),
-            config.insecure
+            config.insecure,
+            config.proxy_mode,
+            config.proxy_pool_size,
         ));
 
         let policy = Arc::new(crate::core::policy::StaticPolicy::new());
@@ -99,7 +103,9 @@ impl RedTeamEngine<crate::utils::executor::GhostMode> {
         let approval_gate = Arc::new(ApprovalGate::for_red_team());
         let proxy_manager = Arc::new(crate::utils::proxy::ProxyManager::new(
             config.proxies.clone().unwrap_or_default(),
-            config.insecure
+            config.insecure,
+            config.proxy_mode,
+            config.proxy_pool_size,
         ));
 
         let policy = Arc::new(crate::core::policy::StaticPolicy::new());
@@ -223,10 +229,15 @@ impl<M: ExecutorMode> RedTeamEngine<M> {
             loop {
                 if shutdown.is_cancelled() { break; }
                 
-                // If we have no available exits, provision one
-                if pm.is_empty() {
-                    info!("🚀 STEALTH: No exit nodes available. Provisioning new DigitalOcean droplet (nyc1)...");
-                    match do_client.create_droplet(&format!("stealth-exit-{:x}", rand::random::<u32>()), "nyc1").await {
+                // V14.1 High-Speed Egress: Maintain the Pre-Warmed Pool
+                let current_exits = pm.get_managed_exits().len();
+                let pool_size = pm.proxy_pool_size as usize;
+                
+                if current_exits < pool_size || (current_exits == 0 && pool_size == 0) {
+                    let mode = pm.proxy_mode;
+                    let target = if pool_size == 0 { 1 } else { pool_size };
+                    info!("🚀 STEALTH: Maintaining pool (Current: {}, Target: {}). Provisioning new DigitalOcean droplet (nyc1) in mode {:?}...", current_exits, target, mode);
+                    match do_client.create_droplet(&format!("stealth-exit-{:x}", rand::random::<u32>()), "nyc1", mode).await {
                         Ok(droplet) => {
                             info!("⏳ STEALTH: Waiting for droplet IP (Managed node ID: {})...", droplet.id);
                             match do_client.wait_for_ip(droplet.id).await {

@@ -158,13 +158,30 @@ async fn main() -> Result<()> {
         dashboard_port: args.dashboard,
         max_layer,
         readiness_timeout: Duration::from_secs(180), // V13 Default: 3 min for DO exit nodes
+        proxy_mode: utils_config.proxy_mode,
+        proxy_pool_size: utils_config.proxy_pool_size,
     };
 
     let engine = RedTeamEngine::from_config(engine_config, &utils_config);
 
-    // --- STEALTH INFRASTRUCTURE SETUP (V13) ---
+    // --- STEALTH INFRASTRUCTURE SETUP (V14.1) ---
     if let Ok(token) = utils_config.require_do_token() {
-        engine.init_stealth_infrastructure(token).await?;
+        engine.init_stealth_infrastructure(token.clone()).await?;
+
+        // Global Kill-Switch Integration
+        let token_clean = token.clone();
+        let pm_clean = engine.proxy_manager();
+        tokio::spawn(async move {
+            tokio::signal::ctrl_c().await.ok();
+            warn!("⚠️ [KILL-SWITCH] Interrupt detected. Commencing autonomous cleanup of all ephemeral egress nodes...");
+            let do_client = redteam_rust_core::infrastructure::digital_ocean::DigitalOceanClient::new(token_clean, pm_clean);
+            if let Err(e) = do_client.destroy_all_ephemeral_droplets().await {
+                error!("❌ [KILL-SWITCH] Failed to clean up DigitalOcean droplets: {}", e);
+            } else {
+                info!("🛡️ [KILL-SWITCH] Cleanup complete. Sovereign egress terminated safely.");
+            }
+            std::process::exit(0);
+        });
     }
 
 

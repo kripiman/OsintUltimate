@@ -65,7 +65,7 @@ impl<M: ExecutorMode> ScannerPlugin for BloodHoundScanner<M> {
         fn metadata(&self) -> crate::plugins::PluginMetadata {
         crate::plugins::PluginMetadata {
             name: self.name().to_string(),
-            description: "Automated security analysis using this plugin.".to_string(),
+            description: "BloodHound AD collection plugin: Automates ingest of infrastructure topology securely.".to_string(),
             target_type: crate::plugins::TargetType::Host,
             risk_level: crate::plugins::RiskLevel::Medium,
             layer: crate::core::capability_layer::ScanLayer::PostExploitation,
@@ -73,7 +73,7 @@ impl<M: ExecutorMode> ScannerPlugin for BloodHoundScanner<M> {
             capabilities: self.capabilities(),
             cost: 5,
             category: "Lateral Movement".to_string(),
-            mitre_attacks: vec![],
+            mitre_attacks: vec!["T1087.002".to_string(), "T1482".to_string(), "T1069.002".to_string()],
             remediation_difficulty: crate::plugins::RiskLevel::Medium,
             blackarch_category: None,
             is_destructive: false,

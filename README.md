@@ -16,6 +16,7 @@
 - **Priority-Aware Swarm**: Atomic token admission control (`TokenBudget`) ensuring critical analysis survives starvation.
 - **Fail-Closed Egress**: Zero-trust networking: Functionality aborts instantly if stealth infrastructure (Proxies/Managed Exits) is compromised.
 - **AttackGraph Correlation**: DFS-based pathfinding for automated escalation and pivoting, specifically optimized for Active Directory environments.
+- **High-Speed Autonomous Proxies**: Integrated support for **Shadowsocks** and **Hysteria (QUIC/UDP)** with pre-warmed Droplet pools for zero-latency rotation and evasion.
 - **C2 Sovereignty**: Native integration with autonomous C2 operators for persistent session maintenance and lateral movement.
 - **Lock-Free Pipeline**: High-throughput telemetry ingesta using lock-free data structures and `io-uring`.
 

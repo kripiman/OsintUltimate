@@ -50,17 +50,16 @@ impl<M: ExecutorMode> C2Operator for HavocScanner<M> {
         
         let output_path = format!("/tmp/demon_{}.bin", target.host.replace('.', "_"));
         
-        let output = Command::new(&self.binary_path)
-            .arg("generate")
-            .arg("demon")
-            .arg("--host")
-            .arg(&callback_ip)
-            .arg("--out")
-            .arg(&output_path)
-            .stdin(Stdio::null())
-            .stdout(Stdio::piped())
-            .stderr(Stdio::piped())
-            .output()
+        let args = vec![
+            "generate".to_string(),
+            "demon".to_string(),
+            "--host".to_string(),
+            callback_ip.clone(),
+            "--out".to_string(),
+            output_path.clone(),
+        ];
+
+        let output = self.executor.execute_and_wait(&self.binary_path, args)
             .await
             .context("Failed to generate havoc payload")?;
 

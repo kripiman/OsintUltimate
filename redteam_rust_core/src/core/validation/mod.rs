@@ -134,8 +134,8 @@ impl<M: ExecutorMode> PocValidator<M> {
             // We return a string that should match a pattern like 'critical' or 'high' or even template name
             Ok(stdout)
         } else {
-            // If no critical results, we return the output but it might fail the expected_pattern check
-            Ok(stdout)
+            // Unconditionally fail the pipeline step if no high/critical results are found
+            anyhow::bail!("Nuclei execution completed but no [critical] or [high] vulnerabilities were found.");
         }
     }
 }

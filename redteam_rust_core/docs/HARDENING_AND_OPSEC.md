@@ -1,53 +1,53 @@
-# 🛡️ Hardening Stealth y SIGILO (Protocolo V13)
+# 🛡️ Hardening Stealth and SIGILO (V14.1 Protocol)
 
-Este documento describe la arquitectura de endurecimiento y las tácticas de evasión de grado militar integradas en **OsintUltimate V13**. El objetivo es garantizar la invisibilidad operativa y la integridad del sistema ante contramedidas avanzadas de WAF, EDR y equipos de Blue Team.
-
----
-
-## 1. Protección de Egress y Evasión de RED
-
-### Detección de Infraestructura OCI (P0)
-Si el motor detecta que se está ejecutando dentro de Oracle Cloud Infrastructure (`stealth_detect.rs`), activa automáticamente el **aislamiento de salida total**. Todas las conexiones ofensivas se enrutan imperativamente a través de la infraestructura efímera para evitar que el objetivo identifique la IP de origen del orquestador.
-
-### Aprovisionamiento Autónomo de Proxies (DigitalOcean)
-- **Despliegue Just-in-Time**: Se lanzan nodos de salida en regiones aleatorias de DigitalOcean ante detecciones de bloqueo (403/WAF).
-- **Auto-Destrucción Táctica**: Los nodos tienen un script de limpieza que los apaga tras 4 horas para eliminar rastros forenses y controlar costos.
-- **Enrutamiento por Proxy-Wrapping**: Las herramientas externas (nmap, curl, sqlmap) son invocadas mediante envoltorios que inyectan configuraciones de proxy SOCKS5 dinámicamente.
+This document describes the hardening architecture and military-grade evasion tactics integrated into **OsintUltimate V14.1**. The primary objective is to ensure operational invisibility and system integrity against advanced WAF, EDR countermeasures, and professional Blue Team monitoring.
 
 ---
 
-## 2. Hardening del Validador de PoC (`PocValidator`)
+## 1. Egress Protection & Network Evasion
 
-El sistema de validación de Proof-of-Concept ha sido rediseñado para evitar inyecciones y fugas:
+### OCI Infrastructure Detection (P0)
+If the engine detects it is running within Oracle Cloud Infrastructure (`stealth_detect.rs`), it automatically activates **total egress isolation**. All offensive connections are imperatively routed through ephemeral infrastructure to prevent the target from identifying the orchestrator's origin IP.
 
-1.  **Validación Semántica de Argumentos**: No se permiten argumentos de línea de comandos arbitrarios. Las herramientas se ejecutan bajo plantillas que validan cada flag contra una lista blanca (Whitelist).
-2.  **Pinning de IP de Destino**: Previene el **DNS Rebinding**. Una vez resuelto el dominio, la IP se fija internamente para todas las fases de escaneo y explotación.
-3.  **SSRF Shield Multinivel**: Bloqueo asíncrono de rangos de red internos, metadatos cloud (169.254.169.254) y direcciones no enrutables antes de iniciar cualquier conexión.
-
----
-
-## 3. Sigilo de Comportamiento (Behavioral OPSEC)
-
-- **Jitter Log-Normal**: Los retrasos entre peticiones no son constantes; siguen una distribución matemática que imita la interacción humana.
-- **RT-Identity (Fingerprinting Consistent)**: El sistema vincula un `User-Agent` específico y una versión de `TLS` a cada IP de salida para mantener la coherencia de identidad durante toda la sesión contra un objetivo.
-- **Thompson Sampling**: El motor de evasión elige dinámicamente la mejor técnica de salto de WAF basándose en el éxito de ejecuciones previas.
+### Autonomous Proxy Provisioning (DigitalOcean)
+- **Just-in-Time Deployment**: Egress nodes are launched in random DigitalOcean regions upon detection of blocking (403/WAF) or as part of the mission's rotation strategy.
+- **Tactical Auto-Destruction**: Nodes include a mandatory cleanup script that shuts them down after 4 hours to eliminate forensic traces and control operational costs.
+- **Proxy-Wrapping Enforcement**: External tools (nmap, curl, nuclei) are invoked via wrappers that dynamically inject SOCKS5 proxy configurations, adhering to the [Sovereign Execution](file:///home/kripi/Documentos/GitHub/OsintUltimate/redteam_rust_core/docs/SOVEREIGN_SYSTEMS.md) standard.
 
 ---
 
-## 4. Gestión Adaptativa de Recursos
+## 2. PocValidator Hardening
 
-V13 implementa **Backpressure Autoconsciente**:
-- **Monitorización de RAM**: El hilo `MemoryMonitor` vigila el consumo del proceso.
-- **Límites Dinámicos**: Si el sistema detecta solo 1GB de RAM, se reduce la concurrencia a 5-10 hilos y se desactiva el sandboxing pesado (Docker) en favor de `ProcessGuard` nativo.
-- **Aislamiento `rlimit`**: Cada subproceso se lanza con límites de memoria virtual (`RLIMIT_AS`) de 512MB para evitar ataques de agotamiento de recursos por parte del objetivo.
+The Proof-of-Concept validation system is architected to prevent injections and data leaks:
 
----
-
-## 5. Salidas y Auditoría Inmutable
-
-- **Lock-Free Sink**: Los hallazgos se escriben de forma no bloqueante utilizando `SegQueue`, evitando lags en el motor de escaneo.
-- **Audit Log**: Cada acción de alto riesgo (ej. ejecución de exploit) requiere aprobación manual vía **Approval Gate** y queda registrada con la identidad del operador y la justificación táctica.
+1.  **Semantic Argument Validation**: Arbitrary command-line arguments are prohibited. Tools execute under rigid templates that validate every flag against a strict Whitelist.
+2.  **Destination IP Pinning**: Prevents **DNS Rebinding** attacks. Once a domain is resolved, the target IP is pinned internally for all subsequent scanning and exploitation phases.
+3.  **Multi-level SSRF Shield**: Asynchronous blocking of internal network ranges, cloud metadata endpoints (169.254.169.254), and non-routable addresses before any connection is initiated.
 
 ---
 
-© 2026 RedTeam Lab | OsintUltimate V13 Hardening Protocol
+## 3. Behavioral OPSEC
+
+- **Log-Normal Jitter**: Delays between requests are not constant; they follow a mathematical distribution that emulates human interaction patterns.
+- **RT-Identity (Consistent Fingerprinting)**: The system binds a specific `User-Agent` string and `TLS` version to each egress IP to maintain identity consistency throughout a session against a target.
+- **Thompson Sampling**: The evasion engine dynamically selects the most effective WAF bypass technique based on the success rates of previous executions.
+
+---
+
+## 4. Adaptive Resource Management
+
+V14.1 implements **Self-Aware Backpressure**:
+- **RAM Monitoring**: The `MemoryMonitor` thread supervises overall process consumption.
+- **Dynamic Limits**: If the system detects limited resources (e.g., < 1GB RAM), it automatically reduces concurrency and deactivates intensive sandboxing in favor of native `ProcessGuard` mechanisms.
+- **rlimit Isolation**: Every subprocess is launched with hard-coded virtual memory limits (`RLIMIT_AS`) of 512MB to prevent target-side resource exhaustion attacks.
+
+---
+
+## 5. Persistence and Immutable Auditing
+
+- **Lock-Free Sink**: Findings are written non-blockingly using `SegQueue` to prevent engine lag during high-throughput scanning.
+- **Audit Log**: Every high-risk action (e.g., exploit execution) requires explicit manual approval via the **Approval Gate** and is recorded with operator identity and tactical justification.
+
+---
+
+© 2026 RedTeam Lab | OsintUltimate V14.1 Sovereign Protocol

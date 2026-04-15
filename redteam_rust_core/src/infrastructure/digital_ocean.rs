@@ -51,8 +51,11 @@ struct CreateDropletRequest {
     user_data: Option<String>,
 }
 
-fn generate_proxy_user_data(user: &str, pass: &str) -> String {
-    format!(r#"#cloud-config
+use crate::utils::config::ProxyMode;
+
+fn generate_proxy_user_data(mode: ProxyMode, user: &str, pass: &str) -> String {
+    match mode {
+        ProxyMode::Dante => format!(r#"#cloud-config
 package_update: true
 packages:
   - dante-server
@@ -84,7 +87,29 @@ runcmd:
   - echo "{user}:{pass}" | chpasswd
   - systemctl restart danted
   - shutdown -h +240
-"#, user = user, pass = pass)
+"#, user = user, pass = pass),
+        ProxyMode::Shadowsocks => format!(r#"#cloud-config
+package_update: true
+packages:
+  - docker.io
+runcmd:
+  - docker run -d --name ss-server --restart always -p 1080:8388 shadowsocks/shadowsocks-libev ss-server -s 0.0.0.0 -p 8388 -k {pass} -m aes-256-gcm
+  - shutdown -h +240
+"#, pass = pass),
+        ProxyMode::Hysteria => format!(r#"#cloud-config
+package_update: true
+runcmd:
+  - wget https://github.com/apernet/hysteria/releases/latest/download/hysteria-linux-amd64 -O /usr/local/bin/hysteria
+  - chmod +x /usr/local/bin/hysteria
+  - openssl req -x509 -nodes -newkey rsa:2048 -keyout /etc/hysteria.key -out /etc/hysteria.crt -days 365 -subj "/C=US/ST=State/L=City/O=Organization/OU=Unit/CN=localhost"
+  - echo "listen: :1080" > /etc/hysteria.yaml
+  - echo "cert: /etc/hysteria.crt" >> /etc/hysteria.yaml
+  - echo "key: /etc/hysteria.key" >> /etc/hysteria.yaml
+  - echo "auth: {pass}" >> /etc/hysteria.yaml
+  - hysteria server -c /etc/hysteria.yaml &
+  - shutdown -h +240
+"#, pass = pass),
+    }
 }
 
 pub struct DigitalOceanClient {
@@ -115,7 +140,7 @@ impl DigitalOceanClient {
         Ok(headers)
     }
 
-    pub async fn create_droplet(&self, name: &str, region: &str) -> Result<Droplet> {
+    pub async fn create_droplet(&self, name: &str, region: &str, mode: ProxyMode) -> Result<Droplet> {
         let socks_user = "operator"; 
         let socks_pass = uuid::Uuid::new_v4().to_string()[..12].to_string(); // Professional entropy
 
@@ -129,7 +154,7 @@ impl DigitalOceanClient {
             ipv6: false,
             monitoring: true,
             tags: vec!["osint-ultimate".to_string(), "ephemeral".to_string()],
-            user_data: Some(generate_proxy_user_data(socks_user, &socks_pass)),
+            user_data: Some(generate_proxy_user_data(mode, socks_user, &socks_pass)),
         };
 
         let response = self.get_client()?
@@ -207,5 +232,14 @@ impl DigitalOceanClient {
 
         let wrapper: DropletsWrapper = response.json().await?;
         Ok(wrapper.droplets)
+    }
+
+    pub async fn destroy_all_ephemeral_droplets(&self) -> Result<()> {
+        let droplets = self.list_droplets().await?;
+        for d in droplets {
+            info!("🛡️ KILL-SWITCH: Destroying ephemeral droplet {} (ID: {})...", d.name, d.id);
+            let _ = self.destroy_droplet(d.id).await;
+        }
+        Ok(())
     }
 }

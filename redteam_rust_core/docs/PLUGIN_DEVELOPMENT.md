@@ -1,39 +1,49 @@
-# 🔌 Guía de Desarrollo de Plugins
+# 🔌 Plugin Development Guide
 
-OsintUltimate aprovecha una arquitectura modular donde cada capacidad de escaneo es un plugin que implementa el trait `ScannerPlugin`.
+OsintUltimate leverages a modular architecture where every scanning capability is a plugin implementing the `ScannerPlugin` trait.
 
-## El Trait Interface
+## The Trait Interface
 
-Ubicado en `src/plugins/mod.rs`:
+Located in `src/plugins/mod.rs`:
 
 ```rust
 #[async_trait]
 pub trait ScannerPlugin: Send + Sync {
-    /// Identificador único para el plugin (ej., "WebFuzzer")
+    /// Unique identifier for the plugin (e.g., "WebFuzzer")
     fn name(&self) -> &'static str;
-    
-    /// La lógica central. Modifica el target_host in-place.
-    async fn scan(&self, target: &mut TargetHost) -> Result<()>;
+
+    /// Detailed metadata including risk levels and MITRE mapping
+    fn metadata(&self) -> PluginMetadata;
+
+    /// List of capabilities provided by the plugin
+    fn capabilities(&self) -> Vec<Capability>;
+
+    /// Asynchronous check for system dependencies (e.g., bin availability)
+    async fn check_dependencies(&self) -> Result<bool>;
+
+    /// The core logic. Returns a list of findings for a specific target.
+    async fn scan(&self, target: &TargetHost) -> Result<Vec<Finding>>;
 }
 ```
 
-## Creando un Nuevo Scanner
+## Creating a New Scanner
 
-### Paso 1: Definir la Estructura
-Tu struct puede contener configuraciones (ej., puertos, listas de palabras).
+### Step 1: Define the Structure
+Your struct can contain specialized configurations or shared resources like an `Arc<StealthExecutor>`.
 
 ```rust
 pub struct MyCustomScanner {
     port: u16,
+    executor: Arc<StealthExecutor<GhostMode>>,
 }
 ```
 
-### Paso 2: Implementar el Trait
+### Step 2: Implement the Trait
 
 ```rust
 use async_trait::async_trait;
 use crate::models::{TargetHost, Finding, Severity, Category};
-use crate::plugins::ScannerPlugin;
+use crate::plugins::{ScannerPlugin, PluginMetadata, Capability};
 use anyhow::Result;
 
 #[async_trait]
@@ -42,204 +52,80 @@ impl ScannerPlugin for MyCustomScanner {
         "MyCustomScanner"
     }
 
-    async fn scan(&self, target: &mut TargetHost) -> Result<()> {
-        // 1. Realizar la lógica (ej., solicitud de red)
-        // Usar tokio::net::TcpStream o reqwest
+    fn metadata(&self) -> PluginMetadata {
+        PluginMetadata {
+            name: self.name().to_string(),
+            description: "Custom network probe for specific ports.".to_string(),
+            risk_level: RiskLevel::Low,
+            layer: ScanLayer::Discovery,
+            // ... see PluginMetadata definition for more fields
+            ..Default::default()
+        }
+    }
+
+    async fn scan(&self, target: &TargetHost) -> Result<Vec<Finding>> {
+        let mut findings = Vec::new();
         
-        // 2. Añadir hallazgos (Findings) si es vulnerable
-        if es_vulnerable {
-             target.findings.push(Finding::new(
-                "VULN-ID-001",
+        // 1. Perform logic (e.g., via StealthExecutor)
+        let output = self.executor.execute_and_wait("probe", vec![target.host.clone()]).await?;
+        
+        // 2. Parse findings
+        if output.status.success() {
+             findings.push(Finding::new(
+                "CUSTOM-VULN-01",
                 Category::Network,
                 Severity::High,
-                "Puerto Abierto Detectado",
-                serde_json::json!({ "port": self.port })
+                "Target is vulnerable to custom probe.",
+                serde_json::json!({ "output": String::from_utf8_lossy(&output.stdout) })
             ));
         }
         
-        Ok(())
+        Ok(findings)
     }
 }
 ```
 
-### Paso 3: Registrar en `main.rs`
-
-```rust
-// En main.rs
-orchestrator.register_plugin(Box::new(MyCustomScanner { port: 8080 })).await;
-```
-
-## Mejores Prácticas
-
-1.  **No Bloqueante**: Nunca uses `std::thread::sleep` o E/S bloqueante. Usa `tokio`.
-2.  **Manejo de Errores**: Devuelve `Ok(())` incluso si el escaneo "no encontró nada". Solo devuelve `Err` si el plugin en sí falló (ej., error de configuración).
-3.  **Concurrencia**: El orquestador maneja el paralelismo. Tu instancia de plugin se comparte (`Arc<RwLock<...>>`), por lo que `&self` es inmutable.
-
-## Plugins Dinámicos (Librerías Compartidas `.so` / `.dylib`)
-
-Puedes compilar plugins como librerías dinámicas independientes. El núcleo verifica la compatibilidad de la **ABI** y el **Versionado** antes de cargar cualquier plugin por seguridad. Pasa `--plugins-dir <ruta>` al ejecutar OsintUltimate para cargarlos.
-
-### Paso 1: Configurar el `Cargo.toml` externo
-Asegúrate de configurar el tipo de crate como `cdylib` e importa las dependencias núcleo (como redteam_rust_core y anyhow).
-```toml
-[lib]
-crate-type = ["cdylib"]
-```
-
-### Paso 2: Exportar la Instancia y Versión
-En el archivo `lib.rs` de tu plugin externo, debes exportar la función `_plugin_create` y `plugin_version`. **Importante**: Debido a que Rust no tiene una ABI estable, el plugin DEBE exportar estos símbolos con `extern "C"`.
-
-```rust
-use redteam_rust_core::plugins::ScannerPlugin;
-use redteam_rust_core::models::TargetHost;
-use anyhow::Result;
-use async_trait::async_trait;
-
-pub struct ExternalPlugin;
-
-#[async_trait]
-impl ScannerPlugin for ExternalPlugin {
-    fn name(&self) -> &'static str { "ExternalScannerDynamic" }
-    async fn scan(&self, target: &TargetHost) -> Result<Vec<Finding>> {
-        // Lógica de escaneo (ahora recibe &TargetHost por optimización Arc)
-        Ok(vec![])
-    }
-}
-
-// Exportar la versión para validación ABI
-#[no_mangle]
-pub extern "C" fn plugin_version() -> &'static str {
-    env!("CARGO_PKG_VERSION")
-}
-
-#[no_mangle]
-pub extern "C" fn _plugin_create() -> *mut dyn ScannerPlugin {
-    let plugin = Box::new(ExternalPlugin);
-    Box::into_raw(plugin)
-}
-```
-
-### Paso 3: Ejecución
-Pasa la ruta durante el inicio:
-```bash
-cargo run --release -- --target example.com --plugins-dir ./external_plugins/target/release/
-```
-
-## 🎯 Integración con BlackArch (Sistema de Herramientas)
-
-A partir de v4.0, OsintUltimate detecta automáticamente herramientas de BlackArch instaladas en el sistema y las utiliza en lugar de binarios embebidos. Esto proporciona:
-
-- **Eficiencia**: Reutiliza binarios del sistema en lugar de embeddings
-- **Compatibilidad**: Soporte automático para distribuciones especializadas (BlackArch, Kali, Parrot)
-- **Fallback seguro**: Usa binarios embebidos si no se encuentra la herramienta
-
-### Sistema de Detección Automática
-
-La detección de herramientas se realiza mediante el módulo `utils::tool_detection`:
-
-```rust
-use crate::utils::tool_detection::{detect_tool, check_tool_availability, verify_tool_version};
-
-// 1. Detección simple
-let ffuf_path = detect_tool("ffuf"); // Returns String (path or tool name as fallback)
-
-// 2. Verificación asíncrona de disponibilidad
-if check_tool_availability("nuclei").await {
-    println!("nuclei está disponible y es ejecutable");
-}
-
-// 3. Validación de versión (opcional)
-if verify_tool_version("sqlmap", Some("1.5")).await? {
-    println!("sqlmap meet minimum version requirement");
-}
-```
-
-### Herramientas Soportadas Actualmente
-
-| Herramienta | Plugin | Módulo | Estado |
-|-------------|--------|--------|--------|
-| ffuf | FfufScanner | enumeration/web | ✅ Integrado |
-| nuclei | NucleiScanner | intelligence | ✅ Integrado |
-| sqlmap | SqlMapScanner | exploitation/web | ✅ Integrado |
-| rustscan | RustScanScanner | enumeration/network | ✅ Integrado |
-| arjun | ArjunScanner | enumeration/web | ✅ Integrado |
-| jaeles | JaelesScanner | intelligence | ✅ Integrado |
-| kubescape | KubescapeScanner | compliance | ✅ Integrado |
-| searchsploit | SearchsploitScanner | intelligence | ✅ Integrado |
-| certipy | CertipyScanner | privilege_escalation | ✅ Integrado |
-| netexec | NetExecScanner | exploitation/network | ✅ Integrado |
-| coercer | CoercerScanner | exploitation/network | ✅ Integrado |
-| dalfox | DalfoxScanner | exploitation/web | ✅ Integrado |
-| graphql_cop | GraphQLCopScanner | exploitation/web | ✅ Integrado |
-| wapiti | WapitiScanner | exploitation/web | ✅ Integrado |
-| jwt_tool | JWTToolScanner | exploitation/web | ✅ Integrado |
-| hydra | HydraScanner | exploitation/network | ✅ Integrado |
-| responder | ResponderScanner | exploitation/network | ✅ Integrado |
-| petitpotam | PetitPotamScanner | exploitation/network | ✅ Integrado |
-| bloodhound | BloodHoundScanner | lateral_movement | ✅ Integrado |
-| ligolo | LigoloScanner | lateral_movement | ✅ Integrado |
-| sliver | SliverScanner | lateral_movement | ✅ Integrado |
-| havoc | HavocScanner | persistence | ✅ Integrado |
-| dnsx | DNSXScanner | reconnaissance/active | ✅ Integrado |
-| httpx | HTTPXScanner | reconnaissance/active | ✅ Integrado |
-| naabu | NaabuScanner | reconnaissance/active | ✅ Integrado |
-| wayback | WaybackScanner | reconnaissance/passive | ✅ Integrado |
-| uncover | UncoverScanner | reconnaissance/osint | ✅ Integrado |
-| gauplus | GauPlusScanner | enumeration/web | ✅ Integrado |
-| interactsh | InteractshScanner | enumeration/web | ✅ Integrado |
-| feroxbuster | FeroxbusterScanner | enumeration/web | ✅ Integrado |
-| gowitness | GoWitnessScanner | enumeration/web | ✅ Integrado |
-| cloudenum | CloudEnumScanner | enumeration/cloud | ✅ Integrado |
-| cloudbrute | CloudBruteScanner | enumeration/cloud | ✅ Integrado |
-| cloudfox | CloudFoxScanner | enumeration/cloud | ✅ Integrado |
-| pacu | PacuScanner | enumeration/cloud | ✅ Integrado |
-| trivy | TrivyScanner | compliance | ✅ Integrado |
-
-**Total integrado: 35+ plugins** | **Estado: ✅ BlackArch Ready**
-
-## 🚀 Plugins Nativos (io-uring) - NUEVO en v4.0
-
-Para tareas de red que requieren una latencia extremadamente baja (como port scanning masivo), OsintUltimate v4.0 introduce el trait `NativeScanner`. Estos plugins operan mediante `io-uring` para bypassar el modelo tradicional de subprocesos.
-
-### Implementación del Trait NativeScanner
-Ubicado en `src/core/native_scanner.rs`.
-
-```rust
-pub trait NativeScanner: Send + Sync {
-    fn name(&self) -> &str;
-    async fn scan(&self, target: &str) -> Result<Vec<crate::models::Finding>>;
-}
-```
-
-### Ventajas del Modelo Nativo:
-1. **Zero-Copy**: Envío de paquetes directamente desde buffers compartidos con el kernel.
-2. **Lock-Free**: Ingestión de resultados directamente en el `LockFreeResultSink`.
-3. **Escala**: Capaz de manejar >100k paquetes por segundo sin saturar el planificador de hilos de Rust.
+### Step 3: Registration
+Register the plugin in `src/plugins/mod.rs` within the `get_all_scanners` function.
 
 ---
 
-### Instalación de Herramientas (para pruebas)
+## Best Practices
 
-En BlackArch o Kali:
-```bash
-# Instalar herramientas individuales
-sudo pacman -S ffuf nuclei sqlmap rustscan
+1.  **Non-Blocking**: Never use `std::thread::sleep`. Always use `tokio::time::sleep` and async I/O.
+2.  **Sovereign Egress**: Any external binary execution MUST go through the `StealthExecutor::spawn` or `execute_and_wait` methods to ensure proxy wrapping.
+3.  **Error Handling**: Return `Ok(vec![])` if no vulnerabilities are found. Only return `Err` if the plugin itself experienced a fatal execution error.
 
-# O instalar la suite de categoría
-sudo pacman -S blackarch-webapp
-```
+## Dynamic Plugins (.so / .dylib)
 
-En Debian/Ubuntu:
-```bash
-# FFuf
-sudo apt-get install ffuf
+OsintUltimate supports loading plugins as independent dynamic libraries. The core verifies **ABI compatibility** and **Version matching** before loading. Use the `--plugins-dir <path>` flag to load them.
 
-# Nuclei
-go install -v github.com/projectdiscovery/nuclei/v2/cmd/nuclei@latest
+---
 
-# SQLMap
-sudo apt-get install sqlmap
+## 🎯 BlackArch Integration
 
-# RustScan
-cargo install rustscan
-```
+As of V14.1, OsintUltimate automatically detects BlackArch tools installed on the system using the `utils::tool_detection` module. This ensures that the engine uses optimized system binaries instead of embedded fallbacks.
+
+### Currently Supported Tools (Partial List)
+| Tool | Plugin | Category |
+| :--- | :--- | :--- |
+| **ffuf** | FfufScanner | Web Enumeration |
+| **nuclei** | NucleiScanner | Vulnerability Intelligence |
+| **sqlmap** | SqlMapScanner | Exploitation |
+| **bloodhound** | BloodHoundScanner | Lateral Movement |
+| **sliver** | SliverScanner | C2 Operations |
+
+---
+
+## 🚀 Native Scanners (io-uring)
+
+For network tasks requiring ultra-low latency (like massive port scanning), OsintUltimate utilizes the `NativeScanner` trait, which bypasses the traditional process model in favor of `io-uring`.
+
+### Advantages:
+1. **Zero-Copy**: Direct packet transmission from kernel-shared buffers.
+2. **Lock-Free**: Ingestion of results directly into the `LockFreeResultSink`.
+3. **Scale**: Capable of handling >100k pps (packets per second).
+
+---
+
+© 2026 RedTeam Lab | OsintUltimate V14.1 Developer Manual

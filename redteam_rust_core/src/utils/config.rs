@@ -1,6 +1,13 @@
 use std::env;
 use anyhow::{Result, anyhow};
 
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum ProxyMode {
+    Dante,
+    Shadowsocks,
+    Hysteria,
+}
+
 pub struct Config {
     pub do_token: Option<String>,
     pub ollama_url: String,
@@ -8,6 +15,14 @@ pub struct Config {
     pub soft_memory_limit_mb: usize,
     pub hard_memory_limit_mb: usize,
     pub default_concurrency: usize,
+    pub proxy_mode: ProxyMode,
+    pub proxy_pool_size: u32,
+    pub chaos_api_key: Option<String>,
+    pub netlas_api_key: Option<String>,
+    pub securitytrails_api_key: Option<String>,
+    pub shodan_api_key: Option<String>,
+    pub criminalip_api_key: Option<String>,
+    pub netlas_daily_budget: u32,
 }
 
 impl Config {
@@ -31,6 +46,27 @@ impl Config {
                 .ok()
                 .and_then(|s| s.parse().ok())
                 .unwrap_or(10),
+            proxy_mode: env::var("PROXY_MODE")
+                .ok()
+                .map(|s| match s.to_lowercase().as_str() {
+                    "shadowsocks" => ProxyMode::Shadowsocks,
+                    "hysteria" => ProxyMode::Hysteria,
+                    _ => ProxyMode::Dante,
+                })
+                .unwrap_or(ProxyMode::Dante),
+            proxy_pool_size: env::var("PROXY_POOL_SIZE")
+                .ok()
+                .and_then(|s| s.parse().ok())
+                .unwrap_or(0),
+            chaos_api_key: env::var("CHAOS_API_KEY").ok(),
+            netlas_api_key: env::var("NETLAS_API_KEY").ok(),
+            securitytrails_api_key: env::var("SECURITYTRAILS_API_KEY").ok(),
+            shodan_api_key: env::var("SHODAN_API_KEY").ok(),
+            criminalip_api_key: env::var("CRIMINALIP_API_KEY").ok(),
+            netlas_daily_budget: env::var("NETLAS_DAILY_BUDGET")
+                .ok()
+                .and_then(|s| s.parse().ok())
+                .unwrap_or(33), // Default ~1000/month
         }
     }
 

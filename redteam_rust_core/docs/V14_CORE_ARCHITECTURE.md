@@ -1,7 +1,7 @@
 # 🏗️ OsintUltimate V14: Core Architecture (Master SSOT)
 
 > [!NOTE]
-> This document provides the high-level architecture. For detailed operational specifications and V14.1 Sovereign Sync details, see [SOVEREIGN_SYSTEMS_V14.1.md](file:///home/kripi/Documentos/GitHub/OsintUltimate/redteam_rust_core/docs/SOVEREIGN_SYSTEMS_V14.1.md).
+> This document provides the high-level architecture. For detailed operational specifications and V14.1 Sovereign Sync details, see [SOVEREIGN_SYSTEMS.md](file:///home/kripi/Documentos/GitHub/OsintUltimate/redteam_rust_core/docs/SOVEREIGN_SYSTEMS.md).
 
 OsintUltimate V14 is a high-performance, autonomous red-teaming orchestrator built in Rust. It utilizes **Lock-Free concurrency**, **io-uring I/O**, and **Adaptive AI Routing** to deliver production-grade offensive security.
 
