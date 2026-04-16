@@ -46,6 +46,19 @@ impl SecretScrubber {
         // 6. Generic PII
         if let Ok(re) = Regex::new(r"[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}") { patterns.push((re, "[REDACTED_EMAIL]")); }
 
+        // 7. System Paths & Host Topology (Hardened)
+        if let Ok(re) = Regex::new(r"(?i)\b(/etc/passwd|/etc/shadow|/etc/group|/etc/hosts|/root/\.ssh/id_rsa)\b") {
+            patterns.push((re, "[REDACTED_SYSTEM_PATH]"));
+        }
+        if let Ok(re) = Regex::new(r"(?i)\b(C:\\Windows\\System32\\Config\\SAM|C:\\Windows\\win\.ini|C:\\Users\\.*\\\.ssh\\id_rsa)\b") {
+            patterns.push((re, "[REDACTED_WINDOWS_PATH]"));
+        }
+
+        // 8. Control Injection Prevention (Anti-Hallucination)
+        // Evita que la herramienta inyecte cabeceras falsas que confundan al parseador TONE/LLM
+        if let Ok(re) = Regex::new(r"(?m)^#type:tone-v\d+.*$") { patterns.push((re, "[REDACTED_MALICIOUS_HEADER]")); }
+        if let Ok(re) = Regex::new(r"(?m)^---.*?\btemplate\b.*?\b(title|severity)\b.*?---$") { patterns.push((re, "[REDACTED_MALICIOUS_METADATA]")); }
+
         Self { patterns }
     }
 

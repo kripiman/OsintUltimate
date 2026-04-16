@@ -7,6 +7,9 @@ use crate::core::ai::scrubber::SCRUBBER;
 static IP_RE: Lazy<Regex> = Lazy::new(|| Regex::new(r"\b(?:\d{1,3}\.){3}\d{1,3}\b").unwrap());
 static DOMAIN_RE: Lazy<Regex> = Lazy::new(|| Regex::new(r"\b(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z0-9][a-z0-9-]{0,61}[a-z0-9]\b").unwrap());
 
+/// Límite de seguridad para el buffer de filtrado (5MB) para evitar OOM
+const MAX_FILTER_BUFFER: usize = 5 * 1024 * 1024;
+
 /// Filtro inteligente para eliminar ruido de herramientas BlackArch
 pub struct OutputFilter {
     rules: HashMap<&'static str, Vec<Regex>>,
@@ -56,25 +59,31 @@ impl OutputFilter {
     }
 
     pub fn filter(&self, plugin_name: &str, output: &str) -> String {
-        let mut filtered = output.to_string();
-        
-        // 1. Aplicar reglas específicas si existen
-        if let Some(tool_rules) = self.rules.get(plugin_name) {
-            for re in tool_rules {
-                filtered = re.replace_all(&filtered, "").to_string();
-            }
+        // Hardening: Si el output es excesivo, truncar preventivamente
+        let input = if output.len() > MAX_FILTER_BUFFER {
+            tracing::warn!("🛡️ [MCP-HARDEN] Truncando output de {} por exceso de tamaño ({} bytes)", 
+                plugin_name, output.len());
+            &output[..MAX_FILTER_BUFFER]
         } else {
-            // 2. Fallback: Aplicar reglas genéricas si es una herramienta desconocida
-            for re in &self.generic_rules {
-                filtered = re.replace_all(&filtered, "").to_string();
-            }
-        }
+            output
+        };
+
+        let mut lines: Vec<String> = input.lines().map(|s| s.to_string()).collect();
         
-        // 3. Limpieza de líneas vacías sobrantes (Universal)
-        filtered.lines()
-            .filter(|l| !l.trim().is_empty())
-            .collect::<Vec<_>>()
-            .join("\n")
+        // 1. Aplicar reglas específicas o genéricas
+        let active_rules = self.rules.get(plugin_name).unwrap_or(&self.generic_rules);
+        
+        // Procesamiento en una sola pasada de líneas para eficiencia (Streaming-like)
+        lines.retain(|line| {
+            if line.trim().is_empty() { return false; }
+            for re in active_rules {
+                if re.is_match(line) { return false; }
+            }
+            true
+        });
+
+        // 2. Limpieza final de ruido en las líneas restantes
+        lines.join("\n")
     }
 }
 
@@ -95,11 +104,25 @@ impl DataSanitizer {
 
     /// Filtra ruido, aplica scrubbing de credenciales y enmascara IPs/Dominios
     pub fn filter_tool_output(&self, plugin_name: &str, text: &str) -> String {
-        // 1. Filtrado semántico (BlackArch rules)
+        // FAIL-CLOSED DESIGN: Si el input está vacío o es nulo, retornar vacío seguro
+        if text.trim().is_empty() {
+            return String::new();
+        }
+
+        // 1. Filtrado semántico (BlackArch rules) con OOM Protection
         let filtered = self.filter.filter(plugin_name, text);
         
         // 2. Anti-alucinación: Scrubbing de credenciales/tokens
-        SCRUBBER.scrub(&filtered)
+        let scrubbed = SCRUBBER.scrub(&filtered);
+
+        // 3. Verificación de Integridad: Si el scrubbing falló (retornó vacío por error interno)
+        // pero el input tenía datos, usar un placeholder seguro.
+        if scrubbed.is_empty() && !filtered.is_empty() {
+            tracing::error!("🚨 [MCP-HARDEN] Error crítico en pipeline de filtrado para {}. Activando Fail-Closed.", plugin_name);
+            return "[ERROR: FILTRADO_DE_SEGURIDAD_FALLIDO]".to_string();
+        }
+
+        scrubbed
     }
 
     /// Enmascara IPs y Dominios en un texto de salida (Osint -> IA)

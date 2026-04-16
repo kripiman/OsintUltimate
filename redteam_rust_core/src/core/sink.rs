@@ -273,10 +273,9 @@ impl SqliteSink {
         ).execute(&pool).await?;
 
         sqlx::query(
-            "CREATE TABLE IF NOT EXISTS plugin_cache (
-                cache_key TEXT PRIMARY KEY,
-                output TEXT NOT NULL,
-                timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
+            "CREATE TABLE IF NOT EXISTS mcp_stats (
+                stat_key TEXT PRIMARY KEY,
+                stat_value INTEGER DEFAULT 0
             )"
         ).execute(&pool).await?;
 
@@ -308,6 +307,31 @@ impl SqliteSink {
         .fetch_optional(&self.pool)
         .await?;
         Ok(row.map(|r| r.0))
+    }
+
+    /// PHASE 5: Recuperar todas las estadísticas de MCP
+    pub async fn get_mcp_stats(&self) -> Result<std::collections::HashMap<String, i64>> {
+        let rows: Vec<(String, i64)> = sqlx::query_as(
+            "SELECT stat_key, stat_value FROM mcp_stats"
+        )
+        .fetch_all(&self.pool)
+        .await?;
+        Ok(rows.into_iter().collect())
+    }
+
+    /// PHASE 5: Actualizar/Incrementar estadísticas de forma atómica
+    pub async fn update_mcp_stats(&self, stats: std::collections::HashMap<String, i64>) -> Result<()> {
+        for (key, value) in stats {
+            sqlx::query(
+                "INSERT INTO mcp_stats (stat_key, stat_value) VALUES (?, ?)
+                 ON CONFLICT(stat_key) DO UPDATE SET stat_value = stat_value + excluded.stat_value"
+            )
+            .bind(key)
+            .bind(value)
+            .execute(&self.pool)
+            .await?;
+        }
+        Ok(())
     }
 
     /// V15: Persists an agent session state to allow mission resumption.

@@ -52,6 +52,7 @@ impl ContextCompressor {
             "sev": finding.severity,
             "cat": finding.category,
             "cvss": finding.cvss_score,
+            "conf": if finding.evidence.verified { "VERIFIED" } else { "POTENTIAL" },
             "desc": finding.description.chars().take(200).collect::<String>(),
             "ev": ev,
         })
