@@ -272,11 +272,42 @@ impl SqliteSink {
             )"
         ).execute(&pool).await?;
 
+        sqlx::query(
+            "CREATE TABLE IF NOT EXISTS plugin_cache (
+                cache_key TEXT PRIMARY KEY,
+                output TEXT NOT NULL,
+                timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
+            )"
+        ).execute(&pool).await?;
+
         Ok(Self {
             pool,
             scan_id: None,
             command_line: String::new(),
         })
+    }
+
+    /// V15: Saves a plugin execution result to the persistent cache.
+    pub async fn save_plugin_cache(&self, cache_key: &str, output: &str) -> Result<()> {
+        sqlx::query(
+            "INSERT OR REPLACE INTO plugin_cache (cache_key, output, timestamp) VALUES (?, ?, CURRENT_TIMESTAMP)"
+        )
+        .bind(cache_key)
+        .bind(output)
+        .execute(&self.pool)
+        .await?;
+        Ok(())
+    }
+
+    /// V15: Loads a plugin execution result from the persistent cache.
+    pub async fn load_plugin_cache(&self, cache_key: &str) -> Result<Option<String>> {
+        let row: Option<(String,)> = sqlx::query_as(
+            "SELECT output FROM plugin_cache WHERE cache_key = ?"
+        )
+        .bind(cache_key)
+        .fetch_optional(&self.pool)
+        .await?;
+        Ok(row.map(|r| r.0))
     }
 
     /// V15: Persists an agent session state to allow mission resumption.

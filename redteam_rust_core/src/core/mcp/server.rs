@@ -15,20 +15,42 @@ use serde_json::json;
 use crate::core::mcp::protocol::{JsonRpcRequest, CallToolRequest, CallToolResult, McpContent};
 use crate::plugins::GlobalConfig;
 use crate::core::mcp::sanitizer::DataSanitizer;
+use crate::core::ai::compressor::ContextCompressor;
+use crate::core::ai::types::RouteLevel;
+
+use crate::core::sink::SqliteSink;
+use std::path::PathBuf;
+use moka::future::Cache;
 
 pub struct McpServer {
     config: Arc<GlobalConfig>,
     sanitizer: Arc<DataSanitizer>,
     sessions: Arc<dashmap::DashMap<String, mpsc::Sender<Event>>>,
+    db: Option<Arc<SqliteSink>>,
+    plugin_cache: Cache<String, String>,
 }
 
 impl McpServer {
     pub fn new(config: GlobalConfig) -> Self {
+        let plugin_cache = Cache::builder()
+            .max_capacity(100)
+            .time_to_live(Duration::from_secs(1800)) // 30 min TTL
+            .build();
+
         Self {
             config: Arc::new(config),
             sanitizer: Arc::new(DataSanitizer::new()),
             sessions: Arc::new(dashmap::DashMap::new()),
+            db: None,
+            plugin_cache,
         }
+    }
+
+    pub async fn with_sqlite(mut self, path: PathBuf) -> Self {
+        if let Ok(db) = SqliteSink::new(path).await {
+            self.db = Some(Arc::new(db));
+        }
+        self
     }
 
     pub async fn run(self, port: u16) -> anyhow::Result<()> {
@@ -146,6 +168,31 @@ async fn handle_execute_plugin(state: &Arc<McpServer>, args: serde_json::Value) 
     let target_real = state.sanitizer.unmask_input(target_masked);
     info!("🛡️ [MCP-OPSEC] Interpolando '{}' -> Real: '{}'", target_masked, target_real);
 
+    // 1.1 CACHÉ PERSISTENTE (Fase 2 Roadmap)
+    let cache_key = format!("{}:{}", plugin_name, target_real);
+    
+    // Nivel 1: Moka (RAM)
+    if let Some(cached) = state.plugin_cache.get(&cache_key) {
+        info!("🚀 [MCP-CACHE] Hit en RAM (Moka) para: {}", cache_key);
+        return json!(CallToolResult {
+            content: vec![McpContent::Text { text: format!("[CACHED: RAM] {}", cached) }],
+            is_error: false
+        });
+    }
+
+    // Nivel 2: SQLite (Disco)
+    if let Some(ref db) = state.db {
+        if let Ok(Some(cached)) = db.load_plugin_cache(&cache_key).await {
+            info!("💾 [MCP-CACHE] Hit en Disco (SQLite) para: {}", cache_key);
+            // Re-poblar RAM
+            state.plugin_cache.insert(cache_key.clone(), cached.clone()).await;
+            return json!(CallToolResult {
+                content: vec![McpContent::Text { text: format!("[CACHED: DISK] {}", cached) }],
+                is_error: false
+            });
+        }
+    }
+
     // 2. BUSCAR PLUGIN
     let registry = crate::plugins::get_registry((*state.config).clone());
     let plugin = registry.scanners.iter().find(|p| p.name() == plugin_name);
@@ -166,18 +213,40 @@ async fn handle_execute_plugin(state: &Arc<McpServer>, args: serde_json::Value) 
 
         match p.scan(&host).await {
             Ok(findings) => {
-                // 3. COMPRESIÓN DE CONTEXTO Y RESUMEN
-                let mut summary = String::new();
-                for f in findings {
-                    summary.push_str(&format!("- [{}]: {}\n", f.severity.to_string(), f.title));
-                }
-                
-                if summary.is_empty() {
-                    summary = "No se encontraron hallazgos relevantes.".to_string();
+                // 3. COMPRESIÓN DE CONTEXTO (Integración V14.1)
+                // Usamos el ContextCompressor para minificar los findings y ahorrar tokens
+                let compressed_findings: Vec<_> = findings.iter()
+                    .map(|f| ContextCompressor::compress_finding(f, RouteLevel::Local))
+                    .collect();
+
+                let summary = if compressed_findings.is_empty() {
+                    "No se encontraron hallazgos relevantes.".to_string()
+                } else {
+                    serde_json::to_string_pretty(&compressed_findings).unwrap_or_default()
+                };
+
+                // 4. FILTRADO SEMÁNTICO Y SCRUBBING (BlackArch Rules)
+                let filtered = state.sanitizer.filter_tool_output(plugin_name, &summary);
+
+                // 5. MASCARAR SALIDA (Real -> IA)
+                let final_text = state.sanitizer.mask_output(&filtered);
+
+                // 5.1 GUARDAR EN CACHÉ (Fase 2 Roadmap)
+                state.plugin_cache.insert(cache_key.clone(), final_text.clone()).await;
+                if let Some(ref db) = state.db {
+                    let _ = db.save_plugin_cache(&cache_key, &final_text).await;
                 }
 
-                // 4. MASCARAR SALIDA (Real -> IA)
-                let final_text = state.sanitizer.mask_output(&summary);
+                // 6. LOGS Y MÉTRICAS (Fase 5 Roadmap)
+                let original_len = summary.len();
+                let filtered_len = filtered.len();
+                let savings = if original_len > 0 {
+                    (1.0 - (filtered_len as f64 / original_len as f64)) * 100.0
+                } else {
+                    0.0
+                };
+                info!("📊 [MCP-STATS] Plugin: {} | Original: {} chars | Filtered: {} chars | Ahorro: {:.2}%", 
+                    plugin_name, original_len, filtered_len, savings);
 
                 json!(CallToolResult {
                     content: vec![McpContent::Text { text: final_text }],
