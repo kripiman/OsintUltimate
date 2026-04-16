@@ -19,6 +19,7 @@ use crate::core::ai::compressor::ContextCompressor;
 use crate::core::ai::types::RouteLevel;
 
 use crate::core::sink::SqliteSink;
+use crate::utils::tone::tone_encode;
 use std::path::PathBuf;
 use moka::future::Cache;
 
@@ -216,20 +217,37 @@ async fn handle_execute_plugin(state: &Arc<McpServer>, args: serde_json::Value) 
                 // 3. COMPRESIÓN DE CONTEXTO (Integración V14.1)
                 // Usamos el ContextCompressor para minificar los findings y ahorrar tokens
                 let compressed_findings: Vec<_> = findings.iter()
-                    .map(|f| ContextCompressor::compress_finding(f, RouteLevel::Local))
+                    .map(|f| {
+                        let mut f_filtered = f.clone();
+                        // 3.1 Filtrar la descripción principal
+                        f_filtered.description = state.sanitizer.filter_tool_output(plugin_name, &f.description);
+                        
+                        // 3.2 Filtrar el cuerpo de la evidencia si existe (donde suele estar el output crudo)
+                        if let Some(obj) = f_filtered.evidence.data.as_object_mut() {
+                            if let Some(body) = obj.get_mut("body") {
+                                if let Some(s) = body.as_str() {
+                                    let filtered_body = state.sanitizer.filter_tool_output(plugin_name, s);
+                                    *body = serde_json::json!(filtered_body);
+                                }
+                            }
+                        }
+
+                        ContextCompressor::compress_finding(&f_filtered, RouteLevel::Local)
+                    })
                     .collect();
 
                 let summary = if compressed_findings.is_empty() {
                     "No se encontraron hallazgos relevantes.".to_string()
+                } else if compressed_findings.len() > 10 {
+                    // FASE 3: Serialización TONE para densidad de datos
+                    tone_encode(&compressed_findings)
                 } else {
                     serde_json::to_string_pretty(&compressed_findings).unwrap_or_default()
                 };
 
-                // 4. FILTRADO SEMÁNTICO Y SCRUBBING (BlackArch Rules)
-                let filtered = state.sanitizer.filter_tool_output(plugin_name, &summary);
-
-                // 5. MASCARAR SALIDA (Real -> IA)
-                let final_text = state.sanitizer.mask_output(&filtered);
+                // 4. MASCARAR SALIDA (Real -> IA)
+                // Nota: El filtrado semántico ya se aplicó individualmente arriba
+                let final_text = state.sanitizer.mask_output(&summary);
 
                 // 5.1 GUARDAR EN CACHÉ (Fase 2 Roadmap)
                 state.plugin_cache.insert(cache_key.clone(), final_text.clone()).await;
@@ -238,15 +256,15 @@ async fn handle_execute_plugin(state: &Arc<McpServer>, args: serde_json::Value) 
                 }
 
                 // 6. LOGS Y MÉTRICAS (Fase 5 Roadmap)
-                let original_len = summary.len();
-                let filtered_len = filtered.len();
+                let original_len = findings.len() * 200; // Estimación cruda del ahorro vs texto plano
+                let final_len = final_text.len();
                 let savings = if original_len > 0 {
-                    (1.0 - (filtered_len as f64 / original_len as f64)) * 100.0
+                    (1.0 - (final_len as f64 / original_len as f64)) * 100.0
                 } else {
                     0.0
                 };
-                info!("📊 [MCP-STATS] Plugin: {} | Original: {} chars | Filtered: {} chars | Ahorro: {:.2}%", 
-                    plugin_name, original_len, filtered_len, savings);
+                info!("📊 [MCP-STATS] Plugin: {} | Items: {} | Out: {} chars | Savings: {:.2}%", 
+                    plugin_name, findings.len(), final_len, savings);
 
                 json!(CallToolResult {
                     content: vec![McpContent::Text { text: final_text }],

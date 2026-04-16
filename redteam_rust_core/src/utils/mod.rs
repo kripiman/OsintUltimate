@@ -16,6 +16,7 @@ pub mod executor;
 pub mod payload_server;
 pub mod downloader;
 pub mod output_filter;
+pub mod tone;
 
 pub use security::{validate_target, is_ssrf_safe_host};
 pub use executor::StealthExecutor;

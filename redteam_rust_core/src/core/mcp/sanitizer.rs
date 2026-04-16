@@ -10,6 +10,7 @@ static DOMAIN_RE: Lazy<Regex> = Lazy::new(|| Regex::new(r"\b(?:[a-z0-9](?:[a-z0-
 /// Filtro inteligente para eliminar ruido de herramientas BlackArch
 pub struct OutputFilter {
     rules: HashMap<&'static str, Vec<Regex>>,
+    generic_rules: Vec<Regex>,
 }
 
 impl OutputFilter {
@@ -43,18 +44,33 @@ impl OutputFilter {
             Regex::new(r"(?m)^.*403.*$").unwrap(),
         ]);
 
-        Self { rules }
+        // Reglas Genéricas para cualquier herramienta BlackArch (Fallback)
+        let generic_rules = vec![
+            Regex::new(r"(?m)^.*\[[#= ]+\] [0-9]+%.*$").unwrap(), // Progress bars
+            Regex::new(r"(?m)^.*\[[ \.]*\] [0-9]+%.*$").unwrap(), // Progress dots
+            Regex::new(r"(?mi)^.*(copyright|license|all rights reserved).*$").unwrap(), // Boilerplate
+            Regex::new(r"(?m)^[.=_\-]{10,}$").unwrap(), // Visual separators
+        ];
+
+        Self { rules, generic_rules }
     }
 
     pub fn filter(&self, plugin_name: &str, output: &str) -> String {
         let mut filtered = output.to_string();
+        
+        // 1. Aplicar reglas específicas si existen
         if let Some(tool_rules) = self.rules.get(plugin_name) {
             for re in tool_rules {
                 filtered = re.replace_all(&filtered, "").to_string();
             }
+        } else {
+            // 2. Fallback: Aplicar reglas genéricas si es una herramienta desconocida
+            for re in &self.generic_rules {
+                filtered = re.replace_all(&filtered, "").to_string();
+            }
         }
         
-        // Limpieza de líneas vacías sobrantes
+        // 3. Limpieza de líneas vacías sobrantes (Universal)
         filtered.lines()
             .filter(|l| !l.trim().is_empty())
             .collect::<Vec<_>>()
@@ -139,5 +155,40 @@ impl DataSanitizer {
         m2r.insert(mask.clone(), real.to_string());
         
         mask
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_generic_fallback_filter() {
+        let sanitizer = DataSanitizer::new();
+        let noise = "
+[##########] 50%
+Copyright (c) 2026 Offensive Security
+------------------------------
+Real data here
+        ";
+        
+        // Simular una herramienta desconocida
+        let filtered = sanitizer.filter_tool_output("UnknownTool", noise);
+        
+        assert!(!filtered.contains("50%"));
+        assert!(!filtered.contains("Copyright"));
+        assert!(!filtered.contains("-----"));
+        assert!(filtered.contains("Real data here"));
+    }
+
+    #[test]
+    fn test_specific_nmap_filter() {
+        let sanitizer = DataSanitizer::new();
+        let nmap_output = "SF: Port 80 is open\nNmap done: 1 host up\nActual Result";
+        let filtered = sanitizer.filter_tool_output("NmapScanner", nmap_output);
+        
+        assert!(!filtered.contains("SF:"));
+        assert!(!filtered.contains("Nmap done"));
+        assert!(filtered.contains("Actual Result"));
     }
 }
