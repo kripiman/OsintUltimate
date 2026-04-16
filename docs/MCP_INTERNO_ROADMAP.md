@@ -1,242 +1,131 @@
 # MCP Interno — Roadmap de Optimización
-> `redteam_rust_core/src/core/mcp/` · Estado base analizado · V14.1
+> `redteam_rust_core/src/core/mcp/` · **V14.5 — Todas las fases completadas**
 
 ---
 
-## Estado Actual (Baseline)
+## Estado Actual (Post-Implementación)
 
-| Componente | Estado |
+| Componente | Estado V14.5 |
 |---|---|
-| `server.rs` — `handle_execute_plugin` | Devuelve texto plano sin comprimir |
-| `sanitizer.rs` — `DataSanitizer` | Solo enmascara IPs/dominios. Sin filtrado semántico |
-| Cache de ejecución | Ninguna. Cada llamada re-ejecuta el plugin completo |
-| Serialización de findings | `format!("- [{}]: {}", severity, title)` — sin estructura |
-| Anti-alucinación | Ninguna. El cliente recibe output crudo de herramientas |
-| Métricas de sesión | Ninguna. Sin visibilidad de tokens consumidos |
-| Failover | Ninguno. Si el plugin falla, retorna `Err` directo |
-
-El `TieredAIRouter` y `ContextCompressor` ya existen en `core/ai/` pero el MCP no los usa en el pipeline de salida.
+| `server.rs` — `handle_execute_plugin` | Pipeline completo: filtro → compressor → TONE → mask |
+| `sanitizer.rs` — `OutputFilter` | V2: arquitectura `FilterStrategy` (Deny/Allow), lógica acumulativa |
+| Caché de ejecución | RAM (moka, 30min TTL) + SQLite persistente, dual-key SHA256 |
+| Serialización de findings | TONE V1 (5 campos) con negociación `support_tone`, fallback JSON |
+| Anti-alucinación | Trust prefixes, Severity Caps, SCRUBBER mandatorio todos los niveles |
+| Métricas de sesión | AtomicU64 + SQLite histórico + herramienta `mcp_get_stats` |
+| Failover | Backoff conservador (2s/5s/10s) + stale cache fallback |
 
 ---
 
-## Fase 1 — Compresión de Output en el Punto de Salida
-**Prioridad: CRÍTICA · Impacto: Alto · Esfuerzo: Bajo**
+## Fase 1 — Compresión de Output ✅ COMPLETADO (HARDENED V2)
 
-### 1.1 — Filtro semántico de output de herramientas
+### 1.1 — OutputFilter V2
 
 **Archivo:** `sanitizer.rs`
 
-Añadir `OutputFilter` que procese el texto crudo de cada plugin antes de enmascarar. El punto de inyección ya existe en `handle_execute_plugin`:
+Pipeline implementado en `filter_tool_output`:
 
 ```rust
-// Actual
-let final_text = state.sanitizer.mask_output(&summary);
-
-// Objetivo
-let filtered = state.sanitizer.filter_tool_output(plugin_name, &summary);
-let final_text = state.sanitizer.mask_output(&filtered);
+// Pipeline actual
+let filtered = self.filter.filter(plugin_name, text);   // semántico
+let scrubbed = SCRUBBER.scrub(&filtered);               // secretos
+// fail-closed si scrubbed vacío sobre input no vacío
 ```
 
-Reglas por tipo de herramienta:
+Arquitectura `FilterStrategy` con dos modos:
 
-| Plugin | Ruido a eliminar | Señal a conservar |
+| Estrategia | Plugins | Lógica |
 |---|---|---|
-| Nmap | líneas `SF:`, `Nmap done`, banners vacíos | puerto, servicio, versión, estado |
-| Nuclei | líneas `[INF]`, `[WRN]`, timestamps | `[critical]`/`[high]`/`[medium]` + template ID |
-| SQLMap | banners ASCII, `[INFO] testing`, progress bars | payload confirmado, DB type, tablas |
-| Feroxbuster | líneas 404/403 masivas | 200/301/302 con tamaño relevante |
-| Naabu | líneas de progreso | `host:port` confirmados |
+| `Deny` | Feroxbuster, Naabu, Httpx, TruffleHog | Elimina líneas que matcheen regex de ruido |
+| `Allow` | SqlMap | Conserva solo líneas con señal de explotación confirmada |
 
-Implementación: tabla `HashMap<&str, Vec<Regex>>` de patrones a eliminar por plugin. ~50 líneas.
+Reglas genéricas acumulativas (siempre activas en modo `Deny`):
+- Progress bars: `^\s*\[[\s#=\.]+\]\s*\d+%`
+- Separadores visuales: `^[\s=\-_+]{10,}$`
+- Boilerplate legal: `(?i)^\s*(?:copyright|all rights reserved|license)`
 
-### 1.2 — Integrar `ContextCompressor` existente
+Cobertura real por plugin (basada en auditoría del output de cada binario):
 
-**Archivo:** `server.rs` — `handle_execute_plugin`
+| Plugin | Estrategia | Detalle |
+|---|---|---|
+| `FeroxbusterScanner` | Deny | `^\s*(?:4\d{2}\|5\d{2})\s+` — columna de status, no substring. Preserva `/error404handler` con status 200. |
+| `NaabuScanner` | Deny | Banner Go-PD + `[INF]/[WRN]/[ERR]`. Conserva `host:port`. |
+| `HttpxScanner` | Deny | Motor ProjectDiscovery idéntico a Naabu. |
+| `TruffleHogScanner` | Deny | Progress bars y banners. Conserva líneas de hallazgo. |
+| `SqlMapScanner` | Allow | Allowlist: `injectable`, `retrieved`, `fetching`, `DBMS`, `database:`, `table:`, `column:`, `vulnerable`, `payload`. |
 
-El `ContextCompressor` ya está implementado en `core/ai/compressor.rs`. El MCP no lo usa. Cambio mínimo:
+Plugins **sin reglas** (parsean JSON/XML antes de llegar al MCP — no necesitan filtrado):
+Nmap (`parse_nmap_xml`), Nuclei (`-jsonl`), FFuf (`-of json`), Katana (`-jsonl`), WhatWeb (`--log-json`), Arjun (`-oJ`), Gitleaks (`--report-format json`), SovereignRecon (API REST directa).
 
-```rust
-// Actual — texto plano
-for f in findings {
-    summary.push_str(&format!("- [{}]: {}\n", f.severity, f.title));
-}
+### 1.2 — ContextCompressor integrado
 
-// Objetivo — usar compressor existente
-let compressed: Vec<_> = findings.iter()
-    .map(|f| ContextCompressor::compress_finding(f, RouteLevel::Local))
-    .collect();
-let summary = serde_json::to_string(&compressed)?;
-```
-
-Esto activa truncación de bodies a 512 chars, filtrado de headers no-security, y scrubbing de datos sensibles — todo ya implementado.
+`ContextCompressor::compress_finding(f, RouteLevel::Local)` aplicado a todos los findings antes de serializar. Trunca bodies a 512 chars, filtra headers no-security. Scrubbing mandatorio en todos los `RouteLevel` (bypass de Local eliminado).
 
 ---
 
-## Fase 2 — Cache de Ejecución por Sesión
-**Prioridad: ALTA · Impacto: Alto · Esfuerzo: Medio**
+## Fase 2 — Caché de Ejecución ✅ COMPLETADO (HARDENED)
 
-### 2.1 — Cache `(plugin_name, target_real)` con TTL
-
-**Archivo:** `server.rs` — struct `McpServer`
-
-Añadir cache `moka` (ya es dependencia del proyecto) al `McpServer`:
-
-```rust
-use moka::future::Cache;
-
-pub struct McpServer {
-    config: Arc<GlobalConfig>,
-    sanitizer: Arc<DataSanitizer>,
-    sessions: Arc<DashMap<String, mpsc::Sender<Event>>>,
-    // NUEVO
-    plugin_cache: Cache<String, String>, // key: "plugin:target_hash" → output comprimido
-}
-```
-
-TTL recomendado: 30 minutos (operación activa). Si el mismo cliente MCP pide `NmapScanner` sobre el mismo target dos veces en la misma sesión, la segunda llamada retorna el resultado cacheado sin re-ejecutar Nmap.
-
-Clave de cache: `SipHash(plugin_name + target_real)` — mismo patrón que `TieredAIRouter.calculate_finding_cache_key`.
-
-### 2.2 — Header de cache en respuesta
-
-Añadir metadato al `CallToolResult` para que el cliente sepa si el resultado es fresco o cacheado:
-
-```
-[CACHED: NmapScanner/TARGET_1 · 8min ago · ~1240 tokens saved]
-```
+- Dual-layer: RAM (moka, 30min) → SQLite (persistente).
+- Clave: `SHA256(plugin + target + config_salt)` con retrocompatibilidad legacy.
+- Tabla `plugin_cache` creada en schema de `SqliteSink` (gap G1 cerrado).
+- Headers de respuesta: `[CACHED: RAM]`, `[CACHED: DISK]`, `[CACHED: LEGACY_RAM]`, `[CACHED: LEGACY_DISK]`.
 
 ---
 
-## Fase 3 — TONE Encoding para Arrays de Findings
-**Prioridad: MEDIA · Impacto: Medio · Esfuerzo: Medio**
+## Fase 3 — TONE Encoding ✅ COMPLETADO (HARDENED)
 
-### 3.1 — Serialización TONE cuando findings > 10
-
-**Archivo:** `server.rs` — `handle_execute_plugin`
-
-Para scans con muchos findings (Nuclei típicamente 20-100+), el JSON estándar repite claves en cada objeto. TONE elimina esa repetición:
-
-```
-// JSON estándar — 50 findings × ~60 chars/finding = ~3000 chars
-[{"sev":"high","cat":"injection","id":"sqli-001"}, ...]
-
-// TONE — header fijo + filas densas
-#keys $0:sev,$1:cat,$2:id
-[50]{$0,$1,$2}:
-  high,injection,sqli-001
-  medium,xss,xss-042
-  ...
-```
-
-Implementar `tone_encode(findings: &[Value]) -> String` en un nuevo `utils/tone.rs`. Activar solo cuando `findings.len() > 10`.
-
-El cliente MCP (Claude, GPT-4) puede parsear TONE porque el header es autodescriptivo. Si el cliente no lo soporta, fallback a JSON comprimido.
+- Header: `#type:tone-v1;keys:$0:id,$1:sev,$2:cat,$3:conf,$4:summary`
+- Activación: `support_tone=true` OR `findings.len() > 10`
+- Sanitización de delimitadores `|` y `\n` en cada campo.
+- Test unitario corregido para validar 5 campos (gap G2 cerrado).
 
 ---
 
-## Fase 4 — Anti-Alucinación: Validación de Contexto
-**Prioridad: ALTA · Impacto: Alto · Esfuerzo: Medio**
+## Fase 4 — Anti-Alucinación ✅ COMPLETADO (HARDENED)
 
-### 4.1 — Scrubbing de output antes de enviar al cliente
-
-**Archivo:** `sanitizer.rs`
-
-El `SCRUBBER` de `core/ai/scrubber.rs` ya elimina credenciales, tokens, y datos sensibles del contexto AI. El MCP no lo aplica al output de plugins.
-
-Añadir llamada a `SCRUBBER.scrub(&filtered)` en el pipeline de `mask_output`. Esto previene que el cliente MCP reciba:
-- API keys en outputs de GitLeaks/TruffleHog
-- Hashes de contraseñas en outputs de Impacket
-- Tokens JWT en outputs de Burp/ZAP
-
-### 4.2 — Prefijo de confianza por tipo de finding
-
-Añadir prefijo semántico al output para que el cliente AI no alucine sobre el estado de verificación:
-
-```
-[UNVERIFIED] - [high]: SQL Injection en /login
-[VERIFIED]   - [critical]: RCE via CVE-2024-XXXX (PoC ejecutado)
-[POTENTIAL]  - [medium]: Open Redirect (requiere validación manual)
-```
-
-El campo `finding.verified` ya existe en el modelo. Solo hay que usarlo en el formato de salida.
-
-### 4.3 — Límite de findings por severidad en output
-
-Prevenir context overflow cuando un scan retorna 200+ findings de baja severidad:
-
-```rust
-// Cap por severidad para no saturar el contexto del cliente
-const MAX_CRITICAL: usize = 20;
-const MAX_HIGH: usize = 30;
-const MAX_MEDIUM: usize = 20;
-const MAX_LOW: usize = 10;
-// + resumen: "N findings adicionales de severidad LOW omitidos"
-```
+- `SCRUBBER` mandatorio en `filter_tool_output` (post-filtrado semántico).
+- Trust prefixes `[VERIFIED]`/`[POTENTIAL]` desde `finding.evidence.verified`.
+- Severity Caps: Critical:20, High:30, Medium:20, Low/Info:10.
 
 ---
 
-## Fase 5 — Métricas de Sesión y Visibilidad
-**Prioridad: MEDIA · Impacto: Medio · Esfuerzo: Bajo**
+## Fase 5 — Métricas ✅ COMPLETADO (PROFESIONAL)
 
-### 5.1 — Contador de tokens estimados por sesión
-
-**Archivo:** `server.rs` — struct `McpServer`
-
-Añadir `AtomicU64` de tokens estimados por sesión (estimación: `chars / 3.5`). Reportar en cada respuesta como comentario al final:
-
-```
-[SESSION: 3 calls · ~4,820 tokens out · 2 cache hits · 1,240 tokens saved]
-```
-
-### 5.2 — Tool `mcp_session_stats`
-
-Añadir una segunda herramienta al `tools/list` para introspección de sesión:
-
-```json
-{
-  "name": "mcp_session_stats",
-  "description": "Retorna métricas de la sesión MCP actual: tokens consumidos, cache hits, plugins ejecutados."
-}
-```
-
-Sin argumentos. Retorna JSON con el estado de la sesión. Permite al cliente AI decidir si debe comprimir su contexto antes de continuar.
+- `AtomicU32/U64` para `total_calls`, `cache_hits`, `tokens_saved`, `bytes_processed`.
+- Carga de métricas históricas desde SQLite al arranque del servidor.
+- Herramienta `mcp_get_stats` con estimación de coste USD (`tokens * $0.000015`).
 
 ---
 
-## Fase 6 — Failover y Resiliencia
-**Prioridad: MEDIA · Impacto: Medio · Esfuerzo: Bajo**
+## Fase 6 — Resiliencia ✅ COMPLETADO (PROFESIONAL)
 
-### 6.1 — Retry con backoff en `handle_execute_plugin`
-
-Actualmente si `p.scan(&host).await` falla, retorna error inmediato. Añadir retry con backoff exponencial (2 intentos, 1s/2s delay) para errores transitorios (timeout, proceso no encontrado).
-
-### 6.2 — Fallback a resultado cacheado en fallo
-
-Si el plugin falla y existe un resultado cacheado (aunque expirado), retornarlo con prefijo `[STALE CACHE]` en lugar de error. Mejor contexto degradado que error vacío.
+- Retry loop: 3 intentos, backoff 2s/5s/10s.
+- Stale fallback: si el plugin falla y existe caché (aunque expirada), retornar con `[MODO_RESILIENCIA: DATOS_HISTÓRICOS]`.
 
 ---
 
-## Orden de Implementación Recomendado
+## Fase 7 — Auditoría y Corrección de Gaps ✅ COMPLETADO (HARDENED V2)
 
-```
-Fase 1.1 → Fase 1.2 → Fase 4.1 → Fase 4.2 → Fase 2.1 → Fase 2.2
-   ↓            ↓           ↓           ↓           ↓
- 50 líneas   10 líneas   5 líneas   10 líneas   40 líneas
- sanitizer   server      sanitizer   server      server+moka
-```
+Gaps identificados y cerrados tras revisión del código real:
 
-Las fases 3, 4.3, 5, y 6 son mejoras incrementales una vez el pipeline base está comprimido.
+| ID | Gap | Archivo | Fix |
+|---|---|---|---|
+| G1 | Tabla `plugin_cache` ausente del schema | `sink.rs` | `CREATE TABLE IF NOT EXISTS plugin_cache` añadida |
+| G2 | Test TONE validaba 4 campos, header genera 5 | `tone.rs` | Assertion actualizada a `[N]{$0,$1,$2,$3,$4}:` |
+| G3 | Scrubbing omitido en `RouteLevel::Local` | `compressor.rs` | Bypass eliminado, scrubbing mandatorio |
+| G4 | Genéricas no acumulaban con específicas | `sanitizer.rs` | Lógica acumulativa en rama `Deny` |
+| G5 | Feroxbuster: falso positivo en URLs con "404" | `sanitizer.rs` | Regex de columna de status, no substring |
+| G6 | SQLMap: denylist perdía señal bajo `[INFO]` | `sanitizer.rs` | Reemplazado por `FilterStrategy::Allow` |
+| G7 | Naabu, Httpx, TruffleHog sin reglas | `sanitizer.rs` | Reglas específicas implementadas |
 
 ---
 
-## Archivos Afectados
+## Archivos Modificados
 
-| Archivo | Cambio |
+| Archivo | Cambios |
 |---|---|
-| `core/mcp/sanitizer.rs` | + `filter_tool_output()`, + `SCRUBBER` integration |
-| `core/mcp/server.rs` | + `plugin_cache`, + `ContextCompressor` en pipeline, + caps por severidad |
-| `utils/tone.rs` | NUEVO — `tone_encode()` para arrays de findings |
-| `core/mcp/protocol.rs` | Sin cambios |
-| `core/mcp/mod.rs` | + re-export de nuevos módulos si aplica |
-
-Ningún cambio en plugins, modelos, ni `TieredAIRouter`. Todo el trabajo está en la capa MCP.
+| `core/mcp/sanitizer.rs` | OutputFilter V2: `FilterStrategy`, lógica acumulativa, 5 plugins, 6 tests |
+| `core/mcp/server.rs` | Pipeline completo, caché dual-layer, métricas, retry, `mcp_get_stats` |
+| `core/sink.rs` | Tablas `plugin_cache` y `mcp_stats` en schema SQLite |
+| `utils/tone.rs` | TONE V1 con 5 campos, sanitización de delimitadores, test corregido |
+| `core/ai/compressor.rs` | Scrubbing mandatorio eliminando bypass `RouteLevel::Local` |

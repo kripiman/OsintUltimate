@@ -78,9 +78,9 @@ mod tests {
         let encoded = tone_encode(&findings);
         
         assert!(encoded.contains("#type:tone-v1"));
-        assert!(encoded.contains("[2]{$0,$1,$2,$3}:"));
-        assert!(encoded.contains("sqli-01|high|vulnerability|SQL Injection found in /api/v1/login"));
-        assert!(encoded.contains("xss-02|medium|vulnerability|Cross-Site Scripting in search parameter"));
+        assert!(encoded.contains("[2]{$0,$1,$2,$3,$4}:"));
+        assert!(encoded.contains("sqli-01|high|vulnerability|POTENTIAL|SQL Injection found in /api/v1/login"));
+        assert!(encoded.contains("xss-02|medium|vulnerability|POTENTIAL|Cross-Site Scripting in search parameter"));
     }
 
     #[test]

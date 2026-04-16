@@ -5,85 +5,163 @@ use once_cell::sync::Lazy;
 use crate::core::ai::scrubber::SCRUBBER;
 
 static IP_RE: Lazy<Regex> = Lazy::new(|| Regex::new(r"\b(?:\d{1,3}\.){3}\d{1,3}\b").unwrap());
-static DOMAIN_RE: Lazy<Regex> = Lazy::new(|| Regex::new(r"\b(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z0-9][a-z0-9-]{0,61}[a-z0-9]\b").unwrap());
+static DOMAIN_RE: Lazy<Regex> = Lazy::new(|| {
+    Regex::new(r"\b(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z0-9][a-z0-9-]{0,61}[a-z0-9]\b").unwrap()
+});
 
-/// Límite de seguridad para el buffer de filtrado (5MB) para evitar OOM
 const MAX_FILTER_BUFFER: usize = 5 * 1024 * 1024;
 
-/// Filtro inteligente para eliminar ruido de herramientas BlackArch
+// SQLMap allowlist: solo conservar líneas que contengan señal real de explotación.
+// El log de SQLMap mezcla [INFO] de ruido con [INFO] de señal — la distinción es el contenido.
+static SQLMAP_SIGNAL_RE: Lazy<Regex> = Lazy::new(|| {
+    Regex::new(
+        r"(?i)(injectable|injection|payload|parameter .* appears|retrieved|fetching|DBMS|database:|table:|column:|back-end DBMS|vulnerable|sqlmap identified|available databases|current database|current user|hostname)"
+    ).unwrap()
+});
+
+// Feroxbuster --quiet output: "200      GET   1234l   5678w  123456c http://..."
+// Conservar solo líneas con código HTTP 2xx/3xx al inicio de línea (señal).
+// Eliminar 4xx/5xx que son ruido masivo en fuzzing.
+static FEROX_NOISE_RE: Lazy<Regex> = Lazy::new(|| {
+    Regex::new(r"^\s*(?:4\d{2}|5\d{2})\s+").unwrap()
+});
+
+// Naabu sin -silent puede emitir el banner del motor Go de ProjectDiscovery.
+static NAABU_NOISE_RE: Lazy<Regex> = Lazy::new(|| {
+    Regex::new(r"(?i)(?:naabu|projectdiscovery|current naabu version|running .* scan|use sudo|INF\]|WRN\]|ERR\])").unwrap()
+});
+
+// Httpx sin -silent emite líneas de estado del motor antes de los resultados.
+static HTTPX_NOISE_RE: Lazy<Regex> = Lazy::new(|| {
+    Regex::new(r"(?i)(?:httpx|projectdiscovery|current httpx version|\[INF\]|\[WRN\]|\[ERR\]|Use with caution)").unwrap()
+});
+
+// TruffleHog sin --json emite progress/banners antes de los hallazgos.
+static TRUFFLEHOG_NOISE_RE: Lazy<Regex> = Lazy::new(|| {
+    Regex::new(r"(?i)(?:trufflehog|scanning\.\.\.|progress:|chunks:|🐷|🔑|Found verified|Found unverified result that is [^:]+$)").unwrap()
+});
+
+// Reglas genéricas aplicadas SIEMPRE (acumulativas con las específicas).
+static GENERIC_NOISE_RULES: Lazy<Vec<Regex>> = Lazy::new(|| {
+    vec![
+        // Barras de progreso: [####] 50% / [....] 23%
+        Regex::new(r"^\s*\[[\s#=\.]+\]\s*\d+%").unwrap(),
+        // Separadores visuales puros: ===, ---, +++, ___
+        Regex::new(r"^[\s=\-_+]{10,}$").unwrap(),
+        // Boilerplate legal
+        Regex::new(r"(?i)^\s*(?:copyright|all rights reserved|license|this tool is for)").unwrap(),
+    ]
+});
+
+/// Estrategia de filtrado por plugin.
+enum FilterStrategy {
+    /// Denylist: eliminar líneas que matcheen los regex.
+    Deny(Vec<&'static Lazy<Regex>>),
+    /// Allowlist: conservar solo líneas que matcheen el regex de señal.
+    Allow(&'static Lazy<Regex>),
+}
+
 pub struct OutputFilter {
-    rules: HashMap<&'static str, Vec<Regex>>,
-    generic_rules: Vec<Regex>,
+    strategies: HashMap<&'static str, FilterStrategy>,
 }
 
 impl OutputFilter {
     pub fn new() -> Self {
-        let mut rules = HashMap::new();
+        let mut strategies = HashMap::new();
 
-        // Nmap: eliminar líneas de estado y banners vacíos
-        rules.insert("NmapScanner", vec![
-            Regex::new(r"(?m)^SF:.*$").unwrap(),
-            Regex::new(r"(?m)^Nmap done:.*$").unwrap(),
-            Regex::new(r"(?m)^Service enumeration.*$").unwrap(),
-        ]);
+        // Feroxbuster: eliminar 4xx/5xx. El resto (2xx/3xx) es señal.
+        strategies.insert(
+            "FeroxbusterScanner",
+            FilterStrategy::Deny(vec![&FEROX_NOISE_RE]),
+        );
 
-        // Nuclei: eliminar líneas [INF], [WRN] y timestamps
-        rules.insert("NucleiScanner", vec![
-            Regex::new(r"\[INF\]").unwrap(),
-            Regex::new(r"\[WRN\]").unwrap(),
-            Regex::new(r"\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}").unwrap(),
-        ]);
+        // Naabu: eliminar líneas de banner/motor Go-PD. Conservar "host:port".
+        strategies.insert(
+            "NaabuScanner",
+            FilterStrategy::Deny(vec![&NAABU_NOISE_RE]),
+        );
 
-        // SQLMap: eliminar banners ASCII y barras de progreso
-        rules.insert("SqlMapScanner", vec![
-            Regex::new(r"(?s)___.*?___").unwrap(), // ASCII Art
-            Regex::new(r"\[INFO\] testing.*").unwrap(),
-            Regex::new(r"\[\d+%\]").unwrap(),
-        ]);
+        // Httpx: eliminar líneas de motor. Conservar líneas de resultado.
+        strategies.insert(
+            "HttpxScanner",
+            FilterStrategy::Deny(vec![&HTTPX_NOISE_RE]),
+        );
 
-        // Feroxbuster: eliminar líneas 404/403 masivas
-        rules.insert("FeroxbusterScanner", vec![
-            Regex::new(r"(?m)^.*404.*$").unwrap(),
-            Regex::new(r"(?m)^.*403.*$").unwrap(),
-        ]);
+        // TruffleHog: eliminar progress/banners. Conservar líneas de hallazgo.
+        strategies.insert(
+            "TruffleHogScanner",
+            FilterStrategy::Deny(vec![&TRUFFLEHOG_NOISE_RE]),
+        );
 
-        // Reglas Genéricas para cualquier herramienta BlackArch (Fallback)
-        let generic_rules = vec![
-            Regex::new(r"(?m)^.*\[[#= ]+\] [0-9]+%.*$").unwrap(), // Progress bars
-            Regex::new(r"(?m)^.*\[[ \.]*\] [0-9]+%.*$").unwrap(), // Progress dots
-            Regex::new(r"(?mi)^.*(copyright|license|all rights reserved).*$").unwrap(), // Boilerplate
-            Regex::new(r"(?m)^[.=_\-]{10,}$").unwrap(), // Visual separators
-        ];
+        // SQLMap: allowlist — el log mezcla ruido e información crítica en el mismo
+        // prefijo [INFO]. Solo conservar líneas con términos de explotación confirmada.
+        strategies.insert(
+            "SqlMapScanner",
+            FilterStrategy::Allow(&SQLMAP_SIGNAL_RE),
+        );
 
-        Self { rules, generic_rules }
+        Self { strategies }
     }
 
     pub fn filter(&self, plugin_name: &str, output: &str) -> String {
-        // Hardening: Si el output es excesivo, truncar preventivamente
         let input = if output.len() > MAX_FILTER_BUFFER {
-            tracing::warn!("🛡️ [MCP-HARDEN] Truncando output de {} por exceso de tamaño ({} bytes)", 
-                plugin_name, output.len());
+            tracing::warn!(
+                "🛡️ [MCP-HARDEN] Truncando output de {} ({} bytes > 5MB)",
+                plugin_name, output.len()
+            );
             &output[..MAX_FILTER_BUFFER]
         } else {
             output
         };
 
-        let mut lines: Vec<String> = input.lines().map(|s| s.to_string()).collect();
-        
-        // 1. Aplicar reglas específicas o genéricas
-        let active_rules = self.rules.get(plugin_name).unwrap_or(&self.generic_rules);
-        
-        // Procesamiento en una sola pasada de líneas para eficiencia (Streaming-like)
-        lines.retain(|line| {
-            if line.trim().is_empty() { return false; }
-            for re in active_rules {
-                if re.is_match(line) { return false; }
-            }
-            true
-        });
+        let lines: Vec<&str> = input.lines().collect();
 
-        // 2. Limpieza final de ruido en las líneas restantes
-        lines.join("\n")
+        let filtered: Vec<&str> = match self.strategies.get(plugin_name) {
+            Some(FilterStrategy::Allow(signal_re)) => {
+                // Allowlist: conservar solo líneas con señal real.
+                // Las genéricas no aplican aquí — en SQLMap un separador visual
+                // puede estar pegado a una línea de señal.
+                lines.into_iter()
+                    .filter(|line| {
+                        let t = line.trim();
+                        !t.is_empty() && signal_re.is_match(t)
+                    })
+                    .collect()
+            }
+            Some(FilterStrategy::Deny(deny_rules)) => {
+                // Denylist específica + genéricas acumulativas.
+                lines.into_iter()
+                    .filter(|line| {
+                        let t = line.trim();
+                        if t.is_empty() { return false; }
+                        // 1. Reglas genéricas siempre
+                        for re in GENERIC_NOISE_RULES.iter() {
+                            if re.is_match(t) { return false; }
+                        }
+                        // 2. Reglas específicas del plugin
+                        for re in deny_rules {
+                            if re.is_match(t) { return false; }
+                        }
+                        true
+                    })
+                    .collect()
+            }
+            None => {
+                // Plugin sin reglas específicas: solo genéricas.
+                lines.into_iter()
+                    .filter(|line| {
+                        let t = line.trim();
+                        if t.is_empty() { return false; }
+                        for re in GENERIC_NOISE_RULES.iter() {
+                            if re.is_match(t) { return false; }
+                        }
+                        true
+                    })
+                    .collect()
+            }
+        };
+
+        filtered.join("\n")
     }
 }
 
@@ -102,44 +180,39 @@ impl DataSanitizer {
         }
     }
 
-    /// Filtra ruido, aplica scrubbing de credenciales y enmascara IPs/Dominios
+    /// Pipeline: filtrado semántico → scrubbing de secretos → fail-closed.
     pub fn filter_tool_output(&self, plugin_name: &str, text: &str) -> String {
-        // FAIL-CLOSED DESIGN: Si el input está vacío o es nulo, retornar vacío seguro
         if text.trim().is_empty() {
             return String::new();
         }
 
-        // 1. Filtrado semántico (BlackArch rules) con OOM Protection
         let filtered = self.filter.filter(plugin_name, text);
-        
-        // 2. Anti-alucinación: Scrubbing de credenciales/tokens
+
         let scrubbed = SCRUBBER.scrub(&filtered);
 
-        // 3. Verificación de Integridad: Si el scrubbing falló (retornó vacío por error interno)
-        // pero el input tenía datos, usar un placeholder seguro.
         if scrubbed.is_empty() && !filtered.is_empty() {
-            tracing::error!("🚨 [MCP-HARDEN] Error crítico en pipeline de filtrado para {}. Activando Fail-Closed.", plugin_name);
+            tracing::error!(
+                "🚨 [MCP-HARDEN] Pipeline de filtrado falló para {}. Activando Fail-Closed.",
+                plugin_name
+            );
             return "[ERROR: FILTRADO_DE_SEGURIDAD_FALLIDO]".to_string();
         }
 
         scrubbed
     }
 
-    /// Enmascara IPs y Dominios en un texto de salida (Osint -> IA)
+    /// Enmascara IPs y dominios en el output hacia la IA.
     pub fn mask_output(&self, text: &str) -> String {
         let mut masked = text.to_string();
-        
-        // 1. Enmascarar IPs
+
         for cap in IP_RE.find_iter(text) {
             let real = cap.as_str();
             let mask = self.get_or_create_mask(real, "IP_TARGET");
             masked = masked.replace(real, &mask);
         }
 
-        // 2. Enmascarar Dominios
         for cap in DOMAIN_RE.find_iter(text) {
             let real = cap.as_str();
-            // Evitar enmascarar localhost o dominios comunes si fuera necesario
             if real == "127.0.0.1" || real == "localhost" { continue; }
             let mask = self.get_or_create_mask(real, "DOMAIN_TARGET");
             masked = masked.replace(real, &mask);
@@ -148,15 +221,13 @@ impl DataSanitizer {
         masked
     }
 
-    /// Des-enmascara la entrada de la IA hacia el motor real (IA -> Osint)
+    /// Des-enmascara la entrada de la IA hacia el motor real.
     pub fn unmask_input(&self, text: &str) -> String {
         let mut real_text = text.to_string();
         let mapping = self.mask_to_real.read().unwrap();
-        
         for (mask, real) in mapping.iter() {
             real_text = real_text.replace(mask, real);
         }
-        
         real_text
     }
 
@@ -167,16 +238,12 @@ impl DataSanitizer {
                 return mask.clone();
             }
         }
-
         let mut r2m = self.real_to_mask.write().unwrap();
         let mut m2r = self.mask_to_real.write().unwrap();
-        
         let count = r2m.len() + 1;
         let mask = format!("{}_{}", prefix, count);
-        
         r2m.insert(real.to_string(), mask.clone());
         m2r.insert(mask.clone(), real.to_string());
-        
         mask
     }
 }
@@ -186,32 +253,82 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_generic_fallback_filter() {
-        let sanitizer = DataSanitizer::new();
-        let noise = "
-[##########] 50%
-Copyright (c) 2026 Offensive Security
-------------------------------
-Real data here
-        ";
-        
-        // Simular una herramienta desconocida
-        let filtered = sanitizer.filter_tool_output("UnknownTool", noise);
-        
-        assert!(!filtered.contains("50%"));
-        assert!(!filtered.contains("Copyright"));
-        assert!(!filtered.contains("-----"));
-        assert!(filtered.contains("Real data here"));
+    fn test_feroxbuster_keeps_2xx_drops_4xx() {
+        let s = DataSanitizer::new();
+        let input = "200      GET   1234l   5678w  http://target.com/admin\n\
+                     404      GET      0l      0w  http://target.com/missing\n\
+                     301      GET      0l      0w  http://target.com/old";
+        let out = s.filter_tool_output("FeroxbusterScanner", input);
+        assert!(out.contains("200"), "debe conservar 200");
+        assert!(out.contains("301"), "debe conservar 301");
+        assert!(!out.contains("404"), "debe eliminar 404");
     }
 
     #[test]
-    fn test_specific_nmap_filter() {
-        let sanitizer = DataSanitizer::new();
-        let nmap_output = "SF: Port 80 is open\nNmap done: 1 host up\nActual Result";
-        let filtered = sanitizer.filter_tool_output("NmapScanner", nmap_output);
-        
-        assert!(!filtered.contains("SF:"));
-        assert!(!filtered.contains("Nmap done"));
-        assert!(filtered.contains("Actual Result"));
+    fn test_feroxbuster_keeps_path_with_404_in_url() {
+        // Un path que contiene "404" en la URL no debe eliminarse si el status es 200
+        let s = DataSanitizer::new();
+        let input = "200      GET   100l   200w  http://target.com/error404handler";
+        let out = s.filter_tool_output("FeroxbusterScanner", input);
+        assert!(out.contains("error404handler"), "no debe eliminar URL con 404 en el path");
+    }
+
+    #[test]
+    fn test_naabu_drops_banner_keeps_ports() {
+        let s = DataSanitizer::new();
+        let input = "[INF] Current naabu version v2.3.0\n\
+                     [INF] Running SYN scan with root privileges\n\
+                     192.168.1.1:80\n\
+                     192.168.1.1:443\n\
+                     [INF] Found 2 ports";
+        let out = s.filter_tool_output("NaabuScanner", input);
+        assert!(!out.contains("[INF]"), "debe eliminar líneas INF");
+        assert!(out.contains(":80"), "debe conservar host:port");
+        assert!(out.contains(":443"), "debe conservar host:port");
+    }
+
+    #[test]
+    fn test_sqlmap_allowlist_keeps_signal_drops_noise() {
+        let s = DataSanitizer::new();
+        let input = "[INFO] testing connection to the target URL\n\
+                     [INFO] checking if the target is protected by some kind of WAF/IPS\n\
+                     [WARNING] GET parameter 'id' appears to be 'AND boolean-based blind' injectable\n\
+                     [INFO] fetching database names\n\
+                     [INFO] retrieved: users_db\n\
+                     [INFO] testing for SQL injection on GET parameter 'name'";
+        let out = s.filter_tool_output("SqlMapScanner", input);
+        assert!(out.contains("injectable"), "debe conservar señal de inyección");
+        assert!(out.contains("fetching"), "debe conservar fetching");
+        assert!(out.contains("retrieved"), "debe conservar retrieved");
+        assert!(!out.contains("testing connection"), "debe eliminar ruido de conexión");
+        assert!(!out.contains("WAF/IPS"), "debe eliminar ruido de WAF check");
+    }
+
+    #[test]
+    fn test_generic_rules_always_apply() {
+        let s = DataSanitizer::new();
+        // Plugin sin reglas específicas — solo genéricas
+        let input = "[##########] 50%\n\
+                     Copyright (c) 2026 Tool Author\n\
+                     ====================\n\
+                     real finding here";
+        let out = s.filter_tool_output("UnknownTool", input);
+        assert!(!out.contains("50%"));
+        assert!(!out.contains("Copyright"));
+        assert!(!out.contains("===="));
+        assert!(out.contains("real finding here"));
+    }
+
+    #[test]
+    fn test_generic_rules_accumulate_with_specific() {
+        // Feroxbuster tiene reglas específicas — las genéricas también deben aplicar
+        let s = DataSanitizer::new();
+        let input = "200      GET   100l   200w  http://target.com/admin\n\
+                     [##########] 50%\n\
+                     ====================";
+        let out = s.filter_tool_output("FeroxbusterScanner", input);
+        assert!(out.contains("200"), "señal debe pasar");
+        assert!(!out.contains("50%"), "genérica debe eliminar progress bar");
+        assert!(!out.contains("===="), "genérica debe eliminar separador");
     }
 }

@@ -10,13 +10,11 @@ impl ContextCompressor {
     pub fn compress_finding(finding: &Finding, route_level: RouteLevel) -> serde_json::Value {
         let mut ev = finding.evidence.data.clone();
         
-        // OPSEC 2026: Skip scrubbing for Local (Tier-0) to maximize context
-        if route_level != RouteLevel::Local {
-            let ev_str = serde_json::to_string(&ev).unwrap_or_default();
-            let sanitized_str = SCRUBBER.scrub(&ev_str);
-            if let Ok(sanitized_json) = serde_json::from_str(&sanitized_str) {
-                ev = sanitized_json;
-            }
+        // OPSEC 2026: Mandatory scrubbing for ALL route levels to ensure Zero Leak security
+        let ev_str = serde_json::to_string(&ev).unwrap_or_default();
+        let sanitized_str = SCRUBBER.scrub(&ev_str);
+        if let Ok(sanitized_json) = serde_json::from_str(&sanitized_str) {
+            ev = sanitized_json;
         }
 
         // 2. Reduce size for tokens

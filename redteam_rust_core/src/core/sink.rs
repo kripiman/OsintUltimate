@@ -273,6 +273,14 @@ impl SqliteSink {
         ).execute(&pool).await?;
 
         sqlx::query(
+            "CREATE TABLE IF NOT EXISTS plugin_cache (
+                cache_key TEXT PRIMARY KEY,
+                output TEXT NOT NULL,
+                timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
+            )"
+        ).execute(&pool).await?;
+
+        sqlx::query(
             "CREATE TABLE IF NOT EXISTS mcp_stats (
                 stat_key TEXT PRIMARY KEY,
                 stat_value INTEGER DEFAULT 0
