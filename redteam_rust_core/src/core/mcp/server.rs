@@ -280,7 +280,28 @@ async fn handle_execute_plugin(state: &Arc<McpServer>, args: serde_json::Value) 
             extra_data: Arc::new(json!({})),
         };
 
-        match p.scan(&host).await {
+        // 2.1 MOTOR DE RESILIENCIA (Fase 6 Roadmap)
+        let mut attempts = 0;
+        let max_retries = 3;
+        let mut scan_result = Err(anyhow::anyhow!("No se ha iniciado la ejecución"));
+
+        while attempts < max_retries {
+            scan_result = p.scan(&host).await;
+            if scan_result.is_ok() { break; }
+            
+            attempts += 1;
+            if attempts < max_retries {
+                let delay = match attempts {
+                    1 => 2,   // Backoff Conservador
+                    2 => 5,
+                    _ => 10,
+                };
+                warn!("⚠️ [MCP-RESILIENCIA] Intento {} fallido para {}. Reintentando en {}s...", attempts, plugin_name, delay);
+                tokio::time::sleep(tokio::time::Duration::from_secs(delay)).await;
+            }
+        }
+
+        match scan_result {
             Ok(findings) => {
                 // 2.2 PHASE 4: SEVERITY CAPS & TRUST PREFIXES
                 use crate::models::Severity;
@@ -385,9 +406,23 @@ async fn handle_execute_plugin(state: &Arc<McpServer>, args: serde_json::Value) 
             }
             Err(e) => {
                 state.total_calls.fetch_add(1, Ordering::Relaxed);
-                error!("Error ejecutando plugin {} en MCP: {}", plugin_name, e);
+                error!("❌ [MCP-RESILIENCIA] Plugin {} falló definitivamente tras {} intentos: {}", plugin_name, max_retries, e);
+                
+                // FALLBACK: Intentar rescatar datos estancados de la caché
+                if let Some(stale_data) = state.plugin_cache.get(&secure_key)
+                    .or_else(|| state.plugin_cache.get(&legacy_key)) 
+                {
+                    warn!("🔄 [MCP-RESILIENCIA] Activando degradación controlada para {}. Usando caché estancada.", plugin_name);
+                    return json!(CallToolResult {
+                        content: vec![McpContent::Text { 
+                            text: format!("⚠️ [MODO_RESILIENCIA: DATOS_HISTÓRICOS]\nLa herramienta falló pero he recuperado el último estado conocido:\n\n{}", stale_data) 
+                        }],
+                        is_error: false
+                    });
+                }
+
                 json!(CallToolResult {
-                    content: vec![McpContent::Text { text: format!("Error de ejecución: {}", e) }],
+                    content: vec![McpContent::Text { text: format!("Error crítico de ejecución (Sin caché disponible): {}", e) }],
                     is_error: true
                 })
             }
