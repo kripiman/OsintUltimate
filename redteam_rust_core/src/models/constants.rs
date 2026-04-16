@@ -66,4 +66,5 @@ pub const PLUGIN_KUBE_BENCH: &str = "KubeBenchScanner";
 pub const PLUGIN_OSV_SCANNER: &str = "OsvScanner";
 pub const PLUGIN_CRLF: &str = "CRLFuzz";
 pub const PLUGIN_GF: &str = "GfScanner";
+pub const PLUGIN_CAIDO: &str = "CaidoScanner";
 pub const PLUGIN_SOVEREIGN_RECON: &str = "SovereignReconScanner";

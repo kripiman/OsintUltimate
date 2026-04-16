@@ -1,6 +1,7 @@
-use anyhow::{Result, Context};
-use crate::models::TargetHost;
+use crate::core::validation::PocValidator;
 use crate::utils::executor::ExecutorMode;
+use crate::models::TargetHost;
+use anyhow::{Context, Result};
 
 impl<M: ExecutorMode> PocValidator<M> {
     pub(crate) async fn execute_raw_payload(&self, payload: &str, _target: &TargetHost) -> Result<String> {

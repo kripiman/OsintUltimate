@@ -16,8 +16,8 @@ impl WaybackScanner {
         let wayback_path = detect_tool("waybackurls");
         let gau_path = detect_tool("gau");
         Self {
-            wayback_path: wayback_path,
-            gau_path: gau_path,
+            wayback_path,
+            gau_path,
         }
     }
 }

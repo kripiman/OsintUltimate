@@ -29,6 +29,7 @@ All documentation is synchronized with the **V14.1 Sovereign Sync**:
 
 *   [🔱 Sovereign Systems V14.1 Sync](redteam_rust_core/docs/SOVEREIGN_SYSTEMS.md): **Core Master Spec** for Layers 0-5, AD Ingestion, and Egress Flow.
 *   [🏗️ V14 Core Architecture (Master)](redteam_rust_core/docs/V14_CORE_ARCHITECTURE.md): System topology, concurrent agent pool, and Master SSOT component graph.
+*   [🧠 AI Architecture Breakdown](redteam_rust_core/docs/AI_ARCHITECTURE.md): **Deep Technical Guide** on tiered routing, context compression, and token optimization.
 *   [🐝 Swarm Dynamics & Budgeting](redteam_rust_core/docs/SWARM_DYNAMICS.md): Token reservation, admission thresholds, and agent role specifications.
 *   [🎭 Adaptive Evasion: The Posture Manual](redteam_rust_core/docs/ADAPTIVE_EVASION.md): Technical specs for GHOST/STRIKE/BREACH transitions and Proxy isolation.
 *   [🛡️ Hardening & OPSEC](redteam_rust_core/docs/HARDENING_AND_OPSEC.md): Jitter distributions, User-Agent pinning, and security boundaries.

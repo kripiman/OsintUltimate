@@ -1,5 +1,21 @@
 use crate::core::orchestrator::Orchestrator;
 use crate::utils::executor::{StealthExecutor, ExecutorMode};
+use crate::plugins::{DiscoveryPlugin, ScannerPlugin};
+use crate::models::{TargetHost, Finding, Category, Severity, TargetStatus, ScanMetadata};
+use crate::core::sink::DataSink;
+use crate::utils::{LivenessChecker, JitterSleep};
+use crate::utils::liveness::is_safe_ip;
+use crate::core::capability_layer::ScanLayerPolicy;
+use crate::core::approval_gate::ApprovalGate;
+use crate::core::filter::FalsePositiveFilter;
+use std::sync::Arc;
+use tokio_util::sync::CancellationToken;
+use tracing::{info, warn};
+use serde_json::json;
+use anyhow::{Result, Context};
+use tokio::sync::mpsc;
+use futures::StreamExt;
+use bloomfilter::Bloom;
 
 pub struct Pipeline<M: ExecutorMode = crate::utils::executor::GhostMode> {
     concurrency: usize,
@@ -55,7 +71,7 @@ impl<M: ExecutorMode> Pipeline<M> {
             sandbox,
             proxy_manager: None,
             policy: policy.clone(),
-            executor: Arc::new(crate::utils::executor::StealthExecutor::new(
+            executor: Arc::new(crate::utils::executor::StealthExecutor::<M>::new(
                 policy, 
                 None, 
                 false,
@@ -347,9 +363,9 @@ pub struct PipelineBuilder<M: ExecutorMode = crate::utils::executor::GhostMode> 
     executor: Option<Arc<crate::utils::executor::StealthExecutor<M>>>,
 }
 
-impl Default for PipelineBuilder { fn default() -> Self { Self::new() } }
+impl<M: ExecutorMode> Default for PipelineBuilder<M> { fn default() -> Self { Self::new() } }
 
-impl PipelineBuilder {
+impl<M: ExecutorMode> PipelineBuilder<M> {
     pub fn new() -> Self {
         Self {
             concurrency: 10,

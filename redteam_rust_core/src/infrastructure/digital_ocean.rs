@@ -1,5 +1,6 @@
 use serde::{Deserialize, Serialize};
 use reqwest::header::{HeaderMap, HeaderValue, AUTHORIZATION, CONTENT_TYPE};
+use tracing::info;
 use anyhow::{Result, Context};
 use std::sync::Arc;
 use crate::utils::proxy::ProxyManager;
@@ -86,7 +87,7 @@ runcmd:
   - useradd -M -s /usr/sbin/nologin {user}
   - echo "{user}:{pass}" | chpasswd
   - systemctl restart danted
-  - shutdown -h +240
+  - shutdown -h +120
 "#, user = user, pass = pass),
         ProxyMode::Shadowsocks => format!(r#"#cloud-config
 package_update: true
@@ -94,7 +95,7 @@ packages:
   - docker.io
 runcmd:
   - docker run -d --name ss-server --restart always -p 1080:8388 shadowsocks/shadowsocks-libev ss-server -s 0.0.0.0 -p 8388 -k {pass} -m aes-256-gcm
-  - shutdown -h +240
+  - shutdown -h +120
 "#, pass = pass),
         ProxyMode::Hysteria => format!(r#"#cloud-config
 package_update: true
@@ -107,7 +108,7 @@ runcmd:
   - echo "key: /etc/hysteria.key" >> /etc/hysteria.yaml
   - echo "auth: {pass}" >> /etc/hysteria.yaml
   - hysteria server -c /etc/hysteria.yaml &
-  - shutdown -h +240
+  - shutdown -h +120
 "#, pass = pass),
     }
 }
@@ -147,7 +148,7 @@ impl DigitalOceanClient {
         let request = CreateDropletRequest {
             name: name.to_string(),
             region: region.to_string(),
-            size: "s-1vcpu-1gb".to_string(),
+            size: "s-1vcpu-512mb".to_string(),
             image: "ubuntu-22-04-x64".to_string(),
             ssh_keys: vec![], 
             backups: false,

@@ -5,7 +5,15 @@ use super::types::{CapabilityGap, AdaptiveContext, RouteLevel};
 
 #[async_trait]
 pub trait LlmClient: Send + Sync {
-    async fn analyze(&self, finding: &Finding, target: &TargetHost, attack_context: Option<&str>, route_level: RouteLevel) -> Result<AIAnalysis>;
+    async fn analyze(
+        &self, 
+        finding: &Finding, 
+        target: &TargetHost, 
+        attack_context: Option<&str>, 
+        route_level: RouteLevel,
+        caveman: super::types::CavemanLevel,
+    ) -> Result<AIAnalysis>;
+
     async fn decide_action(
         &self, 
         finding: &Finding, 
@@ -15,5 +23,6 @@ pub trait LlmClient: Send + Sync {
         gap: Option<&CapabilityGap>,
         adaptive_context: Option<&AdaptiveContext>,
         route_level: RouteLevel,
+        caveman: super::types::CavemanLevel,
     ) -> Result<Option<(String, serde_json::Value)>>;
 }

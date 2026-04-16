@@ -5,7 +5,7 @@ use crate::utils::proxy::ProxyManager;
 use crate::utils::common::HumanJitter;
 use async_trait::async_trait;
 use anyhow::Result;
-use tracing::{info, warn, debug, error};
+use tracing::{info, warn, debug};
 use serde::Deserialize;
 use std::sync::{Arc, Mutex};
 use std::collections::HashSet;
@@ -66,7 +66,7 @@ impl SovereignReconScanner {
     pub fn new(config: &crate::utils::config::Config, pm: Arc<ProxyManager>) -> Self {
         Self {
             proxy_manager: pm,
-            jitter: Arc::new(HumanJitter::new()), // Default jitter
+            jitter: Arc::new(HumanJitter::new(100, 500)), // Default jitter 100-500ms
             credit_manager: Arc::new(CreditManager::new(config.netlas_daily_budget)),
             chaos_key: config.chaos_api_key.clone(),
             netlas_key: config.netlas_api_key.clone(),
@@ -229,11 +229,11 @@ impl SovereignReconScanner {
             _ => return results,
         };
 
-        debug!("🔭 Phase 4: Shodan infrastructure discovery for {}", domain);
-        let url = format!("https://api.shodan.io/dns/domain/{}?key={}", domain, key);
+        debug!(" telescope Phase 4: Shodan infrastructure discovery for {}", domain);
+        let url = format!("https://api.shodan.io/dns/domain/{}", domain);
         
         if let Ok(client) = self.get_client("api.shodan.io").await {
-            if let Ok(resp) = client.get(&url).send().await {
+            if let Ok(resp) = client.get(&url).header("Authorization", format!("Bearer {}", key)).send().await {
                 #[derive(Deserialize)]
                 struct ShodanResp { subdomains: Option<Vec<String>> }
                 if let Ok(data) = resp.json::<ShodanResp>().await {
@@ -267,7 +267,7 @@ impl SovereignReconScanner {
                 #[derive(Deserialize)]
                 struct CIPResp { score: Option<CIPScore> }
                 #[derive(Deserialize)]
-                struct CIPScore { inbound: Option<u32>, outbound: Option<u32> }
+                struct CIPScore { inbound: Option<u32>, _outbound: Option<u32> }
                 
                 if let Ok(data) = resp.json::<CIPResp>().await {
                     if let Some(score) = data.score {
@@ -345,7 +345,7 @@ impl DiscoveryPlugin for SovereignReconScanner {
         }
 
         // 2. SecurityTrails
-        self.jitter.human_delay().await;
+        self.jitter.sleep().await;
         info!("🛰️ Phase 2/5: SecurityTrails mapping...");
         let st = self.query_securitytrails(&target.host).await;
         if !st.is_empty() {
@@ -354,7 +354,7 @@ impl DiscoveryPlugin for SovereignReconScanner {
         }
 
         // 3. Netlas (Paid - Precision)
-        self.jitter.human_delay().await;
+        self.jitter.sleep().await;
         info!("💎 Phase 3/5: Netlas High-Precision Deep Dive...");
         let netlas = self.query_netlas(&target.host).await;
         if !netlas.is_empty() {
@@ -363,7 +363,7 @@ impl DiscoveryPlugin for SovereignReconScanner {
         }
 
         // 4. Shodan
-        self.jitter.human_delay().await;
+        self.jitter.sleep().await;
         info!("🔭 Phase 4/5: Shodan infrastructure discovery...");
         let shodan = self.query_shodan(&target.host).await;
         if !shodan.is_empty() {
@@ -371,11 +371,19 @@ impl DiscoveryPlugin for SovereignReconScanner {
             all_results.extend(shodan);
         }
 
-        // 5. Automatic Fallback: Subfinder (Emergency)
+        // 5. Criminal IP (Reputation)
+        self.jitter.sleep().await;
+        info!("🏴‍☠️ Phase 5/5: Criminal IP reputation scoring...");
+        let cip_findings = self.query_criminalip(&target.host).await;
+        for finding in cip_findings {
+            info!("  ✅ {}", finding);
+        }
+
+        // 6. Automatic Fallback: Subfinder (Emergency)
         if all_results.is_empty() {
             warn!("⚠️ SOVEREIGN RECON: All primary phases returned ZERO results. Triggering Subfinder Emergency Fallback...");
             use crate::plugins::reconnaissance::osint::subfinder::SubfinderScanner;
-            let subfinder = SubfinderScanner::new();
+            let subfinder = SubfinderScanner::new(self.proxy_manager.clone());
             if let Ok(subs) = subfinder.discover(target).await {
                 info!("  🚑 Subfinder Fallback captured {} subdomains", subs.len());
                 all_results.extend(subs);

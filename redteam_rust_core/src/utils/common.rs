@@ -74,7 +74,7 @@ pub fn check_cap_net_raw() -> bool {
 /// 2. setsid/process_group: Decouples from the parent's process tree signaling.
 /// 3. Resource Limits: Enforces virtual memory constraints to protect the 1GB RAM host.
 /// 4. V12 Enterprise: Global Proxy Enforcement (ALL_PROXY)
-pub fn stealth_command(binary: &str) -> tokio::process::Command {
+pub fn stealth_command(binary: &str, pm: Option<&crate::utils::proxy::ProxyManager>) -> tokio::process::Command {
     let mut cmd = tokio::process::Command::new(binary);
     
     cmd.env_clear()
@@ -83,9 +83,14 @@ pub fn stealth_command(binary: &str) -> tokio::process::Command {
        .kill_on_drop(true);
 
     // V12 HARDENING: Global Proxy Enforcement
-    // If the system has a proxy configured via environment, we propagate it.
-    // This is crucial for Oracle-to-DigitalOcean routing.
-    if let Ok(proxy) = std::env::var("GLOBAL_SCAN_PROXY") {
+    // V14.1 Professional: Prefer live ProxyManager over static environment variable.
+    if let Some(pm) = pm {
+        if let Some(proxy_url) = pm.get_best_socks_url() {
+            cmd.env("ALL_PROXY", proxy_url.clone())
+               .env("http_proxy", proxy_url.clone())
+               .env("https_proxy", proxy_url);
+        }
+    } else if let Ok(proxy) = std::env::var("GLOBAL_SCAN_PROXY") {
         cmd.env("ALL_PROXY", proxy.clone())
            .env("http_proxy", proxy.clone())
            .env("https_proxy", proxy);

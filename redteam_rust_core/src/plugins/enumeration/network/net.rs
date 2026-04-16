@@ -1,6 +1,6 @@
 use crate::plugins::{ScannerPlugin, Capability};
 use crate::models::{TargetHost, Finding};
-use crate::utils::{tool_detection::detect_tool, executor::{StealthExecutor, ExecutorMode}};
+use crate::utils::executor::{StealthExecutor, ExecutorMode};
 
 pub struct NmapScanner<M: ExecutorMode> {
     scripts: Option<String>,

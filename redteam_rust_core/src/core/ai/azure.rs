@@ -30,15 +30,17 @@ impl AzureOpenAIClient {
 
 #[async_trait]
 impl LlmClient for AzureOpenAIClient {
-    async fn analyze(&self, finding: &Finding, target: &TargetHost, attack_context: Option<&str>, route_level: RouteLevel) -> Result<AIAnalysis> {
+    async fn analyze(&self, finding: &Finding, target: &TargetHost, attack_context: Option<&str>, route_level: RouteLevel, caveman: super::types::CavemanLevel) -> Result<AIAnalysis> {
         let compressed = ContextCompressor::compress_finding(finding, route_level);
         let ctx = attack_context.map(|c| format!("\nTactical Path: {}", c)).unwrap_or_default();
+        let prompt_raw = format!("Target: {}{}, Finding: {}", target.host, ctx, serde_json::to_string(&compressed)?);
+        let prompt = crate::core::ai::caveman::CavemanOptimizer::optimize_prompt(&prompt_raw, caveman);
         let client = self.get_client().await?;
         let url = format!("{}/openai/deployments/{}/chat/completions?api-version={}", self.endpoint, self.deployment, self.api_version);
         let res = client.post(url).header("api-key", &self.key).json(&json!({
             "messages": [
                 { "role": "system", "content": "### PROFESSIONAL RED TEAM ENGINE ###\nReturn strictly JSON analysis." }, 
-                { "role": "user", "content": format!("Target: {}{}, Finding: {}", target.host, ctx, serde_json::to_string(&compressed)?) }
+                { "role": "user", "content": prompt }
             ],
             "response_format": { "type": "json_object" }
         })).send().await?.json::<serde_json::Value>().await?;
@@ -46,15 +48,17 @@ impl LlmClient for AzureOpenAIClient {
         Ok(serde_json::from_str(extract_json(text))?)
     }
 
-    async fn decide_action(&self, finding: &Finding, target: &TargetHost, plugins: &[crate::plugins::PluginMetadata], attack_context: Option<&str>, _gap: Option<&CapabilityGap>, adaptive_context: Option<&AdaptiveContext>, route_level: RouteLevel) -> Result<Option<(String, serde_json::Value)>> {
+    async fn decide_action(&self, finding: &Finding, target: &TargetHost, plugins: &[crate::plugins::PluginMetadata], attack_context: Option<&str>, _gap: Option<&CapabilityGap>, adaptive_context: Option<&AdaptiveContext>, route_level: RouteLevel, caveman: super::types::CavemanLevel) -> Result<Option<(String, serde_json::Value)>> {
         let _ = ContextCompressor::compress_finding(finding, route_level);
         let ctx = attack_context.map(|c| format!("\nTactical Path: {}", c)).unwrap_or_default();
+        let prompt_raw = format!("Target: {}{}, Finding: {}, Context: {:?}", target.host, ctx, finding.id, adaptive_context);
+        let prompt = crate::core::ai::caveman::CavemanOptimizer::optimize_prompt(&prompt_raw, caveman);
         let client = self.get_client().await?;
         let url = format!("{}/openai/deployments/{}/chat/completions?api-version={}", self.endpoint, self.deployment, self.api_version);
         let res = client.post(url).header("api-key", &self.key).json(&json!({
             "messages": [
                 { "role": "system", "content": "### SENTINEL ORCHESTRATOR ###\nReturn JSON: {\"action\": \"name\", \"tactical_context\": {}}" },
-                { "role": "user", "content": format!("Target: {}{}, Finding: {}, Context: {:?}", target.host, ctx, finding.id, adaptive_context) }
+                { "role": "user", "content": prompt }
             ],
             "response_format": { "type": "json_object" }
         })).send().await?.json::<serde_json::Value>().await?;

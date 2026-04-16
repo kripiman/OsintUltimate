@@ -3,9 +3,11 @@ use crate::models::{Finding, TargetHost};
 use crate::models::findings::PocDefinition;
 use crate::core::validation::PocValidator;
 
-impl PocValidator {
+use crate::utils::executor::ExecutorMode;
+
+impl<M: ExecutorMode> PocValidator<M> {
     pub(crate) async fn generate_poc(&self, finding: &Finding, target: &TargetHost, attack_context: Option<&str>) -> Result<PocDefinition> {
-        let analysis = self.router.analyze_with_level(finding, target, attack_context, crate::core::ai::RouteLevel::Premium).await?;
+        let analysis = self.router.analyze_with_level(finding, target, attack_context, crate::core::ai::RouteLevel::Premium, crate::core::ai::CavemanLevel::default()).await?;
         if let Some(poc) = analysis.poc {
             Ok(poc)
         } else {

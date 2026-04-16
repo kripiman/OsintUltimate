@@ -62,11 +62,18 @@ impl<M: ExecutorMode> PocValidator<M> {
         // 2. Gestionar aprobaciones para PoCs intrusivos
         if poc.is_intrusive {
             let action_desc = format!("PoC EXPLOIT: {} on {}", finding.title, target.host);
+            
+            // Human Pivot: Generate a readable explanation for the approval request
+            let human_context = format!(
+                "Sentinel propone ejecutar el siguiente PoC intrusivo:\n\nStrategy: {:?}\nPayload: {}\nExpected: {}\n\n¿Desea autorizar esta acción?",
+                poc.strategy, poc.payload, poc.expected_pattern
+            );
+
             let req_id = self.approval_gate.request_approval(
                 &action_desc,
                 95, 
                 &self.operator,
-                &format!("Sentinel propone ejecutar el siguiente PoC intrusivo:\n\nStrategy: {:?}\nPayload: {}\nExpected: {}", poc.strategy, poc.payload, poc.expected_pattern)
+                &human_context
             ).await?;
 
             if let Some(id) = req_id {

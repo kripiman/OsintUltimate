@@ -4,9 +4,8 @@ use crate::utils::tool_detection::detect_tool;
 use async_trait::async_trait;
 use anyhow::{Result, Context};
 use tracing::{info, warn};
-use std::process::Stdio;
-use tokio::process::Command;
 use serde::Deserialize;
+use crate::utils::executor::{StealthExecutor, ExecutorMode};
 
 #[derive(Debug, Deserialize)]
 struct NucleiResult {
@@ -24,21 +23,23 @@ struct NucleiInfo {
     description: Option<String>,
 }
 
-pub struct NucleiScanner {
+pub struct NucleiScanner<M: ExecutorMode> {
     binary_path: String,
+    executor: std::sync::Arc<StealthExecutor<M>>,
 }
 
-impl NucleiScanner {
-    pub fn new() -> Self {
+impl<M: ExecutorMode> NucleiScanner<M> {
+    pub fn new(executor: std::sync::Arc<StealthExecutor<M>>) -> Self {
         let path = detect_tool("nuclei");
         Self {
             binary_path: path,
+            executor,
         }
     }
 }
 
 #[async_trait]
-impl ScannerPlugin for NucleiScanner {
+impl<M: ExecutorMode> ScannerPlugin for NucleiScanner<M> {
     fn name(&self) -> &'static str {
         crate::models::PLUGIN_NUCLEI
     }
@@ -85,19 +86,18 @@ impl ScannerPlugin for NucleiScanner {
         let temp_file = tempfile::NamedTempFile::new().context("Failed to create temp file for Nuclei")?;
         let temp_path = temp_file.path().to_string_lossy().to_string();
 
-        let mut child = Command::new(&self.binary_path)
-            .arg("-u").arg(&url)
-            .arg("-H").arg(&host_header)
-            .arg("-jsonl")
-            .arg("-o").arg(&temp_path)
-            .arg("-silent")
-            .stdin(Stdio::null())
-            .stdout(Stdio::null())
-            .stderr(Stdio::null())
-            .spawn()
+        let args = vec![
+            "-u".to_string(), url.clone(),
+            "-H".to_string(), host_header.clone(),
+            "-jsonl".to_string(),
+            "-o".to_string(), temp_path.clone(),
+            "-silent".to_string(),
+        ];
+
+        let output = self.executor.execute_and_wait(&self.binary_path, args).await
             .context("Failed to spawn nuclei")?;
 
-        let status = child.wait().await.context("Failed to wait for nuclei")?;
+        let status = output.status;
 
         if !status.success() {
             warn!("Nuclei failed on {}", target.host);

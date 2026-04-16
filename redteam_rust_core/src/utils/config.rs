@@ -23,6 +23,8 @@ pub struct Config {
     pub shodan_api_key: Option<String>,
     pub criminalip_api_key: Option<String>,
     pub netlas_daily_budget: u32,
+    pub caido_api_key: Option<String>,
+    pub caido_api_url: String,
 }
 
 impl Config {
@@ -67,6 +69,8 @@ impl Config {
                 .ok()
                 .and_then(|s| s.parse().ok())
                 .unwrap_or(33), // Default ~1000/month
+            caido_api_key: env::var("CAIDO_API_KEY").ok(),
+            caido_api_url: env::var("CAIDO_API_URL").unwrap_or_else(|_| "http://localhost:8080/graphql".to_string()),
         }
     }
 

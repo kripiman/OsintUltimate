@@ -4,8 +4,6 @@ use crate::utils::tool_detection::detect_tool;
 use async_trait::async_trait;
 use anyhow::{Result, Context};
 use tracing::{info, warn};
-use std::process::Stdio;
-use tokio::process::Command;
 use serde::Deserialize;
 
 #[derive(Debug, Deserialize)]
@@ -14,21 +12,26 @@ struct WhatWebResult {
     plugins: serde_json::Value,
 }
 
-pub struct WhatWebScanner {
+use std::sync::Arc;
+use crate::utils::executor::{StealthExecutor, ExecutorMode};
+
+pub struct WhatWebScanner<M: ExecutorMode> {
     binary_path: String,
+    executor: Arc<StealthExecutor<M>>,
 }
 
-impl WhatWebScanner {
-    pub fn new() -> Self {
+impl<M: ExecutorMode> WhatWebScanner<M> {
+    pub fn new(executor: Arc<StealthExecutor<M>>) -> Self {
         let path = detect_tool("whatweb");
         Self {
             binary_path: path,
+            executor,
         }
     }
 }
 
 #[async_trait]
-impl ScannerPlugin for WhatWebScanner {
+impl<M: ExecutorMode> ScannerPlugin for WhatWebScanner<M> {
     fn name(&self) -> &'static str {
         crate::models::PLUGIN_WHATWEB
     }
@@ -36,7 +39,7 @@ impl ScannerPlugin for WhatWebScanner {
         fn metadata(&self) -> crate::plugins::PluginMetadata {
         crate::plugins::PluginMetadata {
             name: self.name().to_string(),
-            description: "Technology stack fingerprinter using WhatWeb.".to_string(),
+            description: "Technology stack fingerprinter using WhatWeb with mandatory proxying.".to_string(),
             target_type: crate::plugins::TargetType::Web,
             risk_level: crate::plugins::RiskLevel::Medium,
             layer: crate::core::capability_layer::ScanLayer::Discovery,
@@ -44,11 +47,8 @@ impl ScannerPlugin for WhatWebScanner {
             capabilities: self.capabilities(),
             cost: 5,
             category: "Enumeration".to_string(),
-            mitre_attacks: vec![],
-            remediation_difficulty: crate::plugins::RiskLevel::Medium,
-            blackarch_category: None,
-            is_destructive: false,
-            poc_mode: false,
+            mitre_attacks: vec!["T1592".to_string()], // Gather Victim Host Information
+            ..Default::default()
         }
     }
     fn capabilities(&self) -> Vec<Capability> {
@@ -62,7 +62,7 @@ impl ScannerPlugin for WhatWebScanner {
 
     async fn scan(&self, target: &TargetHost) -> Result<Vec<Finding>> {
         let target_addr = target.pinned_addr()?;
-        info!("WhatWebScanner: launching scan against {} (via {})", target.host, target_addr);
+        info!("🔱 V14.1 SOVEREIGN: Launching WhatWeb scan against {} via StealthExecutor...", target.host);
 
         let url = if target_addr.starts_with("http") {
             target_addr.to_string()
@@ -74,20 +74,16 @@ impl ScannerPlugin for WhatWebScanner {
         let temp_file = tempfile::NamedTempFile::new().context("Failed to create temp file for WhatWeb")?;
         let temp_path = temp_file.path().to_string_lossy().to_string();
         
-        let mut child = Command::new(&self.binary_path)
-            .arg("--color=never")
-            .arg(format!("--log-json={}", temp_path))
-            .arg(&url)
-            .stdin(Stdio::null())
-            .stdout(Stdio::piped())
-            .stderr(Stdio::piped())
-            .spawn()
-            .context("Failed to spawn whatweb")?;
+        let args = vec![
+            "--color=never".to_string(),
+            format!("--log-json={}", temp_path),
+            url,
+        ];
 
-        let status = child.wait().await.context("Failed to wait for WhatWeb")?;
+        let output = self.executor.execute_and_wait(&self.binary_path, args).await?;
 
-        if !status.success() {
-            warn!("WhatWeb failed on {}", target.host);
+        if !output.status.success() {
+            warn!("⚠️ WhatWeb failed on {}: {}", target.host, String::from_utf8_lossy(&output.stderr));
             return Ok(Vec::new());
         }
 

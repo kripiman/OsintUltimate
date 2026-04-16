@@ -368,8 +368,6 @@ impl ProxyManager {
         use std::process::Command;
         use crate::utils::downloader::ensure_hysteria_binary;
         
-        let pm = self.clone(); // Error: self is not Clone, need to handle this differently or use tokio block_in_place
-        // Actually, we can just use tokio::spawn for the async binary check
         let remote_ip = remote_ip.to_string();
         let auth = auth.to_string();
 
@@ -406,7 +404,7 @@ transport:
                 .arg("-c")
                 .arg(&config_path)
                 .spawn() {
-                    Ok(mut child) => {
+                    Ok(child) => {
                         info!("🚀 STEALTH: Hysteria local client PID {} established for {}", child.id(), remote_ip);
                         // In a real implementation, we'd store the child handle to kill it later
                     }
@@ -422,6 +420,7 @@ transport:
             last_seen: SystemTime::now(),
             user: None,
             pass: None,
+            local_port: None,
         });
         info!("🚀 ProxyManager: Active DO Managed Exit added (Anonymous): {}", ip);
     }

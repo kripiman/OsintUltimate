@@ -151,7 +151,7 @@ impl<M: ExecutorMode> Orchestrator<M> {
                 }).buffer_unordered(self.concurrency);
 
                 tokio::pin!(swarm_stream);
-                while let Some(_) = swarm_stream.next().await {}
+                while swarm_stream.next().await.is_some() {}
                 info!("🐝 ORCHESTRATOR: Swarm processing finished.");
             }
             _ => {

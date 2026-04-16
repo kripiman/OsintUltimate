@@ -27,9 +27,11 @@ impl OpenAIClient {
 
 #[async_trait]
 impl LlmClient for OpenAIClient {
-    async fn analyze(&self, finding: &Finding, target: &TargetHost, attack_context: Option<&str>, route_level: RouteLevel) -> Result<AIAnalysis> {
+    async fn analyze(&self, finding: &Finding, target: &TargetHost, attack_context: Option<&str>, route_level: RouteLevel, caveman: super::types::CavemanLevel) -> Result<AIAnalysis> {
         let compressed = ContextCompressor::compress_finding(finding, route_level);
         let ctx = attack_context.map(|c| format!(" Tactical Path: {}.", c)).unwrap_or_default();
+        let prompt_raw = format!("Analyze this: {}. Target: {}.{}", serde_json::to_string(&compressed)?, target.host, ctx);
+        let prompt = crate::core::ai::caveman::CavemanOptimizer::optimize_prompt(&prompt_raw, caveman);
         let client = self.get_client().await?;
         let res = client.post("https://api.openai.com/v1/chat/completions")
             .header("Authorization", format!("Bearer {}", self.key))
@@ -37,7 +39,7 @@ impl LlmClient for OpenAIClient {
                 "model": self.model,
                 "messages": [
                     { "role": "system", "content": "### PROFESSIONAL RED TEAM ENGINE ###\nReturn strictly JSON." },
-                    { "role": "user", "content": format!("Analyze this: {}. Target: {}.{}", serde_json::to_string(&compressed)?, target.host, ctx) }
+                    { "role": "user", "content": prompt }
                 ],
                 "response_format": { "type": "json_object" }
             })).send().await?.json::<serde_json::Value>().await?;
@@ -46,7 +48,7 @@ impl LlmClient for OpenAIClient {
         Ok(serde_json::from_str(extract_json(text))?)
     }
 
-    async fn decide_action(&self, _finding: &Finding, _target: &TargetHost, _plugins: &[crate::plugins::PluginMetadata], _attack_context: Option<&str>, _gap: Option<&CapabilityGap>, _adaptive_context: Option<&AdaptiveContext>, _route_level: RouteLevel) -> Result<Option<(String, serde_json::Value)>> {
+    async fn decide_action(&self, _finding: &Finding, _target: &TargetHost, _plugins: &[crate::plugins::PluginMetadata], _attack_context: Option<&str>, _gap: Option<&CapabilityGap>, _adaptive_context: Option<&AdaptiveContext>, _route_level: RouteLevel, _caveman: super::types::CavemanLevel) -> Result<Option<(String, serde_json::Value)>> {
         Ok(None)
     }
 }

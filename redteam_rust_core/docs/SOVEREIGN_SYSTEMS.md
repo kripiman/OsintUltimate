@@ -196,7 +196,13 @@ Template-based vulnerability scanner for high-fidelity detection of misconfigura
 - **DNS Pinning**: Enforced via `target.pinned_addr()` to prevent SSRF and DNS Rebinding during template execution.
 - **Vhost Support**: Automatically injects a `Host` header corresponding to the original target domain to ensure accuracy against virtualized infrastructure.
 
-#### 3. WebFuzzer (`src/plugins/enumeration/web/web.rs`)
+#### 3. CaidoScanner (`src/plugins/verification/caido.rs`)
+The automated web auditor for the Sentinel project.
+- **Managed Headless**: Automatically spins up a `caido-cli` instance in headless mode for the duration of the engagement.
+- **GraphQL Orchestration**: Leverages Caido's GraphQL API for project isolation and vulnerability extraction.
+- **Student-Tier Optimized**: Designed to maximize the professional features of Caido's student/free plan within a 24/7 autonomous pipeline.
+
+#### 4. WebFuzzer (`src/plugins/enumeration/web/web.rs`)
 A custom, high-performance fuzzer for sensitive file discovery.
 - **Stealth Features**: Implements "Human-like" jitter and randomized signature traversal to evade basic rate-limiting and pattern-based detection.
 - **Tactical Proxying**: Leverages `get_client_pinned` from `ProxyManager` to ensure all fuzzing traffic to a specific host originates from the same egress node.

@@ -5,8 +5,6 @@ use crate::core::c2::{C2Operator, C2Session, SessionState};
 use async_trait::async_trait;
 use anyhow::{Result, Context};
 use tracing::{info, warn};
-use std::process::Stdio;
-use tokio::process::Command;
 use std::sync::Arc;
 use crate::utils::executor::{StealthExecutor, ExecutorMode};
 

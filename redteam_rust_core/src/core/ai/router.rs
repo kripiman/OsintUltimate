@@ -95,10 +95,15 @@ impl TieredAIRouter {
 
     pub async fn analyze(&self, finding: &Finding, target: &TargetHost, attack_context: Option<&str>) -> Result<AIAnalysis> {
         let level = self.classify(finding, target);
-        self.analyze_with_level(finding, target, attack_context, level).await
+        let caveman = if level == RouteLevel::Premium {
+            super::types::CavemanLevel::WenyanUltra
+        } else {
+            super::types::CavemanLevel::default()
+        };
+        self.analyze_with_level(finding, target, attack_context, level, caveman).await
     }
 
-    pub async fn analyze_with_level(&self, finding: &Finding, target: &TargetHost, attack_context: Option<&str>, target_level: RouteLevel) -> Result<AIAnalysis> {
+    pub async fn analyze_with_level(&self, finding: &Finding, target: &TargetHost, attack_context: Option<&str>, target_level: RouteLevel, caveman: super::types::CavemanLevel) -> Result<AIAnalysis> {
         let cache_key = Self::calculate_finding_cache_key(finding, target);
         if let Some(cached) = self.analysis_cache.get(&cache_key) {
             self.metrics.hits.fetch_add(1, Ordering::Relaxed);
@@ -117,7 +122,7 @@ impl TieredAIRouter {
 
             if let Some(providers) = self.providers.get(&current_level) {
                 for entry in providers {
-                    match entry.client.analyze(finding, target, attack_context, current_level).await {
+                    match entry.client.analyze(finding, target, attack_context, current_level, caveman).await {
                         Ok(analysis) => {
                             let mut analysis = analysis;
                             analysis.model = format!("{} (Tiered: {:?}, Provider: {:?})", analysis.model, current_level, entry.kind);
@@ -154,8 +159,9 @@ impl TieredAIRouter {
             };
 
             if let Some(providers) = self.providers.get(&current_level) {
+                let caveman = adaptive_context.map(|c| c.current_caveman).unwrap_or_default();
                 for entry in providers {
-                    match entry.client.decide_action(finding, target, plugins, attack_context, None, adaptive_context, current_level).await {
+                    match entry.client.decide_action(finding, target, plugins, attack_context, None, adaptive_context, current_level, caveman).await {
                         Ok(Some((action, context))) => {
                             return Ok(Some((action, context)));
                         }

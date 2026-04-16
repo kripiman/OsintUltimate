@@ -260,12 +260,61 @@ impl SqliteSink {
             )"
         ).execute(&pool).await?;
 
+        sqlx::query(
+            "CREATE TABLE IF NOT EXISTS agent_sessions (
+                id TEXT PRIMARY KEY,
+                agent_role TEXT NOT NULL,
+                target_id INTEGER NOT NULL,
+                posture TEXT NOT NULL,
+                memory_json TEXT NOT NULL,
+                last_updated DATETIME DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY(target_id) REFERENCES targets(id)
+            )"
+        ).execute(&pool).await?;
+
         Ok(Self {
             pool,
             scan_id: None,
             command_line: String::new(),
         })
     }
+
+    /// V15: Persists an agent session state to allow mission resumption.
+    pub async fn save_agent_session(&self, session: &AgentSession) -> Result<()> {
+        sqlx::query(
+            "INSERT OR REPLACE INTO agent_sessions (id, agent_role, target_id, posture, memory_json, last_updated)
+             VALUES (?, ?, ?, ?, ?, CURRENT_TIMESTAMP)"
+        )
+        .bind(&session.id)
+        .bind(&session.agent_role)
+        .bind(session.target_id)
+        .bind(&session.posture)
+        .bind(&session.memory_json)
+        .execute(&self.pool)
+        .await?;
+        Ok(())
+    }
+
+    /// V15: Loads an agent session state for a specific target.
+    pub async fn load_agent_session(&self, session_id: &str) -> Result<Option<AgentSession>> {
+        let res: Option<AgentSession> = sqlx::query_as(
+            "SELECT id, agent_role, target_id, posture, memory_json FROM agent_sessions WHERE id = ?"
+        )
+        .bind(session_id)
+        .fetch_optional(&self.pool)
+        .await?;
+        Ok(res)
+    }
+}
+
+/// V15 Persistent Agent Mission State
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize, sqlx::FromRow)]
+pub struct AgentSession {
+    pub id: String,          // Unique session/project ID
+    pub agent_role: String,   // ghost / strike / breach
+    pub target_id: i64,      // FK to targets table
+    pub posture: String,     // Active OPSEC level
+    pub memory_json: String,  // Serialized AdaptiveContext/Findings
 }
 
 #[async_trait]

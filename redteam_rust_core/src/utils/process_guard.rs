@@ -12,20 +12,22 @@ pub struct ExternalToolGuard {
     args: Vec<String>,
     timeout: Duration,
     child_pid: Arc<Mutex<Option<u32>>>,
+    proxy_manager: Option<Arc<crate::utils::proxy::ProxyManager>>,
 }
 
 impl ExternalToolGuard {
-    pub fn new(tool_name: &str, args: &[&str], timeout: Duration) -> Self {
+    pub fn new(tool_name: &str, args: &[&str], timeout: Duration, pm: Option<Arc<crate::utils::proxy::ProxyManager>>) -> Self {
         Self {
             tool_name: tool_name.to_string(),
             args: args.iter().map(|s| s.to_string()).collect(),
             timeout,
             child_pid: Arc::new(Mutex::new(None)),
+            proxy_manager: pm,
         }
     }
 
     pub async fn run(&self) -> Result<ExitStatus> {
-        let mut cmd = crate::utils::common::stealth_command(&self.tool_name);
+        let mut cmd = crate::utils::common::stealth_command(&self.tool_name, self.proxy_manager.as_ref().map(|p| p.as_ref()));
         cmd.args(&self.args)
             .stdout(Stdio::piped())
             .stderr(Stdio::piped());

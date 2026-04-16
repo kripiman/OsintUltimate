@@ -23,7 +23,7 @@ pub enum AgentRole {
 }
 
 #[derive(Clone)]
-pub struct SwarmOrchestrator<M: ExecutorMode = crate::utils::executor::GhostMode> {
+pub struct SwarmOrchestrator<M: ExecutorMode = crate::utils::executor::GhostMode> where M: Clone {
     pub router: Arc<TieredAIRouter>,
     pub pipeline: Arc<Pipeline<M>>,
     pub approval_gate: Arc<ApprovalGate>,

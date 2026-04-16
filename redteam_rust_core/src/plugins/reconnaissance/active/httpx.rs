@@ -5,14 +5,20 @@ use async_trait::async_trait;
 use anyhow::{Result, Context};
 use tracing::info;
 use std::process::Stdio;
+use std::sync::Arc;
+use crate::utils::proxy::ProxyManager;
+
 pub struct HttpxScanner {
     binary_path: String,
+    proxy_manager: Arc<ProxyManager>,
 }
+
 impl HttpxScanner {
-    pub fn new() -> Self {
+    pub fn new(pm: Arc<ProxyManager>) -> Self {
         let path = detect_tool("httpx");
         Self {
             binary_path: path,
+            proxy_manager: pm,
         }
     }
 }
@@ -24,7 +30,7 @@ impl ScannerPlugin for HttpxScanner {
         fn metadata(&self) -> crate::plugins::PluginMetadata {
         crate::plugins::PluginMetadata {
             name: self.name().to_string(),
-            description: "Automated security analysis using this plugin.".to_string(),
+            description: "Tactical HTTP probing and fingerprinter (httpx): Multi-protocol discovery with fingerprinting and tech-detection via managed egress.".to_string(),
             target_type: crate::plugins::TargetType::Host,
             risk_level: crate::plugins::RiskLevel::Medium,
             layer: crate::core::capability_layer::ScanLayer::Discovery,
@@ -48,8 +54,8 @@ impl ScannerPlugin for HttpxScanner {
     async fn scan(&self, target: &TargetHost) -> Result<Vec<Finding>> {
         info!("HttpxScanner: probing HTTP for {}", target.host);
         
-        // --- STEALTH-003: Using tactical command wrapper ---
-        let mut child = crate::utils::common::stealth_command(&self.binary_path);
+        // --- STEALTH-003: Using tactical command wrapper with live ProxyManager ---
+        let mut child = crate::utils::common::stealth_command(&self.binary_path, Some(&self.proxy_manager));
         child.arg("-u")
             .arg(&target.host)
             .arg("-title")

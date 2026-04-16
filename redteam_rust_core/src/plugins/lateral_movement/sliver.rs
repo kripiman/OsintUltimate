@@ -6,8 +6,6 @@ use async_trait::async_trait;
 use anyhow::{Result, Context};
 use tracing::{info, warn};
 use std::sync::Arc;
-use tokio::process::Command;
-use std::process::Stdio;
 
 use crate::utils::executor::{StealthExecutor, ExecutorMode};
 

@@ -159,7 +159,7 @@ use crate::utils::executor::{StealthExecutor, ExecutorMode};
 
 /// Global configuration shared across all plugins to ensure consistency and streamline initialization.
 #[derive(Clone)]
-pub struct GlobalConfig<M: ExecutorMode = crate::utils::executor::GhostMode> {
+pub struct GlobalConfig<M: ExecutorMode = crate::utils::executor::GhostMode> where M: Clone {
     pub insecure: bool,
     pub jitter: std::sync::Arc<crate::utils::common::HumanJitter>,
     pub proxy_manager: std::sync::Arc<crate::utils::proxy::ProxyManager>,
@@ -191,6 +191,7 @@ pub fn get_all_scanners<M: ExecutorMode>(config: GlobalConfig<M>) -> Vec<Box<dyn
     use crate::plugins::exploitation::web::wapiti::WapitiScanner;
     use crate::plugins::verification::zap::ZapScanner;
     use crate::plugins::verification::burp::BurpScanner;
+    use crate::plugins::verification::caido::CaidoScanner;
     use crate::plugins::intelligence::nuclei::NucleiScanner;
     use crate::plugins::enumeration::web::ffuf::FfufScanner;
     use crate::plugins::enumeration::web::arjun::ArjunScanner;
@@ -241,8 +242,67 @@ pub fn get_all_scanners<M: ExecutorMode>(config: GlobalConfig<M>) -> Vec<Box<dyn
     use crate::plugins::exploitation::web::graphql_cop::GraphQLCopScanner; // NUEVO
     use crate::plugins::exploitation::network::coercer::CoercerScanner; // NUEVO
 
-    vec![Box::new(WebFuzzer::new(config.insecure, config.jitter.clone(), Some(config.proxy_manager.clone()))), Box::new(NmapScanner::new(
-            config.nmap_options.scripts, config.nmap_options.stealth, config.nmap_options.service_detection, config.nmap_options.scan_type, config.nmap_options.fragment, config.nmap_options.decoy, config.nmap_options.ports, config.nmap_options.vuln_scan, config.executor.clone())), Box::new(WhatWebScanner::new()), Box::new(SqlMapScanner::new()), Box::new(HydraScanner::new(None, None, None)), Box::new(WapitiScanner::new()), Box::new(ZapScanner::new(None, None, None)), Box::new(BurpScanner::new(None, None)), Box::new(NucleiScanner::new()), Box::new(FfufScanner::new(None)), Box::new(ArjunScanner::new()), Box::new(RustScanScanner::new()), Box::new(NetExecScanner::new()), Box::new(TruffleHogScanner::new()), Box::new(DalfoxScanner::new()), Box::new(KatanaScanner::new()), Box::new(BloodHoundScanner::new(config.executor.clone(), config.correlation_engine.clone())), Box::new(ResponderScanner::new()), Box::new(ImpacketScanner::new()), Box::new(CertipyScanner::new()), Box::new(PetitPotamScanner::new()), Box::new(SliverScanner::new(config.executor.clone())), Box::new(LigoloScanner::new(config.executor.clone())), Box::new(PacuScanner::new()), Box::new(CloudEnumScanner::new()), Box::new(HttpxScanner::new()), Box::new(NaabuScanner::new()), Box::new(InteractshScanner::new()), Box::new(HavocScanner::new(config.executor.clone())), Box::new(CloudFoxScanner::new()), Box::new(KiterunnerScanner::new()), Box::new(KubescapeScanner::new()), Box::new(GitleaksScanner::new()), Box::new(TsunamiScanner::new()), Box::new(CheckovScanner::new()), Box::new(JwtToolScanner::new()), Box::new(GoWitnessScanner::new()), Box::new(SearchsploitScanner::new()), Box::new(TrivyScanner::new()), Box::new(FeroxbusterScanner::new()), Box::new(GauPlusScanner::new()), Box::new(DnsxScanner::new()), Box::new(CloudBruteScanner::new()), Box::new(NiktoScanner::new()), Box::new(WPScanner::new()), Box::new(SnallygasterScanner::new()), Box::new(WaybackScanner::new()), Box::new(JaelesScanner::new()), Box::new(ProwlerScanner::new()), Box::new(KubeBenchScanner::new()), Box::new(OSVScanner::new()), Box::new(CRLFScanner::new()), Box::new(GfScanner::new()), Box::new(CommixScanner::new()), Box::new(PrivescHunterScanner::new(PrivescCheckLevel::Moderate)), Box::new(GraphQLCopScanner::new()), Box::new(CoercerScanner::new()), ]
+    vec![
+        Box::new(WebFuzzer::new(config.insecure, config.jitter.clone(), Some(config.proxy_manager.clone()))), 
+        Box::new(NmapScanner::new(
+            config.nmap_options.scripts, config.nmap_options.stealth, config.nmap_options.service_detection, config.nmap_options.scan_type, config.nmap_options.fragment, config.nmap_options.decoy, config.nmap_options.ports, config.nmap_options.vuln_scan, config.executor.clone())), 
+        Box::new(WhatWebScanner::new(config.executor.clone())), 
+        Box::new(SqlMapScanner::new()), 
+        Box::new(HydraScanner::new(None, None, None)), 
+        Box::new(WapitiScanner::new()), 
+        Box::new(ZapScanner::new(None, None, None)), 
+        Box::new(BurpScanner::new(None, None)), 
+        Box::new(NucleiScanner::new(config.executor.clone())), 
+        Box::new(FfufScanner::new(None)), 
+        Box::new(ArjunScanner::new()), 
+        Box::new(RustScanScanner::new()), 
+        Box::new(NetExecScanner::new()), 
+        Box::new(TruffleHogScanner::new()), 
+        Box::new(DalfoxScanner::new()), 
+        Box::new(KatanaScanner::new()), 
+        Box::new(BloodHoundScanner::new(config.executor.clone(), config.correlation_engine.clone())), 
+        Box::new(ResponderScanner::new()), 
+        Box::new(ImpacketScanner::new()), 
+        Box::new(CertipyScanner::new()), 
+        Box::new(PetitPotamScanner::new()), 
+        Box::new(SliverScanner::new(config.executor.clone())), 
+        Box::new(LigoloScanner::new(config.executor.clone())), 
+        Box::new(PacuScanner::new()), 
+        Box::new(CloudEnumScanner::new()), 
+        Box::new(HttpxScanner::new(config.proxy_manager.clone())), 
+        Box::new(NaabuScanner::new()), 
+        Box::new(InteractshScanner::new()), 
+        Box::new(HavocScanner::new(config.executor.clone())), 
+        Box::new(CloudFoxScanner::new()), 
+        Box::new(KiterunnerScanner::new()), 
+        Box::new(KubescapeScanner::new()), 
+        Box::new(GitleaksScanner::new()), 
+        Box::new(TsunamiScanner::new()), 
+        Box::new(CheckovScanner::new()), 
+        Box::new(JwtToolScanner::new()), 
+        Box::new(GoWitnessScanner::new()), 
+        Box::new(SearchsploitScanner::new()), 
+        Box::new(TrivyScanner::new()), 
+        Box::new(FeroxbusterScanner::new()), 
+        Box::new(GauPlusScanner::new()), 
+        Box::new(DnsxScanner::new(config.executor.clone())), 
+        Box::new(CloudBruteScanner::new()), 
+        Box::new(NiktoScanner::new()), 
+        Box::new(WPScanner::new()), 
+        Box::new(SnallygasterScanner::new()), 
+        Box::new(WaybackScanner::new()), 
+        Box::new(JaelesScanner::new()), 
+        Box::new(ProwlerScanner::new()), 
+        Box::new(KubeBenchScanner::new()), 
+        Box::new(OSVScanner::new()), 
+        Box::new(CRLFScanner::new()), 
+        Box::new(GfScanner::new()), 
+        Box::new(CommixScanner::new()), 
+        Box::new(PrivescHunterScanner::new(PrivescCheckLevel::Moderate)), 
+        Box::new(GraphQLCopScanner::new()), 
+        Box::new(CoercerScanner::new()), 
+        Box::new(CaidoScanner::new(&crate::utils::config::Config::from_env(), config.proxy_manager.clone())), 
+    ]
 }
 
 pub fn get_all_discovery<M: ExecutorMode>(config: GlobalConfig<M>) -> Vec<Box<dyn DiscoveryPlugin>> {
@@ -255,7 +315,7 @@ pub fn get_all_discovery<M: ExecutorMode>(config: GlobalConfig<M>) -> Vec<Box<dy
     vec![
         Box::new(SovereignReconScanner::new(&crate::utils::config::Config::from_env(), config.proxy_manager.clone())),
         Box::new(OsintScanner::new(config.proxy_manager.clone())), 
-        Box::new(SubfinderScanner::new()), 
+        Box::new(SubfinderScanner::new(config.proxy_manager.clone())), 
         Box::new(AmassScanner::new()), 
         Box::new(UncoverScanner::new()), 
     ]

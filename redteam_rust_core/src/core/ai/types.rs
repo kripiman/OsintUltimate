@@ -43,6 +43,21 @@ pub struct ProviderEntry {
     pub client: Arc<dyn LlmClient>,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
+pub enum CavemanLevel {
+    /// No caveman optimization.
+    Off,
+    /// No filler/hedging. Keep articles + full sentences. Professional but tight.
+    Lite,
+    /// Drop articles, fragments OK, short synonyms. Classic caveman.
+    Full,
+    /// Maximum compression. Telegraphic. Abbreviate everything.
+    Ultra,
+    /// Classical Chinese literary compression. ~80-90% character reduction.
+    #[default]
+    WenyanUltra,
+}
+
 /// ARCH-11: AdaptiveContext tracks the history of attempts to allow the AI
 /// to "learn" from failures (e.g., WAF blocks) within a single target scan.
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
@@ -57,6 +72,8 @@ pub struct AdaptiveContext {
     pub last_blocked_url: Option<String>,
     /// V14 Posture state management
     pub posture: Posture,
+    /// V14.1 Token optimization state
+    pub current_caveman: CavemanLevel,
 }
 
 #[derive(Default)]

@@ -6,15 +6,20 @@ use anyhow::{Result, Context};
 use tracing::{info, warn};
 use std::process::Stdio;
 
+use std::sync::Arc;
+use crate::utils::proxy::ProxyManager;
+
 pub struct SubfinderScanner {
     binary_path: String,
+    proxy_manager: Arc<ProxyManager>,
 }
 
 impl SubfinderScanner {
-    pub fn new() -> Self {
+    pub fn new(pm: Arc<ProxyManager>) -> Self {
         let path = detect_tool("subfinder");
         Self {
             binary_path: path,
+            proxy_manager: pm,
         }
     }
 }
@@ -58,7 +63,7 @@ impl DiscoveryPlugin for SubfinderScanner {
         let temp_file = tempfile::NamedTempFile::new().context("Failed to create temp file for Subfinder")?;
         let temp_path = temp_file.path().to_string_lossy().to_string();
 
-        let mut child = crate::utils::common::stealth_command(&self.binary_path)
+        let mut child = crate::utils::common::stealth_command(&self.binary_path, Some(&self.proxy_manager))
             .arg("-d").arg(&target.host)
             .arg("-silent")
             .arg("-o").arg(&temp_path)

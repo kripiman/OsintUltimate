@@ -7,19 +7,22 @@ use tracing::info;
 use std::process::Stdio;
 
 /// Marker trait for executor modes.
-pub trait ExecutorMode: Send + Sync + 'static {}
+pub trait ExecutorMode: Send + Sync + Clone + 'static {}
 
 /// GHOST mode: Basic stealth execution without remote exploitation capabilities.
+#[derive(Clone, Copy, Debug)]
 pub struct GhostMode;
 impl ExecutorMode for GhostMode {}
 
 /// BREACH mode: Advanced execution with mandatory remote coordination capabilities.
+#[derive(Clone, Copy, Debug)]
 pub struct BreachMode;
 impl ExecutorMode for BreachMode {}
 
 /// V14.1 Unified Stealth Executor: The only authorized way to interact with OS binaries.
 /// Enforces policy-first, proxy-mandatory execution.
 /// Generic over the executor mode M for compile-time enforcement of capabilities.
+#[derive(Clone)]
 pub struct StealthExecutor<M: ExecutorMode = GhostMode> {
     policy: Arc<dyn PolicyProvider>,
     proxy_manager: Option<Arc<ProxyManager>>,
@@ -28,7 +31,7 @@ pub struct StealthExecutor<M: ExecutorMode = GhostMode> {
     _marker: std::marker::PhantomData<M>,
 }
 
-impl StealthExecutor<GhostMode> {
+impl<M: ExecutorMode> StealthExecutor<M> {
     pub fn new(
         policy: Arc<dyn PolicyProvider>,
         proxy_manager: Option<Arc<ProxyManager>>,
@@ -107,7 +110,7 @@ impl<M: ExecutorMode> StealthExecutor<M> {
                 pm.wrap_command(binary, &mut args).context("V14.1 OPSEC Block: Failed to wrap command for stealth.")?;
                 
                 // Professional Mode logic: If args[0] was tool, it means we want proxychains
-                if args.get(0).map(|s| s.as_str()) == Some(binary) {
+                if args.first().map(|s| s.as_str()) == Some(binary) {
                     final_binary = "proxychains4".to_string(); // Professional standard
                 }
             }
@@ -128,15 +131,42 @@ impl<M: ExecutorMode> StealthExecutor<M> {
 
         cmd.args(&args);
 
-        info!("🔥 EXECUTOR: Spawning process: {} {}", binary, args.join(" "));
+        // V15 OPSEC: Sanitize log arguments before printing
+        use crate::utils::output_filter::SecurityGuard;
+        let sanitized_args = SecurityGuard::redact_secrets(&args.join(" "));
+        info!("🔥 EXECUTOR: Spawning process: {} {}", binary, sanitized_args);
         
         cmd.spawn().context(format!("Failed to spawn OS process for tool '{}'", binary))
     }
 
     /// Executes a command and waits for its output (standardized wrapper).
+    /// V15: Integrates the Egress Shield (Filter + Redaction).
     pub async fn execute_and_wait(&self, binary: &str, args: Vec<String>) -> Result<std::process::Output> {
         let child = self.spawn(binary, args).await?;
-        child.wait_with_output().await.context("Failed to wait for process output")
+        let output = child.wait_with_output().await.context("Failed to wait for process output")?;
+        let exit_code = output.status.code().unwrap_or(-1);
+        
+        // V15 Egress Shield: Apply Filter and Secret Redaction
+        use crate::utils::output_filter::{COMMAND_FILTER, SecurityGuard};
+        
+        // Process Stdout
+        let stdout_str = String::from_utf8_lossy(&output.stdout);
+        let sanitized_stdout = COMMAND_FILTER.strip_control_characters(&stdout_str);
+        let filtered_stdout = COMMAND_FILTER.filter(binary, &sanitized_stdout, exit_code);
+        let redacted_stdout = SecurityGuard::redact_secrets(&filtered_stdout);
+        
+        // Process Stderr
+        let stderr_str = String::from_utf8_lossy(&output.stderr);
+        let sanitized_stderr = COMMAND_FILTER.strip_control_characters(&stderr_str);
+        let filtered_stderr = COMMAND_FILTER.filter(binary, &sanitized_stderr, exit_code);
+        let redacted_stderr = SecurityGuard::redact_secrets(&filtered_stderr);
+
+        // Return standardized output with filtered buffers
+        Ok(std::process::Output {
+            status: output.status,
+            stdout: redacted_stdout.into_bytes(),
+            stderr: redacted_stderr.into_bytes(),
+        })
     }
 
     /// V14.1 Professional Implementation: Dispatches a command to a remote target.

@@ -1,5 +1,5 @@
 use crate::plugins::{ScannerPlugin, Capability, PluginMetadata, RiskLevel, TargetType};
-use crate::models::{TargetHost, Finding, Severity, Category};
+use crate::models::{TargetHost, Finding};
 use crate::core::capability_layer::ScanLayer;
 use async_trait::async_trait;
 use anyhow::Result;
@@ -47,7 +47,7 @@ impl ScannerPlugin for PoCVerifier {
         Ok(true)
     }
 
-    async fn scan(&self, target: &TargetHost) -> Result<Vec<Finding>> {
+    async fn scan(&self, _target: &TargetHost) -> Result<Vec<Finding>> {
         // En una implementación real, aquí se buscarían hallazgos existentes
         // y se intentarían payloads de verificación específicos.
         Ok(Vec::new())

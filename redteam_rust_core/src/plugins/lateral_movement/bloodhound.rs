@@ -1,4 +1,5 @@
 use crate::plugins::{ScannerPlugin, Capability};
+use std::sync::Arc;
 use crate::models::{TargetHost, Finding, Severity, Category};
 use crate::utils::tool_detection::detect_tool;
 use async_trait::async_trait;

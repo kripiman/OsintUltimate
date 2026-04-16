@@ -1,6 +1,6 @@
 use anyhow::{Context, Result};
-use std::path::{Path, PathBuf};
-use tracing::{info, error};
+use std::path::PathBuf;
+use tracing::info;
 use tokio::fs;
 use tokio::io::AsyncWriteExt;
 

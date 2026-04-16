@@ -4,6 +4,7 @@ pub mod scrubber;
 pub mod compressor;
 pub mod router;
 pub mod off_path;
+pub mod caveman;
 
 pub mod ollama;
 pub mod gemini;
