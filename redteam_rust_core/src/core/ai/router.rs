@@ -1,4 +1,6 @@
 use std::sync::Arc;
+use tracing::info;
+use thiserror::Error;
 use std::hash::{Hash, Hasher};
 use std::time::Duration;
 use std::sync::atomic::Ordering;
@@ -9,12 +11,41 @@ use anyhow::{Result, anyhow};
 use crate::models::{Finding, AIAnalysis, TargetHost};
 use crate::plugins::PluginMetadata;
 use crate::core::ai::traits::LlmClient;
-use super::types::{RouteLevel, LlmProviderKind, ProviderEntry, AdaptiveContext, CacheMetrics};
 use super::compressor::ContextCompressor;
+use super::token_optimizer::{PROMPT_OPTIMIZER, OptimizationLevel};
+use super::types::{RouteLevel, LlmProviderKind, ProviderEntry, AdaptiveContext, CacheMetrics, Posture, CavemanLevel};
+
+#[derive(Error, Debug)]
+pub enum RouterError {
+    #[error("API Authentication failed (401/Unauthorized)")]
+    Unauthorized,
+    #[error("Rate limited by provider (429)")]
+    RateLimited,
+    #[error("Provider internal error (500+)")]
+    InternalError,
+    #[error("Generic analysis failure: {0}")]
+    Generic(String),
+}
+
+impl RouterError {
+    fn from_anyhow(err: &anyhow::Error) -> Self {
+        let msg = err.to_string().to_lowercase();
+        if msg.contains("401") || msg.contains("unauthorized") || msg.contains("invalid") {
+            RouterError::Unauthorized
+        } else if msg.contains("429") || msg.contains("rate limit") || msg.contains("too many") {
+            RouterError::RateLimited
+        } else if msg.contains("500") || msg.contains("502") || msg.contains("503") || msg.contains("unreachable") {
+            RouterError::InternalError
+        } else {
+            RouterError::Generic(msg)
+        }
+    }
+}
 
 /// Orchestrates multiple LLM clients based on task complexity/severity.
 pub struct TieredAIRouter {
     pub providers: std::collections::HashMap<RouteLevel, Vec<ProviderEntry>>,
+    pub skill_manager: Option<Arc<crate::core::skills::SkillManager>>,
     analysis_cache: Cache<String, AIAnalysis>, // TACTICAL CACHE: Prevents Azure credit bleed
     metrics: Arc<CacheMetrics>,
 }
@@ -23,12 +54,18 @@ impl TieredAIRouter {
     pub fn new() -> Self {
         Self {
             providers: std::collections::HashMap::new(),
+            skill_manager: None,
             analysis_cache: Cache::builder()
                 .max_capacity(5000)
                 .time_to_live(Duration::from_secs(7200)) // 2h TTL
                 .build(),
             metrics: Arc::new(CacheMetrics::default()),
         }
+    }
+
+    pub fn with_skills(mut self, sm: Arc<crate::core::skills::SkillManager>) -> Self {
+        self.skill_manager = Some(sm);
+        self
     }
 
     pub fn add_provider(&mut self, level: RouteLevel, kind: LlmProviderKind, priority: u8, client: Arc<dyn LlmClient>) {
@@ -121,8 +158,11 @@ impl TieredAIRouter {
             };
 
             if let Some(providers) = self.providers.get(&current_level) {
+                // V15: SKILL INJECTION BRIDGE (ENRICHED)
+                let effective_ctx = self.enrich_context_v15(finding, attack_context, current_level, Posture::Ghost, caveman).await;
+
                 for entry in providers {
-                    match entry.client.analyze(finding, target, attack_context, current_level, caveman).await {
+                    match entry.client.analyze(finding, target, effective_ctx.as_deref(), current_level, caveman).await {
                         Ok(analysis) => {
                             let mut analysis = analysis;
                             analysis.model = format!("{} (Tiered: {:?}, Provider: {:?})", analysis.model, current_level, entry.kind);
@@ -130,7 +170,12 @@ impl TieredAIRouter {
                             return Ok(analysis);
                         }
                         Err(e) => {
-                            tracing::warn!("TieredRouter: Provider {:?} in {:?} failed: {}. Trying next...", entry.kind, current_level, e);
+                            let router_err = RouterError::from_anyhow(&e);
+                            tracing::warn!("TieredRouter: Provider {:?} in {:?} failed ({:?}). Trying next...", entry.kind, current_level, router_err);
+                            
+                            if matches!(router_err, RouterError::Unauthorized) {
+                                tracing::error!("🚨 [TieredRouter] 401 Unauthorized detectado en {:?}. Activando Failover Bridge.", entry.kind);
+                            }
                         }
                     }
                 }
@@ -160,8 +205,22 @@ impl TieredAIRouter {
 
             if let Some(providers) = self.providers.get(&current_level) {
                 let caveman = adaptive_context.map(|c| c.current_caveman).unwrap_or_default();
+                let posture = adaptive_context.map(|c| c.posture).unwrap_or(Posture::Ghost);
+                
+                // V15: SKILL INJECTION FOR DECISION (ENRICHED)
+                let effective_ctx = self.enrich_context_v15(finding, attack_context, current_level, posture, caveman).await;
+
                 for entry in providers {
-                    match entry.client.decide_action(finding, target, plugins, attack_context, None, adaptive_context, current_level, caveman).await {
+                    // V15: PLUGIN RAG OPTIMIZATION
+                    // Select only top 15 most relevant tools to save tokens and reduce model confusion
+                    let filtered_plugins = super::plugin_rag::PluginRagManager::select_tools(
+                        finding, 
+                        effective_ctx.as_deref(), 
+                        plugins, 
+                        15
+                    );
+                    
+                    match entry.client.decide_action(finding, target, &filtered_plugins, effective_ctx.as_deref(), None, adaptive_context, current_level, caveman).await {
                         Ok(Some((action, context))) => {
                             return Ok(Some((action, context)));
                         }
@@ -175,5 +234,52 @@ impl TieredAIRouter {
         }
         
         Ok(None)
+    }
+
+    /// V15.2: Unified Context Enrichment with Dynamic Budgeting and Token Optimization.
+    /// Synergy: Skills selected here directly influence Plugin weighting in PluginRagManager.
+    async fn enrich_context_v15(
+        &self,
+        finding: &Finding,
+        base_ctx: Option<&str>,
+        level: RouteLevel,
+        posture: Posture,
+        caveman: CavemanLevel,
+    ) -> Option<String> {
+        let mut effective_ctx = base_ctx.map(|s| s.to_string());
+        
+        if let Some(ref sm) = self.skill_manager {
+            // 1. Determine Dynamic Budget based on Tier
+            let budget = match level {
+                RouteLevel::Local => 300,
+                RouteLevel::Mid => 800,
+                RouteLevel::Premium => 1500,
+            };
+
+            // 2. Match Skills
+            let skills = sm.match_for_context(finding, posture, level, budget).await;
+            if !skills.is_empty() {
+                if let Some(injection) = sm.build_injection(&skills, caveman).await {
+                    info!("🧠 [Router] Inyectando {} skills técnicos (Budget: {} tokens, Tier: {:?}).", skills.len(), budget, level);
+                    
+                    // 3. Apply Token Optimization (Wenyan Ultra) for skill injection
+                    // Even if caveman is not Ultra, we want the skills themselves to be as dense as possible
+                    let optimized_injection = if caveman >= CavemanLevel::Ultra {
+                        PROMPT_OPTIMIZER.optimize(&injection, OptimizationLevel::Ultra)
+                    } else if caveman == CavemanLevel::Lite {
+                        PROMPT_OPTIMIZER.optimize(&injection, OptimizationLevel::Lite)
+                    } else {
+                        PROMPT_OPTIMIZER.optimize(&injection, OptimizationLevel::Full)
+                    };
+
+                    effective_ctx = Some(match effective_ctx {
+                        Some(ctx) => format!("{}\n{}", optimized_injection, ctx),
+                        None => optimized_injection,
+                    });
+                }
+            }
+        }
+        
+        effective_ctx
     }
 }

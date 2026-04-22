@@ -9,7 +9,7 @@ use std::time::Duration;
 use std::sync::Arc;
 use tokio::process::{Command, Child};
 use tokio::sync::Mutex;
-use reqwest::Client;
+
 use serde_json::json;
 
 pub struct CaidoScanner {
@@ -227,7 +227,7 @@ impl ScannerPlugin for CaidoScanner {
                                 severity,
                                 node.get("title").and_then(|t| t.as_str()).unwrap_or("Caido Finding"),
                                 node.clone()
-                            ).with_remediation(node.get("description").and_then(|d| d.as_str()).unwrap_or("No details provided")));
+                            ).with_tactical_path(node.get("description").and_then(|d| d.as_str()).unwrap_or("No details provided")));
                         }
                         break; // Exit polling loop if we found anything
                     }

@@ -1,0 +1,26 @@
+# Nuclei Optimized Config for OsintUltimate V14.2
+# Priority 1: High-impact, zero-code noise reduction
+
+severity: critical,high,medium
+exclude-severity: low,info
+
+# Focus only on high-value categories
+include-tags:
+  - cves
+  - vulnerabilities
+  - exposures
+
+# Blacklist noisy/generic findings
+exclude-tags:
+  - misconfig
+  - headers
+  - ssl
+  - tls
+  - generic
+  - default-logins
+
+# Operational optimizations
+stats: true
+silent: true
+project: true
+project-path: /tmp/nuclei_osintultimate_project

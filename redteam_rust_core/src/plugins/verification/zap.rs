@@ -39,7 +39,7 @@ impl ScannerPlugin for ZapScanner {
             cost: 5,
             category: "Verification".to_string(),
             mitre_attacks: vec![],
-            remediation_difficulty: crate::plugins::RiskLevel::Medium,
+            exploit_difficulty: crate::plugins::RiskLevel::Medium,
             blackarch_category: None,
             is_destructive: false,
             poc_mode: true,
@@ -107,7 +107,7 @@ impl ScannerPlugin for ZapScanner {
                     severity,
                     alert.get("alert").and_then(|a| a.as_str()).unwrap_or("ZAP Alert"),
                     alert.clone()
-                ).with_remediation(alert.get("solution").and_then(|s| s.as_str()).unwrap_or("No remediation available")));
+                ).with_tactical_path(alert.get("solution").and_then(|s| s.as_str()).unwrap_or("No tactical path identified")));
             }
         }
 

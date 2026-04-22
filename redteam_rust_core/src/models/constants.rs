@@ -68,3 +68,9 @@ pub const PLUGIN_CRLF: &str = "CRLFuzz";
 pub const PLUGIN_GF: &str = "GfScanner";
 pub const PLUGIN_CAIDO: &str = "CaidoScanner";
 pub const PLUGIN_SOVEREIGN_RECON: &str = "SovereignReconScanner";
+
+// OOB Verification Defaults
+pub const OOB_DEFAULT_POLL_INTERVAL_MS: u64 = 5000;
+pub const OOB_DEFAULT_TOTAL_WAIT_SECONDS: u64 = 60;
+pub const OOB_DEFAULT_SERVER: &str = "interact.sh";
+

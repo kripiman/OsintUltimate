@@ -34,7 +34,7 @@ impl ScannerPlugin for FeroxbusterScanner {
             cost: 5,
             category: "Enumeration".to_string(),
             mitre_attacks: vec![],
-            remediation_difficulty: crate::plugins::RiskLevel::Medium,
+            exploit_difficulty: crate::plugins::RiskLevel::Medium,
             blackarch_category: None,
             is_destructive: false,
             poc_mode: false,
@@ -75,7 +75,7 @@ impl ScannerPlugin for FeroxbusterScanner {
                 Severity::Info,
                 &format!("Discovered path via feroxbuster: {}", line),
                 serde_json::json!({ "output": line.trim() })
-            ).with_remediation("Review the discovered path for sensitive information or unauthorized access."));
+            ).with_tactical_path("Review the discovered path for sensitive information or unauthorized access."));
         }
         Ok(findings)
     }

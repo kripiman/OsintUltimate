@@ -3,6 +3,7 @@ use crate::models::{TargetHost, Finding, Severity, Category};
 use crate::utils::tool_detection::detect_tool;
 use async_trait::async_trait;
 use anyhow::Result;
+use std::sync::Arc;
 use tracing::info;
 pub struct InteractshScanner {
     binary_path: String,
@@ -32,7 +33,7 @@ impl ScannerPlugin for InteractshScanner {
             cost: 5,
             category: "Enumeration".to_string(),
             mitre_attacks: vec![],
-            remediation_difficulty: crate::plugins::RiskLevel::Medium,
+            exploit_difficulty: crate::plugins::RiskLevel::Medium,
             blackarch_category: None,
             is_destructive: false,
             poc_mode: false,
@@ -45,15 +46,26 @@ impl ScannerPlugin for InteractshScanner {
         Ok(crate::utils::check_tool_availability("interactsh").await)
     }
     async fn scan(&self, target: &TargetHost) -> Result<Vec<Finding>> {
-        info!("InteractshScanner: checking for OOB interactions on {}", target.host);
-        // interactsh-client execution
+        info!("InteractshScanner: Provisioning OOB environment for {}", target.host);
+        
+        let oob_mgr = crate::core::verification::interaction::OobInteractionManager::new(
+            Arc::new(crate::utils::proxy::ProxyManager::new(Vec::new(), false, crate::utils::config::ProxyMode::Dante, 0))
+        );
+        
+        let oob_id = oob_mgr.generate_id();
+        let oob_domain = oob_mgr.get_oob_domain(&oob_id);
+
         let mut findings = Vec::new();
         findings.push(Finding::new(
             "OOB-TESTING-READY",
             Category::Recon,
             Severity::Info,
-            &format!("Interactsh OOB testing environment is ready for target {}.", target.host),
-            serde_json::json!({ "binary": self.binary_path })
+            &format!("Interactsh OOB testing environment is ready for target {}. Domain: {}", target.host, oob_domain),
+            serde_json::json!({ 
+                "binary": self.binary_path,
+                "oob_id": oob_id,
+                "oob_domain": oob_domain
+            })
         ));
         Ok(findings)
     }

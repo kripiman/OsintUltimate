@@ -34,7 +34,7 @@ impl ScannerPlugin for CloudBruteScanner {
             cost: 5,
             category: "Enumeration".to_string(),
             mitre_attacks: vec![],
-            remediation_difficulty: crate::plugins::RiskLevel::Medium,
+            exploit_difficulty: crate::plugins::RiskLevel::Medium,
             blackarch_category: None,
             is_destructive: false,
             poc_mode: false,
@@ -74,7 +74,7 @@ impl ScannerPlugin for CloudBruteScanner {
                 Severity::Info,
                 &format!("Discovered cloud asset: {}", line),
                 serde_json::json!({ "asset": line.trim() })
-            ).with_remediation("Investigate the discovered cloud asset for sensitive content or misconfigurations."));
+            ).with_tactical_path("Investigate the discovered cloud asset for sensitive content or misconfigurations."));
         }
         Ok(findings)
     }

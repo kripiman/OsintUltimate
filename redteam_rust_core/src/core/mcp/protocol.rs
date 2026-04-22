@@ -50,6 +50,8 @@ pub struct CallToolResult {
 pub enum McpContent {
     #[serde(rename = "text")]
     Text { text: String },
+    #[serde(rename = "wenyan")]
+    Wenyan { text: String },
 }
 
 // SSE Handshake types

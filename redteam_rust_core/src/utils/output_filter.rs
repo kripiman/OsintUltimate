@@ -34,7 +34,7 @@ impl CommandFilter {
             .collect()
     }
 
-    pub fn filter(&self, binary: &str, output: &str, exit_code: i32) -> String {
+    pub fn filter(&self, binary: &str, output: &str, _exit_code: i32) -> String {
         // Safety cap: Avoid OOM on massive outputs
         if output.len() > 5 * 1024 * 1024 {
             return format!("[OUTPUT TOO LARGE (>5MB) - Compression Skipped]\n{}", &output[..2000]);

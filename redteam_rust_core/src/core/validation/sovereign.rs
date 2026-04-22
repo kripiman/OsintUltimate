@@ -57,9 +57,9 @@ impl<M: ExecutorMode> PocValidator<M> {
             Complexity: {}\n\n\
             --- MISSION CONTEXT ---\n\
             {}\n\n\
-            --- REMEDIATION ---\n\
+            --- EXPLOIT PATH ---\n\
             {}", 
-            target.host, finding.title, poc.complexity_score, analysis.summary, analysis.remediation
+            target.host, finding.title, poc.complexity_score, analysis.summary, analysis.exploit_path
         );
 
         let req_id = self.approval_gate.request_approval(&format!("HANDOVER: {}", finding.title), 100, &self.operator, &context).await?;

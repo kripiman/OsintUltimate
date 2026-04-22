@@ -39,7 +39,7 @@ impl ScannerPlugin for CRLFScanner {
             cost: 3,
             category: "Enumeration".to_string(),
             mitre_attacks: vec![],
-            remediation_difficulty: crate::plugins::RiskLevel::Medium,
+            exploit_difficulty: crate::plugins::RiskLevel::Medium,
             blackarch_category: None,
             is_destructive: false,
             poc_mode: false,
@@ -90,7 +90,7 @@ impl ScannerPlugin for CRLFScanner {
                     "type": "CRLF Injection",
                     "payload": "Various (detected by crlfuzz)"
                 })
-            ).with_remediation("Sanitize user input and headers to prevent injection of carriage return and line feed characters."));
+            ).with_tactical_path("Sanitize user input and headers to prevent injection of carriage return and line feed characters."));
         }
 
         Ok(findings)

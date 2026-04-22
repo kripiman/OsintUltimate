@@ -7,42 +7,19 @@ use super::scrubber::SCRUBBER;
 pub struct ContextCompressor;
 
 impl ContextCompressor {
-    pub fn compress_finding(finding: &Finding, route_level: RouteLevel) -> serde_json::Value {
+    pub fn compress_finding(finding: &Finding, _route_level: RouteLevel) -> serde_json::Value {
         let mut ev = finding.evidence.data.clone();
         
-        // OPSEC 2026: Mandatory scrubbing for ALL route levels to ensure Zero Leak security
-        let ev_str = serde_json::to_string(&ev).unwrap_or_default();
-        let sanitized_str = SCRUBBER.scrub(&ev_str);
-        if let Ok(sanitized_json) = serde_json::from_str(&sanitized_str) {
-            ev = sanitized_json;
+        // 1. Mandatory scrubbing
+        if let Ok(sanitized) = serde_json::to_string(&ev).map(|s| SCRUBBER.scrub(&s)) {
+            if let Ok(json) = serde_json::from_str(&sanitized) {
+                ev = json;
+            }
         }
 
         // 2. Reduce size for tokens
         if let Some(obj) = ev.as_object_mut() {
-            // Truncate large bodies
-            if let Some(body) = obj.get_mut("body") {
-                if let Some(s) = body.as_str() {
-                    if s.len() > 512 {
-                        *body = serde_json::json!(format!("{}... [TRUNCATED]", &s[..512]));
-                    }
-                }
-            }
-            // Strip noisy headers, keep security/tech ones
-            if let Some(headers) = obj.get_mut("headers") {
-                if let Some(h_obj) = headers.as_object_mut() {
-                    let whitelist = [
-                        "server", "x-powered-by", "content-security-policy", 
-                        "x-frame-options", "strict-transport-security", "location",
-                        "www-authenticate", "x-content-type-options"
-                    ];
-                    let keys: Vec<String> = h_obj.keys().cloned().collect();
-                    for k in keys {
-                        if !whitelist.contains(&k.to_lowercase().as_str()) {
-                            h_obj.remove(&k);
-                        }
-                    }
-                }
-            }
+            Self::minify_evidence_object(obj, 512, false);
         }
 
         serde_json::json!({
@@ -68,16 +45,11 @@ impl ContextCompressor {
 
     /// NEW V10: Compress target host info including tech stack for AI context.
     pub fn compress_target(target: &TargetHost) -> serde_json::value::Value {
-        let mut tech_stack: Vec<String> = Vec::new();
-        for finding in target.findings.iter() {
-            if finding.category == Category::TechnologyStack {
-                if let Some(plugins) = finding.evidence.data.get("plugins") {
-                    if let Some(obj) = plugins.as_object() {
-                        tech_stack.extend(obj.keys().cloned());
-                    }
-                }
-            }
-        }
+        let tech_stack: Vec<String> = target.findings.iter()
+            .filter(|f| f.category == Category::TechnologyStack)
+            .filter_map(|f| f.evidence.data.get("plugins")?.as_object())
+            .flat_map(|obj| obj.keys().cloned())
+            .collect();
 
         serde_json::json!({
             "h": target.host,
@@ -91,22 +63,10 @@ impl ContextCompressor {
     pub fn compress_swarm_context(finding: &Finding, _target: &TargetHost) -> serde_json::Value {
         let mut base = Self::compress_finding(finding, RouteLevel::Local);
         
-        // Planner only needs high-level telemetry, not raw body samples
-        if let Some(obj) = base.as_object_mut() {
-            if let Some(ev) = obj.get_mut("ev").and_then(|e| e.as_object_mut()) {
-                ev.remove("body");
-                ev.remove("raw_response");
-                if let Some(headers) = ev.get_mut("headers").and_then(|h| h.as_object_mut()) {
-                    // Keep ONLY Server and Tech headers for planning
-                    let critical = ["server", "x-powered-by"];
-                    let keys: Vec<String> = headers.keys().cloned().collect();
-                    for k in keys {
-                        if !critical.contains(&k.to_lowercase().as_str()) {
-                            headers.remove(&k);
-                        }
-                    }
-                }
-            }
+        if let Some(ev) = base.get_mut("ev").and_then(|e| e.as_object_mut()) {
+            ev.remove("body");
+            ev.remove("raw_response");
+            Self::minify_headers(ev, &["server", "x-powered-by"]);
         }
         base
     }
@@ -120,20 +80,49 @@ impl ContextCompressor {
             "desc": finding.description,
         });
 
-        if let Some(obj) = base.as_object_mut() {
-            if let Some(ev) = finding.evidence.data.as_object() {
-                let mut compressed_ev = ev.clone();
-                // Ultra-aggressive snippet truncation
-                if let Some(snippet) = compressed_ev.get_mut("snippet") {
-                    if let Some(s) = snippet.as_str() {
-                        if s.len() > 300 {
-                            *snippet = serde_json::json!(format!("{}... [TRUNCATED]", &s[..300]));
-                        }
+        if let (Some(obj), Some(ev)) = (base.as_object_mut(), finding.evidence.data.as_object()) {
+            let mut compressed_ev = ev.clone();
+            if let Some(val) = compressed_ev.get_mut("snippet") {
+                if let Some(s) = val.as_str() {
+                    if s.len() > 300 {
+                        *val = serde_json::json!(format!("{}... [TRUNCATED]", &s[..300]));
                     }
                 }
-                obj.insert("ev".to_string(), serde_json::Value::Object(compressed_ev));
             }
+            obj.insert("ev".to_string(), serde_json::Value::Object(compressed_ev));
         }
         base
     }
+
+    // --- INTERNAL HELPERS TO PREVENT ARROW PATTERN ---
+
+    fn minify_evidence_object(obj: &mut serde_json::Map<String, serde_json::Value>, body_limit: usize, planner_only: bool) {
+        // Truncate bodies
+        if let Some(val) = obj.get_mut("body") {
+            if let Some(s) = val.as_str() {
+                if s.len() > body_limit {
+                    *val = serde_json::json!(format!("{}... [TRUNCATED]", &s[..body_limit]));
+                }
+            }
+        }
+
+        let whitelist = if planner_only {
+            vec!["server", "x-powered-by"]
+        } else {
+            vec![
+                "server", "x-powered-by", "content-security-policy", 
+                "x-frame-options", "strict-transport-security", "location",
+                "www-authenticate", "x-content-type-options"
+            ]
+        };
+
+        Self::minify_headers(obj, &whitelist);
+    }
+
+    fn minify_headers(obj: &mut serde_json::Map<String, serde_json::Value>, whitelist: &[&str]) {
+        if let Some(h_obj) = obj.get_mut("headers").and_then(|h| h.as_object_mut()) {
+            h_obj.retain(|k, _| whitelist.contains(&k.to_lowercase().as_str()));
+        }
+    }
+
 }

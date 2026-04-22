@@ -239,6 +239,9 @@ impl<M: ExecutorMode> Pipeline<M> {
         v4_sink.start_worker(final_sink);
 
         while let Some(mut target) = sink_rx.recv().await {
+            // V14.2 ENRICHMENT (Phase B): Auto-enrich findings with persistent CVE cache metadata
+            Self::enrich_target_findings_static(&mut target).await;
+            
             Arc::make_mut(&mut target.findings).retain(|f| fp_filter.evaluate(f));
             v4_sink.enqueue(target);
         }
@@ -254,8 +257,14 @@ impl<M: ExecutorMode> Pipeline<M> {
         
         let (tx, mut rx) = mpsc::channel::<TargetHost>(100);
         let fp_filter = self.fp_filter.clone();
+        
+        // V14.2: We need a copy of the self-context for enrichment if needed, 
+        // but here we'll use the static manager for simplicity.
         let handle = tokio::spawn(async move {
             while let Some(mut target) = rx.recv().await {
+                // V14.2 ENRICHMENT: Local Cache lookup
+                Self::enrich_target_findings_static(&mut target).await;
+
                 Arc::make_mut(&mut target.findings).retain(|f| fp_filter.evaluate(f));
                 let _ = sink.write(&target).await;
             }
@@ -263,6 +272,46 @@ impl<M: ExecutorMode> Pipeline<M> {
         });
 
         Ok((tx, handle))
+    }
+
+
+    /// Static version of enrichment to avoid lifetime issues in background tasks.
+    async fn enrich_target_findings_static(target: &mut TargetHost) {
+        let manager = match crate::utils::cve_cache::CveCacheManager::global() {
+            Some(m) => m,
+            None => return,
+        };
+
+        let re = regex::Regex::new(r"CVE-\d{4}-\d{4,}").unwrap();
+        let findings_mut = Arc::make_mut(&mut target.findings);
+
+        for finding in findings_mut.iter_mut() {
+            // Try to find CVE ID in title, id or description
+            let cve_id = if let Some(cap) = re.captures(&finding.id) {
+                Some(cap[0].to_uppercase())
+            } else if let Some(cap) = re.captures(&finding.title) {
+                Some(cap[0].to_uppercase())
+            } else {
+                None
+            };
+
+            if let Some(id) = cve_id {
+                if let Ok(Some(meta)) = manager.get_or_fetch_cve(&id).await {
+                    info!("✨ V14.2 ENRICH: Enriched finding {} with cached metadata for {}", finding.id, id);
+                    if finding.tactical_path.is_none() {
+                        finding.tactical_path = meta.tactical_path;
+                    }
+                    if let Some(score) = meta.cvss_score {
+                        finding.cvss_score = Some(score);
+                    }
+                    for r in meta.references {
+                        if !finding.references.contains(&r) {
+                            finding.references.push(r);
+                        }
+                    }
+                }
+            }
+        }
     }
 
 

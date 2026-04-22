@@ -38,7 +38,7 @@ impl ScannerPlugin for BurpScanner {
             cost: 5,
             category: "Verification".to_string(),
             mitre_attacks: vec![],
-            remediation_difficulty: crate::plugins::RiskLevel::Medium,
+            exploit_difficulty: crate::plugins::RiskLevel::Medium,
             blackarch_category: None,
             is_destructive: false,
             poc_mode: true,
@@ -102,7 +102,7 @@ impl ScannerPlugin for BurpScanner {
                         severity,
                         issue.get("name").and_then(|n| n.as_str()).unwrap_or("Burp Issue"),
                         issue.clone()
-                    ).with_remediation(issue.get("remediation").and_then(|r| r.as_str()).unwrap_or("No remediation available")));
+                    ).with_tactical_path(issue.get("remediation").and_then(|r| r.as_str()).unwrap_or("No tactical path identified")));
                 }
             }
         }

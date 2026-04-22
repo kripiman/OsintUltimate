@@ -102,7 +102,7 @@ impl PrivescHunterScanner {
                     "privilege": "SeImpersonatePrivilege",
                     "abuse_path": "PrintNightmare -> SYSTEM",
                 })
-            ).with_remediation("Disable Print Spooler or patch CVE-2021-34527")
+            ).with_tactical_path("Disable Print Spooler or patch CVE-2021-34527")
              .with_mitre_attack(vec!["T1134".to_string()]));
         }
 

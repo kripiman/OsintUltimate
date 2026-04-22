@@ -3,6 +3,16 @@
 version = 4
 
 [[package]]
+name = "addr"
+version = "0.15.6"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a93b8a41dbe230ad5087cc721f8d41611de654542180586b315d9f4cf6b72bef"
+dependencies = [
+ "psl",
+ "psl-types",
+]
+
+[[package]]
 name = "adler2"
 version = "2.0.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2791,6 +2801,21 @@ dependencies = [
 ]
 
 [[package]]
+name = "psl"
+version = "2.1.203"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "76c0777260d32b76a8c3c197646707085d37e79d63b5872a29192c8d4f60f50b"
+dependencies = [
+ "psl-types",
+]
+
+[[package]]
+name = "psl-types"
+version = "2.0.11"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "33cb294fe86a74cbcf50d4445b37da762029549ebeea341421c7c70370f86cac"
+
+[[package]]
 name = "pulldown-cmark"
 version = "0.9.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2944,11 +2969,13 @@ dependencies = [
 name = "redteam_rust_core"
 version = "0.1.0"
 dependencies = [
+ "addr",
  "anyhow",
  "async-stream",
  "async-trait",
  "axum 0.7.9",
  "aya",
+ "base64",
  "bloomfilter",
  "chrono",
  "clap",

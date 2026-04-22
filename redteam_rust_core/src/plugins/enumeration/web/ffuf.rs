@@ -55,7 +55,7 @@ impl ScannerPlugin for FfufScanner {
             cost: 5,
             category: "Enumeration".to_string(),
             mitre_attacks: vec!["T1595".to_string()],
-            remediation_difficulty: RiskLevel::Low,
+            exploit_difficulty: RiskLevel::Low,
             blackarch_category: Some("webapp".to_string()),
             is_destructive: false,
             poc_mode: true,

@@ -34,7 +34,7 @@ impl ScannerPlugin for CloudFoxScanner {
             cost: 5,
             category: "Enumeration".to_string(),
             mitre_attacks: vec![],
-            remediation_difficulty: crate::plugins::RiskLevel::Medium,
+            exploit_difficulty: crate::plugins::RiskLevel::Medium,
             blackarch_category: None,
             is_destructive: false,
             poc_mode: false,

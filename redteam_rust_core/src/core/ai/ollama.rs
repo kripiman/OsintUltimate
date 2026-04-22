@@ -2,28 +2,22 @@ use anyhow::{Result, Context};
 use async_trait::async_trait;
 use crate::models::{Finding, AIAnalysis, TargetHost};
 use crate::core::ai::{LlmClient, ContextCompressor, AdaptiveContext, RouteLevel, CapabilityGap};
-use crate::utils::common::extract_json;
 use serde_json::json;
 use std::sync::Arc;
 
 pub struct OllamaClient {
+    pub base: super::base::BaseLlmClient,
     pub url: String,
     pub model: String,
-    pub proxy_manager: Option<Arc<crate::utils::proxy::ProxyManager>>,
 }
 
 impl OllamaClient {
-    pub fn new(url: String, model: String, pm: Option<Arc<crate::utils::proxy::ProxyManager>>) -> Result<Self> {
-        Ok(Self { url, model, proxy_manager: pm })
-    }
-
-    async fn get_client(&self) -> Result<reqwest::Client> {
-        let pm = self.proxy_manager.as_ref()
-            .context("V13 OPSEC Violation: OllamaClient requires an active ProxyManager for Sovereign Stealth.")?;
-        
-        let host = url::Url::parse(&self.url)?.host_str().unwrap_or("localhost").to_string();
-        let (_, client) = pm.get_client_fail_closed(&host)?;
-        Ok(client)
+    pub fn new(url: String, model: String, pm: Arc<crate::utils::proxy::ProxyManager>) -> Result<Self> {
+        Ok(Self { 
+            base: super::base::BaseLlmClient::new(pm),
+            url, 
+            model 
+        })
     }
 }
 
@@ -34,21 +28,21 @@ impl LlmClient for OllamaClient {
         let ctx_header = attack_context.map(|c| format!("Tactical Path: {}\n", c)).unwrap_or_default();
         let prompt_raw = format!(
             "### PROFESSIONAL RED TEAM ENGINE (v3.0) ###\n\
-            Analyze this finding based on modern TTPs. Be extremely technical.\n\n\
+            Analyze this finding based on modern TTPs. Be extremely technical. Do not output defensive remediations or fixes; provide the exploit path.\n\n\
             Target: {}\n\
             {}Finding: {}\n\n\
-            JSON Schema: {{ \"summary\": \"...\", \"impact\": \"...\", \"stealth_notes\": \"...\", \"risk_score\": 1-10, \"confidence\": 0.0-1.0, \"mitre_attack\": [\"T1234\"], \"remediation\": \"...\", \"model\": \"{}\" }}",
+            JSON Schema: {{ \"summary\": \"...\", \"impact\": \"...\", \"stealth_notes\": \"...\", \"risk_score\": 1-10, \"confidence\": 0.0-1.0, \"mitre_attack\": [\"T1234\"], \"exploit_path\": \"...\", \"model\": \"{}\" }}",
             target.host, ctx_header, serde_json::to_string(&compressed)?, self.model
         );
         let prompt = crate::core::ai::caveman::CavemanOptimizer::optimize_prompt(&prompt_raw, caveman);
 
-        let client = self.get_client().await?;
+        let client = self.base.get_client("localhost").await?;
         let res: serde_json::Value = client.post(format!("{}/api/generate", self.url))
             .json(&json!({ "model": self.model, "prompt": prompt, "stream": false, "format": "json" }))
             .send().await?.json().await?;
 
         let response_text = res["response"].as_str().context("Ollama response missing text")?;
-        let mut analysis: AIAnalysis = serde_json::from_str(extract_json(response_text))?;
+        let mut analysis: AIAnalysis = serde_json::from_value(self.base.parse_extraction(response_text)?)?;
         
         if let Some(prompt_tokens) = res["prompt_eval_count"].as_u64() {
             analysis.usage.prompt_tokens = prompt_tokens as u32;
@@ -89,13 +83,13 @@ impl LlmClient for OllamaClient {
         );
         let prompt = crate::core::ai::caveman::CavemanOptimizer::optimize_prompt(&prompt_raw, caveman);
 
-        let client = self.get_client().await?;
+        let client = self.base.get_client("localhost").await?;
         let res: serde_json::Value = client.post(format!("{}/api/generate", self.url))
             .json(&json!({ "model": self.model, "prompt": prompt, "stream": false, "format": "json" }))
             .send().await?.json().await?;
 
         let text = res["response"].as_str().context("Ollama decision missing text")?;
-        let json_val: serde_json::Value = serde_json::from_str(extract_json(text))?;
+        let json_val: serde_json::Value = self.base.parse_extraction(text)?;
         let action = json_val["action"].as_str().unwrap_or("none");
         
         if action == "none" || !plugins.iter().any(|p| p.name == action) {

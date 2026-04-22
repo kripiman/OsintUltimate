@@ -134,8 +134,13 @@ impl OutputFilter {
                     .filter(|line| {
                         let t = line.trim();
                         if t.is_empty() { return false; }
-                        // 1. Reglas genéricas siempre
+                        // 1. Reglas genéricas siempre (GAP-5: Guard for code indentation)
+                        let is_code = t.contains("fn ") || t.contains("def ") || t.contains("pub ") || t.contains("let ") || t.contains("mut ");
+                        
                         for re in GENERIC_NOISE_RULES.iter() {
+                            // If it looks like code, don't apply rules that might strip indentation
+                            if is_code && re.as_str().contains(r"^\s*") { continue; }
+                            
                             if re.is_match(t) { return false; }
                         }
                         // 2. Reglas específicas del plugin
@@ -152,7 +157,12 @@ impl OutputFilter {
                     .filter(|line| {
                         let t = line.trim();
                         if t.is_empty() { return false; }
+                        
+                        let is_code = t.contains("fn ") || t.contains("def ") || t.contains("pub ") || t.contains("let ") || t.contains("mut ");
+
                         for re in GENERIC_NOISE_RULES.iter() {
+                            if is_code && re.as_str().contains(r"^\s*") { continue; }
+                            
                             if re.is_match(t) { return false; }
                         }
                         true
@@ -162,6 +172,22 @@ impl OutputFilter {
         };
 
         filtered.join("\n")
+    }
+
+    /// GAP-8: File type detection.
+    /// Clasifica el contenido como código o lenguaje natural.
+    pub fn is_compressible_file(path: &str) -> bool {
+        matches!(
+            std::path::Path::new(path).extension().and_then(|e| e.to_str()),
+            Some("md") | Some("txt") | Some("markdown") | Some("log") | None
+        )
+    }
+
+    pub fn is_code_file(path: &str) -> bool {
+        matches!(
+            std::path::Path::new(path).extension().and_then(|e| e.to_str()),
+            Some("rs") | Some("py") | Some("js") | Some("ts") | Some("go") | Some("c") | Some("cpp")
+        )
     }
 }
 

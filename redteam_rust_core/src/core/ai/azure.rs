@@ -2,29 +2,26 @@ use anyhow::{Result, Context};
 use async_trait::async_trait;
 use crate::models::{Finding, AIAnalysis, TargetHost};
 use crate::core::ai::{LlmClient, ContextCompressor, AdaptiveContext, RouteLevel, CapabilityGap};
-use crate::utils::common::extract_json;
 use serde_json::json;
 use std::sync::Arc;
 
 pub struct AzureOpenAIClient {
+    pub base: super::base::BaseLlmClient,
     pub endpoint: String,
     pub key: String,
     pub deployment: String,
     pub api_version: String,
-    pub proxy_manager: Option<Arc<crate::utils::proxy::ProxyManager>>,
 }
 
 impl AzureOpenAIClient {
-    pub fn new(endpoint: String, key: String, deployment: String, api_version: String, pm: Option<Arc<crate::utils::proxy::ProxyManager>>) -> Result<Self> {
-        Ok(Self { endpoint, key, deployment, api_version, proxy_manager: pm })
-    }
-    async fn get_client(&self) -> Result<reqwest::Client> {
-        let pm = self.proxy_manager.as_ref()
-            .context("V13 OPSEC Violation: AzureOpenAIClient requires an active ProxyManager for Sovereign Stealth.")?;
-        
-        let host = url::Url::parse(&self.endpoint)?.host_str().unwrap_or("openai.azure.com").to_string();
-        let (_, client) = pm.get_client_fail_closed(&host)?;
-        Ok(client)
+    pub fn new(endpoint: String, key: String, deployment: String, api_version: String, pm: Arc<crate::utils::proxy::ProxyManager>) -> Result<Self> {
+        Ok(Self { 
+            base: super::base::BaseLlmClient::new(pm),
+            endpoint, 
+            key, 
+            deployment, 
+            api_version 
+        })
     }
 }
 
@@ -35,17 +32,19 @@ impl LlmClient for AzureOpenAIClient {
         let ctx = attack_context.map(|c| format!("\nTactical Path: {}", c)).unwrap_or_default();
         let prompt_raw = format!("Target: {}{}, Finding: {}", target.host, ctx, serde_json::to_string(&compressed)?);
         let prompt = crate::core::ai::caveman::CavemanOptimizer::optimize_prompt(&prompt_raw, caveman);
-        let client = self.get_client().await?;
+        
+        let host = url::Url::parse(&self.endpoint)?.host_str().unwrap_or("openai.azure.com").to_string();
+        let client = self.base.get_client(&host).await?;
         let url = format!("{}/openai/deployments/{}/chat/completions?api-version={}", self.endpoint, self.deployment, self.api_version);
         let res = client.post(url).header("api-key", &self.key).json(&json!({
             "messages": [
-                { "role": "system", "content": "### PROFESSIONAL RED TEAM ENGINE ###\nReturn strictly JSON analysis." }, 
+                { "role": "system", "content": "### PROFESSIONAL RED TEAM ENGINE ###\nReturn strictly JSON analysis. You must include these fields: 'summary', 'impact', 'stealth_notes', 'risk_score', 'confidence', 'mitre_attack', 'exploit_path', 'model'. DO NOT output defensive remediations or fixes; provide the exploit path." }, 
                 { "role": "user", "content": prompt }
             ],
             "response_format": { "type": "json_object" }
         })).send().await?.json::<serde_json::Value>().await?;
-        let text = res["choices"][0]["message"]["content"].as_str().context("Azure error")?;
-        Ok(serde_json::from_str(extract_json(text))?)
+        let text = res["choices"][0]["message"]["content"].as_str().context("Azure response format error")?;
+        Ok(serde_json::from_value(self.base.parse_extraction(text)?)?)
     }
 
     async fn decide_action(&self, finding: &Finding, target: &TargetHost, plugins: &[crate::plugins::PluginMetadata], attack_context: Option<&str>, _gap: Option<&CapabilityGap>, adaptive_context: Option<&AdaptiveContext>, route_level: RouteLevel, caveman: super::types::CavemanLevel) -> Result<Option<(String, serde_json::Value)>> {
@@ -53,7 +52,9 @@ impl LlmClient for AzureOpenAIClient {
         let ctx = attack_context.map(|c| format!("\nTactical Path: {}", c)).unwrap_or_default();
         let prompt_raw = format!("Target: {}{}, Finding: {}, Context: {:?}", target.host, ctx, finding.id, adaptive_context);
         let prompt = crate::core::ai::caveman::CavemanOptimizer::optimize_prompt(&prompt_raw, caveman);
-        let client = self.get_client().await?;
+        
+        let host = url::Url::parse(&self.endpoint)?.host_str().unwrap_or("openai.azure.com").to_string();
+        let client = self.base.get_client(&host).await?;
         let url = format!("{}/openai/deployments/{}/chat/completions?api-version={}", self.endpoint, self.deployment, self.api_version);
         let res = client.post(url).header("api-key", &self.key).json(&json!({
             "messages": [
@@ -62,8 +63,8 @@ impl LlmClient for AzureOpenAIClient {
             ],
             "response_format": { "type": "json_object" }
         })).send().await?.json::<serde_json::Value>().await?;
-        let text = res["choices"][0]["message"]["content"].as_str().context("Azure decision error")?;
-        let json_val: serde_json::Value = serde_json::from_str(extract_json(text))?;
+        let text = res["choices"][0]["message"]["content"].as_str().context("Azure decision format error")?;
+        let json_val: serde_json::Value = self.base.parse_extraction(text)?;
         let action = json_val["action"].as_str().unwrap_or("none");
         if action == "none" || !plugins.iter().any(|p| p.name == action) { Ok(None) }
         else { Ok(Some((action.to_string(), json_val["tactical_context"].clone()))) }

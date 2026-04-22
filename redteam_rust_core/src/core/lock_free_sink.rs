@@ -1,15 +1,17 @@
 use crate::models::TargetHost;
 use crate::core::sink::DataSink;
-use crossbeam::queue::SegQueue;
+use crossbeam::queue::ArrayQueue;
 use std::sync::Arc;
 use tokio::sync::Notify;
 use tracing::{info, error};
 
+const MAX_SINK_CAPACITY: usize = 200_000;
+
 /// ARCH-v4: Lock-Free Result Sink
-/// Replaces MPSC bounded channels with an unbounded SegQueue for zero-block ingestion.
+/// Replaces MPSC bounded channels with a bounded ArrayQueue for zero-block ingestion with memory limits.
 /// Batches writes into single transactions to maximize I/O throughput.
 pub struct LockFreeResultSink {
-    queue: Arc<SegQueue<TargetHost>>,
+    queue: Arc<ArrayQueue<TargetHost>>,
     running: Arc<std::sync::atomic::AtomicBool>,
     notify: Arc<Notify>,
 }
@@ -17,7 +19,7 @@ pub struct LockFreeResultSink {
 impl LockFreeResultSink {
     pub fn new() -> Self {
         Self {
-            queue: Arc::new(SegQueue::new()),
+            queue: Arc::new(ArrayQueue::new(MAX_SINK_CAPACITY)),
             running: Arc::new(std::sync::atomic::AtomicBool::new(true)),
             notify: Arc::new(Notify::new()),
         }
@@ -61,8 +63,11 @@ impl LockFreeResultSink {
     }
 
     pub fn enqueue(&self, target: TargetHost) {
-        self.queue.push(target);
-        self.notify.notify_one();
+        if let Err(t) = self.queue.push(target) {
+            error!("⚠️  v4-SINK: Results queue is FULL (capacity reached). Dropping target {} to prevent OOM.", t.host);
+        } else {
+            self.notify.notify_one();
+        }
     }
 
     pub fn stop(&self) {

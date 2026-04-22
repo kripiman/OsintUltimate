@@ -1,140 +1,128 @@
-# OsintUltimate V14.1 - Project Structure
+# OsintUltimate — Project Structure
 
-## Root Directory Organization
+## Repository Layout
 
 ```
 OsintUltimate/
-├── .amazonq/rules/memory-bank/     # AI assistant memory bank
-├── .github/workflows/              # CI/CD automation
-├── docs/                          # General documentation
-├── prompts/                       # AI prompt templates
-├── redteam_rust_core/            # Main Rust application
-├── repo_readmes/                 # Reference documentation
-├── scratch/                      # Development workspace
-├── skills/                       # Capability definitions
-└── README.md                     # Project overview
+├── redteam_rust_core/       # Main Rust crate (the entire engine)
+│   ├── src/
+│   │   ├── main.rs          # CLI entrypoint, Args (clap), engine wiring
+│   │   ├── menu.rs          # Interactive TUI menu (inquire)
+│   │   ├── lib.rs           # Crate root, re-exports
+│   │   ├── core/            # Engine internals
+│   │   ├── models/          # Shared data types
+│   │   ├── plugins/         # Offensive capability plugins
+│   │   ├── infrastructure/  # Cloud/proxy provisioning
+│   │   └── utils/           # Cross-cutting utilities
+│   ├── Cargo.toml
+│   ├── Dockerfile / docker-compose.yml
+│   └── docs/                # Technical specs (SOVEREIGN_SYSTEMS, V14_CORE_ARCHITECTURE, …)
+├── docs/                    # Project-level docs, roadmaps, comparative analyses
+├── prompts/                 # LLM audit/remediation prompt templates
+├── repo_readmes/            # Reference READMEs from comparable tools
+├── triage_automation/       # Standalone triage scripts/utils
+├── skills/                  # Tactical knowledge base (MITRE techniques)
+├── scratch/                 # Throwaway experiments
+├── .amazonq/rules/memory-bank/  # This Memory Bank
+├── CLAUDE.md                # AI assistant context/instructions
+├── MEMORIA.md               # Running project memory/decisions log
+└── HANDOFF.md               # Handoff notes between sessions
 ```
 
-## Core Application Structure (redteam_rust_core/)
+## Core Module Breakdown (`src/core/`)
 
-### Source Code Organization (`src/`)
+| Module | Responsibility |
+|---|---|
+| `engine/` | `RedTeamEngine` — top-level orchestrator; `EngineConfig`; `run_pipeline()` / `run_autopilot()` |
+| `factory.rs` | `EngineFactory` — hardware detection, infrastructure limit calculation |
+| `pipeline.rs` | Sequential scan pipeline; layer-gated execution |
+| `orchestrator.rs` | Sentinel Sovereign Orchestrator; waterfall discovery loop |
+| `swarm/` | `SwarmOrchestrator`, `TokenBudget` admission control, agent role dispatch |
+| `ai/` | Multi-provider LLM routing (Ollama, OpenAI, Anthropic, Azure, Gemini); token optimizer; context compressor; scrubber |
+| `mcp/` | MCP SSE server; protocol types; input sanitizer |
+| `agent.rs` | Individual agent task execution |
+| `approval_gate.rs` | Human-in-the-loop gate for Layer 4+ operations |
+| `capability_layer.rs` | `ScanLayer` enum (Passive → PostExploitation) |
+| `sandbox.rs` | `SandboxDispatcher` — Docker + FluidLocal process isolation |
+| `sink.rs` | `MultiSink`, `JsonlSink`, `SqliteSink`, `TacticalWebhookSink` |
+| `lock_free_sink.rs` | Lock-free telemetry ingestion (io-uring backed) |
+| `persistence.rs` | Post-exploit persistence orchestration |
+| `c2.rs` | C2 session management |
+| `correlation/` | `AttackGraph` DFS; AD ingestor |
+| `policy/` | `PolicyProvider`, `StaticPolicy` — PSL + regex scope enforcement, RoE |
+| `validation/` | PoC executor, exploit generator, sovereign validator |
+| `waf/` | WAF detection engine and evasion profiles |
+| `web/` | Axum dashboard server; embedded assets; ed25519 JWT auth |
+| `filter.rs` | Output deduplication and noise filtering |
+| `middleware.rs` | Request middleware (jitter, rate limiting) |
+| `plugin_loader.rs` | Dynamic `.so` plugin loading via `libloading` |
+| `blackarch.rs` | BlackArch tool catalogue integration |
+| `native_scanner.rs` | Built-in port/service scanner (smoltcp / io-uring) |
+| `source_analyzer.rs` | Source code analysis capabilities |
+| `resource_manager.rs` | Memory and CPU resource tracking |
 
-#### Core Systems (`core/`)
-- **ai/**: Multi-tiered LLM routing and AI orchestration
-  - Provider integrations (OpenAI, Anthropic, Azure, Gemini, Ollama)
-  - Context compression and token optimization
-  - Router for adaptive decision-making
-- **correlation/**: Active Directory ingestion and attack graph analysis
-- **engine/**: Main application engine and orchestration
-- **mcp/**: Model Context Protocol implementation
-- **swarm/**: Multi-agent orchestration and token budgeting
-- **validation/**: PoC validation and sovereign execution
-- **waf/**: Web Application Firewall engine and policies
-- **web/**: Web interface and API handlers
+## Plugin Categories (`src/plugins/`)
 
-#### Infrastructure (`infrastructure/`)
-- **decoy/**: Decoy infrastructure management
-- **digital_ocean.rs**: Cloud provider integration
-- **proxy.rs**: Proxy chain management and stealth networking
+```
+reconnaissance/
+  ├── active/    — dnsx, httpx, naabu
+  ├── osint/     — amass, subfinder, uncover, sovereign_recon
+  └── passive/   — gitleaks, trufflehog, wayback
+enumeration/
+  ├── network/   — nmap (with parser), rustscan
+  ├── web/       — ffuf, feroxbuster, katana, nikto, gowitness, …
+  └── cloud/     — cloudbrute, cloudfox, pacu, prowler, kubebench
+exploitation/
+  ├── web/       — sqlmap, dalfox, commix, jwt_tool, wapiti
+  └── network/   — hydra, impacket, netexec, responder, coercer
+intelligence/   — nuclei, jaeles, searchsploit
+lateral_movement/ — bloodhound, sliver, ligolo
+privilege_escalation/ — certipy, privesc_hunter
+persistence/    — havoc
+compliance/     — trivy, checkov, kubescape, osv_scanner
+verification/   — burp, caido, zap, poc
+reporting/      — bug_bounty
+```
 
-#### Data Models (`models/`)
-- **constants.rs**: System-wide constants and configuration
-- **findings.rs**: Vulnerability and finding data structures
-- **scan_result.rs**: Scan result aggregation and storage
+## Models (`src/models/`)
 
-#### Plugin System (`plugins/`)
-Organized by operational phase and capability:
+- `findings.rs` — `Finding` struct (cvss_score, mitre_attack, evidence, severity)
+- `scan_result.rs` — `ScanResult`, `TargetHost`, `TargetStatus`, `TargetType`
+- `objectives.rs` — Objective tracking types
+- `constants.rs` — Shared constants
 
-- **reconnaissance/**: Intelligence gathering
-  - `osint/`: Passive intelligence (Amass, Subfinder, Sovereign Recon)
-  - `active/`: Active discovery (DNSx, HTTPx, Naabu)
-  - `passive/`: Passive analysis (Wayback, GitLeaks, TruffleHog)
+## Infrastructure (`src/infrastructure/`)
 
-- **enumeration/**: Target enumeration
-  - `network/`: Network scanning (Nmap, RustScan)
-  - `web/`: Web application enumeration (Feroxbuster, FFUF, Katana)
-  - `cloud/`: Cloud infrastructure enumeration (CloudBrute, Prowler)
+- `digital_ocean.rs` — Ephemeral droplet provisioning, destroy-all kill-switch
+- `proxy.rs` — Proxy pool management, rotation logic
+- `decoy/` — Decoy traffic generation and control
 
-- **intelligence/**: Vulnerability intelligence
-  - `nuclei.rs`: Template-based vulnerability scanning
-  - `jaeles.rs`: Web application security testing
-  - `searchsploit.rs`: Exploit database integration
+## Utils (`src/utils/`)
 
-- **exploitation/**: Active exploitation
-  - `web/`: Web application exploitation (SQLMap, Commix, Dalfox)
-  - `network/`: Network exploitation (Impacket, NetExec, Hydra)
-  - `mobile/`: Mobile application testing
-  - `wireless/`: Wireless security testing
-
-- **lateral_movement/**: Post-exploitation movement
-  - `bloodhound.rs`: Active Directory analysis
-  - `sliver.rs`: C2 framework integration
-  - `ligolo.rs`: Network tunneling
-
-- **persistence/**: Persistence establishment
-  - `havoc.rs`: Advanced C2 framework integration
-
-- **privilege_escalation/**: Privilege escalation
-  - `certipy.rs`: Certificate-based escalation
-  - `privesc_hunter.rs`: Automated privilege escalation
-
-- **compliance/**: Security compliance scanning
-  - `trivy.rs`: Container vulnerability scanning
-  - `checkov.rs`: Infrastructure as Code scanning
-  - `kubescape.rs`: Kubernetes security
-
-- **verification/**: Manual verification tools
-  - `burp.rs`: Burp Suite integration
-  - `caido.rs`: Caido proxy integration
-  - `zap.rs`: OWASP ZAP integration
-
-- **reporting/**: Report generation and output
-
-#### Utilities (`utils/`)
-- **executor.rs**: Stealth command execution
-- **proxy.rs**: Proxy management and validation
-- **security.rs**: Security controls and OPSEC
-- **telemetry.rs**: Monitoring and observability
-- **hardware_detection.rs**: System capability detection
-- **report_gen.rs**: Report generation utilities
+| File | Purpose |
+|---|---|
+| `config.rs` | `Config::from_env()` — all env-var configuration |
+| `telemetry.rs` | OTel init/shutdown, tracing subscriber setup |
+| `activity_log.rs` | JSONL event log per engagement |
+| `report_gen.rs` | HTML report generation from JSONL via Handlebars |
+| `executor.rs` | Async subprocess execution with timeout/kill |
+| `sandbox.rs` | Metacharacter sanitization for shell commands |
+| `proxy.rs` | SOCKS5 proxy client helpers |
+| `jitter.rs` | Randomized delay distributions for OPSEC |
+| `stealth_http.rs` | Stealth HTTP client (UA pinning, header normalization) |
+| `cvss.rs` | CVSS score calculation |
+| `cve_cache.rs` | Local CVE data cache |
+| `deduplication.rs` | Bloom-filter-based finding deduplication |
+| `hardware_detection.rs` | CPU/RAM profiling for auto-concurrency |
+| `memory_monitor.rs` | Runtime memory limit enforcement |
+| `tool_detection.rs` | Checks which external tools are installed |
+| `security.rs` | SSRF-safe host validation, input sanitization |
 
 ## Architectural Patterns
 
-### Multi-Agent Swarm Architecture
-- **Orchestrator**: Central coordination and task distribution
-- **Agent Pool**: Concurrent worker agents with role specialization
-- **Token Budget**: Resource allocation and starvation prevention
-- **Priority Queue**: Critical task prioritization
-
-### Plugin-Based Extensibility
-- **Modular Design**: Each tool as independent plugin
-- **Trait-Based Interface**: Consistent plugin API
-- **Dynamic Loading**: Runtime plugin discovery and loading
-- **Capability Layers**: Phased operational capabilities (0-5)
-
-### Stealth and OPSEC Integration
-- **Proxy Wrapping**: All network traffic through proxy chains
-- **Stealth Executor**: Sandboxed command execution
-- **Approval Gates**: Human-in-the-loop controls
-- **Fail-Closed Design**: Abort on security boundary violations
-
-### Data Flow Architecture
-- **Lock-Free Pipeline**: High-throughput data processing
-- **Correlation Engine**: Attack graph construction and analysis
-- **Persistence Layer**: SQLite-based result storage
-- **Telemetry Sink**: Observability and monitoring
-
-## Configuration and Deployment
-
-### Docker Integration
-- **Multi-stage builds**: Optimized container images
-- **Tool isolation**: Containerized security tools
-- **Compose orchestration**: Multi-service deployment
-
-### Documentation Structure (`docs/`)
-- **SOVEREIGN_SYSTEMS.md**: Core system specifications
-- **V14_CORE_ARCHITECTURE.md**: Architectural overview
-- **AI_ARCHITECTURE.md**: AI system design
-- **SWARM_DYNAMICS.md**: Multi-agent coordination
-- **ADAPTIVE_EVASION.md**: Stealth and evasion techniques
-- **PLUGIN_DEVELOPMENT.md**: Plugin development guide
+1. **Layer-gated execution**: `ScanLayer` enum gates which plugins run; `--max-layer` CLI flag controls depth.
+2. **Sink abstraction**: all findings flow through `DataSink` trait → `MultiSink` fan-out.
+3. **Fail-closed egress**: proxy liveness checked before any active operation; aborts on failure.
+4. **Token budget**: `TokenBudget` (atomic) shared across swarm agents; critical roles get reserved quota.
+5. **Plugin trait**: all plugins implement a common async trait; loaded statically or dynamically via FFI.
+6. **ApprovalGate**: async channel-based human confirmation required before exploitation layers.

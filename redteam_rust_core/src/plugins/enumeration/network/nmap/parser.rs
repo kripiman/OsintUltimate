@@ -1,5 +1,5 @@
 use crate::models::{Finding, Category, Severity};
-use crate::plugins::enumeration::network::nmap::classifier::{classify_script_severity, map_category, suggest_remediation};
+use crate::plugins::enumeration::network::nmap::classifier::{classify_script_severity, map_category, suggest_exploit_vector};
 use anyhow::Result;
 use quick_xml::reader::Reader;
 use quick_xml::events::Event;
@@ -78,8 +78,8 @@ pub fn parse_nmap_xml<R: BufRead>(reader: R) -> Result<Vec<Finding>> {
                                 &format!("NSE Script {}: {}", id, output.lines().next().unwrap_or("")),
                                 serde_json::json!({ "script_id": id, "output": output, "port": portid })
                             );
-                            if let Some(rem) = suggest_remediation(&id, &severity) {
-                                finding = finding.with_remediation(&rem);
+                            if let Some(rem) = suggest_exploit_vector(&id, &severity) {
+                                finding = finding.with_tactical_path(&rem);
                             }
                             local_findings.push(finding);
                         }

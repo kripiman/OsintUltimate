@@ -4,14 +4,13 @@ use crate::core::c2::{C2Operator, C2Session, SessionState};
 use crate::utils::executor::{StealthExecutor, ExecutorMode};
 use async_trait::async_trait;
 use anyhow::{Result, Context};
-use tracing::{info, warn, error};
+use tracing::info;
 use std::sync::Arc;
 use serde_json::Value;
 
 pub struct SovereignSliverOperator<M: ExecutorMode> {
     grpc_client: Option<Arc<SliverGrpcClient>>,
     executor: Arc<StealthExecutor<M>>,
-    server_addr: String,
 }
 
 struct SliverGrpcClient {
@@ -117,7 +116,6 @@ impl<M: ExecutorMode> SovereignSliverOperator<M> {
         Ok(Self {
             grpc_client,
             executor,
-            server_addr,
         })
     }
 
@@ -241,7 +239,7 @@ impl<M: ExecutorMode> ScannerPlugin for SovereignSliverOperator<M> {
             cost: 15,
             category: "Lateral Movement".to_string(),
             mitre_attacks: vec!["T1105".to_string(), "T1071".to_string(), "T1090".to_string()],
-            remediation_difficulty: crate::plugins::RiskLevel::High,
+            exploit_difficulty: crate::plugins::RiskLevel::High,
             blackarch_category: Some("backdoor".to_string()),
             is_destructive: false,
             poc_mode: false,

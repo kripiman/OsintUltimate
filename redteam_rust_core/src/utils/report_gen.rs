@@ -88,8 +88,8 @@ const HTML_TEMPLATE: &str = r#"
     .finding-description { font-size: 1rem; margin-bottom: 12px; color: #e2e8f0; }
     .finding-evidence { font-family: 'Fira Code', ui-monospace, monospace; font-size: 0.875rem; background: #020617; color: #38bdf8; padding: 16px; border-radius: 8px; margin-top: 12px; white-space: pre-wrap; word-break: break-all; border: 1px solid #1e293b; }
     
-    .remediation-box { background: rgba(74, 222, 128, 0.05); border-left: 4px solid var(--low); padding: 16px; margin-top: 16px; border-radius: 0 8px 8px 0; font-size: 0.9375rem; }
-    .remediation-label { font-weight: 800; color: var(--low); font-size: 0.75rem; text-transform: uppercase; margin-bottom: 8px; display: block; }
+    .tactical_path-box { background: rgba(74, 222, 128, 0.05); border-left: 4px solid var(--low); padding: 16px; margin-top: 16px; border-radius: 0 8px 8px 0; font-size: 0.9375rem; }
+    .tactical_path-label { font-weight: 800; color: var(--low); font-size: 0.75rem; text-transform: uppercase; margin-bottom: 8px; display: block; }
 
     .references-list { margin-top: 12px; font-size: 0.8125rem; color: var(--muted); }
     .references-list a { color: var(--accent); text-decoration: none; margin-right: 12px; }
@@ -185,10 +185,10 @@ const HTML_TEMPLATE: &str = r#"
                 </div>
                 {{/if}}
 
-                {{#if remediation}}
-                <div class="remediation-box">
-                  <span class="remediation-label">🛠️ Technical Remediation</span>
-                  <div>{{remediation}}</div>
+                {{#if tactical_path}}
+                <div class="tactical_path-box">
+                  <span class="tactical-label">🛠️ Technical Tactical Path</span>
+                  <div>{{tactical_path}}</div>
                 </div>
                 {{/if}}
 

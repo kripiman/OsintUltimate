@@ -32,7 +32,7 @@ impl ScannerPlugin for PoCVerifier {
             capabilities: vec![],
             cost: 2,
             mitre_attacks: vec!["T1595".to_string()],
-            remediation_difficulty: RiskLevel::Low,
+            exploit_difficulty: RiskLevel::Low,
             blackarch_category: Some("automation".to_string()),
             is_destructive: false,
             poc_mode: false,

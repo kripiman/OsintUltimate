@@ -74,9 +74,9 @@ impl<M: ExecutorMode> C2Operator for HavocScanner<M> {
         let pm = self.executor.get_proxy_manager().context("ProxyManager required for delivery")?;
         
         // 1. Stage payload on OTT server
-        let server = Arc::new(crate::utils::payload_server::PayloadServer::new());
+        let server = crate::utils::payload_server::PayloadServer::new();
         let token = server.stage_payload(std::path::PathBuf::from(payload_path));
-        let server_port = server.clone().start().await?;
+        let server_port = server.start().await?;
         
         // 2. Determine delivery IP
         let delivery_ip = pm.get_managed_exits().first().cloned().unwrap_or_else(|| "127.0.0.1".to_string());
@@ -169,7 +169,7 @@ impl<M: ExecutorMode> ScannerPlugin for HavocScanner<M> {
             cost: 10,
             category: "Persistence".to_string(),
             mitre_attacks: vec!["T1543".to_string(), "T1053".to_string()],
-            remediation_difficulty: crate::plugins::RiskLevel::High,
+            exploit_difficulty: crate::plugins::RiskLevel::High,
             blackarch_category: Some("persistence".to_string()),
             is_destructive: false,
             poc_mode: false,

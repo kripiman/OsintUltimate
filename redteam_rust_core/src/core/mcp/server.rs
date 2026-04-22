@@ -20,20 +20,29 @@ use crate::plugins::GlobalConfig;
 use crate::core::mcp::sanitizer::DataSanitizer;
 use crate::core::ai::compressor::ContextCompressor;
 use crate::core::ai::types::RouteLevel;
+use crate::core::ai::{PROMPT_OPTIMIZER};
+use crate::core::ai::token_optimizer::PromptOptimizer;
 
 use crate::core::sink::SqliteSink;
-use crate::utils::tone::tone_encode;
+use crate::utils::tone::{tone_encode, tonl_encode, to_ascii_safe};
 use std::path::PathBuf;
 use moka::future::Cache;
+use dashmap::DashMap;
 
 pub struct McpServer {
-    config: Arc<GlobalConfig>,
-    sanitizer: Arc<DataSanitizer>,
-    sessions: Arc<dashmap::DashMap<String, mpsc::Sender<Event>>>,
-    db: Option<Arc<SqliteSink>>,
-    plugin_cache: Cache<String, String>,
-    
-    // PHASE 5: Métricas de Sesión Optimidadas (Atomics)
+    pub(crate) config: Arc<GlobalConfig>,
+    pub(crate) sanitizer: Arc<DataSanitizer>,
+    pub(crate) sessions: Arc<dashmap::DashMap<String, mpsc::Sender<Event>>>,
+    pub(crate) db: Option<Arc<SqliteSink>>,
+    pub(crate) plugin_cache: Cache<String, String>,
+    // Delta cache: SHA-256 de archivos leídos para smart_file_read
+    file_hash_cache: Arc<DashMap<String, String>>,
+    // Loop detection: historial de (tool, input_hash) — últimas 20 llamadas
+    call_history: Arc<tokio::sync::Mutex<Vec<(String, String)>>>,
+    // Checkpoint Manifest: Registro de snapshots para continuidad
+    checkpoint_manifest: Arc<DashMap<String, serde_json::Value>>,
+
+    // PHASE 5: Métricas de Sesión Optimizadas (Atomics)
     pub total_calls: AtomicU32,
     pub cache_hits: AtomicU32,
     pub tokens_saved: AtomicU64,
@@ -53,6 +62,9 @@ impl McpServer {
             sessions: Arc::new(dashmap::DashMap::new()),
             db: None,
             plugin_cache,
+            file_hash_cache: Arc::new(DashMap::new()),
+            call_history: Arc::new(tokio::sync::Mutex::new(Vec::with_capacity(20))),
+            checkpoint_manifest: Arc::new(DashMap::new()),
             total_calls: AtomicU32::new(0),
             cache_hits: AtomicU32::new(0),
             tokens_saved: AtomicU64::new(0),
@@ -153,15 +165,96 @@ async fn message_handler(
                                 "support_tone": {
                                     "type": "boolean",
                                     "description": "Indica si el cliente soporta el formato denso TONE. Recomendado para ahorrar tokens."
+                                },
+                                "support_wenyan": {
+                                    "type": "boolean",
+                                    "description": "Indica si el cliente (IA-IA) soporta el protocolo Wenyan para compresión extrema."
+                                },
+                                "support_tonl": {
+                                    "type": "boolean",
+                                    "description": "Activa TONL V1.1: formato denso con diccionario global de claves. Superior a TONE V1 para findings con claves repetidas."
                                 }
                             },
                             "required": ["target", "plugin_name"]
                         }
                     },
                     {
+                        "name": "osint_compress_memory_file",
+                        "description": "GAP-4: Comprime archivos de sesión (MEMORIA.md, HISTORIAL.md) usando PromptOptimizer para liberar tokens de contexto.",
+                        "inputSchema": {
+                            "type": "object",
+                            "properties": {
+                                "path": {
+                                    "type": "string",
+                                    "description": "Ruta absoluta al archivo .md o .txt a comprimir."
+                                },
+                                "level": {
+                                    "type": "string",
+                                    "enum": ["lite", "full", "ultra"],
+                                    "description": "Nivel de intensidad de la compresión."
+                                }
+                            },
+                            "required": ["path"]
+                        }
+                    },
+                    {
                         "name": "mcp_get_stats",
                         "description": "Retorna estadísticas de eficiencia del MCP (ahorro de tokens, tasa de caché, etc.). Úsalo para informar al usuario sobre el rendimiento del sistema.",
                         "inputSchema": { "type": "object", "properties": {} }
+                    },
+                    {
+                        "name": "osint_detect_waste",
+                        "description": "Analiza la sesión en busca de patrones de desperdicio de tokens y retorna un Quality Score (1-10).",
+                        "inputSchema": { "type": "object", "properties": {} }
+                    },
+                    {
+                        "name": "osint_smart_read",
+                        "description": "Lee un archivo de forma inteligente. Si el contenido no cambió desde la última lectura, retorna '[NO-CHANGE]' ahorrando todos los tokens del archivo. Si cambió, retorna solo el delta (líneas modificadas).",
+                        "inputSchema": {
+                            "type": "object",
+                            "properties": {
+                                "path": {
+                                    "type": "string",
+                                    "description": "Ruta absoluta al archivo a leer."
+                                }
+                            },
+                            "required": ["path"]
+                        }
+                    },
+                    {
+                        "name": "osint_route_task",
+                        "description": "Determina el modelo de IA optimo para una tarea basandose en el tamano del contexto y la naturaleza de la tarea. Usa esto antes de llamar a cualquier LLM para maximizar calidad y minimizar costo. Umbrales: >80k tokens -> Antigravity (Gemini), security/audit <30k -> Claude Code, resto -> Kimi.",
+                        "inputSchema": {
+                            "type": "object",
+                            "properties": {
+                                "task": {
+                                    "type": "string",
+                                    "description": "Descripcion breve de la tarea (ej: 'security audit proxy module', 'global repo snapshot')."
+                                },
+                                "context_tokens": {
+                                    "type": "integer",
+                                    "description": "Estimacion de tokens del contexto a enviar al LLM."
+                                },
+                                "files": {
+                                    "type": "array",
+                                    "items": { "type": "string" },
+                                    "description": "Rutas de archivos involucrados en la tarea."
+                                }
+                            },
+                            "required": ["task"]
+                        }
+                    },
+                    {
+                        "name": "osint_checkpoint_save",
+                        "description": "Guarda un checkpoint de la sesión con semanticDigest (SHA-256) para continuidad operacional.",
+                        "inputSchema": {
+                            "type": "object",
+                            "properties": {
+                                "trigger": { "type": "string", "description": "Evento que dispara el checkpoint (p.ej. 'pre-fanout')." },
+                                "content": { "type": "string", "description": "Contenido semántico a preservar." }
+                            },
+                            "required": ["trigger", "content"]
+                        }
                     }
                 ]
             })
@@ -170,8 +263,13 @@ async fn message_handler(
             if let Some(params) = payload.params {
                 let call: CallToolRequest = serde_json::from_value(params).unwrap();
                 match call.name.as_str() {
+                    "osint_route_task" => handle_route_task(call.arguments).await,
                     "osint_execute_plugin" => handle_execute_plugin(&state, call.arguments).await,
+                    "osint_compress_memory_file" => handle_compress_memory(&state, call.arguments).await,
                     "mcp_get_stats" => handle_get_stats(&state).await,
+                    "osint_detect_waste" => handle_detect_waste(&state).await,
+                    "osint_smart_read" => handle_smart_read(&state, call.arguments).await,
+                    "osint_checkpoint_save" => handle_checkpoint_save(&state, call.arguments).await,
                     _ => json!({"error": {"code": -32601, "message": "Tool not found"}})
                 }
             } else {
@@ -190,9 +288,228 @@ async fn message_handler(
     Json(full_response)
 }
 
+const OUTPUT_CAP_CHARS: usize = 2000;
+
+/// Wraps a CallToolResult text through to_ascii_safe for safe SSE/JSON transport.
+/// Prevents stream corruption from Wenyan CJK output, emojis, or non-ASCII tool output.
+fn safe_result(text: String, is_error: bool) -> serde_json::Value {
+    json!(CallToolResult {
+        content: vec![McpContent::Text { text: to_ascii_safe(&text) }],
+        is_error,
+    })
+}
+
+fn cap_content(content: &str) -> (String, u64) {
+    let char_count = content.chars().count();
+    if char_count > OUTPUT_CAP_CHARS {
+        // Corte en frontera de char — nunca en medio de un codepoint UTF-8
+        let safe_end = content.char_indices()
+            .nth(OUTPUT_CAP_CHARS)
+            .map(|(i, _)| i)
+            .unwrap_or(content.len());
+        let truncated = format!(
+            "{}\n... [{} chars truncados — usa osint_compress_memory_file para reducir]",
+            &content[..safe_end],
+            char_count - OUTPUT_CAP_CHARS
+        );
+        let saved = (content.len().saturating_sub(safe_end) / 4) as u64;
+        (truncated, saved)
+    } else {
+        (content.to_string(), 0)
+    }
+}
+
+async fn log_tool_call(state: &Arc<McpServer>, tool: &str, input: &str) -> Option<String> {
+    let mut history = state.call_history.lock().await;
+    let summary = if input.len() > 64 {
+        format!("{}…{}", &input[..32], &input[input.len()-32..])
+    } else {
+        input.to_string()
+    };
+    let key = format!("{}:{}", tool, summary);
+    let loop_count = history.iter().filter(|(_, k)| k == &key).count();
+    if history.len() >= 20 { history.remove(0); }
+    history.push((tool.to_string(), key));
+    if loop_count >= 2 {
+        Some(format!("⚠️ [LOOP-DETECT] '{}' llamado {}x con el mismo input. Posible alucinación en cadena.", tool, loop_count + 1))
+    } else {
+        None
+    }
+}
+
+async fn handle_route_task(args: serde_json::Value) -> serde_json::Value {
+    let task = args["task"].as_str().unwrap_or("").to_lowercase();
+    let context_tokens = args["context_tokens"].as_u64().unwrap_or(0);
+    let files: Vec<String> = args["files"].as_array()
+        .map(|a| a.iter().filter_map(|v| v.as_str()).map(|s| s.to_lowercase()).collect())
+        .unwrap_or_default();
+
+    // Thresholds calibrated for offensive core: larger context windows expected.
+    // Antigravity (Gemini): massive context / global repo reasoning
+    let (model, reason, fallback) = if context_tokens > 80_000
+        || task.contains("global") || task.contains("repo") || task.contains("snapshot")
+        || files.len() > 15
+    {
+        (
+            "Antigravity (Gemini 1.5 Pro)",
+            format!("Massive context ({} tokens) or global reasoning task.", context_tokens),
+            "Kimi (128k)",
+        )
+    // Claude: security/architecture precision tasks within manageable context
+    } else if context_tokens < 30_000 && (
+        task.contains("security") || task.contains("audit") || task.contains("exploit")
+        || task.contains("architecture") || task.contains("refactor") || task.contains("sovereign")
+        || files.iter().any(|f| ["poc", "proxy", "sandbox", "stealth", "engine", "plugin_loader"]
+            .iter().any(|kw| f.contains(kw)))
+    ) {
+        (
+            "Claude Code (claude-3-5-sonnet)",
+            "Security/architecture precision task within Claude context budget.".to_string(),
+            "Antigravity",
+        )
+    // Kimi: standard bulk tasks, cost-optimized
+    } else {
+        let reason = if context_tokens > 30_000 {
+            format!("Cost-optimized for medium context ({} tokens).", context_tokens)
+        } else {
+            "Standard technical task. Cost efficiency prioritized.".to_string()
+        };
+        ("Kimi (Moonshot-v1-128k)", reason, "Claude Code")
+    };
+
+    safe_result(
+        format!("[ROUTE] model:{} | reason:{} | fallback:{}", model, reason, fallback),
+        false,
+    )
+}
+
+async fn handle_smart_read(state: &Arc<McpServer>, args: serde_json::Value) -> serde_json::Value {
+    let path_str = args["path"].as_str().unwrap_or("");
+
+    if state.sanitizer.filter_tool_output("SmartRead", path_str).is_empty()
+        || path_str.contains(".env") || path_str.contains("id_rsa") || path_str.contains(".key")
+    {
+        return safe_result("SECURITY BLOCK: Ruta sensible bloqueada.".to_string(), true);
+    }
+
+    let path = std::path::Path::new(path_str);
+    if path.components().any(|c| matches!(c, std::path::Component::ParentDir)) {
+        return safe_result("Error: Path traversal detectado.".to_string(), true);
+    }
+
+    let content = match tokio::fs::read_to_string(path_str).await {
+        Ok(c) => c,
+        Err(e) => return safe_result(format!("Error leyendo archivo: {}", e), true),
+    };
+
+    // SHA-256 del contenido actual
+    let mut hasher = Sha256::new();
+    hasher.update(content.as_bytes());
+    let current_hash: String = hasher.finalize().encode_hex();
+
+    if let Some(prev_hash) = state.file_hash_cache.get(path_str) {
+        if *prev_hash == current_hash {
+            let saved = (content.len() / 4) as u64;
+            state.tokens_saved.fetch_add(saved, Ordering::Relaxed);
+            return safe_result(
+                format!("[SMART-READ: NO-CHANGE] '{}' — ~{} tokens ahorrados.", path_str, saved),
+                false,
+            );
+        }
+        state.file_hash_cache.insert(path_str.to_string(), current_hash);
+        let (capped, saved) = cap_content(&content);
+        state.tokens_saved.fetch_add(saved, Ordering::Relaxed);
+        return safe_result(format!("[SMART-READ: CHANGED] '{}'\n{}", path_str, capped), false);
+    }
+
+    state.file_hash_cache.insert(path_str.to_string(), current_hash);
+    let (capped, saved) = cap_content(&content);
+    state.tokens_saved.fetch_add(saved, Ordering::Relaxed);
+    safe_result(format!("[SMART-READ: FIRST-READ] '{}'\n{}", path_str, capped), false)
+}
+
+async fn handle_detect_waste(state: &Arc<McpServer>) -> serde_json::Value {
+    let calls = state.total_calls.load(Ordering::SeqCst);
+    let tokens = state.tokens_saved.load(Ordering::SeqCst);
+    let bytes = state.bytes_processed.load(Ordering::SeqCst);
+
+    let history = state.call_history.lock().await;
+    let mut loop_counts: std::collections::HashMap<&str, usize> = std::collections::HashMap::new();
+    for (tool, _) in history.iter() {
+        *loop_counts.entry(tool.as_str()).or_insert(0) += 1;
+    }
+    let loop_penalty = loop_counts.values().filter(|&&c| c >= 3).count() as f32 * 2.0;
+    drop(history);
+
+    let tokens_sent = bytes / 4;
+    let total_potential = tokens + tokens_sent;
+    let efficiency_ratio = if total_potential > 0 { tokens as f32 / total_potential as f32 } else { 0.0 };
+    let efficiency_score = efficiency_ratio * 5.0;
+    let bloat_penalty = if calls > 10 && efficiency_ratio < 0.1 { 2.0 } else { 0.0 };
+    let mut score = 10.0 - loop_penalty + efficiency_score - bloat_penalty;
+    score = score.clamp(1.0, 10.0);
+    let status = if score >= 8.0 { "Sovereign (Optimo)" } else if score >= 5.0 { "Degradado" } else { "Critico" };
+
+    safe_result(format!(
+        "[OSINT-WASTE] Quality Score: {:.1}/10 [{}]\n\
+        - Penalizacion Loops: -{:.1}\n\
+        - Bonus Eficiencia: +{:.1}\n\
+        - Penalizacion Bloat: -{:.1}\n\
+        - Recomendacion: {}",
+        score, status, loop_penalty, efficiency_score, bloat_penalty,
+        if score < 5.0 { "Ejecutar osint_compress_memory_file inmediatamente." } else { "Sesion saludable." }
+    ), false)
+}
+
+async fn handle_checkpoint_save(state: &Arc<McpServer>, args: serde_json::Value) -> serde_json::Value {
+    let trigger = args["trigger"].as_str().unwrap_or("unknown");
+    let content = args["content"].as_str().unwrap_or("");
+
+    if content.is_empty() {
+        return safe_result("Error: Contenido vacio.".to_string(), true);
+    }
+
+    let mut hasher = Sha256::new();
+    hasher.update(content.as_bytes());
+    let digest: String = hasher.finalize().encode_hex();
+
+    if let Some(prev) = state.checkpoint_manifest.get(trigger) {
+        if prev["digest"].as_str() == Some(&digest) {
+            return safe_result(
+                format!("[CHECKPOINT: SKIP] Snapshot identico ya existe para '{}'.", trigger),
+                false,
+            );
+        }
+    }
+
+    let entry = json!({
+        "trigger": trigger,
+        "digest": digest,
+        "timestamp": chrono::Utc::now().to_rfc3339(),
+        "size": content.len()
+    });
+    state.checkpoint_manifest.insert(trigger.to_string(), entry.clone());
+
+    if let Some(ref db) = state.db {
+        let _ = db.save_checkpoint(trigger, &entry.to_string(), content).await;
+    }
+
+    safe_result(
+        format!("[CHECKPOINT: SAVED] Trigger: '{}' | Digest: {}...", trigger, &digest[..8]),
+        false,
+    )
+}
+
 async fn handle_execute_plugin(state: &Arc<McpServer>, args: serde_json::Value) -> serde_json::Value {
     let target_masked = args["target"].as_str().unwrap_or("");
     let plugin_name = args["plugin_name"].as_str().unwrap_or("");
+
+    // Loop detection — detecta alucinaciones en cadena antes de ejecutar
+    let loop_input = format!("{}:{}", plugin_name, target_masked);
+    if let Some(warning) = log_tool_call(state, "osint_execute_plugin", &loop_input).await {
+        warn!("{}", warning);
+        // No abortamos — advertimos pero ejecutamos para no romper flujos legítimos
+    }
 
     // 1. DESENMASCARAR (IA -> Real)
     let target_real = state.sanitizer.unmask_input(target_masked);
@@ -351,19 +668,51 @@ async fn handle_execute_plugin(state: &Arc<McpServer>, args: serde_json::Value) 
 
                 // 3. COMPRESIÓN DE CONTEXTO (Integración V14.1)
                 let support_tone = args["support_tone"].as_bool().unwrap_or(false);
+                let support_wenyan = args["support_wenyan"].as_bool().unwrap_or(false);
+                let support_tonl = args["support_tonl"].as_bool().unwrap_or(false);
                 
                 let summary = if compressed_findings.is_empty() {
                     "No se encontraron hallazgos relevantes.".to_string()
+                } else if support_tonl {
+                    // FASE 8: TONL V1.1 — diccionario dinámico + bidireccional (MCP-OSINTULT port)
+                    let arr = serde_json::Value::Array(compressed_findings.clone());
+                    tonl_encode(arr)
                 } else if support_tone || compressed_findings.len() > 10 {
-                    // FASE 3: Serialización TONE para densidad de datos (Completado con Negociación)
+                    // FASE 3: TONE V1 (compatibilidad legacy)
                     tone_encode(&compressed_findings)
                 } else {
                     serde_json::to_string_pretty(&compressed_findings).unwrap_or_default()
                 };
 
-                // 4. MASCARAR SALIDA (Real -> IA)
-                // Nota: El filtrado semántico ya se aplicó individualmente arriba
-                let final_text = state.sanitizer.mask_output(&summary);
+                // 3.2 PROMPT OPTIMIZER (MCP-OSINTULT port) — reduce prose/fillers en summaries textuales
+                let summary = if !support_tone && !support_tonl && !support_wenyan {
+                    let optimized = PROMPT_OPTIMIZER.optimize(&summary, crate::core::ai::token_optimizer::OptimizationLevel::Full);
+                    let saved_by_opt = PromptOptimizer::savings_tokens(&summary, &optimized);
+                    if saved_by_opt > 0 {
+                        state.tokens_saved.fetch_add(saved_by_opt, Ordering::Relaxed);
+                        info!("🔤 [MCP-OPT] PromptOptimizer: ~{} tokens adicionales ahorrados", saved_by_opt);
+                    }
+                    optimized
+                } else {
+                    summary
+                };
+
+                // 3.1 PROTOCOLO WENYAN (IA-IA)
+                let content = if support_wenyan {
+                    let wenyan_text = crate::core::ai::caveman::CavemanOptimizer::optimize_prompt(
+                        &summary, 
+                        crate::core::ai::CavemanLevel::WenyanUltra
+                    );
+                    McpContent::Wenyan { text: wenyan_text }
+                } else {
+                    McpContent::Text { text: state.sanitizer.mask_output(&summary) }
+                };
+
+                // 4. MASCARAR SALIDA (Real -> IA) - Solo si no es Wenyan (IA-IA suele usar targets enmascarados ya)
+                let final_text = match &content {
+                    McpContent::Text { text } => text.clone(),
+                    McpContent::Wenyan { text } => text.clone(),
+                };
 
                 // 5.1 GUARDAR EN CACHÉ (Fase 2 Roadmap - Hardened)
                 state.plugin_cache.insert(secure_key.clone(), final_text.clone()).await;
@@ -392,47 +741,39 @@ async fn handle_execute_plugin(state: &Arc<McpServer>, args: serde_json::Value) 
                     stats_map.insert("total_calls".to_string(), 1); // Incremento delta
                     stats_map.insert("tokens_saved".to_string(), token_savings as i64);
                     stats_map.insert("bytes_processed".to_string(), final_len as i64);
-                    if let Ok(Some(_)) = db.load_plugin_cache(&secure_key).await {
-                        // Si ya estaba en la DB pero no en RAM, esto se manejaría arriba, 
-                        // pero aquí solo sumamos a los globales si no es un hit puro.
-                    }
                     let _ = db.update_mcp_stats(stats_map).await;
                 }
 
+                // Apply to_ascii_safe to the final content before returning
+                // (critical for Wenyan output which contains CJK characters)
+                let safe_content = match &content {
+                    McpContent::Text { text } => McpContent::Text { text: to_ascii_safe(text) },
+                    McpContent::Wenyan { text } => McpContent::Wenyan { text: to_ascii_safe(text) },
+                };
                 json!(CallToolResult {
-                    content: vec![McpContent::Text { text: final_text }],
+                    content: vec![safe_content],
                     is_error: false
                 })
             }
             Err(e) => {
                 state.total_calls.fetch_add(1, Ordering::Relaxed);
                 error!("❌ [MCP-RESILIENCIA] Plugin {} falló definitivamente tras {} intentos: {}", plugin_name, max_retries, e);
-                
-                // FALLBACK: Intentar rescatar datos estancados de la caché
+
                 if let Some(stale_data) = state.plugin_cache.get(&secure_key)
-                    .or_else(|| state.plugin_cache.get(&legacy_key)) 
+                    .or_else(|| state.plugin_cache.get(&legacy_key))
                 {
                     warn!("🔄 [MCP-RESILIENCIA] Activando degradación controlada para {}. Usando caché estancada.", plugin_name);
-                    return json!(CallToolResult {
-                        content: vec![McpContent::Text { 
-                            text: format!("⚠️ [MODO_RESILIENCIA: DATOS_HISTÓRICOS]\nLa herramienta falló pero he recuperado el último estado conocido:\n\n{}", stale_data) 
-                        }],
-                        is_error: false
-                    });
+                    return safe_result(
+                        format!("[MODO_RESILIENCIA: DATOS_HISTORICOS]\nUltimo estado conocido:\n\n{}", stale_data),
+                        false,
+                    );
                 }
-
-                json!(CallToolResult {
-                    content: vec![McpContent::Text { text: format!("Error crítico de ejecución (Sin caché disponible): {}", e) }],
-                    is_error: true
-                })
+                safe_result(format!("Error critico de ejecucion (Sin cache disponible): {}", e), true)
             }
         }
     } else {
         state.total_calls.fetch_add(1, Ordering::Relaxed);
-        json!(CallToolResult {
-            content: vec![McpContent::Text { text: format!("Plugin '{}' no encontrado.", plugin_name) }],
-            is_error: true
-        })
+        safe_result(format!("Plugin '{}' no encontrado.", plugin_name), true)
     }
 }
 
@@ -441,21 +782,94 @@ async fn handle_get_stats(state: &Arc<McpServer>) -> serde_json::Value {
     let hits = state.cache_hits.load(Ordering::SeqCst);
     let tokens = state.tokens_saved.load(Ordering::SeqCst);
     let bytes = state.bytes_processed.load(Ordering::SeqCst);
-    
-    let hit_rate = if calls > 0 { (hits as f64 / calls as f64) * 100.0 } else { 0.0 };
-    
-    let stats_text = format!(
-        "📊 **Informe de Eficiencia MCP OsintUltimate**\n\n\
-        - **Total de Consultas:** {}\n\
-        - **Aciertos de Caché:** {} ({:.2}% de eficiencia operativa)\n\
-        - **Tokens Ahorrados:** ~{} (Aprox. ${:.2} USD ahorrados)\n\
-        - **Datos Saneados:** {} bytes\n\n\
-        *Nota: El ahorro se calcula comparando el formato crudo JSON vs TONE V1.*",
-        calls, hits, hit_rate, tokens, (tokens as f64 * 0.000015), bytes // Estimación coste GPT-4o-like
-    );
 
-    json!(CallToolResult {
-        content: vec![McpContent::Text { text: stats_text }],
-        is_error: false
-    })
+    let usd_saved = (tokens as f64) * 0.000015;
+    let hit_rate = if calls > 0 { (hits as f64 / calls as f64) * 100.0 } else { 0.0 };
+    let tokens_sent = bytes / 4;
+    let compression_ratio = if tokens + tokens_sent > 0 {
+        (tokens as f64 / (tokens + tokens_sent) as f64) * 100.0
+    } else { 0.0 };
+
+    let history = state.call_history.lock().await;
+    let mut loop_counts: std::collections::HashMap<&str, usize> = std::collections::HashMap::new();
+    for (tool, _) in history.iter() {
+        *loop_counts.entry(tool.as_str()).or_insert(0) += 1;
+    }
+    let loop_warnings: Vec<String> = loop_counts.into_iter()
+        .filter(|(_, count)| *count >= 3)
+        .map(|(tool, count)| format!("  [WARN] '{}': {}x en ventana", tool, count))
+        .collect();
+    drop(history);
+
+    let loop_section = if loop_warnings.is_empty() {
+        "  [OK] Sin loops detectados".to_string()
+    } else {
+        loop_warnings.join("\n")
+    };
+
+    safe_result(format!(
+        "[MCP-STATS] Rendimiento de Sesion:\n\
+        - Llamadas totales: {}\n\
+        - Cache Hits: {} ({:.1}%)\n\
+        - Tokens Ahorrados: ~{} (ROI Est: ${:.4})\n\
+        - Ratio de Compresion: {:.1}%\n\
+        - Bytes Procesados: {} KB\n\
+        - Archivos en Delta Cache: {}\n\
+        - Loop Detection:\n{}",
+        calls, hits, hit_rate, tokens, usd_saved, compression_ratio,
+        bytes / 1024, state.file_hash_cache.len(), loop_section
+    ), false)
+}
+
+async fn handle_compress_memory(state: &Arc<McpServer>, args: serde_json::Value) -> serde_json::Value {
+    let path_str = args["path"].as_str().unwrap_or("");
+    let level_str = args["level"].as_str().unwrap_or("full");
+
+    let level = match level_str {
+        "lite"  => crate::core::ai::token_optimizer::OptimizationLevel::Lite,
+        "ultra" => crate::core::ai::token_optimizer::OptimizationLevel::Ultra,
+        _       => crate::core::ai::token_optimizer::OptimizationLevel::Full,
+    };
+
+    let path = std::path::PathBuf::from(path_str);
+    if !path.exists() {
+        return safe_result(format!("Error: Archivo no encontrado en '{}'", path_str), true);
+    }
+
+    match tokio::fs::read_to_string(&path).await {
+        Ok(content) => {
+            if state.sanitizer.filter_tool_output("MemoryCompressor", &content)
+                .contains("[ERROR: FILTRADO_DE_SEGURIDAD_FALLIDO]")
+            {
+                return safe_result(
+                    "Error: El archivo contiene secretos criticos sin enmascarar. Abortando por OPSEC.".to_string(),
+                    true,
+                );
+            }
+
+            let optimized = PROMPT_OPTIMIZER.optimize(&content, level);
+            let saved_tokens = PromptOptimizer::savings_tokens(&content, &optimized);
+
+            let backup_path = path.with_extension("original.md");
+            if !backup_path.exists() {
+                let _ = tokio::fs::write(&backup_path, &content).await;
+            }
+
+            match tokio::fs::write(&path, &optimized).await {
+                Ok(_) => {
+                    state.tokens_saved.fetch_add(saved_tokens, Ordering::Relaxed);
+                    safe_result(format!(
+                        "[GAP-4] Compresion completada para '{}':\n\
+                        - Nivel: {:?}\n\
+                        - Tokens ahorrados: ~{}\n\
+                        - Backup: '{}'",
+                        path.file_name().and_then(|n| n.to_str()).unwrap_or(path_str),
+                        level, saved_tokens, backup_path.display()
+                    ), false)
+                }
+                Err(_) => safe_result("Error: No se pudo escribir el archivo optimizado.".to_string(), true),
+            }
+        }
+        Err(e) => safe_result(format!("Error al leer el archivo: {}", e), true),
+    }
 }

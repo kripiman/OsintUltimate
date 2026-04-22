@@ -39,7 +39,7 @@ impl ScannerPlugin for TruffleHogScanner {
             cost: 5,
             category: "Reconnaissance".to_string(),
             mitre_attacks: vec![],
-            remediation_difficulty: crate::plugins::RiskLevel::Medium,
+            exploit_difficulty: crate::plugins::RiskLevel::Medium,
             blackarch_category: None,
             is_destructive: false,
             poc_mode: false,
@@ -97,7 +97,7 @@ impl ScannerPlugin for TruffleHogScanner {
                     Severity::Critical,
                     &format!("Potential secret/credential leak found on {}.", target.host),
                     serde_json::json!({ "raw_match": line.trim() })
-                ).with_remediation("Revoke the compromised credential and remove it from the source."));
+                ).with_tactical_path("Revoke the compromised credential and remove it from the source."));
             }
         }
 

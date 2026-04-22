@@ -209,7 +209,7 @@ impl DataSink for JsonlSink {
 
 /// A DataSink that writes results to a SQLite database.
 pub struct SqliteSink {
-    pool: SqlitePool,
+    pub(crate) pool: SqlitePool,
     scan_id: Option<i64>,
     command_line: String,
 }
@@ -253,10 +253,28 @@ impl SqliteSink {
                 severity TEXT NOT NULL,
                 description TEXT NOT NULL,
                 evidence TEXT NOT NULL,
-                remediation TEXT,
+                tactical_path TEXT,
                 mitre_attack TEXT,
                 ai_analysis TEXT,
+                cvss_vector TEXT,
+                objective_id TEXT,
+                agent TEXT,
+                iteration INTEGER,
                 FOREIGN KEY(target_id) REFERENCES targets(id)
+            )"
+        ).execute(&pool).await?;
+
+        sqlx::query(
+            "CREATE TABLE IF NOT EXISTS objectives (
+                id TEXT PRIMARY KEY,
+                title TEXT NOT NULL,
+                description TEXT NOT NULL,
+                status TEXT NOT NULL,
+                depends_on TEXT,
+                priority INTEGER NOT NULL,
+                agent_assigned TEXT,
+                created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
             )"
         ).execute(&pool).await?;
 
@@ -286,6 +304,38 @@ impl SqliteSink {
                 stat_value INTEGER DEFAULT 0
             )"
         ).execute(&pool).await?;
+
+        sqlx::query(
+            "CREATE TABLE IF NOT EXISTS checkpoints (
+                trigger TEXT NOT NULL,
+                digest TEXT NOT NULL,
+                manifest TEXT NOT NULL,
+                content TEXT NOT NULL,
+                timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
+                PRIMARY KEY(trigger, digest)
+            )"
+        ).execute(&pool).await?;
+
+        sqlx::query(
+            "CREATE TABLE IF NOT EXISTS deduplication (
+                finding_hash BLOB PRIMARY KEY,
+                first_seen INTEGER NOT NULL
+            )"
+        ).execute(&pool).await?;
+
+        sqlx::query(
+            "CREATE TABLE IF NOT EXISTS cve_cache (
+                cve_id TEXT PRIMARY KEY,
+                json_data TEXT NOT NULL,
+                last_updated DATETIME DEFAULT CURRENT_TIMESTAMP
+            )"
+        ).execute(&pool).await?;
+
+        // V14.2: Initialize the DeduplicationEngine with the persistent pool
+        crate::utils::deduplication::DeduplicationEngine::init(pool.clone()).await?;
+
+        // V14.2: Initialize CveCacheManager (Phase B)
+        crate::utils::cve_cache::CveCacheManager::init(pool.clone());
 
         Ok(Self {
             pool,
@@ -342,6 +392,37 @@ impl SqliteSink {
         Ok(())
     }
 
+    /// V15: Persistencia de checkpoints para continuidad (MCP-OSINTULT port)
+    pub async fn save_checkpoint(&self, trigger: &str, manifest: &str, content: &str) -> Result<()> {
+        use sha2::{Sha256, Digest};
+        let mut hasher = Sha256::new();
+        hasher.update(content.as_bytes());
+        let digest: String = hex::encode(hasher.finalize());
+
+        sqlx::query(
+            "INSERT OR REPLACE INTO checkpoints (trigger, digest, manifest, content, timestamp)
+             VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP)"
+        )
+        .bind(trigger)
+        .bind(digest)
+        .bind(manifest)
+        .bind(content)
+        .execute(&self.pool)
+        .await?;
+        Ok(())
+    }
+
+    pub async fn load_checkpoint(&self, trigger: &str, digest: &str) -> Result<Option<String>> {
+        let row: Option<(String,)> = sqlx::query_as(
+            "SELECT content FROM checkpoints WHERE trigger = ? AND digest = ?"
+        )
+        .bind(trigger)
+        .bind(digest)
+        .fetch_optional(&self.pool)
+        .await?;
+        Ok(row.map(|r| r.0))
+    }
+
     /// V15: Persists an agent session state to allow mission resumption.
     pub async fn save_agent_session(&self, session: &AgentSession) -> Result<()> {
         sqlx::query(
@@ -367,6 +448,24 @@ impl SqliteSink {
         .fetch_optional(&self.pool)
         .await?;
         Ok(res)
+    }
+
+    /// PHASE 2: Saves or updates an operational objective.
+    pub async fn save_objective(&self, objective: &crate::models::Objective) -> Result<()> {
+        sqlx::query(
+            "INSERT OR REPLACE INTO objectives (id, title, description, status, depends_on, priority, agent_assigned, updated_at)
+             VALUES (?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)"
+        )
+        .bind(&objective.id)
+        .bind(&objective.title)
+        .bind(&objective.description)
+        .bind(format!("{:?}", objective.status))
+        .bind(&serde_json::to_string(&objective.depends_on).unwrap_or_default())
+        .bind(objective.priority as i64)
+        .bind(&objective.agent_assigned)
+        .execute(&self.pool)
+        .await?;
+        Ok(())
     }
 }
 
@@ -405,8 +504,8 @@ impl DataSink for SqliteSink {
             let ai = finding.ai_analysis.as_ref().map(|a| serde_json::to_string(a).unwrap_or_default());
             
             sqlx::query(
-                "INSERT OR REPLACE INTO findings (id, target_id, category, severity, description, evidence, remediation, mitre_attack, ai_analysis)
-                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)"
+                "INSERT OR REPLACE INTO findings (id, target_id, category, severity, description, evidence, tactical_path, mitre_attack, ai_analysis, cvss_vector, objective_id, agent, iteration)
+                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
             )
             .bind(&finding.id)
             .bind(target_id)
@@ -414,9 +513,13 @@ impl DataSink for SqliteSink {
             .bind(format!("{:?}", finding.severity))
             .bind(&finding.description)
             .bind(evidence)
-            .bind(&finding.remediation)
+            .bind(&finding.tactical_path)
             .bind(mitre)
             .bind(ai)
+            .bind(&finding.cvss_vector)
+            .bind(&finding.objective_id)
+            .bind(&finding.agent)
+            .bind(finding.iteration as i64)
             .execute(&self.pool)
             .await?;
         }
@@ -477,7 +580,7 @@ impl DataSink for MarkdownSink {
                 report.push_str(&format!("\n> ### AI Analysis (Model: {})\n", ai.model));
                 report.push_str(&format!("> **Summary:** {}\n", ai.summary));
                 report.push_str(&format!("> **Impact:** {}\n", ai.impact));
-                report.push_str(&format!("> **Remediation:** {}\n", ai.remediation));
+                report.push_str(&format!("> **Exploit Path:** {}\n", ai.exploit_path));
                 if let Some(mitre) = &ai.mitre_attack {
                     let mitre_tags: Vec<String> = mitre.iter().map(|s| s.to_string()).collect();
                     report.push_str(&format!("> **MITRE ATT&CK:** {}\n", mitre_tags.join(", ")));
@@ -501,6 +604,35 @@ impl DataSink for MarkdownSink {
         let footer = format!("\n---\n**Total Findings:** {}\n*Generated by OsintUltimate Sentinel Agent*", self.findings_count);
         self.file.write_all(footer.as_bytes()).await?;
         self.file.flush().await?;
+        Ok(())
+    }
+}
+
+/// A DataSink that writes findings to the activity log (timeline.jsonl).
+pub struct TimelineSink {
+    logger: Arc<crate::utils::activity_log::ActivityLog>,
+}
+
+impl TimelineSink {
+    pub fn new(logger: Arc<crate::utils::activity_log::ActivityLog>) -> Self {
+        Self { logger }
+    }
+}
+
+#[async_trait]
+impl DataSink for TimelineSink {
+    async fn write(&mut self, target: &crate::models::TargetHost) -> Result<()> {
+        for finding in target.findings.iter() {
+            let _ = self.logger.log_finding(finding, crate::utils::activity_log::Actor::Sentinel, Some(&target.host)).await;
+        }
+        Ok(())
+    }
+
+    async fn write_metadata(&mut self, _metadata: &crate::models::ScanMetadata) -> Result<()> {
+        Ok(())
+    }
+
+    async fn close(&mut self) -> Result<()> {
         Ok(())
     }
 }

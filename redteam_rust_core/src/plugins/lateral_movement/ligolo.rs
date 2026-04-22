@@ -38,7 +38,7 @@ impl<M: ExecutorMode> ScannerPlugin for LigoloScanner<M> {
             cost: 5,
             category: "Lateral Movement".to_string(),
             mitre_attacks: vec!["T1090".to_string(), "T1572".to_string()],
-            remediation_difficulty: crate::plugins::RiskLevel::Medium,
+            exploit_difficulty: crate::plugins::RiskLevel::Medium,
             blackarch_category: None,
             is_destructive: false,
             poc_mode: false,
@@ -68,9 +68,9 @@ impl<M: ExecutorMode> ScannerPlugin for LigoloScanner<M> {
         info!("🔱 V14.1 SOVEREIGN: Preparing Ligolo agent delivery via managed exit relay: {}", delivery_ip);
         
         let agent_path = "/usr/bin/ligolo-agent"; 
-        let server = Arc::new(crate::utils::payload_server::PayloadServer::new());
+        let server = crate::utils::payload_server::PayloadServer::new();
         let token = server.stage_payload(std::path::PathBuf::from(agent_path));
-        let server_port = server.clone().start().await?;
+        let server_port = server.start().await?;
 
         // PROFESSIONAL MODE: The delivery URL follows the managed exit IP.
         // This requires a reverse tunnel (e.g., SSH -R) or a dedicated staging VPS.

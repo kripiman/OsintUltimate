@@ -90,7 +90,7 @@ impl crate::plugins::ScannerPlugin for FFIPluginWrapper {
             cost: 5,
             category: "General".to_string(),
             mitre_attacks: vec![],
-            remediation_difficulty: crate::plugins::RiskLevel::Medium,
+            exploit_difficulty: crate::plugins::RiskLevel::Medium,
             blackarch_category: None,
             is_destructive: false,
             poc_mode: true,

@@ -3,7 +3,7 @@ use super::*;
 #[tokio::test]
 async fn test_proxy_manager_identity_bonding() {
     let p1 = "http://127.0.0.1:8080".to_string();
-    let pm = ProxyManager::new(vec![p1.clone()], true);
+    let pm = ProxyManager::new(vec![p1.clone()], true, crate::utils::config::ProxyMode::Dante, 0);
     
     let host = "example.com";
     
@@ -32,7 +32,7 @@ async fn test_proxy_manager_identity_bonding() {
 async fn test_proxy_manager_latency_prioritization() {
     let p1 = "http://127.0.0.1:8080".to_string();
     let p2 = "http://127.0.0.1:8081".to_string();
-    let pm = ProxyManager::new(vec![p1.clone(), p2.clone()], true);
+    let pm = ProxyManager::new(vec![p1.clone(), p2.clone()], true, crate::utils::config::ProxyMode::Dante, 0);
 
     // Report p1 as very fast, p2 as slow
     for _ in 0..5 {
@@ -54,7 +54,7 @@ async fn test_proxy_manager_latency_prioritization() {
 #[tokio::test]
 async fn test_proxy_blacklist_recovery() {
     let proxies = vec!["http://127.0.0.1:8080".to_string()];
-    let mut pm = ProxyManager::new(proxies, false);
+    let mut pm = ProxyManager::new(proxies, false, crate::utils::config::ProxyMode::Dante, 0);
     pm.blacklist_duration_sec = 1; // 1 second for test
     
     pm.blacklist_proxy("http://127.0.0.1:8080");
@@ -69,7 +69,7 @@ async fn test_proxy_blacklist_recovery() {
 #[tokio::test]
 async fn test_proxy_manager_concurrency() {
     let proxies = vec!["http://127.0.0.1:8080".to_string(), "http://127.0.0.1:8081".to_string()];
-    let pm = Arc::new(ProxyManager::new(proxies, true));
+    let pm = Arc::new(ProxyManager::new(proxies, true, crate::utils::config::ProxyMode::Dante, 0));
     
     let mut handles = vec![];
     for i in 0..20 {
@@ -88,7 +88,7 @@ async fn test_proxy_manager_concurrency() {
 #[tokio::test]
 async fn test_proxy_manager_managed_exit_selection() {
     // No static proxies
-    let pm = ProxyManager::new(vec![], true);
+    let pm = ProxyManager::new(vec![], true, crate::utils::config::ProxyMode::Dante, 0);
     assert!(pm.is_empty());
     assert!(pm.get_best_socks_url().is_none());
 

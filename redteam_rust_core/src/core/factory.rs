@@ -1,7 +1,7 @@
 use std::sync::Arc;
 use anyhow::Result;
 use crate::core::ai::{TieredAIRouter, RouteLevel, LlmProviderKind};
-use crate::core::ai::{OllamaClient, GeminiClient, AnthropicClient, OpenAIClient, AzureOpenAIClient};
+use crate::core::ai::{OllamaClient, GeminiClient, AnthropicClient, OpenAIClient, AzureOpenAIClient, AntigravityClient};
 use crate::utils::{InfrastructureType, HardwareInfo, proxy::ProxyManager};
 
 pub struct EngineFactory;
@@ -22,7 +22,7 @@ impl EngineFactory {
     }
 
     /// Build a pre-configured AI Router based on available environment variables
-    pub fn build_default_router(ollama_url: String, pm: Option<Arc<ProxyManager>>) -> Result<Arc<TieredAIRouter>> {
+    pub fn build_default_router(ollama_url: String, pm: Arc<ProxyManager>) -> Result<Arc<TieredAIRouter>> {
         let mut router = TieredAIRouter::new();
         
         // Tier 0: Local (Ollama)
@@ -76,6 +76,22 @@ impl EngineFactory {
                 "claude-3-5-sonnet-20240620".to_string(),
                 pm.clone()
             )?));
+        }
+
+        // Tier 2: Premium Failover (Antigravity Bridge)
+        if let (Ok(key), Ok(endpoint)) = (std::env::var("ANTIGRAVITY_API_KEY"), std::env::var("ANTIGRAVITY_ENDPOINT")) {
+            router.add_provider(RouteLevel::Premium, LlmProviderKind::Antigravity, 5, Arc::new(AntigravityClient::new(
+                key,
+                "antigravity-v1".to_string(),
+                endpoint,
+                pm.clone()
+            )?));
+        }
+
+        // V15: SkillManager Initialization (Tactical Knowledge Injection)
+        let skill_path = std::path::Path::new("../skills");
+        if let Ok(sm) = crate::core::skills::SkillManager::load_from_dir(skill_path) {
+            router = router.with_skills(Arc::new(sm));
         }
 
         Ok(Arc::new(router))

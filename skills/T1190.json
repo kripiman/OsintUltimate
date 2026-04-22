@@ -1,0 +1,22 @@
+{
+  "id": "T1190.sqli",
+  "name": "SQL Injection Professional Exploitation",
+  "version": "1.0",
+  "mitre": {
+    "tactic": "TA0001",
+    "tactic_name": "Initial Access",
+    "technique": "T1190",
+    "sub_technique": null
+  },
+  "category_match": ["Vulnerability"],
+  "posture_match": ["Strike", "Breach"],
+  "role_match": ["Exploiter"],
+  "tags": ["sqli", "sql", "injection", "database"],
+  "route_level_min": "Mid",
+  "token_cost": 150,
+  "preconditions": {
+    "min_cvss": 7.0,
+    "requires_verified": true
+  },
+  "prompt_fragment": "Metodología T1190/SQLi: Priorizar inyecciones basadas en tiempo (Blind) si los errores están suprimidos. Para extracción masiva, usar técnicas de concatenación de resultados para minimizar peticiones HTTP. Intentar lectura de archivos locales (@LOAD_FILE o xp_cmdshell) para escalar a RCE. Mantener evasión de WAF mediante ofuscación de keywords (SEL/**/ECT) y uso de funciones no estándar (ej: HEX, UNHEX)."
+}

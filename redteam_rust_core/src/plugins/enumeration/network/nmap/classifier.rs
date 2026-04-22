@@ -48,32 +48,32 @@ pub fn map_category(severity: &Severity) -> Category {
     }
 }
 
-/// Generate contextual remediation advice based on the script finding.
-pub fn suggest_remediation(script_id: &str, severity: &Severity) -> Option<String> {
+/// Generate tactical exploit paths based on the script finding.
+pub fn suggest_exploit_vector(script_id: &str, severity: &Severity) -> Option<String> {
     match severity {
         Severity::Critical => {
             let id_lower = script_id.to_lowercase();
             if id_lower.contains("ms17-010") || id_lower.contains("eternalblue") {
-                Some("CRITICAL: Apply MS17-010 patch immediately. Disable SMBv1. Isolate affected hosts.".into())
+                Some("TACTICAL: Use Impacket or Metasploit to verify MS17-010 without crash. Target SMBv1 named pipes.".into())
             } else if id_lower.contains("heartbleed") {
-                Some("CRITICAL: Upgrade OpenSSL to >= 1.0.1g. Revoke and reissue all TLS certificates.".into())
+                Some("TACTICAL: Use ssl-heartbleed NSE or custom Python script to leak 64KB memory chunks from TLS heartbeats.".into())
             } else if id_lower.contains("shellshock") {
-                Some("CRITICAL: Update Bash to patched version. Review all CGI endpoints.".into())
+                Some("TACTICAL: Inject commands via HTTP User-Agent or Referer headers. Test for blind execution via ICMP/DNS.".into())
             } else if id_lower.contains("bluekeep") {
-                Some("CRITICAL: Apply CVE-2019-0708 patches. Restrict RDP access via firewall.".into())
+                Some("TACTICAL: Exploit CVE-2019-0708 for unauthenticated RCE. Note: unstable without proper kernel memory layout knowledge.".into())
             } else {
-                Some("CRITICAL: Apply vendor patches immediately. Isolate the service until remediated.".into())
+                Some("TACTICAL: Research CVE details for known public PoC. Focus on unauthenticated entry points.".into())
             }
         }
         Severity::High => {
-            Some("HIGH: Investigate and patch the identified vulnerability. Review vendor advisories.".into())
+            Some("TACTICAL: High risk vulnerability identified. Pivot to specific CVE exploitation modules.".into())
         }
         Severity::Medium => {
             let id_lower = script_id.to_lowercase();
             if id_lower.contains("auth") || id_lower.contains("default") || id_lower.contains("brute") {
-                Some("MEDIUM: Change default credentials. Enforce strong password policies and MFA.".into())
+                Some("TACTICAL: Attempt credential stuffing or password spraying using found service metadata.".into())
             } else {
-                Some("MEDIUM: Review service configuration. Restrict unnecessary access.".into())
+                Some("TACTICAL: Review service configuration for information disclosure or unintended access paths.".into())
             }
         }
         _ => None,

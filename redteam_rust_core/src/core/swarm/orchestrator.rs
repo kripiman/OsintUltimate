@@ -12,6 +12,8 @@ use std::collections::HashSet;
 use super::budget::{TokenBudget, TokenGuard, TaskPriority};
 
 use crate::utils::executor::{StealthExecutor, ExecutorMode};
+use crate::core::persistence::PersistenceOrchestrator;
+use crate::models::{EngagementState, Objective, ObjectivePhase};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum AgentRole {
@@ -32,6 +34,7 @@ pub struct SwarmOrchestrator<M: ExecutorMode = crate::utils::executor::GhostMode
     pub proxy_manager: Option<Arc<crate::utils::proxy::ProxyManager>>,
     pub executor: Arc<StealthExecutor<M>>,
     pub policy: Arc<dyn crate::core::policy::PolicyProvider>,
+    pub engagement: Arc<tokio::sync::Mutex<Option<EngagementState>>>,
 }
 
 impl<M: ExecutorMode> SwarmOrchestrator<M> {
@@ -59,6 +62,7 @@ impl<M: ExecutorMode> SwarmOrchestrator<M> {
             proxy_manager,
             executor,
             policy,
+            engagement: Arc::new(tokio::sync::Mutex::new(None)),
         }
     }
 
@@ -68,6 +72,19 @@ impl<M: ExecutorMode> SwarmOrchestrator<M> {
 
     pub async fn run(&self, initial_target: TargetHost, sink_tx: mpsc::Sender<TargetHost>) -> Result<()> {
         info!("🐝 SWARM: Iniciando enjambre multi-agente para {}", initial_target.host);
+        
+        // V15: OPPLAN / Engagement Initialization
+        {
+            let mut state_lock = self.engagement.lock().await;
+            if state_lock.is_none() {
+                let mut state = EngagementState::new("ENG-001", "Default Mission");
+                // Inicializar objetivo principal si no hay plan
+                let root_obj = Objective::new("OBJ-ROOT", "Initial Exploration", &format!("Explore target {}", initial_target.host), ObjectivePhase::Recon);
+                state.opplan.add_objective(root_obj)?;
+                *state_lock = Some(state);
+                info!("🗺️ SWARM [V15]: OPPLAN Framework initialized.");
+            }
+        }
         
         // 🔱 V14.1 READINESS GATE (Professional Grade)
         if let Some(ref pm) = self.proxy_manager {
@@ -97,6 +114,12 @@ impl<M: ExecutorMode> SwarmOrchestrator<M> {
         // V12 HARDENING (HIGH-002): Concurrent Agent Limit (DoS prevention)
         let agent_semaphore = Arc::new(tokio::sync::Semaphore::new(10));
         let max_pending_tasks = 50; // V12 FIX (HIGH-001): Limit JoinSet size to prevent DoS
+
+        // V14.2 SCOPE CHECK: Validate initial target before spawning agents
+        if !self.policy.is_target_allowed(&initial_target.host) {
+            error!("🛡️ V14.2 SCOPE VIOLATION: Target {} is NOT authorized in policy.json. Aborting swarm.", initial_target.host);
+            return Ok(());
+        }
 
         while let Some(finding) = discovery_rx.recv().await {
             // V12 FIX: Limit JoinSet size to prevent DoS (HIGH-001)
@@ -345,14 +368,27 @@ impl<M: ExecutorMode> SwarmOrchestrator<M> {
         sink_tx: &mpsc::Sender<TargetHost>,
         guard: TokenGuard,
     ) -> Result<()> {
-        info!("🔱 SWARM [C2Operator]: Orquestando persistencia dinámica para {} [Posture: BREACH]", target.host);
+        info!("🔱 SWARM [C2Operator]: Orchestrating offensive persistence for {} [Posture: BREACH]", target.host);
         
-        // V14: Elevate to BREACH posture during post-exploitation
         adaptive_ctx.posture = crate::core::ai::Posture::Breach;
-        
         guard.commit(500);
 
-        // V14.1: Delegación al trait en lugar de hardcodear plugins
+        // V15: High-Professional Persistence Orchestration
+        let orchestrator = PersistenceOrchestrator::new(self.router.clone(), self.executor.clone());
+        if let Ok(plan) = orchestrator.generate_plan(&finding).await {
+            info!("🎯 SWARM [C2Operator]: Tactical plan generated. Consolidating access...");
+            if let Err(e) = orchestrator.consolidate(&plan, target).await {
+                warn!("⚠️ SWARM [C2Operator]: Consolidation failed: {}", e);
+            } else {
+                // STAGE 2: Verification Loop
+                if let Ok(true) = orchestrator.verify_access(&plan, target).await {
+                    info!("🛡️ SWARM [C2Operator]: Persistence Verified (APT-Level). Posture maintained.");
+                } else {
+                    warn!("⚠️ SWARM [C2Operator]: Persistence verification failed. Payload might have been detected or blocked.");
+                }
+            }
+        }
+
         let operators = self.pipeline.get_c2_operators();
         if operators.is_empty() {
              warn!("⚠️ SWARM [C2Operator]: No se encontraron operadores C2 cargados en la pipeline.");

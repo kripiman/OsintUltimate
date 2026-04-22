@@ -61,7 +61,8 @@ impl RedTeamEngine<crate::utils::executor::GhostMode> {
         let shutdown_token = CancellationToken::new();
         let memory_monitor = Arc::new(MemoryMonitor::new(soft_limit as u32, hard_limit as u32));
         let res_mgr = SysResourceManager::new();
-        let sandbox = Arc::new(SandboxDispatcher::new(res_mgr));
+        let policy = Arc::new(crate::core::policy::StaticPolicy::new());
+        let sandbox = Arc::new(SandboxDispatcher::new(res_mgr).with_policy(policy.clone()));
         let approval_gate = Arc::new(ApprovalGate::for_red_team());
         let proxy_manager = Arc::new(crate::utils::proxy::ProxyManager::new(
             config.proxies.clone().unwrap_or_default(),
@@ -70,7 +71,6 @@ impl RedTeamEngine<crate::utils::executor::GhostMode> {
             config.proxy_pool_size,
         ));
 
-        let policy = Arc::new(crate::core::policy::StaticPolicy::new());
         let executor = Arc::new(crate::utils::executor::StealthExecutor::new(
             policy.clone(),
             Some(proxy_manager.clone()),
@@ -99,7 +99,8 @@ impl RedTeamEngine<crate::utils::executor::GhostMode> {
             utils_config.hard_memory_limit_mb as u32
         ));
         let res_mgr = SysResourceManager::new();
-        let sandbox = Arc::new(SandboxDispatcher::new(res_mgr));
+        let policy = Arc::new(crate::core::policy::StaticPolicy::new());
+        let sandbox = Arc::new(SandboxDispatcher::new(res_mgr).with_policy(policy.clone()));
         let approval_gate = Arc::new(ApprovalGate::for_red_team());
         let proxy_manager = Arc::new(crate::utils::proxy::ProxyManager::new(
             config.proxies.clone().unwrap_or_default(),
@@ -108,7 +109,6 @@ impl RedTeamEngine<crate::utils::executor::GhostMode> {
             config.proxy_pool_size,
         ));
 
-        let policy = Arc::new(crate::core::policy::StaticPolicy::new());
         let executor = Arc::new(crate::utils::executor::StealthExecutor::new(
             policy.clone(),
             Some(proxy_manager.clone()),
@@ -137,7 +137,7 @@ impl<M: ExecutorMode> RedTeamEngine<M> {
     ) -> Result<()> {
         info!("🤖 SENTINEL: Activating Autonomous Agent with Native AI Cascade...");
         
-        let router = EngineFactory::build_default_router(self.config.ollama_url.clone(), Some(self.proxy_manager.clone()))?;
+        let router = EngineFactory::build_default_router(self.config.ollama_url.clone(), self.proxy_manager.clone())?;
         
         // V13: Readiness Gate - Prevent OPSEC leak by waiting for stealth readiness
         if self.config.stealth {
@@ -145,7 +145,16 @@ impl<M: ExecutorMode> RedTeamEngine<M> {
                 .context(format!("Failed to establish stealth infrastructure readiness within {:?}", self.config.readiness_timeout))?;
         }
 
-        let builder = self.prepare_pipeline_builder(sink);
+        // Phase 3: Initialize ActivityLog
+        let timeline_path = std::path::PathBuf::from("workspace/timeline.jsonl");
+        let activity_log = Arc::new(crate::utils::activity_log::ActivityLog::new(timeline_path).await?);
+        
+        // Add TimelineSink to the pipeline
+        let mut multi_sink = crate::core::sink::MultiSink::new();
+        multi_sink.add(sink);
+        multi_sink.add(Box::new(crate::core::sink::TimelineSink::new(activity_log.clone())));
+        
+        let builder = self.prepare_pipeline_builder(Box::new(multi_sink));
         let mut pipeline = builder.build()?;
         
         // Start standalone sink for Autonomous streaming
@@ -159,7 +168,7 @@ impl<M: ExecutorMode> RedTeamEngine<M> {
             Some(self.proxy_manager.clone()),
             self.executor.clone(),
             self.policy.clone(),
-        );
+        ).with_activity_log(activity_log);
 
         while let Some(target) = target_hosts.next().await {
             if let Err(e) = agent.run_autopilot(target, sink_tx.clone()).await {
@@ -191,7 +200,7 @@ impl<M: ExecutorMode> RedTeamEngine<M> {
         }
 
         if swarm {
-            let router = EngineFactory::build_default_router(self.config.ollama_url.clone(), Some(self.proxy_manager.clone()))?;
+            let router = EngineFactory::build_default_router(self.config.ollama_url.clone(), self.proxy_manager.clone())?;
             builder = builder.with_swarm(true, self.config.max_tokens, router, Some(self.proxy_manager.clone()), self.executor.clone(), self.policy.clone());
         }
 

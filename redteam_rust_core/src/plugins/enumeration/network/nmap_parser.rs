@@ -104,8 +104,8 @@ pub fn classify_script_severity(script_id: &str, script_output: &str) -> Severit
     Severity::Info
 }
 
-/// Generate contextual remediation advice based on the script finding.
-pub fn suggest_remediation(script_id: &str, severity: &Severity) -> Option<String> {
+/// Generate contextual exploit path advice based on the script finding.
+pub fn suggest_exploit_vector(script_id: &str, severity: &Severity) -> Option<String> {
     match severity {
         Severity::Critical => {
             let id_lower = script_id.to_lowercase();
@@ -212,8 +212,8 @@ pub fn parse_nmap_xml<R: BufRead>(reader: R) -> Result<Vec<Finding>> {
                                 &format!("NSE Script {}: {}", id, output.lines().next().unwrap_or("")),
                                 serde_json::json!({ "script_id": id, "output": output, "port": portid })
                             );
-                            if let Some(rem) = suggest_remediation(&id, &severity) {
-                                finding = finding.with_remediation(&rem);
+                            if let Some(rem) = suggest_exploit_vector(&id, &severity) {
+                                finding = finding.with_tactical_path(&rem);
                             }
                             local_findings.push(finding);
                         }

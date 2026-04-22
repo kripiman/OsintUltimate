@@ -34,7 +34,7 @@ impl ScannerPlugin for SearchsploitScanner {
             cost: 5,
             category: "Intelligence".to_string(),
             mitre_attacks: vec![],
-            remediation_difficulty: crate::plugins::RiskLevel::Medium,
+            exploit_difficulty: crate::plugins::RiskLevel::Medium,
             blackarch_category: None,
             is_destructive: false,
             poc_mode: false,
@@ -82,7 +82,7 @@ impl ScannerPlugin for SearchsploitScanner {
                                         serde_json::json!({ "exploits": results, "query": query })
                                     )
                                     .with_mitre_attack(vec!["T1588.006".to_string()])
-                                    .with_remediation("Investigate identified exploits and patch the affected software."));
+                                    .with_tactical_path("Investigate identified exploits and patch the affected software."));
                                 }
                             }
                         }

@@ -76,6 +76,10 @@ pub struct Args {
     pub mcp_server: bool,
     #[arg(long, default_value_t = 3001)]
     pub mcp_port: u16,
+    #[arg(short = 'P', long, default_value_t = false, help = "Activate autonomous persistence phase (Decepticon Fase 5)")]
+    pub persist: bool,
+    #[arg(short = 'C', long, default_value_t = false, help = "Activate post-exploit consolidation phase")]
+    pub consolidate: bool,
 }
 
 // End of file cleanup
@@ -200,6 +204,17 @@ async fn main() -> Result<()> {
                 multi_sink.add(Box::new(TacticalWebhookSink::new(parsed_url.to_string(), c2_token, engine.proxy_manager())?));
             }
         }
+    }
+
+    // --- ACTIVITY LOG (TIMELINE) ---
+    // V15: Quick Win integration to ensure timeline.jsonl is populated automatically
+    let timeline_path = std::path::PathBuf::from("workspace/logs/timeline.jsonl");
+    if let Ok(activity_log) = redteam_rust_core::utils::activity_log::ActivityLog::new(timeline_path).await {
+        let act_log_arc = std::sync::Arc::new(activity_log);
+        multi_sink.add(Box::new(redteam_rust_core::core::sink::TimelineSink::new(act_log_arc)));
+        info!("📝 [TimelineSink] Acitivity log routing attached.");
+    } else {
+        warn!("⚠️ [TimelineSink] Failed to initialize ActivityLog at workspace/logs/timeline.jsonl");
     }
 
     // --- DASHBOARD ---

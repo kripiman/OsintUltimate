@@ -34,7 +34,7 @@ impl ScannerPlugin for GauPlusScanner {
             cost: 5,
             category: "General".to_string(),
             mitre_attacks: vec![],
-            remediation_difficulty: crate::plugins::RiskLevel::Medium,
+            exploit_difficulty: crate::plugins::RiskLevel::Medium,
             blackarch_category: None,
             is_destructive: false,
             poc_mode: false,
@@ -75,7 +75,7 @@ impl ScannerPlugin for GauPlusScanner {
                     Severity::Info,
                     &format!("Discovered historical URL: {}", line),
                     serde_json::json!({ "url": line.trim() })
-                ).with_remediation("Review the discovered URL for sensitive parameters or legacy endpoints."));
+                ).with_tactical_path("Review the discovered URL for sensitive parameters or legacy endpoints."));
             }
         }
         if count >= 50 {

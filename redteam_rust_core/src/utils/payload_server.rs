@@ -8,31 +8,28 @@ use tracing::{info, warn};
 
 pub struct PayloadServer {
     staged_payloads: Arc<RwLock<HashMap<String, PathBuf>>>,
-    server_handle: Option<tokio::task::JoinHandle<()>>,
 }
 
 impl PayloadServer {
     pub fn new() -> Self {
         Self {
             staged_payloads: Arc::new(RwLock::new(HashMap::new())),
-            server_handle: None,
         }
     }
 
     pub fn stage_payload(&self, payload_path: PathBuf) -> String {
         let token = Uuid::new_v4().to_string();
         let payloads = self.staged_payloads.clone();
-        
+        let token_clone = token.clone();
         tokio::spawn(async move {
-            payloads.write().await.insert(token.clone(), payload_path);
+            payloads.write().await.insert(token_clone, payload_path);
         });
-        
         token
     }
 
     pub async fn start(self) -> Result<u16> {
-        use std::net::SocketAddr;
-        use axum::{Router, extract::Path, response::{Response, IntoResponse}, http::StatusCode};
+
+        use axum::{Router, extract::Path, response::IntoResponse, http::StatusCode};
         use tower_http::services::ServeFile;
         
         let payloads = self.staged_payloads.clone();

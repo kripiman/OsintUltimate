@@ -1,7 +1,55 @@
 use anyhow::Result;
+use chrono::Timelike;
 use once_cell::sync::Lazy;
 use regex::Regex;
 use std::collections::HashSet;
+use std::path::Path;
+use serde::{Deserialize, Serialize};
+
+#[derive(Debug, Deserialize)]
+struct PolicyJson {
+    in_scope: Vec<ScopeTarget>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ScopeTarget {
+    pub target: String,
+    pub description: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct EscalationContact {
+    pub name: String,
+    pub role: String,
+    pub channel: String,
+    pub available: String,  // "24/7", "Mon-Fri 09:00-18:00"
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DeconflictionPlan {
+    pub engagement_name: String,
+    pub soc_contact: String,
+    pub deconfliction_code: String,
+    pub notification_procedure: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RoE {
+    pub engagement_name: String,
+    pub client: String,
+    pub start_date: String,
+    pub end_date: String,
+    pub testing_window: String,         // "Mon-Fri 09:00-18:00 UTC"
+    pub in_scope: Vec<ScopeTarget>,
+    pub out_of_scope: Vec<ScopeTarget>,
+    pub prohibited_actions: Vec<String>,
+    pub permitted_actions: Vec<String>,
+    pub escalation_contacts: Vec<EscalationContact>,
+    pub incident_procedure: String,
+    pub authorization_reference: String,
+    pub cleanup_required: bool,
+    pub deconfliction: Option<DeconflictionPlan>,
+}
 
 /// V14.1 Sovereign Policy: Trait-based security for offensive operations.
 pub trait PolicyProvider: Send + Sync {
@@ -13,16 +61,26 @@ pub trait PolicyProvider: Send + Sync {
     
     /// Checks if a hostname or IP is within the authorized scope (Placeholder for future ScopeProvider integration).
     fn is_target_allowed(&self, target: &str) -> bool;
+
+    /// V14.5 Decepticon: Verifies if current time is within the ROE testing window.
+    fn is_within_testing_window(&self) -> bool;
+
+    /// Returns the formal Rules of Engagement if defined.
+    fn get_roe(&self) -> Option<&RoE>;
 }
 
 /// Static implementation of the Sovereign Policy (V14.1 initial consolidation).
 pub struct StaticPolicy {
     allowed_binaries: HashSet<String>,
     allowed_nmap_flags: HashSet<String>,
+    in_scope_patterns: Vec<Regex>,
+    allowed_roots: HashSet<String>, // Phase C: eTLD+1 roots (e.g., example.com)
+    roe: Option<RoE>,
 }
 
 impl StaticPolicy {
     pub fn new() -> Self {
+
         let allowed_binaries = vec!["curl", "nmap", "ping", "dig", "nc", "ssh"]
             .into_iter().map(String::from).collect();
             
@@ -32,10 +90,67 @@ impl StaticPolicy {
             "--min-rate", "--max-retries", "-O"
         ].into_iter().map(String::from).collect();
 
+        let mut in_scope_patterns = Vec::new();
+        let mut allowed_roots = HashSet::new();
+
+        // V14.2: Load scope from policy.json
+        let policy_path = std::env::current_exe()
+            .ok()
+            .and_then(|p| p.parent().map(|d| d.join("policy.json")))
+            .filter(|p| p.exists())
+            .unwrap_or_else(|| Path::new("policy.json").to_path_buf());
+
+        if policy_path.exists() {
+            if let Ok(content) = std::fs::read_to_string(&policy_path) {
+                if let Ok(policy) = serde_json::from_str::<PolicyJson>(&content) {
+                    for entry in policy.in_scope {
+                        let target = entry.target.trim();
+                        
+                        // Phase C: If the target is a domain/wildcard-domain, extract the PSL root
+                        let domain_str = target.trim_start_matches("*.");
+                        if let Ok(domain) = addr::parse_domain_name(domain_str) {
+                            if let Some(root) = domain.root() {
+                                tracing::info!("🛡️ V14.2 SCOPE: Adding PSL authorized root: {}", root);
+                                allowed_roots.insert(root.to_string());
+                            }
+                        }
+
+                        // Fallback/Legacy: Regex for complex patterns or IPs
+                        let pattern = target
+                            .replace(".", "\\.")
+                            .replace("*", ".*");
+                        if let Ok(re) = Regex::new(&format!("^{}$", pattern)) {
+                            in_scope_patterns.push(re);
+                        }
+                    }
+                }
+            }
+        }
+
+        // V14.5: Load RoE from workspace/plan/roe.json
+        let mut roe = None;
+        let roe_path = Path::new("workspace/plan/roe.json");
+        if roe_path.exists() {
+            if let Ok(content) = std::fs::read_to_string(roe_path) {
+                if let Ok(parsed_roe) = serde_json::from_str::<RoE>(&content) {
+                    tracing::info!("🛡️ V14.5 ROE: Loaded rules of engagement for {}", parsed_roe.engagement_name);
+                    roe = Some(parsed_roe);
+                }
+            }
+        }
+
         Self {
             allowed_binaries,
             allowed_nmap_flags,
+            in_scope_patterns,
+            allowed_roots,
+            roe,
         }
+    }
+
+    pub fn with_roe(mut self, roe: RoE) -> Self {
+        self.roe = Some(roe);
+        self
     }
 }
 
@@ -83,9 +198,74 @@ impl PolicyProvider for StaticPolicy {
         PATH_SAFE_RE.is_match(path)
     }
 
-    fn is_target_allowed(&self, _target: &str) -> bool {
-        // V14.1: Scope is handled at a higher level (Agent/Orchestrator), 
-        // but this hook is ready for deep integration.
+    fn is_target_allowed(&self, target: &str) -> bool {
+        // V14.2: Real Scope Validation using PSL + Regex fallbacks
+        if self.in_scope_patterns.is_empty() && self.allowed_roots.is_empty() {
+            // If no policy is defined, we assume everything is allowed (Dev mode)
+            return true;
+        }
+
+        // Phase C: PSL Domain Check (Preferred)
+        if let Ok(domain) = addr::parse_domain_name(target) {
+            if let Some(root) = domain.root() {
+                let root_str: &str = root.as_ref();
+                if self.allowed_roots.contains(root_str) {
+                    return true;
+                }
+            }
+        }
+
+        // Fallback: Regex matching (Handles IPs, partial matches, or manually defined patterns)
+        for re in &self.in_scope_patterns {
+            if re.is_match(target) {
+                return true;
+            }
+        }
+
+        tracing::warn!("V14.2 SCOPE VIOLATION: Target '{}' is NOT in scope!", target);
+        false
+    }
+
+    fn is_within_testing_window(&self) -> bool {
+        let roe = match &self.roe {
+            Some(r) => r,
+            None => return true, // No RoE, assume development mode
+        };
+
+        if roe.testing_window.to_lowercase() == "24/7" {
+            return true;
+        }
+
+        // Simplistic implementation for V14.5: Check if current hour is within window
+        // Format expected: "Mon-Fri 09:00-18:00 UTC"
+        let now = chrono::Utc::now();
+        let day = now.format("%a").to_string();
+        let hour = now.hour();
+
+        if roe.testing_window.contains("Mon-Fri") {
+            let weekdays = ["Mon", "Tue", "Wed", "Thu", "Fri"];
+            if !weekdays.contains(&day.as_str()) {
+                return false;
+            }
+        }
+
+        // Hour range check "09:00-18:00"
+        if let Some(range) = roe.testing_window.split_whitespace().nth(1) {
+            let mut parts = range.split('-');
+            if let (Some(start_str), Some(end_str)) = (parts.next(), parts.next()) {
+                if let (Ok(start), Ok(end)) = (
+                    start_str.split(':').next().unwrap_or("0").parse::<u32>(),
+                    end_str.split(':').next().unwrap_or("23").parse::<u32>(),
+                ) {
+                    return hour >= start && hour < end;
+                }
+            }
+        }
+
         true
+    }
+
+    fn get_roe(&self) -> Option<&RoE> {
+        self.roe.as_ref()
     }
 }

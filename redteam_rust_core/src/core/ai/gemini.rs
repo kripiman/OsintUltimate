@@ -1,29 +1,26 @@
-use anyhow::{Result, Context};
+use anyhow::Result;
 use async_trait::async_trait;
 use crate::models::{Finding, AIAnalysis, TargetHost};
 use crate::core::ai::{LlmClient, ContextCompressor, AdaptiveContext, RouteLevel, CapabilityGap};
-use crate::utils::common::extract_json;
 use serde_json::json;
 use std::sync::Arc;
 
 pub struct GeminiClient {
+    pub base: super::base::BaseLlmClient,
     pub keys: Vec<String>,
     pub current_key_idx: std::sync::atomic::AtomicUsize,
     pub model: String,
-    pub proxy_manager: Option<Arc<crate::utils::proxy::ProxyManager>>,
 }
 
 impl GeminiClient {
-    pub fn new(keys: Vec<String>, model: String, pm: Option<Arc<crate::utils::proxy::ProxyManager>>) -> Result<Self> {
+    pub fn new(keys: Vec<String>, model: String, pm: Arc<crate::utils::proxy::ProxyManager>) -> Result<Self> {
         if keys.is_empty() { anyhow::bail!("GeminiClient requires keys"); }
-        Ok(Self { keys, current_key_idx: std::sync::atomic::AtomicUsize::new(0), model, proxy_manager: pm })
-    }
-    async fn get_client(&self) -> Result<reqwest::Client> {
-        let pm = self.proxy_manager.as_ref()
-            .context("V13 OPSEC Violation: GeminiClient requires an active ProxyManager for Sovereign Stealth.")?;
-        
-        let (_, client) = pm.get_client_fail_closed("generativelanguage.googleapis.com")?;
-        Ok(client)
+        Ok(Self { 
+            base: super::base::BaseLlmClient::new(pm),
+            keys, 
+            current_key_idx: std::sync::atomic::AtomicUsize::new(0), 
+            model 
+        })
     }
     fn get_key(&self) -> &str {
         let idx = self.current_key_idx.load(std::sync::atomic::Ordering::Relaxed);
@@ -39,18 +36,18 @@ impl LlmClient for GeminiClient {
     async fn analyze(&self, finding: &Finding, target: &TargetHost, attack_context: Option<&str>, route_level: RouteLevel, caveman: super::types::CavemanLevel) -> Result<AIAnalysis> {
         let compressed = ContextCompressor::compress_finding(finding, route_level);
         let ctx_header = attack_context.map(|c| format!("Tactical Path: {}\n", c)).unwrap_or_default();
-        let prompt_raw = format!("### PROFESSIONAL RED TEAM ENGINE ###\n{}Analyze this Red Team finding: {}. Target: {}. Provide JSON.", ctx_header, serde_json::to_string(&compressed)?, target.host);
+        let prompt_raw = format!("### PROFESSIONAL RED TEAM ENGINE ###\n{}Analyze this Red Team finding: {}. Target: {}. You must return a JSON object with 'summary', 'impact', 'stealth_notes', 'risk_score', 'confidence', 'mitre_attack', 'exploit_path' (DO NOT provide remediation/blue team fixes, only how to exploit), 'model'.", ctx_header, serde_json::to_string(&compressed)?, target.host);
         let prompt = crate::core::ai::caveman::CavemanOptimizer::optimize_prompt(&prompt_raw, caveman);
         
         let mut last_error = None;
-        let client = self.get_client().await?;
+        let client = self.base.get_client("generativelanguage.googleapis.com").await?;
         for _ in 0..self.keys.len() {
             let url = format!("https://generativelanguage.googleapis.com/v1beta/models/{}:generateContent?key={}", self.model, self.get_key());
             match client.post(url).json(&json!({ "contents": [{ "parts": [{ "text": prompt }] }], "generationConfig": { "response_mime_type": "application/json" } })).send().await {
                 Ok(res) => {
                     let val = res.json::<serde_json::Value>().await?;
                     if let Some(text) = val["candidates"][0]["content"]["parts"][0]["text"].as_str() {
-                        let mut analysis: AIAnalysis = serde_json::from_str(extract_json(text))?;
+                        let mut analysis: AIAnalysis = serde_json::from_value(self.base.parse_extraction(text)?)?;
                         
                         // Gemini token usage
                         if let Some(usage) = val["usageMetadata"].as_object() {
@@ -75,14 +72,14 @@ impl LlmClient for GeminiClient {
         let prompt_raw = format!("### SENTINEL ORCHESTRATOR ###\n{}Decide next step for {}. History: {:?}. Finding: {}. Plugins: {}. Focus on WAF bypass.", ctx_header, target.host, adaptive_context, finding.id, plugins.len());
         let prompt = crate::core::ai::caveman::CavemanOptimizer::optimize_prompt(&prompt_raw, caveman);
         
-        let client = self.get_client().await?;
+        let client = self.base.get_client("generativelanguage.googleapis.com").await?;
         for _ in 0..self.keys.len() {
             let url = format!("https://generativelanguage.googleapis.com/v1beta/models/{}:generateContent?key={}", self.model, self.get_key());
             match client.post(url).json(&json!({ "contents": [{ "parts": [{ "text": prompt }] }], "generationConfig": { "response_mime_type": "application/json" } })).send().await {
                 Ok(res) => {
                     let val = res.json::<serde_json::Value>().await?;
                     if let Some(text) = val["candidates"][0]["content"]["parts"][0]["text"].as_str() {
-                        let json_val: serde_json::Value = serde_json::from_str(extract_json(text))?;
+                        let json_val: serde_json::Value = self.base.parse_extraction(text)?;
                         let action = json_val["action"].as_str().unwrap_or("none");
                         if action == "none" || !plugins.iter().any(|p| p.name == action) { return Ok(None); }
                         return Ok(Some((action.to_string(), json_val["tactical_context"].clone())));

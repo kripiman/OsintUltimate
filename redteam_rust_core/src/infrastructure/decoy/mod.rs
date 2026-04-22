@@ -115,7 +115,7 @@ mod tests {
             max_listener_connections: 10,
         };
 
-        let pm = std::sync::Arc::new(crate::utils::proxy::ProxyManager::new(Vec::new(), true));
+        let pm = std::sync::Arc::new(crate::utils::proxy::ProxyManager::new(Vec::new(), true, crate::utils::config::ProxyMode::Dante, 10));
         let (controller, _rx) = DecoyController::new(config, pm).unwrap();
         assert_eq!(controller.active_count(), 0);
         assert!(controller.list_active().is_empty());

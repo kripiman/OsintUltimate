@@ -94,7 +94,7 @@ impl ScannerPlugin for GitleaksScanner {
                                "line": leak_obj.line,
                                "secret_preview": format!("{}...", &leak_obj.secret[..std::cmp::min(leak_obj.secret.len(), 10)])
                            })
-                       ).with_remediation("Revoke the exposed secret and remove it from the source history."));
+                       ).with_tactical_path("Revoke the exposed secret and remove it from the source history."));
                    }
                 }
             }

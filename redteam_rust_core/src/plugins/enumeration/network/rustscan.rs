@@ -39,7 +39,7 @@ impl ScannerPlugin for RustScanScanner {
             cost: 5,
             category: "Enumeration".to_string(),
             mitre_attacks: vec!["T1046".to_string()],
-            remediation_difficulty: crate::plugins::RiskLevel::Low,
+            exploit_difficulty: crate::plugins::RiskLevel::Low,
             blackarch_category: Some("scanner".to_string()),
             is_destructive: false,
             poc_mode: true,

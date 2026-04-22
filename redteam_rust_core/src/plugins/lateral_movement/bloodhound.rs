@@ -75,7 +75,7 @@ impl<M: ExecutorMode> ScannerPlugin for BloodHoundScanner<M> {
             cost: 5,
             category: "Lateral Movement".to_string(),
             mitre_attacks: vec!["T1087.002".to_string(), "T1482".to_string(), "T1069.002".to_string()],
-            remediation_difficulty: crate::plugins::RiskLevel::Medium,
+            exploit_difficulty: crate::plugins::RiskLevel::Medium,
             blackarch_category: None,
             is_destructive: false,
             poc_mode: false,

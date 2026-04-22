@@ -69,7 +69,7 @@ pub struct PluginMetadata {
     pub capabilities: Vec<Capability>,
     pub cost: u32,
     pub mitre_attacks: Vec<String>, // E.g., ["T1110", "T1046"]
-    pub remediation_difficulty: RiskLevel,
+    pub exploit_difficulty: RiskLevel,
     pub blackarch_category: Option<String>, // NUEVO: Categoría oficial de BlackArch
     pub is_destructive: bool, // NUEVO: Indica si la acción puede alterar el estado o causar DoS
     pub poc_mode: bool,       // NUEVO: Indica si el plugin tiene un modo de prueba no intrusivo
@@ -88,7 +88,7 @@ impl Default for PluginMetadata {
             capabilities: Vec::new(),
             cost: 1,
             mitre_attacks: Vec::new(),
-            remediation_difficulty: RiskLevel::Medium,
+            exploit_difficulty: RiskLevel::Medium,
             blackarch_category: None,
             is_destructive: false,
             poc_mode: true,
@@ -168,6 +168,45 @@ pub struct GlobalConfig<M: ExecutorMode = crate::utils::executor::GhostMode> whe
     pub policy: std::sync::Arc<dyn crate::core::policy::PolicyProvider>,
     pub executor: std::sync::Arc<StealthExecutor<M>>,
     pub correlation_engine: std::sync::Arc<tokio::sync::Mutex<crate::core::correlation::CorrelationEngine>>,
+}
+
+impl<M: ExecutorMode> GlobalConfig<M> where M: Clone {
+    pub fn new() -> Self {
+        let policy = std::sync::Arc::new(crate::core::policy::StaticPolicy::new());
+        let proxy_manager = std::sync::Arc::new(crate::utils::proxy::ProxyManager::new(
+            Vec::new(),
+            false,
+            crate::utils::config::ProxyMode::Dante,
+            0,
+        ));
+        let executor = std::sync::Arc::new(StealthExecutor::new(
+            policy.clone(),
+            Some(proxy_manager.clone()),
+            false,
+        ));
+        let res_mgr = crate::core::resource_manager::SysResourceManager::new();
+        let sandbox = std::sync::Arc::new(crate::core::sandbox::SandboxDispatcher::new(res_mgr).with_policy(policy.clone()));
+
+        Self {
+            insecure: false,
+            jitter: std::sync::Arc::new(crate::utils::common::HumanJitter::new(100, 1500)),
+            proxy_manager,
+            nmap_options: NmapOptions {
+                scripts: None,
+                stealth: false,
+                service_detection: false,
+                scan_type: "connect".to_string(),
+                fragment: false,
+                decoy: None,
+                ports: None,
+                vuln_scan: false,
+            },
+            sandbox,
+            policy,
+            executor,
+            correlation_engine: std::sync::Arc::new(tokio::sync::Mutex::new(crate::core::correlation::CorrelationEngine::new())),
+        }
+    }
 }
 
 #[derive(Clone, Serialize, Deserialize)]

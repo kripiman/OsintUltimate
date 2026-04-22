@@ -1,4 +1,4 @@
-use crate::models::{TargetHost, Finding};
+use crate::models::{TargetHost, Finding, ValidationStatus};
 use crate::core::ai::TieredAIRouter;
 use crate::core::approval_gate::{ApprovalGate, User};
 use crate::models::findings::PocStrategy;
@@ -95,11 +95,11 @@ impl<M: ExecutorMode> PocValidator<M> {
             PocStrategy::HumanVerified => Ok("PoC verificado por operador.".to_string()),
         };
 
-        // 4. Verificación de resultados
-        match execution_result {
+        // 4. Verificación de resultados y Pipeline de Anti-Alucinación (V15)
+        let mut success = match execution_result {
             Ok(output) => {
-                let success = output.contains(&poc.expected_pattern);
-                if success {
+                let s = output.contains(&poc.expected_pattern);
+                if s {
                     info!("🎯 SENTINEL: ¡PoC EXITOSO! Hallazgo verificado: {}", finding.title);
                     finding.evidence.verified = true;
                     if finding.severity >= crate::models::Severity::High {
@@ -108,13 +108,27 @@ impl<M: ExecutorMode> PocValidator<M> {
                 } else {
                     warn!("❌ SENTINEL: PoC fallido. El patrón esperado '{}' no se encontró o no se detectaron severidades críticas/altas.", poc.expected_pattern);
                 }
-                Ok(success)
+                s
             }
             Err(e) => {
                 error!("⚠️ SENTINEL: Error durante la ejecución del PoC: {}", e);
-                Ok(false)
+                false
+            }
+        };
+
+        // V15: Ejecutar el Pipeline Anti-Alucinación para refinamiento final
+        if let Some(ref pm) = self.proxy_manager {
+            let _ = crate::core::verification::ValidationPipeline::validate(finding, target, pm.clone()).await;
+            
+            // Actualizar el éxito basado en el veredicto del Pipeline (si es un falso positivo deshonesto)
+            if finding.validation.status == ValidationStatus::PseudoFalse {
+                info!("🛑 SENTINEL: Pipeline marcó hallazgo como PseudoFalse. Sobrescribiendo éxito.");
+                success = false;
+                finding.evidence.verified = false;
             }
         }
+
+        Ok(success)
     }
 
     /// Real async call to nuclei engine through StealthExecutor.

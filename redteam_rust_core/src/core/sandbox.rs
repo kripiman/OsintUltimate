@@ -15,11 +15,27 @@ pub enum ExecutionTier {
 
 pub struct SandboxDispatcher {
     pub(crate) res_mgr: SysResourceManager,
+    pub(crate) middleware: crate::core::middleware::MiddlewareRegistry,
+    pub(crate) policy: Option<std::sync::Arc<dyn crate::core::policy::PolicyProvider>>,
 }
 
 impl SandboxDispatcher {
     pub fn new(res_mgr: SysResourceManager) -> Self {
-        Self { res_mgr }
+        Self { 
+            res_mgr,
+            middleware: crate::core::middleware::MiddlewareRegistry::default(),
+            policy: None,
+        }
+    }
+
+    pub fn with_policy(mut self, policy: std::sync::Arc<dyn crate::core::policy::PolicyProvider>) -> Self {
+        self.policy = Some(policy);
+        self
+    }
+
+    pub fn with_middleware(mut self, middleware: crate::core::middleware::MiddlewareRegistry) -> Self {
+        self.middleware = middleware;
+        self
     }
 
     pub fn determine_tier(&self, tool: &BlackArchTool) -> ExecutionTier {
@@ -64,6 +80,12 @@ impl SandboxDispatcher {
                 anyhow::bail!("Empty argument not allowed");
             }
 
+            // V14.4 HARDENING: Deep command safety check
+            if let Some(reason) = self.check_command_safety(arg) {
+                error!("Rejecting dangerous argument (Safety Check): {} - Reason: {}", arg, reason);
+                anyhow::bail!("Dangerous command blocked: {}", reason);
+            }
+
             for prefix in forbidden_prefixes {
                 if arg.to_lowercase().starts_with(prefix) {
                     error!("Rejecting dangerous argument (prefix): {}", arg);
@@ -87,8 +109,102 @@ impl SandboxDispatcher {
         Ok(sanitized)
     }
 
+    const DANGEROUS_COMMANDS: &'static [(&'static str, &'static str)] = &[
+        ("pkill",    "Use kill <pid> instead"),
+        ("killall",  "Use kill <pid> instead"),
+        ("nsenter",  "Container namespace escape blocked"),
+        ("eval",     "Run the command directly instead"),
+        ("iptables", "Firewall modification blocked — document persistence vector instead"),
+        ("ip6tables","Firewall modification blocked"),
+        ("nft",      "Firewall modification blocked"),
+        ("rm",       "Destructive file removal blocked in sandbox"),
+        ("base64",   "Potential payload decoding blocked if used as primary command"),
+    ];
+
+    const DANGEROUS_SUBCOMMANDS: &'static [(&'static str, &'static str, &'static str)] = &[
+        ("docker", "exec",    "You are inside the sandbox — run commands directly"),
+        ("docker", "run",     "You are inside the sandbox — run commands directly"),
+        ("ip",     "route",   "Routing table modification blocked"),
+        ("systemctl", "stop",  "Service termination blocked"),
+        ("systemctl", "disable", "Service disabling blocked"),
+    ];
+
+    const DANGEROUS_TARGETS: &'static [&'static str] = &["bash", "tmux", "sh", "zsh", "python", "perl", "ruby"];
+
+    /// Verifica si un comando o argumento es peligroso.
+    /// Retorna Some(reason) si debe bloquearse, None si es seguro.
+    pub fn check_command_safety(&self, cmd: &str) -> Option<String> {
+        let tokens = self.tokenize_command(cmd);
+        if tokens.is_empty() { return None; }
+
+        let base_cmd = tokens[0].to_lowercase();
+        
+        // 1. Check direct commands
+        for (dc, reason) in Self::DANGEROUS_COMMANDS {
+            if base_cmd == *dc {
+                return Some(reason.to_string());
+            }
+        }
+
+        // 2. Check subcommands
+        if tokens.len() > 1 {
+            let subcommand = tokens[1].to_lowercase();
+            for (dc, sub, reason) in Self::DANGEROUS_SUBCOMMANDS {
+                if base_cmd == *dc && subcommand == *sub {
+                    return Some(reason.to_string());
+                }
+            }
+        }
+
+        // 3. Check dangerous interactive targets
+        for dt in Self::DANGEROUS_TARGETS {
+            if base_cmd == *dt || tokens.iter().any(|t| t == *dt) {
+                return Some(format!("Direct interactive shell calls ({}) are discouraged. Use specific tool commands.", dt));
+            }
+        }
+
+        None
+    }
+
+    /// Tokeniza un comando shell de forma simple sin dependencias.
+    /// Divide por espacios respetando comillas.
+    fn tokenize_command(&self, cmd: &str) -> Vec<String> {
+        let mut tokens = Vec::new();
+        let mut current = String::new();
+        let mut in_quotes = false;
+        let mut quote_char = '\0';
+
+        for c in cmd.chars() {
+            if (c == '"' || c == '\'') && !in_quotes {
+                in_quotes = true;
+                quote_char = c;
+            } else if c == quote_char && in_quotes {
+                in_quotes = false;
+            } else if c.is_whitespace() && !in_quotes {
+                if !current.is_empty() {
+                    tokens.push(current.clone());
+                    current.clear();
+                }
+            } else {
+                current.push(c);
+            }
+        }
+        if !current.is_empty() {
+            tokens.push(current);
+        }
+        tokens
+    }
+
     /// Ejecuta una herramienta devolviendo el objeto Child para permitir streaming de stdout/stderr.
     pub async fn execute_tool_streamed(&self, tool: &BlackArchTool, args: &[String]) -> Result<Child> {
+        // Phase 4: Run SafeCommandMiddlewares
+        if let Some(policy) = &self.policy {
+            self.middleware.validate_all(tool, args, policy.as_ref())?;
+        } else {
+            // Fallback for tools executed without a policy context (e.g. initial setup)
+            // We still run basic sanitization which is already in execute_tool_streamed
+        }
+
         let sanitized_args = self.sanitize_args(args)?;
         let tier = self.determine_tier(tool);
         let cost_mb = SysResourceManager::estimate_cost_mb(&tool.category);

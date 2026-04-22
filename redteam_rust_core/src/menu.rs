@@ -46,6 +46,8 @@ pub fn show_menu() -> Result<Option<Args>> {
         max_tokens: 5000,
         mcp_server: false,
         mcp_port: 3001,
+        persist: false,
+        consolidate: false,
     };
 
     if std::path::Path::new(&target).exists() {
@@ -60,6 +62,7 @@ pub fn show_menu() -> Result<Option<Args>> {
         "🔴 Detección de Vulnerabilidades (CVEs, NSE Vuln/Exploit)",
         "🤖 IA Autónoma (Sentinel Autopilot - Decisión en tiempo real)",
         "🚀 Modo Agresivo (Alta concurrencia, Scripts invasivos)",
+        "🔱 Decepticon: Persistencia y Post-explotación (Fase 5)",
         "🛡️  Hardening & Compliance (Trivy, Kubescape, Gitleaks)",
     ];
 
@@ -104,6 +107,11 @@ pub fn show_menu() -> Result<Option<Args>> {
             args.concurrency = 150;
             args.scan_type = "sT".to_string(); // TCP Connect is faster for aggressive
         } else if feature == features[5] {
+            // Decepticon Persistence
+            args.persist = true;
+            args.consolidate = true;
+            args.max_layer = "Post-exploitation".to_string();
+        } else if feature == features[6] {
             // Hardening
             args.max_layer = "Verification".to_string();
         }

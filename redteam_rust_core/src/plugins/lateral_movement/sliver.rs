@@ -74,9 +74,9 @@ impl<M: ExecutorMode> C2Operator for SliverScanner<M> {
         let pm = self.executor.get_proxy_manager().context("ProxyManager required for delivery")?;
         
         // 1. Stage payload on OTT server
-        let server = Arc::new(crate::utils::payload_server::PayloadServer::new());
+        let server = crate::utils::payload_server::PayloadServer::new();
         let token = server.stage_payload(std::path::PathBuf::from(payload_path));
-        let server_port = server.clone().start().await?;
+        let server_port = server.start().await?;
         
         // 2. Determine delivery IP (The operator's routable IP for the target)
         // For simplicity in V14.1, we use the first managed exit or 127.0.0.1 if local testing
@@ -190,7 +190,7 @@ impl<M: ExecutorMode> ScannerPlugin for SliverScanner<M> {
             cost: 10,
             category: "Lateral Movement".to_string(),
             mitre_attacks: vec!["T1105".to_string(), "T1071".to_string()],
-            remediation_difficulty: crate::plugins::RiskLevel::High,
+            exploit_difficulty: crate::plugins::RiskLevel::High,
             blackarch_category: Some("backdoor".to_string()),
             is_destructive: false,
             poc_mode: false,

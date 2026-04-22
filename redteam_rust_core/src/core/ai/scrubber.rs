@@ -21,10 +21,15 @@ impl SecretScrubber {
         if let Ok(re) = Regex::new(r"AKIA[0-9A-Z]{16}") { patterns.push((re, "[AWS_ACCESS_KEY]")); }
         if let Ok(re) = Regex::new(r"(?i)aws.{0,20}['\x22][0-9a-zA-Z/+]{40}['\x22]") { patterns.push((re, "[AWS_SECRET_KEY]")); }
         if let Ok(re) = Regex::new(r"ghp_[A-Za-z0-9]{36}") { patterns.push((re, "[GITHUB_TOKEN]")); }
+        if let Ok(re) = Regex::new(r"gh[osrp]_[A-Za-z0-9]{36,255}") { patterns.push((re, "[GITHUB_TOKEN]")); }
+        if let Ok(re) = Regex::new(r"github_pat_[A-Za-z0-9_]{82}") { patterns.push((re, "[GITHUB_PAT]")); }
         if let Ok(re) = Regex::new(r"xox[baprs]-[0-9a-zA-Z\-]{10,48}") { patterns.push((re, "[SLACK_TOKEN]")); }
         if let Ok(re) = Regex::new(r"AIza[0-9A-Za-z\-_]{35}") { patterns.push((re, "[GOOGLE_API_KEY]")); }
-        if let Ok(re) = Regex::new(r"sk_live_[0-9a-zA-Z]{24}") { patterns.push((re, "[STRIPE_SECRET_KEY]")); }
-        if let Ok(re) = Regex::new(r"hf_[A-Za-z0-9]{37}") { patterns.push((re, "[HUGGINGFACE_TOKEN]")); }
+        if let Ok(re) = Regex::new(r"ya29\.[a-zA-Z0-9_-]{50,}") { patterns.push((re, "[GOOGLE_OAUTH]")); }
+        if let Ok(re) = Regex::new(r"[rs]k_(live|test)_[0-9a-zA-Z]{24}") { patterns.push((re, "[STRIPE_KEY]")); }
+        if let Ok(re) = Regex::new(r"hf_[A-Za-z0-9]{34,}") { patterns.push((re, "[HUGGINGFACE_TOKEN]")); }
+        if let Ok(re) = Regex::new(r"npm_[A-Za-z0-9]{36}") { patterns.push((re, "[NPM_TOKEN]")); }
+        if let Ok(re) = Regex::new(r"sk-ant-api03-[A-Za-z0-9\-_]{93}") { patterns.push((re, "[ANTHROPIC_KEY]")); }
         
         // 3. JWT and Auth Headers
         if let Ok(re) = Regex::new(r"eyJ[A-Za-z0-9-_=]+\.[A-Za-z0-9-_=]+\.?[A-Za-z0-9-_.+/=]*") { patterns.push((re, "[JWT_TOKEN]")); }
@@ -60,6 +65,24 @@ impl SecretScrubber {
         if let Ok(re) = Regex::new(r"(?m)^---.*?\btemplate\b.*?\b(title|severity)\b.*?---$") { patterns.push((re, "[REDACTED_MALICIOUS_METADATA]")); }
 
         Self { patterns }
+    }
+
+    /// GAP-9: Sensitive Path Guard.
+    /// Detecta si una cadena contiene rutas o nombres de archivos críticos que no deben enviarse a la IA.
+    pub fn is_sensitive_content(&self, input: &str) -> bool {
+        static SENSITIVE_TOKENS: &[&str] = &[
+            ".env", "id_rsa", "shadow", "passwd", "config.php", "settings.py",
+            "credentials", "secrets.yaml", "wp-config.php", ".git/config",
+            "access_key", "secret_key", "api_key", "token"
+        ];
+        
+        let lower = input.to_lowercase();
+        for token in SENSITIVE_TOKENS {
+            if lower.contains(token) {
+                return true;
+            }
+        }
+        false
     }
 
     pub fn scrub(&self, input: &str) -> String {

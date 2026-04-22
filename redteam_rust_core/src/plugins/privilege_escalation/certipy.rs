@@ -34,7 +34,7 @@ impl ScannerPlugin for CertipyScanner {
             cost: 5,
             category: "Privilege Escalation".to_string(),
             mitre_attacks: vec![],
-            remediation_difficulty: crate::plugins::RiskLevel::Medium,
+            exploit_difficulty: crate::plugins::RiskLevel::Medium,
             blackarch_category: None,
             is_destructive: false,
             poc_mode: false,
@@ -69,7 +69,7 @@ impl ScannerPlugin for CertipyScanner {
                 Severity::High,
                 &format!("Active Directory Certificate Services (AD CS) vulnerability found on {}.", target.host),
                 serde_json::json!({ "output": content.trim() })
-            ).with_remediation("Fix permissions on Certificate Templates or disable NTLM authentication on CA Web Enrollment."));
+            ).with_tactical_path("Fix permissions on Certificate Templates or disable NTLM authentication on CA Web Enrollment."));
         }
         Ok(findings)
     }

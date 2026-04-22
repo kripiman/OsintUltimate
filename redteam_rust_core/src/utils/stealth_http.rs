@@ -86,7 +86,7 @@ mod tests {
             extra_data: Arc::new(serde_json::json!({})),
         };
 
-        let pm = crate::utils::proxy::ProxyManager::new(Vec::new(), true);
+        let pm = crate::utils::proxy::ProxyManager::new(Vec::new(), true, crate::utils::config::ProxyMode::Dante, 0);
         let _client = StealthClientBuilder::build(&target, &pm)?;
         Ok(())
     }

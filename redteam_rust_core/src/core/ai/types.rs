@@ -29,6 +29,7 @@ pub enum LlmProviderKind {
     Anthropic,
     OpenAI,
     AzureOpenAI,
+    Antigravity, // V15: OpenSource/Custom Failover Endpoint
 }
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
@@ -43,7 +44,7 @@ pub struct ProviderEntry {
     pub client: Arc<dyn LlmClient>,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize, Default)]
 pub enum CavemanLevel {
     /// No caveman optimization.
     Off,
@@ -80,4 +81,19 @@ pub struct AdaptiveContext {
 pub struct CacheMetrics {
     pub hits: AtomicU64,
     pub misses: AtomicU64,
+}
+
+/// V15: PLUGIN RAG OPTIMIZATION
+/// Represents a plugin's vector representation for semantic tool selection.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PluginVector {
+    pub name: String,
+    pub embedding: Vec<f32>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct PluginIndex {
+    pub vectors: Vec<PluginVector>,
+    #[serde(skip)]
+    pub last_updated: Option<chrono::DateTime<chrono::Utc>>,
 }

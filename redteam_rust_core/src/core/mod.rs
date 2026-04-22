@@ -1,5 +1,5 @@
-pub mod orchestrator;
 pub mod agent;
+pub mod skills;
 pub mod pipeline;
 pub mod sink;
 pub mod plugin_loader;
@@ -23,6 +23,11 @@ pub mod factory;
 pub mod engine;
 pub mod c2;
 pub mod policy;
+pub mod middleware;
+pub mod persistence;
+pub mod orchestrator;
+pub mod verification;
+
 #[cfg(test)]
 pub mod tests;
 
