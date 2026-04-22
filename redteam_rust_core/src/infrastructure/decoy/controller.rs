@@ -26,7 +26,7 @@ impl DecoyController {
     /// by a background task that persists events to SQLite.
     pub fn new(config: DecoyConfig, pm: Arc<crate::utils::proxy::ProxyManager>) -> Result<(Self, mpsc::Receiver<TripwireEvent>)> {
         config.validate()?;
-        let max_connections = config.max_listener_connections.max(1).min(50);
+        let max_connections = config.max_listener_connections.clamp(1, 50);
         let (tx, rx) = mpsc::channel(32); // 32-slot buffer for backpressure
 
         Ok((

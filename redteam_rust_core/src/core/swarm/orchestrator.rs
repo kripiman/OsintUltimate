@@ -37,16 +37,29 @@ pub struct SwarmOrchestrator<M: ExecutorMode = crate::utils::executor::GhostMode
     pub engagement: Arc<tokio::sync::Mutex<Option<EngagementState>>>,
 }
 
+pub struct SwarmConfig<M: ExecutorMode> {
+    pub router: Arc<TieredAIRouter>,
+    pub pipeline: Arc<Pipeline<M>>,
+    pub approval_gate: Arc<ApprovalGate>,
+    pub max_tokens: u32,
+    pub proxy_manager: Option<Arc<crate::utils::proxy::ProxyManager>>,
+    pub executor: Arc<StealthExecutor<M>>,
+    pub policy: Arc<dyn crate::core::policy::PolicyProvider>,
+}
+
+pub struct AgentTask<'a, M: ExecutorMode> {
+    pub finding: Finding,
+    pub target: &'a TargetHost,
+    pub attack_context: Option<String>,
+    pub tx: &'a mut mpsc::Sender<Finding>,
+    pub adaptive_ctx: &'a mut AdaptiveContext,
+    pub sink_tx: &'a mpsc::Sender<TargetHost>,
+    pub guard: TokenGuard,
+    pub _marker: std::marker::PhantomData<M>,
+}
+
 impl<M: ExecutorMode> SwarmOrchestrator<M> {
-    pub fn new(
-        router: Arc<TieredAIRouter>,
-        pipeline: Arc<Pipeline<M>>,
-        approval_gate: Arc<ApprovalGate>,
-        max_tokens: u32,
-        proxy_manager: Option<Arc<crate::utils::proxy::ProxyManager>>,
-        executor: Arc<StealthExecutor<M>>,
-        policy: Arc<dyn crate::core::policy::PolicyProvider>,
-    ) -> Self {
+    pub fn new(config: SwarmConfig<M>) -> Self {
         let operator = crate::core::approval_gate::User {
             id: "swarm-orchestrator".to_string(),
             name: "Osint-Swarm".to_string(),
@@ -54,14 +67,14 @@ impl<M: ExecutorMode> SwarmOrchestrator<M> {
             authorized_at: chrono::Utc::now(),
         };
         Self {
-            router,
-            pipeline,
-            approval_gate,
-            budget: Arc::new(TokenBudget::new(max_tokens)),
+            router: config.router,
+            pipeline: config.pipeline,
+            approval_gate: config.approval_gate,
+            budget: Arc::new(TokenBudget::new(config.max_tokens)),
             operator,
-            proxy_manager,
-            executor,
-            policy,
+            proxy_manager: config.proxy_manager,
+            executor: config.executor,
+            policy: config.policy,
             engagement: Arc::new(tokio::sync::Mutex::new(None)),
         }
     }
@@ -106,7 +119,7 @@ impl<M: ExecutorMode> SwarmOrchestrator<M> {
         // FASE 1: SCOUT - Discovery inicial
         let pipeline_clone = pipeline.clone();
         let discovery_tx_clone = discovery_tx.clone();
-        tokio::spawn(async move {
+        let _handle = tokio::spawn(async move {
             let _ = pipeline_clone.run_discovery(&target, discovery_tx_clone).await;
         });
 
@@ -202,8 +215,26 @@ impl<M: ExecutorMode> SwarmOrchestrator<M> {
                     }
 
                     match role {
-                        AgentRole::Scout => orchestrator.execute_scout(finding_clone, &target_clone, attack_context, &mut scout_tx, &mut ctx_clone, &sink_tx_clone, guard).await,
-                        AgentRole::Exploiter => orchestrator.execute_exploiter(finding_clone, &target_clone, attack_context, &mut scout_tx, &mut ctx_clone, &sink_tx_clone, guard).await,
+                        AgentRole::Scout => orchestrator.execute_scout(AgentTask::<M> {
+                            finding: finding_clone,
+                            target: &target_clone,
+                            attack_context,
+                            tx: &mut scout_tx,
+                            adaptive_ctx: &mut ctx_clone,
+                            sink_tx: &sink_tx_clone,
+                            guard,
+                            _marker: std::marker::PhantomData,
+                        }).await,
+                        AgentRole::Exploiter => orchestrator.execute_exploiter(AgentTask::<M> {
+                            finding: finding_clone,
+                            target: &target_clone,
+                            attack_context,
+                            tx: &mut scout_tx,
+                            adaptive_ctx: &mut ctx_clone,
+                            sink_tx: &sink_tx_clone,
+                            guard,
+                            _marker: std::marker::PhantomData,
+                        }).await,
                         AgentRole::C2Operator => orchestrator.execute_c2_operator(finding_clone, &target_clone, &mut ctx_clone, &sink_tx_clone, guard).await,
                         AgentRole::GhostReporter => orchestrator.execute_reporter(finding_clone, &target_clone, &sink_tx_clone, guard).await,
                         AgentRole::Planner => {
@@ -275,28 +306,22 @@ impl<M: ExecutorMode> SwarmOrchestrator<M> {
 
     async fn execute_scout(
         &self,
-        finding: Finding,
-        target: &TargetHost,
-        attack_context: Option<String>,
-        tx: &mut mpsc::Sender<Finding>,
-        adaptive_ctx: &mut AdaptiveContext,
-        sink_tx: &mpsc::Sender<TargetHost>,
-        guard: TokenGuard,
+        task: AgentTask<'_, M>,
     ) -> Result<()> {
-        info!("🔍 SWARM [Scout]: Profundizando en hallazgo de infraestructura: {}", finding.title);
+        info!("🔍 SWARM [Scout]: Profundizando en hallazgo de infraestructura: {}", task.finding.title);
         
         let metadata = self.pipeline.get_plugin_metadata();
-        match self.router.decide_action(&finding, target, &metadata, attack_context.as_deref(), Some(adaptive_ctx)).await {
+        match self.router.decide_action(&task.finding, task.target, &metadata, task.attack_context.as_deref(), Some(task.adaptive_ctx)).await {
             Ok(Some((action, tactical))) => {
                 // V12: Commit usage and transition guard
-                guard.commit(200); 
+                task.guard.commit(200); 
 
-                let mut task_target = target.clone();
+                let mut task_target = task.target.clone();
                 task_target.tactical_context = Arc::new(tactical);
                 
                 let results = self.pipeline.run_specific_plugin(&action, &task_target).await?;
                 for nf in results {
-                    let _ = tx.send(nf).await;
+                    let _ = task.tx.send(nf).await;
                 }
             }
             Ok(None) => {
@@ -307,32 +332,27 @@ impl<M: ExecutorMode> SwarmOrchestrator<M> {
             }
         }
         
-        let mut sink_target = target.clone();
-        sink_target.findings = Arc::new(vec![finding]);
-        let _ = sink_tx.send(sink_target).await;
+        let mut sink_target = task.target.clone();
+        sink_target.findings = Arc::new(vec![task.finding]);
+        let _ = task.sink_tx.send(sink_target).await;
         
         Ok(())
     }
 
     async fn execute_exploiter(
         &self,
-        mut finding: Finding,
-        target: &TargetHost,
-        attack_context: Option<String>,
-        _tx: &mut mpsc::Sender<Finding>,
-        adaptive_ctx: &mut AdaptiveContext,
-        sink_tx: &mpsc::Sender<TargetHost>,
-        guard: TokenGuard,
+        task: AgentTask<'_, M>,
     ) -> Result<()> {
+        let mut finding = task.finding;
         info!("💥 SWARM [Exploiter]: Intentando validación/explotación de: {} [Posture: STRIKE]", finding.title);
         
         // V14: Elevate to STRIKE posture during active exploitation
-        adaptive_ctx.posture = crate::core::ai::Posture::Strike;
+        task.adaptive_ctx.posture = crate::core::ai::Posture::Strike;
         
-        match self.router.analyze(&finding, target, attack_context.as_deref()).await {
+        match self.router.analyze(&finding, task.target, task.attack_context.as_deref()).await {
             Ok(analysis) => {
                 let usage = analysis.usage.total_tokens;
-                guard.commit(usage); 
+                task.guard.commit(usage); 
                 finding = finding.with_ai_analysis(analysis.clone());
                 
                 let poc_validator = crate::core::validation::PocValidator::new(
@@ -345,7 +365,7 @@ impl<M: ExecutorMode> SwarmOrchestrator<M> {
                 );
                 
                 if analysis.risk_score >= 7 {
-                    let _ = poc_validator.validate(&mut finding, target, attack_context.as_deref()).await;
+                    let _ = poc_validator.validate(&mut finding, task.target, task.attack_context.as_deref()).await;
                 }
             }
             Err(e) => {
@@ -353,9 +373,9 @@ impl<M: ExecutorMode> SwarmOrchestrator<M> {
             }
         }
 
-        let mut sink_target = target.clone();
+        let mut sink_target = task.target.clone();
         sink_target.findings = Arc::new(vec![finding]);
-        let _ = sink_tx.send(sink_target).await;
+        let _ = task.sink_tx.send(sink_target).await;
 
         Ok(())
     }

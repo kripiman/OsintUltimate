@@ -123,6 +123,12 @@ pub struct PluginRegistry {
     pub discovery: Vec<Box<dyn DiscoveryPlugin>>,
 }
 
+impl Default for PluginRegistry {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl PluginRegistry {
     pub fn new() -> Self {
         Self {
@@ -168,6 +174,15 @@ pub struct GlobalConfig<M: ExecutorMode = crate::utils::executor::GhostMode> whe
     pub policy: std::sync::Arc<dyn crate::core::policy::PolicyProvider>,
     pub executor: std::sync::Arc<StealthExecutor<M>>,
     pub correlation_engine: std::sync::Arc<tokio::sync::Mutex<crate::core::correlation::CorrelationEngine>>,
+    pub mcp_token: Option<String>,
+}
+
+impl<M: ExecutorMode> Default for GlobalConfig<M>
+where M: Clone
+ {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl<M: ExecutorMode> GlobalConfig<M> where M: Clone {
@@ -205,6 +220,7 @@ impl<M: ExecutorMode> GlobalConfig<M> where M: Clone {
             policy,
             executor,
             correlation_engine: std::sync::Arc::new(tokio::sync::Mutex::new(crate::core::correlation::CorrelationEngine::new())),
+            mcp_token: None,
         }
     }
 }
@@ -223,7 +239,7 @@ pub struct NmapOptions {
 
 pub fn get_all_scanners<M: ExecutorMode>(config: GlobalConfig<M>) -> Vec<Box<dyn ScannerPlugin>> {
     use crate::plugins::enumeration::network::net::NmapScanner;
-    use crate::plugins::enumeration::web::web::WebFuzzer;
+    use crate::plugins::enumeration::web::engine::WebFuzzer;
     use crate::plugins::enumeration::web::whatweb::WhatWebScanner;
     use crate::plugins::exploitation::web::sqlmap::SqlMapScanner;
     use crate::plugins::exploitation::network::hydra::HydraScanner;
@@ -345,7 +361,7 @@ pub fn get_all_scanners<M: ExecutorMode>(config: GlobalConfig<M>) -> Vec<Box<dyn
 }
 
 pub fn get_all_discovery<M: ExecutorMode>(config: GlobalConfig<M>) -> Vec<Box<dyn DiscoveryPlugin>> {
-    use crate::plugins::reconnaissance::osint::osint::OsintScanner;
+    use crate::plugins::reconnaissance::osint::engine::OsintScanner;
     use crate::plugins::reconnaissance::osint::subfinder::SubfinderScanner;
     use crate::plugins::reconnaissance::osint::amass::AmassScanner;
     use crate::plugins::reconnaissance::osint::uncover::UncoverScanner;

@@ -25,53 +25,93 @@ pub fn validate_target(target: &str) -> bool {
     HOSTNAME_RE.is_match(target)
 }
 
-pub fn is_ssrf_safe_host(host: &str) -> bool {
+pub async fn is_ssrf_safe_host_async(host: &str) -> bool {
     if host.is_empty() { return false; }
-    let host_lower = host.to_lowercase();
     
-    // Exact name blacklist
+    // 1. Resolve host to IPs
+    match tokio::net::lookup_host(format!("{}:80", host)).await {
+        Ok(addrs) => {
+            for addr in addrs {
+                if !is_ip_safe(addr.ip()) {
+                    tracing::warn!("🛡️ SSRF BLOCK: Resolved IP {} for host {} is NOT safe.", addr.ip(), host);
+                    return false;
+                }
+            }
+        },
+        Err(e) => {
+            // If it doesn't resolve as a hostname, check if it's already an IP
+            if let Ok(ip) = host.parse::<std::net::IpAddr>() {
+                if !is_ip_safe(ip) { return false; }
+            } else if host.chars().all(|c| c.is_ascii_digit()) {
+                 if let Ok(val) = host.parse::<u32>() {
+                    let ip = std::net::IpAddr::V4(std::net::Ipv4Addr::from(val));
+                    if !is_ip_safe(ip) { return false; }
+                }
+            } else {
+                tracing::debug!("SSRF check: host {} did not resolve: {}", host, e);
+            }
+        }
+    }
+
+    // 2. Extra string-based checks
+    let host_lower = host.to_lowercase();
     let name_blacklist = ["localhost", "broadcasthost", "local", "invalid"];
     if name_blacklist.iter().any(|&b| host_lower == b) {
         return false;
     }
 
-    // Direct IP parse
-    if let Ok(ip) = host.parse::<std::net::IpAddr>() {
-        return match ip {
-            std::net::IpAddr::V4(v4) => {
-                let bytes = v4.octets();
-                !(bytes[0] == 127 || bytes[0] == 10 || bytes[0] == 0 ||
-                  (bytes[0] == 172 && bytes[1] >= 16 && bytes[1] <= 31) ||
-                  (bytes[0] == 192 && bytes[1] == 168) ||
-                  (bytes[0] == 169 && bytes[1] == 254) ||
-                  (bytes[0] == 100 && (bytes[1] >= 64 && bytes[1] <= 127)) ||
-                  (bytes[0] == 198 && (bytes[1] == 18 || bytes[1] == 19)) || // Benchmarking
-                  (bytes[0] == 198 && bytes[1] == 51 && bytes[2] == 100) || // TEST-NET-2
-                  (bytes[0] == 203 && bytes[1] == 0 && bytes[2] == 113) || // TEST-NET-3
-                  (bytes[0] >= 240)) // Reserved
-            },
-            std::net::IpAddr::V6(v6) => {
-                if v6.is_loopback() || v6.is_unspecified() { return false; }
-                let segments = v6.segments();
-                if (segments[0] & 0xffc0) == 0xfe80 { return false; } // Link Local
-                if (segments[0] & 0xfe00) == 0xfc00 { return false; } // Unique Local
-                if segments[0] == 0x2001 && segments[1] == 0x0db8 { return false; } // Doc
-                if (segments[0] & 0xff00) == 0xff00 { return false; } // Multicast
-                if segments[0] == 0x0100 && segments[1] == 0 && segments[2] == 0 && segments[3] == 0 { return false; } // Discard
-                
-                if let Some(v4) = v6.to_ipv4_mapped() {
-                    return is_ssrf_safe_host(&v4.to_string());
-                }
-                true
+    true
+}
+
+fn is_ip_safe(ip: std::net::IpAddr) -> bool {
+    match ip {
+        std::net::IpAddr::V4(v4) => {
+            let bytes = v4.octets();
+            !(bytes[0] == 127 || bytes[0] == 10 || bytes[0] == 0 ||
+              (bytes[0] == 172 && bytes[1] >= 16 && bytes[1] <= 31) ||
+              (bytes[0] == 192 && bytes[1] == 168) ||
+              (bytes[0] == 169 && bytes[1] == 254) ||
+              (bytes[0] == 100 && (bytes[1] >= 64 && bytes[1] <= 127)) ||
+              (bytes[0] == 198 && (bytes[1] == 18 || bytes[1] == 19)) || // Benchmarking
+              (bytes[0] == 198 && bytes[1] == 51 && bytes[2] == 100) || // TEST-NET-2
+              (bytes[0] == 203 && bytes[1] == 0 && bytes[2] == 113) || // TEST-NET-3
+              (bytes[0] >= 240)) // Reserved
+        },
+        std::net::IpAddr::V6(v6) => {
+            if v6.is_loopback() || v6.is_unspecified() { return false; }
+            let segments = v6.segments();
+            if (segments[0] & 0xffc0) == 0xfe80 { return false; } // Link Local
+            if (segments[0] & 0xfe00) == 0xfc00 { return false; } // Unique Local
+            if segments[0] == 0x2001 && segments[1] == 0x0db8 { return false; } // Doc
+            if (segments[0] & 0xff00) == 0xff00 { return false; } // Multicast
+            if segments[0] == 0x0100 && segments[1] == 0 && segments[2] == 0 && segments[3] == 0 { return false; } // Discard
+            
+            if let Some(v4) = v6.to_ipv4_mapped() {
+                return is_ip_safe(std::net::IpAddr::V4(v4));
             }
-        };
+            true
+        }
+    }
+}
+
+pub fn is_ssrf_safe_host(host: &str) -> bool {
+    if host.is_empty() { return false; }
+    
+    // Sync version (Legacy/Blocking fallback) - NO DNS resolution to avoid thread starvation
+    if let Ok(ip) = host.parse::<std::net::IpAddr>() {
+        return is_ip_safe(ip);
+    }
+    
+    if host.chars().all(|c| c.is_ascii_digit()) {
+        if let Ok(val) = host.parse::<u32>() {
+            return is_ip_safe(std::net::IpAddr::V4(std::net::Ipv4Addr::from(val)));
+        }
     }
 
-    // Decimal IP representation
-    if host.chars().all(|c| c.is_digit(10)) {
-        if let Ok(val) = host.parse::<u32>() {
-            return is_ssrf_safe_host(&std::net::Ipv4Addr::from(val).to_string());
-        }
+    let host_lower = host.to_lowercase();
+    let name_blacklist = ["localhost", "broadcasthost", "local", "invalid"];
+    if name_blacklist.iter().any(|&b| host_lower == b) {
+        return false;
     }
 
     true

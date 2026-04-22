@@ -47,6 +47,12 @@ pub struct DynamicPluginLoader {
     loaded_libraries: Vec<Arc<Library>>,
 }
 
+impl Default for DynamicPluginLoader {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl DynamicPluginLoader {
     pub fn new() -> Self {
         Self {

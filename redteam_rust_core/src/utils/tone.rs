@@ -22,8 +22,7 @@ pub fn to_ascii_safe(s: &str) -> String {
 
 /// Sanitiza un campo para el formato TONE, eliminando el delimitador '|' y saltos de línea.
 fn sanitize_tone_field(input: &str) -> String {
-    input.replace('|', " ")
-         .replace('\n', " ")
+    input.replace(['|', '\n'], " ")
          .replace('\r', "")
          .trim()
          .to_string()

@@ -10,6 +10,12 @@ pub struct SysResourceManager {
     available_ram_mb: Arc<std::sync::atomic::AtomicU64>,
 }
 
+impl Default for SysResourceManager {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl SysResourceManager {
     pub fn new() -> Self {
         let mut sys = System::new_all();

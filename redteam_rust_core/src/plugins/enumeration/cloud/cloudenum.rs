@@ -9,6 +9,12 @@ use tokio::process::Command;
 pub struct CloudEnumScanner {
     binary_path: String,
 }
+impl Default for CloudEnumScanner {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl CloudEnumScanner {
     pub fn new() -> Self {
         let path = detect_tool("cloud_enum");

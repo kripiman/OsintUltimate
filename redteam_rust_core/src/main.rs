@@ -11,7 +11,8 @@ use redteam_rust_core::core::engine::{RedTeamEngine, app::EngineConfig};
 use redteam_rust_core::core::sink::{MultiSink, JsonlSink, SqliteSink, TacticalWebhookSink, DataSink};
 use redteam_rust_core::core::capability_layer::ScanLayer;
 use redteam_rust_core::utils::config::Config;
-use redteam_rust_core::utils::{validate_target, is_ssrf_safe_host}; 
+use redteam_rust_core::utils::validate_target;
+use redteam_rust_core::utils::security::is_ssrf_safe_host_async;
 use tracing::{info, error, warn};
 use anyhow::{Context, Result};
 use futures::StreamExt;
@@ -164,6 +165,7 @@ async fn main() -> Result<()> {
         readiness_timeout: Duration::from_secs(180), // V13 Default: 3 min for DO exit nodes
         proxy_mode: utils_config.proxy_mode,
         proxy_pool_size: utils_config.proxy_pool_size,
+        mcp_token: utils_config.mcp_token.clone(),
     };
 
     let engine = RedTeamEngine::from_config(engine_config, &utils_config);
@@ -199,7 +201,7 @@ async fn main() -> Result<()> {
 
     if let Ok(c2_env) = std::env::var("C2_URL") {
         if let Ok(parsed_url) = url::Url::parse(&c2_env) {
-            if parsed_url.scheme() == "https" && is_ssrf_safe_host(parsed_url.host_str().unwrap_or("")) {
+            if parsed_url.scheme() == "https" && is_ssrf_safe_host_async(parsed_url.host_str().unwrap_or("")).await {
                 let c2_token = std::env::var("C2_TOKEN").ok();
                 multi_sink.add(Box::new(TacticalWebhookSink::new(parsed_url.to_string(), c2_token, engine.proxy_manager())?));
             }
@@ -235,7 +237,26 @@ async fn main() -> Result<()> {
         });
 
         let token = generate_dashboard_token(&signing_key, session_id, 86400);
-        info!("🔑 [DASHBOARD-AUTH] Token de acceso (Bearer): {}", token);
+        
+        // Securely write token to workspace/logs/dashboard.token (Sprint 1)
+        let token_path = "workspace/logs/dashboard.token";
+        let _ = tokio::fs::create_dir_all("workspace/logs").await;
+        
+        use std::os::unix::fs::OpenOptionsExt;
+        match std::fs::OpenOptions::new()
+            .create(true)
+            .write(true)
+            .truncate(true)
+            .mode(0o600)
+            .open(token_path) 
+        {
+            Ok(mut file) => {
+                use std::io::Write;
+                let _ = file.write_all(token.as_bytes());
+                info!("🔑 [DASHBOARD-AUTH] Token de acceso guardado de forma segura en {}", token_path);
+            },
+            Err(e) => warn!("⚠️ [DASHBOARD-AUTH] No se pudo guardar el token en disco ({}). No disponible para el operador.", e),
+        }
 
         let dashboard_state = std::sync::Arc::new(DashboardState {
             targets,

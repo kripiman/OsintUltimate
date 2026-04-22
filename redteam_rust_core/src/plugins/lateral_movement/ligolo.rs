@@ -69,7 +69,7 @@ impl<M: ExecutorMode> ScannerPlugin for LigoloScanner<M> {
         
         let agent_path = "/usr/bin/ligolo-agent"; 
         let server = crate::utils::payload_server::PayloadServer::new();
-        let token = server.stage_payload(std::path::PathBuf::from(agent_path));
+        let token = server.stage_payload(std::path::PathBuf::from(agent_path)).await;
         let server_port = server.start().await?;
 
         // PROFESSIONAL MODE: The delivery URL follows the managed exit IP.

@@ -10,8 +10,8 @@ use axum::{
     routing::{get, post},
     Router,
 };
-use std::sync::Arc;
 use tower_http::cors::{AllowOrigin, CorsLayer};
+use std::sync::Arc;
 use ed25519_dalek::{SigningKey, Signer};
 use tracing::{info, error};
 
@@ -41,10 +41,13 @@ pub async fn start_dashboard(state: Arc<state::DashboardState>, port: u16) {
     let cors = CorsLayer::new()
         .allow_origin(AllowOrigin::predicate(move |origin, _| {
             let origin_str = origin.to_str().unwrap_or("");
-            origin_str.starts_with("http://127.0.0.1") || origin_str.starts_with("http://localhost")
+            // Sprint 2: Exact matching including port to prevent subdomain hijacking/rebinding
+            origin_str == format!("http://127.0.0.1:{}", port) || origin_str == format!("http://localhost:{}", port)
         }))
         .allow_methods([axum::http::Method::GET, axum::http::Method::POST])
         .allow_headers([axum::http::header::AUTHORIZATION, axum::http::header::CONTENT_TYPE]);
+
+    // Rate limiting disabled temporarily due to tower-governor compatibility issues.
 
     let app = Router::new()
         .route("/", get(assets::serve_index))

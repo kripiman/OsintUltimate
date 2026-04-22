@@ -65,6 +65,12 @@ pub struct OutputFilter {
     strategies: HashMap<&'static str, FilterStrategy>,
 }
 
+impl Default for OutputFilter {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl OutputFilter {
     pub fn new() -> Self {
         let mut strategies = HashMap::new();
@@ -195,6 +201,12 @@ pub struct DataSanitizer {
     mask_to_real: Arc<RwLock<BTreeMap<String, String>>>,
     real_to_mask: Arc<RwLock<BTreeMap<String, String>>>,
     filter: OutputFilter,
+}
+
+impl Default for DataSanitizer {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl DataSanitizer {

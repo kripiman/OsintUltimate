@@ -12,6 +12,12 @@ pub struct NiktoScanner {
     binary_path: String,
 }
 
+impl Default for NiktoScanner {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl NiktoScanner {
     pub fn new() -> Self {
         let path = detect_tool("nikto");

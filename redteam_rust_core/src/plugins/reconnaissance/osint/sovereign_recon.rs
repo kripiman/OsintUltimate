@@ -91,7 +91,7 @@ impl SovereignReconScanner {
             if let Ok(resp) = client.get(&url).send().await {
                 if let Ok(data) = resp.json::<Vec<Vec<String>>>().await {
                     for entry in data.into_iter().skip(1) { // Skip header
-                        if let Some(target_url) = entry.get(0) {
+                        if let Some(target_url) = entry.first() {
                             if let Ok(parsed) = url::Url::parse(target_url) {
                                 if let Some(host) = parsed.host_str() {
                                     if host.ends_with(domain) {
@@ -118,7 +118,7 @@ impl SovereignReconScanner {
                 if let Ok(text) = resp.text().await {
                     for line in text.lines() {
                         let parts: Vec<&str> = line.split(',').collect();
-                        if let Some(host) = parts.get(0) {
+                        if let Some(host) = parts.first() {
                             if host.ends_with(domain) {
                                 subdomains.insert(host.to_string());
                             }

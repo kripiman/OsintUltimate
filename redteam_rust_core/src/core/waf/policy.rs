@@ -25,6 +25,12 @@ pub struct StochasticEvasionPolicy {
     priors: [(AtomicU32, AtomicU32); 4],
 }
 
+impl Default for StochasticEvasionPolicy {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl StochasticEvasionPolicy {
     pub fn new() -> Self {
         Self {

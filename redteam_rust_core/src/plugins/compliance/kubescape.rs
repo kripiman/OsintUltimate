@@ -11,6 +11,12 @@ pub struct KubescapeScanner {
     binary_path: String,
 }
 
+impl Default for KubescapeScanner {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl KubescapeScanner {
     pub fn new() -> Self {
         let path = detect_tool("kubescape");

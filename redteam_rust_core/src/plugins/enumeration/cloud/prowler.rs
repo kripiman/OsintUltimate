@@ -12,6 +12,12 @@ pub struct ProwlerScanner {
     binary_path: String,
 }
 
+impl Default for ProwlerScanner {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl ProwlerScanner {
     pub fn new() -> Self {
         let path = detect_tool("prowler");

@@ -40,6 +40,7 @@ pub struct EngineConfig {
     pub readiness_timeout: Duration, // V13: Configurable infrastructure wait
     pub proxy_mode: crate::utils::config::ProxyMode,
     pub proxy_pool_size: u32,
+    pub mcp_token: Option<String>,
 }
 
 use crate::utils::executor::{StealthExecutor, ExecutorMode};
@@ -304,7 +305,7 @@ impl<M: ExecutorMode> RedTeamEngine<M> {
         };
 
         let policy = ScanLayerPolicy {
-            max_layer: self.config.max_layer.clone(),
+            max_layer: self.config.max_layer,
             require_approval_for_layer_3_plus: true, 
             require_approval_for_layer_4_plus: true,
             require_approval_for_layer_5: true,
@@ -328,6 +329,7 @@ impl<M: ExecutorMode> RedTeamEngine<M> {
             policy: self.policy.clone(),
             executor: self.executor.clone(),
             correlation_engine: self.correlation_engine.clone(),
+            mcp_token: self.config.mcp_token.clone(),
         };
 
         let mut builder = Pipeline::builder()

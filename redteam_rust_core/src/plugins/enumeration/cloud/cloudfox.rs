@@ -9,6 +9,12 @@ use tokio::process::Command;
 pub struct CloudFoxScanner {
     binary_path: String,
 }
+impl Default for CloudFoxScanner {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl CloudFoxScanner {
     pub fn new() -> Self {
         let path = detect_tool("cloudfox");

@@ -46,6 +46,12 @@ pub mod typestate {
         // Add common fields here
     }
 
+    impl Default for SliverOperator<Staged> {
+        fn default() -> Self {
+            Self::new()
+        }
+    }
+
     impl SliverOperator<Staged> {
         pub fn new() -> Self {
             Self { state: std::marker::PhantomData }

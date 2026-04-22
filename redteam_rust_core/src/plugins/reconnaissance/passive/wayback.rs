@@ -11,6 +11,12 @@ pub struct WaybackScanner {
     wayback_path: String,
     gau_path: String,
 }
+impl Default for WaybackScanner {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl WaybackScanner {
     pub fn new() -> Self {
         let wayback_path = detect_tool("waybackurls");

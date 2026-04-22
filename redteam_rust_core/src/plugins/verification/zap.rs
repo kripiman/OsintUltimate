@@ -65,7 +65,7 @@ impl ScannerPlugin for ZapScanner {
         };
 
         // 1. Start Spider
-        let spider_res = client.get(&format!("{}/JSON/spider/action/scan/", self.api_url))
+        let spider_res = client.get(format!("{}/JSON/spider/action/scan/", self.api_url))
             .query(&[("apikey", &self.api_key), ("url", &url)])
             .send().await?;
         
@@ -75,7 +75,7 @@ impl ScannerPlugin for ZapScanner {
         }
 
         // 2. Start Active Scan
-        let ascan_res = client.get(&format!("{}/JSON/ascan/action/scan/", self.api_url))
+        let ascan_res = client.get(format!("{}/JSON/ascan/action/scan/", self.api_url))
             .query(&[("apikey", &self.api_key), ("url", &url)])
             .send().await?;
 
@@ -84,7 +84,7 @@ impl ScannerPlugin for ZapScanner {
         }
 
         // 3. Fetch Alerts (Simplified: in a real professional tool, we'd wait for progress)
-        let alerts_res = client.get(&format!("{}/JSON/core/view/alerts/", self.api_url))
+        let alerts_res = client.get(format!("{}/JSON/core/view/alerts/", self.api_url))
             .query(&[("apikey", &self.api_key), ("baseurl", &url)])
             .send().await?;
 

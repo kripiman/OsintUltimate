@@ -64,7 +64,7 @@ impl ScannerPlugin for BurpScanner {
         };
 
         // 1. Submit Scan Task (Burp Enterprise/Pro REST API)
-        let scan_res = client.post(&format!("{}/{}/scan", self.api_url, self.api_key))
+        let scan_res = client.post(format!("{}/{}/scan", self.api_url, self.api_key))
             .json(&serde_json::json!({
                 "urls": [url],
                 "scan_configurations": [{"name": "Crawl and audit - fast"}]
@@ -78,7 +78,7 @@ impl ScannerPlugin for BurpScanner {
 
         // 2. Fetch Results (Simplified)
         let scan_id = scan_res.headers().get("location").and_then(|l| l.to_str().ok()).unwrap_or("");
-        let results_res = client.get(&format!("{}{}", self.api_url, scan_id))
+        let results_res = client.get(format!("{}{}", self.api_url, scan_id))
             .header("Authorization", &self.api_key)
             .send().await?;
 

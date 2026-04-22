@@ -6,6 +6,12 @@ pub struct CommandFilter {
     generic_rules: Vec<(Regex, &'static str)>,
 }
 
+impl Default for CommandFilter {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl CommandFilter {
     pub fn new() -> Self {
         Self {

@@ -8,6 +8,12 @@ pub struct PoCVerifier {
     name: &'static str,
 }
 
+impl Default for PoCVerifier {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl PoCVerifier {
     pub fn new() -> Self {
         Self { name: "poc-verifier" }

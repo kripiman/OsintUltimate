@@ -74,6 +74,7 @@ sysinfo = "0.30.5"
 flate2 = "1.0.28"
 axum = { version = "0.7", features = ["macros"] }
 tower-http = { version = "0.5", features = ["fs", "cors", "trace"] }
+tower_governor = { version = "0.8.0", features = ["axum"] }
 rust-embed = "8.4"
 tokio-stream = { version = "0.1", features = ["io-util"] }
 mime_guess = "2.0"

@@ -9,6 +9,12 @@ use tokio::process::Command;
 pub struct UncoverScanner {
     binary_path: String,
 }
+impl Default for UncoverScanner {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl UncoverScanner {
     pub fn new() -> Self {
         let path = detect_tool("uncover");

@@ -23,8 +23,11 @@ impl RemoteExecutor for SshExecutor {
     async fn execute(&self, target: &TargetHost, cmd: &str) -> Result<String> {
         let mut command = Command::new("ssh");
         
-        // Strict OPSEC flags
-        command.arg("-o").arg("StrictHostKeyChecking=no")
+        // V15 HARDENING: OPSEC & MITM Mitigation
+        // We use 'accept-new' instead of 'no' to prevent blind acceptance of modified host keys.
+        // NOTE: This remains a potential MITM vector if the initial key is not verified. 
+        // In a strictly air-gapped or verified deployment, fingerprint pinning should be used.
+        command.arg("-o").arg("StrictHostKeyChecking=accept-new")
                .arg("-o").arg("UserKnownHostsFile=/dev/null")
                .arg("-o").arg("BatchMode=yes")
                .arg("-o").arg("ConnectTimeout=10");

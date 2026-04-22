@@ -28,6 +28,12 @@ pub struct MultiSink {
     sinks: Vec<Box<dyn DataSink>>,
 }
 
+impl Default for MultiSink {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl MultiSink {
     pub fn new() -> Self {
         Self { sinks: Vec::new() }
@@ -128,7 +134,7 @@ impl DataSink for TacticalWebhookSink {
         let host = url::Url::parse(&self.url)?.host_str().unwrap_or("c2-server").to_string();
         let (_, client) = self.proxy_manager.get_client_fail_closed(&host)?;
 
-        let mut request = client.post(&format!("{}/metadata", self.url))
+        let mut request = client.post(format!("{}/metadata", self.url))
             .json(metadata);
             
         request = request.header("Authorization", format!("Bearer {}", self.auth_token));
@@ -460,7 +466,7 @@ impl SqliteSink {
         .bind(&objective.title)
         .bind(&objective.description)
         .bind(format!("{:?}", objective.status))
-        .bind(&serde_json::to_string(&objective.depends_on).unwrap_or_default())
+        .bind(serde_json::to_string(&objective.depends_on).unwrap_or_default())
         .bind(objective.priority as i64)
         .bind(&objective.agent_assigned)
         .execute(&self.pool)

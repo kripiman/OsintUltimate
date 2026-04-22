@@ -13,6 +13,12 @@ pub struct ArjunScanner {
     binary_path: String,
 }
 
+impl Default for ArjunScanner {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl ArjunScanner {
     pub fn new() -> Self {
         let path = detect_tool("arjun");

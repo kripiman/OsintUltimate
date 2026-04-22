@@ -30,6 +30,12 @@ pub struct KatanaScanner {
     binary_path: String,
 }
 
+impl Default for KatanaScanner {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl KatanaScanner {
     pub fn new() -> Self {
         let path = detect_tool("katana");

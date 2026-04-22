@@ -47,8 +47,18 @@ impl<M: ExecutorMode> Pipeline<M> {
         PipelineBuilder::new()
     }
 
-    pub fn new_minimal(plugins: Arc<Vec<Box<dyn ScannerPlugin>>>, sandbox: Arc<crate::core::sandbox::SandboxDispatcher>) -> Self {
-        let policy = Arc::new(crate::core::policy::StaticPolicy::new());
+    pub fn new_minimal(
+        plugins: Arc<Vec<Box<dyn ScannerPlugin>>>, 
+        sandbox: Arc<crate::core::sandbox::SandboxDispatcher>,
+        policy: Option<Arc<dyn crate::core::policy::PolicyProvider>>,
+        memory_monitor: Option<Arc<crate::utils::memory_monitor::MemoryMonitor>>,
+    ) -> Self {
+        let monitor = memory_monitor.unwrap_or_else(|| Arc::new(crate::utils::memory_monitor::MemoryMonitor::new(100, 200)));
+        let policy = policy.unwrap_or_else(|| Arc::new(crate::core::policy::StaticPolicy::new()));
+        
+        // We don't really need the builder if we are just constructing the struct, 
+        // especially since plugins cloning is complex.
+        
         Self {
             concurrency: 1,
             discovery_plugins: Arc::new(Vec::new()),
@@ -62,7 +72,7 @@ impl<M: ExecutorMode> Pipeline<M> {
             blackarch_bridge: Arc::new(crate::core::blackarch::BlackArchBridge::new()),
             jitter: None,
             fp_filter: Arc::new(crate::core::filter::FalsePositiveFilter::default()),
-            memory_monitor: Arc::new(crate::utils::memory_monitor::MemoryMonitor::new(100, 200)),
+            memory_monitor: monitor,
             dashboard_tx: None,
             dashboard_targets: None,
             swarm_mode: false,
@@ -90,24 +100,47 @@ impl<M: ExecutorMode> Pipeline<M> {
         let (osint_tx, osint_rx) = mpsc::channel::<TargetHost>(channel_size);
         let (liveness_tx, liveness_rx) = mpsc::channel::<TargetHost>(channel_size);
         let (scan_tx, scan_rx) = mpsc::channel::<TargetHost>(channel_size);
-        // ARCH-01: Decoupled Stage 4 (Sink). 1024 buffer ensures scanning isn't blocked by slow I/O.
-        let (sink_tx, mut sink_rx) = mpsc::channel::<TargetHost>(1024);
+        let (sink_tx, sink_rx) = mpsc::channel::<TargetHost>(1024);
 
         let mut handles = Vec::new();
         
         // --- STAGE 1: Discovery ---
+        handles.push(self.spawn_discovery_stage(osint_rx, liveness_tx.clone()));
+        
+        let osint_token = self.shutdown_token.clone();
+        tokio::spawn(async move {
+            while let Some(t) = targets.next().await {
+                if osint_token.is_cancelled() { break; }
+                if osint_tx.send(t).await.is_err() { break; }
+            }
+        });
+
+        // --- STAGE 2: Liveness ---
+        handles.push(self.spawn_liveness_stage(liveness_rx, scan_tx.clone(), sink_tx.clone()));
+        drop(scan_tx);
+
+        // --- STAGE 3: Scanning ---
+        handles.push(self.spawn_scanning_stage(scan_rx, sink_tx.clone()));
+        drop(sink_tx);
+
+        // --- STAGE 4: Sink (v4 Lock-Free) ---
+        self.run_sink_stage(sink, sink_rx).await?;
+        
+        Ok(())
+    }
+
+    fn spawn_discovery_stage(&self, mut rx: mpsc::Receiver<TargetHost>, liveness_tx: mpsc::Sender<TargetHost>) -> tokio::task::JoinHandle<()> {
         let mut seen_domains = Bloom::new_for_fp_rate(1_000_000, 0.01);
         let discovery_token = self.shutdown_token.clone();
         let discovery_plugins = self.discovery_plugins.clone();
+        let jitter = self.jitter.clone();
         
-        handles.push(tokio::spawn(async move {
-            let mut rx = osint_rx;
+        tokio::spawn(async move {
             while let Some(mut target) = rx.recv().await {
                 if discovery_token.is_cancelled() { break; }
                 
-                // Apply jitter if configured for stealth scanning
-                if let Some(ref jitter) = self.jitter {
-                    jitter.apply().await;
+                if let Some(ref j) = jitter {
+                    j.apply().await;
                 }
 
                 if seen_domains.check(&target.host) { continue; }
@@ -149,33 +182,25 @@ impl<M: ExecutorMode> Pipeline<M> {
                 }
                 let _ = liveness_tx.send(target).await;
             }
-        }));
+        })
+    }
 
-        let osint_token = self.shutdown_token.clone();
-        tokio::spawn(async move {
-            while let Some(t) = targets.next().await {
-                if osint_token.is_cancelled() { break; }
-                if osint_tx.send(t).await.is_err() { break; }
-            }
-        });
-
-        // --- STAGE 2: Liveness ---
+    fn spawn_liveness_stage(&self, mut rx: mpsc::Receiver<TargetHost>, scan_tx: mpsc::Sender<TargetHost>, sink_tx: mpsc::Sender<TargetHost>) -> tokio::task::JoinHandle<()> {
         let liveness_checker = self.liveness_checker.clone();
         let liveness_token = self.shutdown_token.clone();
-        let scan_tx_clone = scan_tx.clone();
-        let sink_tx_err = sink_tx.clone();
         let liveness_concurrency = self.concurrency;
-        drop(scan_tx);
-
+        
         let stream_token = liveness_token.clone();
-        handles.push(tokio::spawn(async move {
-            let mut rx = liveness_rx;
+        tokio::spawn(async move {
             let stream = async_stream::stream! {
                 while let Some(t) = rx.recv().await { yield t; if stream_token.is_cancelled() { break; } }
             };
             tokio::pin!(stream);
             stream.for_each_concurrent(liveness_concurrency, move |mut target| {
-                let checker = liveness_checker.clone(); let scan_tx = scan_tx_clone.clone(); let sink_tx = sink_tx_err.clone(); let token = liveness_token.clone();
+                let checker = liveness_checker.clone(); 
+                let scan_tx = scan_tx.clone(); 
+                let sink_tx = sink_tx.clone(); 
+                let token = liveness_token.clone();
                 async move {
                     if let Some(ip) = tokio::select! { res = checker.is_live(&target.host) => res, _ = token.cancelled() => return } {
                         if !is_safe_ip(&ip) { 
@@ -185,7 +210,7 @@ impl<M: ExecutorMode> Pipeline<M> {
                             return; 
                         }
                         target.ip = Some(ip.to_string()); 
-                        target.resolved_ip = Some(ip.to_string()); // V12: Pin IP here
+                        target.resolved_ip = Some(ip.to_string());
                         let _ = scan_tx.send(target).await;
                     } else { 
                         warn!("⚠️ V13: Resolution failed for host {}. Aborting scan to prevent DNS Rebinding.", target.host);
@@ -194,54 +219,59 @@ impl<M: ExecutorMode> Pipeline<M> {
                     }
                 }
             }).await;
-        }));
+        })
+    }
 
-        // --- STAGE 3: Scanning ---
+    fn spawn_scanning_stage(&self, scan_rx: mpsc::Receiver<TargetHost>, sink_tx: mpsc::Sender<TargetHost>) -> tokio::task::JoinHandle<()> {
         let plugins = self.plugins.clone();
         let concurrency = self.concurrency;
         let layer_policy = self.layer_policy;
         let approval_gate = self.approval_gate.clone();
         let blackarch_bridge = self.blackarch_bridge.clone();
-        let scan_rx = scan_rx;
-        let sink_tx_stage3 = sink_tx.clone();
         let scan_token = self.shutdown_token.clone();
         let memory_monitor = self.memory_monitor.clone();
-        handles.push(tokio::spawn(async move {
-            let mut orchestrator = Orchestrator::new(
-                plugins, 
+        let sandbox = self.sandbox.clone();
+        let policy = self.policy.clone();
+        let executor = self.executor.clone();
+        let dashboard_tx = self.dashboard_tx.clone();
+        let dashboard_targets = self.dashboard_targets.clone();
+        let swarm_mode = self.swarm_mode;
+        let ai_router = self.ai_router.clone();
+        let max_tokens = self.max_tokens;
+        let proxy_manager = self.proxy_manager.clone();
+
+        tokio::spawn(async move {
+            let mut orchestrator = Orchestrator::new(crate::core::orchestrator::OrchestratorConfig {
+                plugins,
                 concurrency,
                 layer_policy,
                 approval_gate,
                 blackarch_bridge,
                 memory_monitor,
-                self.sandbox.clone(),
-                self.policy.clone(),
-                self.executor.clone(),
-            );
-            if let (Some(tx), Some(targets)) = (self.dashboard_tx, self.dashboard_targets) {
+                sandbox,
+                policy,
+                executor,
+            });
+            if let (Some(tx), Some(targets)) = (dashboard_tx, dashboard_targets) {
                 orchestrator.with_dashboard_preconfigured(tx, targets);
             }
-            if self.swarm_mode {
-                if let Some(router) = self.ai_router.clone() {
-                    orchestrator = orchestrator.with_swarm_mode(true, self.max_tokens, router, self.proxy_manager.clone());
+            if swarm_mode {
+                if let Some(router) = ai_router {
+                    orchestrator = orchestrator.with_swarm_mode(true, max_tokens, router, proxy_manager);
                 }
             }
-            orchestrator.run(scan_rx, sink_tx_stage3, scan_token).await;
-        }));
-        drop(sink_tx);
+            orchestrator.run(scan_rx, sink_tx, scan_token).await;
+        })
+    }
 
-        // --- STAGE 4: Sink (v4 Lock-Free) ---
-        let final_sink = sink;
+    async fn run_sink_stage(&self, final_sink: Box<dyn DataSink>, mut sink_rx: mpsc::Receiver<TargetHost>) -> Result<()> {
         let v4_sink = Arc::new(crate::core::lock_free_sink::LockFreeResultSink::new());
         let fp_filter = self.fp_filter.clone();
         
-        // Start background OS thread for batched writes
         v4_sink.start_worker(final_sink);
 
         while let Some(mut target) = sink_rx.recv().await {
-            // V14.2 ENRICHMENT (Phase B): Auto-enrich findings with persistent CVE cache metadata
             Self::enrich_target_findings_static(&mut target).await;
-            
             Arc::make_mut(&mut target.findings).retain(|f| fp_filter.evaluate(f));
             v4_sink.enqueue(target);
         }
@@ -289,11 +319,7 @@ impl<M: ExecutorMode> Pipeline<M> {
             // Try to find CVE ID in title, id or description
             let cve_id = if let Some(cap) = re.captures(&finding.id) {
                 Some(cap[0].to_uppercase())
-            } else if let Some(cap) = re.captures(&finding.title) {
-                Some(cap[0].to_uppercase())
-            } else {
-                None
-            };
+            } else { re.captures(&finding.title).map(|cap| cap[0].to_uppercase()) };
 
             if let Some(id) = cve_id {
                 if let Ok(Some(meta)) = manager.get_or_fetch_cve(&id).await {
@@ -336,17 +362,17 @@ impl<M: ExecutorMode> Pipeline<M> {
         info!("Pipeline: Running active scans for {}", target.host);
         let (tx, rx) = mpsc::channel(1);
         let (out_tx, mut out_rx) = mpsc::channel(1);
-        let orchestrator = Orchestrator::new(
-            self.plugins.clone(), 
-            self.concurrency,
-            self.layer_policy,
-            self.approval_gate.clone(),
-            self.blackarch_bridge.clone(),
-            self.memory_monitor.clone(),
-            self.sandbox.clone(),
-            self.policy.clone(),
-            self.executor.clone(),
-        );
+        let orchestrator = Orchestrator::new(crate::core::orchestrator::OrchestratorConfig {
+            plugins: self.plugins.clone(),
+            concurrency: self.concurrency,
+            layer_policy: self.layer_policy,
+            approval_gate: self.approval_gate.clone(),
+            blackarch_bridge: self.blackarch_bridge.clone(),
+            memory_monitor: self.memory_monitor.clone(),
+            sandbox: self.sandbox.clone(),
+            policy: self.policy.clone(),
+            executor: self.executor.clone(),
+        });
         let token = self.shutdown_token.clone();
         
         let target_clone = target.clone();

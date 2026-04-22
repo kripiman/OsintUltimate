@@ -9,6 +9,12 @@ use tokio::process::Command;
 pub struct CertipyScanner {
     binary_path: String,
 }
+impl Default for CertipyScanner {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl CertipyScanner {
     pub fn new() -> Self {
         let path = detect_tool("certipy");

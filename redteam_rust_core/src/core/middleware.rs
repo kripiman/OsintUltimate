@@ -23,11 +23,10 @@ impl CommandMiddleware for TargetScopeMiddleware {
         }
 
         for arg in args {
-            if self.is_target_like(arg) {
-                if !policy.is_target_allowed(arg) {
+            if self.is_target_like(arg)
+                && !policy.is_target_allowed(arg) {
                     return Err(anyhow!("TargetScopeViolation: Argument '{}' is outside the authorized Rules of Engagement (RoE).", arg));
                 }
-            }
         }
         Ok(())
     }

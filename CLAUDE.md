@@ -1,41 +1,25 @@
-# CLAUDE.md — OsintUltimate | V13 STEALTH
+# 終極偵察 (OsintUltimate) ⋅ 坤輿 (CLAUDE)
 
-## Security Conventions (CRÍTICO — LEER ANTES DE ESCRIBIR)
-- **SSRF**: Todas las operaciones de red deben pasar por `utils::liveness::is_ssrf_safe_host`. MANDATORIO.
-- **IP Pinning**: Usar `target.pinned_addr()` para prevenir DNS Rebinding en herramientas ofensivas.
-- **PoC Safety**: Usar enums `ValidatedPoc`; prohibida la inyección de comandos CLI mediante strings no verificados.
-- **Integridad**: Plugins dinámicos requieren verificación Ed25519 vía `OSINT_PLUGIN_PUBKEY`.
+## 核心綱要 (CORE)
+- **其物**: 強攻型自動化安全系統 (Autonomous Offensive Core).
+- **境界**: V15.4 Hardened (精鍊).
+- **準則**: 零負債 (Zero-Debt), 盡全功 (Hardened Egress).
 
-## Project Context (Compressed)
-- OSINT/Redteam Rust. Tokio (Async). Reqwest, Hickory-resolver, Libloading. Linux/Windows.
-- Build: `cargo build --release` | Test: `cargo test --all-targets` | Audit: `cargo audit`.
+## 既成之事 (HISTORY)
+- **一期伍五 (P1.5)**: 
+  - **整肅**: 參贊節錄 (Orch/LlmConfig), 除冗贅 (Clippy fix).
+  - **移宮**: 名分更替 (Module ren), 絕遁影 (Inception fix).
+  - **斷舍**: 黜黶邏輯 (Del blacklist), 拔暗樁 (Kill _handle).
+- **驗證**: 完璧 (Clippy-0), 功行 (Test-Pass).
 
-## Architecture Map
-- `core/engine`: State/Lifecycle.
-- `core/pipeline`: Data flow (Discovery -> Liveness -> Scanning).
-- `core/swarm`: Multi-agent autonomous logic. TokenBudget enforced.
-- `core/poc_validator`: Template-based execution. NO raw injection.
-- `core/plugin_loader`: Ed25519-signed dynamic loading.
-- `infrastructure/proxy`: Stealth egress. VPS/Static exit nodes.
+## 當務之急 (ACTIVE)
+- **二期 (P2)**: 紀要與圖錄 (Full Doc/Mermaid).
+- **三期 (P3)**: 幽靈審計 (GHOST/STRIKE Audit).
 
-## Rust & Development
-- Errors: `anyhow::Result` + `.context()`.
-- Concurrency: `tokio::sync::mpsc` preferred over Mutex.
-- Execution: Use `stealth_command` wrapper for binaries.
+## 術語術 (TECH)
+- **神機 (AI)**: 參贊模式 (Config-driven trait).
+- **詭道 (PROXY)**: 絕戶出口 (Fail-closed egress).
+- **群策 (SWARM)**: 合眾為一 (Multi-agent orchestrator).
 
-## Agent Routing logic
-- CLAUDE: Architecture, Hardening, Traits, Swarm Concurrency, PoC safety.
-- GEMINI FLASH: Boilerplate, Tests, Glue code, Tactical context compression.
-- KIMI: Full audit, V12->V13 Regressions, Log correlation.
-
-## Active Audit Status (V13)
-- Status: Fixing Managed Exit Leakage (IP leak during droplet provisioning).
-- Pending: Initial Egress readiness gate integration.
-
-## Files Locked (Review Required)
-- `core/poc_validator.rs`, `core/plugin_loader.rs`, `utils/liveness.rs`.
-
-## Anti-Patterns (NUNCA HACER ESTO)
-- **Unwrap/Expect**: Prohibido en rutas de `core/` e `infrastructure/`.
-- **Raw Commands**: Nunca usar `std::process::Command` directamente (usar `stealth_command`).
-- **Proxy Bypass**: En modo `--stealth`, los plugins no deben usar clientes `reqwest` directos.
+---
+*文言極速版 (Wenyan Ultra) ⋅ 損幣省元 (Token Optimizer)*

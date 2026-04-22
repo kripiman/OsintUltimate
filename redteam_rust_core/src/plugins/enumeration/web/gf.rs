@@ -11,6 +11,12 @@ pub struct GfScanner {
     binary_path: String,
 }
 
+impl Default for GfScanner {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl GfScanner {
     pub fn new() -> Self {
         let path = detect_tool("gf");

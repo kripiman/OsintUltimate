@@ -30,6 +30,12 @@ pub struct CheckovScanner {
     binary_path: String,
 }
 
+impl Default for CheckovScanner {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl CheckovScanner {
     pub fn new() -> Self {
         let path = detect_tool("checkov");

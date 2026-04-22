@@ -25,6 +25,7 @@ pub struct Config {
     pub netlas_daily_budget: u32,
     pub caido_api_key: Option<String>,
     pub caido_api_url: String,
+    pub mcp_token: Option<String>,
 }
 
 impl Config {
@@ -71,6 +72,7 @@ impl Config {
                 .unwrap_or(33), // Default ~1000/month
             caido_api_key: env::var("CAIDO_API_KEY").ok(),
             caido_api_url: env::var("CAIDO_API_URL").unwrap_or_else(|_| "http://localhost:8080/graphql".to_string()),
+            mcp_token: env::var("MCP_TOKEN").ok(),
         }
     }
 

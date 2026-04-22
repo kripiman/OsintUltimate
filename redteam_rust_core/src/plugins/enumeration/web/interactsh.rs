@@ -8,6 +8,12 @@ use tracing::info;
 pub struct InteractshScanner {
     binary_path: String,
 }
+impl Default for InteractshScanner {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl InteractshScanner {
     pub fn new() -> Self {
         let path = detect_tool("interactsh-client");

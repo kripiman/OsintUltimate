@@ -79,6 +79,12 @@ pub struct BlackArchBridge {
     distill_semaphore: Arc<Semaphore>,
 }
 
+impl Default for BlackArchBridge {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl BlackArchBridge {
     pub fn new() -> Self {
         let mut tools = HashMap::new();

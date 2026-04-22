@@ -3,7 +3,7 @@ pub mod config;
 pub mod common;
 pub mod liveness;
 pub mod telemetry;
-pub mod proxy;
+pub mod proxy; // Redirection to infrastructure/proxy.rs
 pub mod cvss;
 pub mod tool_detection;
 pub mod memory_monitor;
@@ -20,6 +20,7 @@ pub mod tone;
 pub mod deduplication;
 pub mod cve_cache;
 pub mod activity_log;
+pub mod transport;
 
 pub use security::{validate_target, is_ssrf_safe_host};
 pub use executor::StealthExecutor;
@@ -28,7 +29,7 @@ pub use payload_server::PayloadServer;
 pub use liveness::LivenessChecker;
 pub use report_gen::generate_report;
 pub use telemetry::{init_telemetry, shutdown_telemetry};
-pub use proxy::ProxyManager;
+pub use crate::infrastructure::proxy::ProxyManager;
 pub use memory_monitor::MemoryMonitor;
 pub use jitter::JitterSleep;
 pub use process_guard::ExternalToolGuard;

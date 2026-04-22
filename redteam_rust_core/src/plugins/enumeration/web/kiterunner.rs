@@ -11,6 +11,12 @@ pub struct KiterunnerScanner {
     binary_path: String,
 }
 
+impl Default for KiterunnerScanner {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl KiterunnerScanner {
     pub fn new() -> Self {
         let path = detect_tool("kr");

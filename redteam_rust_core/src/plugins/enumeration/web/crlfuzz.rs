@@ -12,6 +12,12 @@ pub struct CRLFScanner {
     binary_path: String,
 }
 
+impl Default for CRLFScanner {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl CRLFScanner {
     pub fn new() -> Self {
         let path = detect_tool("crlfuzz");

@@ -75,10 +75,10 @@ impl SkillManager {
 
         for (i, s) in skills.iter().enumerate() {
             for cat in &s.category_match {
-                by_category.entry(cat.clone()).or_insert_with(Vec::new).push(i);
+                by_category.entry(cat.clone()).or_default().push(i);
             }
             for tag in &s.tags {
-                by_tag.entry(tag.to_lowercase()).or_insert_with(Vec::new).push(i);
+                by_tag.entry(tag.to_lowercase()).or_default().push(i);
             }
         }
 
@@ -119,9 +119,15 @@ impl SkillManager {
                 
                 // Check preconditions
                 if let Some(pre) = &s.preconditions {
-                    if let Some(_min_cvss) = pre.min_cvss {
-                        // Assuming Finding has a cvss score or equivalent
-                        // if finding.severity ...
+                    if let Some(min_cvss) = pre.min_cvss {
+                        let actual_cvss = finding.cvss_score.unwrap_or(0.0);
+                        if actual_cvss < min_cvss { continue; }
+                    }
+                    if let Some(req_ver) = pre.requires_verified {
+                        if req_ver && !finding.evidence.verified { continue; }
+                    }
+                    if let Some(req_tag) = &pre.requires_tag {
+                        if !finding.mitre_tags.contains(req_tag) { continue; }
                     }
                 }
 
@@ -130,7 +136,32 @@ impl SkillManager {
         }
 
         // 2. Score by Tags (Boost)
-        // (Implementation can be expanded as tags are added to Finding)
+        for tag in &finding.mitre_tags {
+            if let Some(indices) = self.by_tag.get(&tag.to_lowercase()) {
+                for &i in indices {
+                    // Update score if already a candidate, or add as candidate
+                    if let Some(entry) = candidates.iter_mut().find(|c| c.0 == i) {
+                        entry.1 += 20; // Big boost for tag match
+                    } else {
+                        // Check preconditions even for tag match
+                        let s = &self.skills[i];
+                        if used_lock.contains(&s.id) { continue; }
+                        if !s.posture_match.is_empty() && !s.posture_match.contains(&posture_str) { continue; }
+                        
+                        let mut pre_passed = true;
+                        if let Some(pre) = &s.preconditions {
+                            if let Some(min_cvss) = pre.min_cvss {
+                                if finding.cvss_score.unwrap_or(0.0) < min_cvss { pre_passed = false; }
+                            }
+                        }
+                        
+                        if pre_passed {
+                            candidates.push((i, 15)); // Tag match starting score
+                        }
+                    }
+                }
+            }
+        }
 
         candidates.sort_by(|a, b| b.1.cmp(&a.1));
 

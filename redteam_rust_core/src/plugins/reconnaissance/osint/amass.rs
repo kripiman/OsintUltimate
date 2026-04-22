@@ -11,6 +11,12 @@ pub struct AmassScanner {
     binary_path: String,
 }
 
+impl Default for AmassScanner {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl AmassScanner {
     pub fn new() -> Self {
         let path = detect_tool("amass");

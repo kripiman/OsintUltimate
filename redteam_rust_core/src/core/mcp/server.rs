@@ -1,9 +1,13 @@
 use axum::{
-    extract::{State, Path},
-    response::{sse::{Event, Sse}, IntoResponse},
+    extract::{Path, State, FromRequestParts},
+    http::{request::Parts, StatusCode},
+    response::{IntoResponse, sse::{Event, Sse}},
     routing::{get, post},
     Json, Router,
 };
+use axum::async_trait;
+use tower_http::cors::{AllowOrigin, CorsLayer};
+// use tower_governor::{governor::GovernorConfigBuilder, GovernorLayer, errors::display_error};
 use futures::stream::Stream;
 use std::{convert::Infallible, sync::Arc, time::Duration};
 use std::sync::atomic::{AtomicU32, AtomicU64, Ordering};
@@ -87,15 +91,48 @@ impl McpServer {
     }
 
     pub async fn run(self, port: u16) -> anyhow::Result<()> {
+        // Enforce MCP_TOKEN requirement (Sprint 1 - Fail-Closed)
+        if self.config.mcp_token.is_none() || self.config.mcp_token.as_ref().unwrap().is_empty() {
+            anyhow::bail!("CRITICAL: MCP_TOKEN not set in environment. MCP server cannot start without authentication.");
+        }
+
         let state = Arc::new(self);
         
+        let cors = CorsLayer::new()
+            .allow_origin(AllowOrigin::predicate(move |origin, _| {
+                let origin_str = origin.to_str().unwrap_or("");
+                // Sprint 2: Exact matching including port to prevent subdomain hijacking/rebinding
+                origin_str == format!("http://127.0.0.1:{}", port) || origin_str == format!("http://localhost:{}", port)
+            }))
+            .allow_methods([axum::http::Method::GET, axum::http::Method::POST])
+            .allow_headers([axum::http::header::AUTHORIZATION, axum::http::header::CONTENT_TYPE]);
+
+/*
+        // Rate limiting: 100 requests per second for MCP (IA can be noisy)
+        let governor_conf = Arc::new(
+            GovernorConfigBuilder::default()
+                .per_second(100)
+                .burst_size(200)
+                .error_handler(|e| {
+                    (
+                        StatusCode::TOO_MANY_REQUESTS,
+                        display_error(e),
+                    ).into_response()
+                })
+                .finish()
+                .unwrap(),
+        );
+*/
+
         let app = Router::new()
             .route("/sse", get(sse_handler))
             .route("/message/:session_id", post(message_handler))
+            // .layer(GovernorLayer::new(governor_conf))
+            .layer(cors)
             .with_state(state);
 
         let addr = format!("127.0.0.1:{}", port);
-        info!("🛡️ [MCP-Server] Escuchando en http://{} (SSE Enabled)", addr);
+        info!("🛡️ [MCP-Server] Escuchando en http://{} (SSE Enabled + AUTH + CORS Hardened)", addr);
         
         let listener = tokio::net::TcpListener::bind(&addr).await?;
         axum::serve(listener, app).await?;
@@ -104,8 +141,72 @@ impl McpServer {
     }
 }
 
+pub struct ValidatedOperator;
+
+#[async_trait]
+impl FromRequestParts<Arc<McpServer>> for ValidatedOperator {
+    type Rejection = (StatusCode, String);
+
+    async fn from_request_parts(
+        parts: &mut Parts,
+        state: &Arc<McpServer>,
+    ) -> Result<Self, Self::Rejection> {
+        let auth_header = parts.headers.get("Authorization")
+            .and_then(|h| h.to_str().ok())
+            .ok_or((StatusCode::UNAUTHORIZED, "Missing Authorization header".to_string()))?;
+
+        if !auth_header.starts_with("Bearer ") {
+            return Err((StatusCode::UNAUTHORIZED, "Invalid Authorization header format".to_string()));
+        }
+
+        let token = &auth_header[7..];
+        
+        if let Some(valid_token) = &state.config.mcp_token {
+            if token == valid_token {
+                return Ok(ValidatedOperator);
+            }
+        }
+
+        Err((StatusCode::UNAUTHORIZED, "Invalid MCP token".to_string()))
+    }
+}
+
+/// Helper para sanitizar y validar rutas dentro del workspace (Sprint 2)
+fn validate_path(path_str: &str) -> Result<std::path::PathBuf, String> {
+    let path = std::path::Path::new(path_str);
+    
+    // 1. Obtener la ruta base del workspace (CWD)
+    let workspace_root = std::env::current_dir()
+        .map_err(|e| format!("No se pudo determinar el workspace: {}", e))?;
+    let workspace_root = std::fs::canonicalize(workspace_root)
+        .map_err(|e| format!("No se pudo canonicalizar el workspace: {}", e))?;
+
+    // 2. Canonicalizar la ruta objetivo (o su padre si no existe)
+    let target_path = if path.exists() {
+        std::fs::canonicalize(path)
+            .map_err(|e| format!("Error de canonicalizacion: {}", e))?
+    } else {
+        let parent = path.parent().ok_or("Ruta sin directorio padre.".to_string())?;
+        if parent.as_os_str().is_empty() {
+             // Si el path es relativo simple "backup.md", el padre es "" (CWD)
+             workspace_root.clone()
+        } else {
+            std::fs::canonicalize(parent)
+                .map_err(|e| format!("El directorio padre no existe o no es accesible: {}", e))?
+        }
+    };
+
+    // 3. Verificar que reside dentro del workspace
+    if !target_path.starts_with(&workspace_root) {
+        return Err(format!("PATH VIOLATION: '{}' fuera del workspace autorizado.", path_str));
+    }
+
+    Ok(path.to_path_buf())
+}
+
 async fn sse_handler(
     State(state): State<Arc<McpServer>>,
+    _auth: ValidatedOperator,
 ) -> Sse<impl Stream<Item = Result<Event, Infallible>>> {
     let session_id = uuid::Uuid::new_v4().to_string();
     let (tx, rx) = mpsc::channel(100);
@@ -126,6 +227,7 @@ async fn sse_handler(
 
 async fn message_handler(
     State(state): State<Arc<McpServer>>,
+    _auth: ValidatedOperator,
     Path(_session_id): Path<String>,
     Json(payload): Json<JsonRpcRequest>,
 ) -> impl IntoResponse {
@@ -261,16 +363,18 @@ async fn message_handler(
         },
         "tools/call" => {
             if let Some(params) = payload.params {
-                let call: CallToolRequest = serde_json::from_value(params).unwrap();
-                match call.name.as_str() {
-                    "osint_route_task" => handle_route_task(call.arguments).await,
-                    "osint_execute_plugin" => handle_execute_plugin(&state, call.arguments).await,
-                    "osint_compress_memory_file" => handle_compress_memory(&state, call.arguments).await,
-                    "mcp_get_stats" => handle_get_stats(&state).await,
-                    "osint_detect_waste" => handle_detect_waste(&state).await,
-                    "osint_smart_read" => handle_smart_read(&state, call.arguments).await,
-                    "osint_checkpoint_save" => handle_checkpoint_save(&state, call.arguments).await,
-                    _ => json!({"error": {"code": -32601, "message": "Tool not found"}})
+                match serde_json::from_value::<CallToolRequest>(params) {
+                    Ok(call) => match call.name.as_str() {
+                        "osint_route_task" => handle_route_task(call.arguments).await,
+                        "osint_execute_plugin" => handle_execute_plugin(&state, call.arguments).await,
+                        "osint_compress_memory_file" => handle_compress_memory(&state, call.arguments).await,
+                        "mcp_get_stats" => handle_get_stats(&state).await,
+                        "osint_detect_waste" => handle_detect_waste(&state).await,
+                        "osint_smart_read" => handle_smart_read(&state, call.arguments).await,
+                        "osint_checkpoint_save" => handle_checkpoint_save(&state, call.arguments).await,
+                        _ => json!({"error": {"code": -32601, "message": "Tool not found"}})
+                    },
+                    Err(_) => json!({"error": {"code": -32602, "message": "Invalid params"}})
                 }
             } else {
                 json!({"error": {"code": -32602, "message": "Invalid params"}})
@@ -386,18 +490,19 @@ async fn handle_route_task(args: serde_json::Value) -> serde_json::Value {
 async fn handle_smart_read(state: &Arc<McpServer>, args: serde_json::Value) -> serde_json::Value {
     let path_str = args["path"].as_str().unwrap_or("");
 
+    // 1. Validacion de Path (Sprint 2)
+    let path = match validate_path(path_str) {
+        Ok(p) => p,
+        Err(e) => return safe_result(e, true),
+    };
+
     if state.sanitizer.filter_tool_output("SmartRead", path_str).is_empty()
         || path_str.contains(".env") || path_str.contains("id_rsa") || path_str.contains(".key")
     {
         return safe_result("SECURITY BLOCK: Ruta sensible bloqueada.".to_string(), true);
     }
 
-    let path = std::path::Path::new(path_str);
-    if path.components().any(|c| matches!(c, std::path::Component::ParentDir)) {
-        return safe_result("Error: Path traversal detectado.".to_string(), true);
-    }
-
-    let content = match tokio::fs::read_to_string(path_str).await {
+    let content = match tokio::fs::read_to_string(&path).await {
         Ok(c) => c,
         Err(e) => return safe_result(format!("Error leyendo archivo: {}", e), true),
     };
@@ -728,7 +833,7 @@ async fn handle_execute_plugin(state: &Arc<McpServer>, args: serde_json::Value) 
                 
                 // Ahorro estimado: (Hallazgos Crudos * 250 chars) - Texto Final
                 let raw_est = (findings.len() as u64) * 250;
-                let savings = if raw_est > final_len as u64 { raw_est - final_len as u64 } else { 0 };
+                let savings = raw_est.saturating_sub(final_len as u64);
                 let token_savings = savings / 4; // Estimación cruda 4 chars/token
                 state.tokens_saved.fetch_add(token_savings, Ordering::Relaxed);
                 
@@ -831,10 +936,11 @@ async fn handle_compress_memory(state: &Arc<McpServer>, args: serde_json::Value)
         _       => crate::core::ai::token_optimizer::OptimizationLevel::Full,
     };
 
-    let path = std::path::PathBuf::from(path_str);
-    if !path.exists() {
-        return safe_result(format!("Error: Archivo no encontrado en '{}'", path_str), true);
-    }
+    // 1. Validacion de Path (Sprint 2)
+    let path = match validate_path(path_str) {
+        Ok(p) => p,
+        Err(e) => return safe_result(e, true),
+    };
 
     match tokio::fs::read_to_string(&path).await {
         Ok(content) => {

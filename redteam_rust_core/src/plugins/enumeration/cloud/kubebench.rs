@@ -12,6 +12,12 @@ pub struct KubeBenchScanner {
     binary_path: String,
 }
 
+impl Default for KubeBenchScanner {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl KubeBenchScanner {
     pub fn new() -> Self {
         let path = detect_tool("kube-bench");

@@ -9,6 +9,12 @@ use tokio::process::Command;
 pub struct SearchsploitScanner {
     binary_path: String,
 }
+impl Default for SearchsploitScanner {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl SearchsploitScanner {
     pub fn new() -> Self {
         let path = detect_tool("searchsploit");
@@ -73,7 +79,7 @@ impl ScannerPlugin for SearchsploitScanner {
                         let content = String::from_utf8_lossy(&output.stdout);
                         if let Ok(json_data) = serde_json::from_str::<serde_json::Value>(&content) {
                             if let Some(results) = json_data.get("RESULTS_EXPLOIT") {
-                                if results.as_array().map_or(false, |a| !a.is_empty()) {
+                                if results.as_array().is_some_and(|a| !a.is_empty()) {
                                     findings.push(Finding::new(
                                         "SEARCHSPLOIT-EXPL-FOUND",
                                         Category::Vulnerability,

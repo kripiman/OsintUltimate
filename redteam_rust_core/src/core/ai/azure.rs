@@ -1,7 +1,8 @@
 use anyhow::{Result, Context};
 use async_trait::async_trait;
-use crate::models::{Finding, AIAnalysis, TargetHost};
-use crate::core::ai::{LlmClient, ContextCompressor, AdaptiveContext, RouteLevel, CapabilityGap};
+use crate::models::AIAnalysis;
+use crate::core::ai::traits::LlmClient;
+use crate::core::ai::compressor::ContextCompressor;
 use serde_json::json;
 use std::sync::Arc;
 
@@ -27,11 +28,11 @@ impl AzureOpenAIClient {
 
 #[async_trait]
 impl LlmClient for AzureOpenAIClient {
-    async fn analyze(&self, finding: &Finding, target: &TargetHost, attack_context: Option<&str>, route_level: RouteLevel, caveman: super::types::CavemanLevel) -> Result<AIAnalysis> {
-        let compressed = ContextCompressor::compress_finding(finding, route_level);
-        let ctx = attack_context.map(|c| format!("\nTactical Path: {}", c)).unwrap_or_default();
-        let prompt_raw = format!("Target: {}{}, Finding: {}", target.host, ctx, serde_json::to_string(&compressed)?);
-        let prompt = crate::core::ai::caveman::CavemanOptimizer::optimize_prompt(&prompt_raw, caveman);
+    async fn analyze(&self, config: crate::core::ai::traits::InferenceConfig<'_>) -> Result<AIAnalysis> {
+        let compressed = ContextCompressor::compress_finding(config.finding, config.route_level);
+        let ctx = config.attack_context.map(|c| format!("\nTactical Path: {}", c)).unwrap_or_default();
+        let prompt_raw = format!("Target: {}{}, Finding: {}", config.target.host, ctx, serde_json::to_string(&compressed)?);
+        let prompt = crate::core::ai::caveman::CavemanOptimizer::optimize_prompt(&prompt_raw, config.caveman);
         
         let host = url::Url::parse(&self.endpoint)?.host_str().unwrap_or("openai.azure.com").to_string();
         let client = self.base.get_client(&host).await?;
@@ -47,11 +48,11 @@ impl LlmClient for AzureOpenAIClient {
         Ok(serde_json::from_value(self.base.parse_extraction(text)?)?)
     }
 
-    async fn decide_action(&self, finding: &Finding, target: &TargetHost, plugins: &[crate::plugins::PluginMetadata], attack_context: Option<&str>, _gap: Option<&CapabilityGap>, adaptive_context: Option<&AdaptiveContext>, route_level: RouteLevel, caveman: super::types::CavemanLevel) -> Result<Option<(String, serde_json::Value)>> {
-        let _ = ContextCompressor::compress_finding(finding, route_level);
-        let ctx = attack_context.map(|c| format!("\nTactical Path: {}", c)).unwrap_or_default();
-        let prompt_raw = format!("Target: {}{}, Finding: {}, Context: {:?}", target.host, ctx, finding.id, adaptive_context);
-        let prompt = crate::core::ai::caveman::CavemanOptimizer::optimize_prompt(&prompt_raw, caveman);
+    async fn decide_action(&self, config: crate::core::ai::traits::DecisionConfig<'_>) -> Result<Option<(String, serde_json::Value)>> {
+        let _ = ContextCompressor::compress_finding(config.finding, config.route_level);
+        let ctx = config.attack_context.map(|c| format!("\nTactical Path: {}", c)).unwrap_or_default();
+        let prompt_raw = format!("Target: {}{}, Finding: {}, Context: {:?}", config.target.host, ctx, config.finding.id, config.adaptive_context);
+        let prompt = crate::core::ai::caveman::CavemanOptimizer::optimize_prompt(&prompt_raw, config.caveman);
         
         let host = url::Url::parse(&self.endpoint)?.host_str().unwrap_or("openai.azure.com").to_string();
         let client = self.base.get_client(&host).await?;
@@ -66,7 +67,7 @@ impl LlmClient for AzureOpenAIClient {
         let text = res["choices"][0]["message"]["content"].as_str().context("Azure decision format error")?;
         let json_val: serde_json::Value = self.base.parse_extraction(text)?;
         let action = json_val["action"].as_str().unwrap_or("none");
-        if action == "none" || !plugins.iter().any(|p| p.name == action) { Ok(None) }
+        if action == "none" || !config.plugins.iter().any(|p| p.name == action) { Ok(None) }
         else { Ok(Some((action.to_string(), json_val["tactical_context"].clone()))) }
     }
 }

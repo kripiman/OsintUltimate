@@ -9,6 +9,12 @@ use tokio::process::Command;
 pub struct GauPlusScanner {
     binary_path: String,
 }
+impl Default for GauPlusScanner {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl GauPlusScanner {
     pub fn new() -> Self {
         let path = detect_tool("gauplus");

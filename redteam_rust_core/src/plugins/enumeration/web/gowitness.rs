@@ -9,6 +9,12 @@ use tokio::process::Command;
 pub struct GoWitnessScanner {
     binary_path: String,
 }
+impl Default for GoWitnessScanner {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl GoWitnessScanner {
     pub fn new() -> Self {
         let path = detect_tool("gowitness");

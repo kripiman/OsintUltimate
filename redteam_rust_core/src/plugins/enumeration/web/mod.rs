@@ -1,4 +1,4 @@
-pub mod web;
+pub mod engine;
 pub mod ffuf;
 pub mod feroxbuster;
 pub mod arjun;

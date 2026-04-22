@@ -64,9 +64,9 @@ impl IoUringScanner {
             debug!("🚀 v4-NATIVE: Submitting batch of {} packets to io_uring SQ", targets.len());
             ring.submit_and_wait(targets.len())?;
             
-            let mut cq = ring.completion();
+            let cq = ring.completion();
             let mut count = 0;
-            while let Some(cqe) = cq.next() {
+            for cqe in cq {
                 if cqe.result() < 0 {
                     let err = std::io::Error::from_raw_os_error(-cqe.result());
                     error!("❌ v4-NATIVE: Packet submission error: {}", err);

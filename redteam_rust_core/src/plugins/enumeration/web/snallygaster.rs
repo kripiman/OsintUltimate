@@ -12,6 +12,12 @@ pub struct SnallygasterScanner {
     binary_path: String,
 }
 
+impl Default for SnallygasterScanner {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl SnallygasterScanner {
     pub fn new() -> Self {
         let path = detect_tool("snallygaster");

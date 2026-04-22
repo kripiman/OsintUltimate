@@ -131,8 +131,8 @@ impl WebFuzzer {
                             break; 
                         } else if status == 429 || status == 503 {
                             warn!("WebFuzzer: 429/503 detected on {}. Backing off...", target_host);
-                            if let (Some(ref pm), Some(ref p_url)) = (&self.proxy_manager, &proxy_url) {
-                                pm.blacklist_proxy(p_url);
+                            if let (Some(_pm), Some(_p_url)) = (&self.proxy_manager, &proxy_url) {
+                                // Blacklist logic removed per Auditor request
                             }
                             
                             if attempt < max_retries - 1 {
@@ -148,8 +148,8 @@ impl WebFuzzer {
                     },
                     Err(e) => {
                         if e.is_connect() || e.is_timeout() {
-                            if let (Some(ref pm), Some(ref p_url)) = (&self.proxy_manager, &proxy_url) {
-                                pm.blacklist_proxy(p_url); 
+                            if let (Some(_pm), Some(_p_url)) = (&self.proxy_manager, &proxy_url) {
+                                // Blacklist logic removed per Auditor request
                             }
                         }
                         

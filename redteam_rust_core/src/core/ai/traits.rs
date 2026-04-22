@@ -3,26 +3,28 @@ use async_trait::async_trait;
 use crate::models::{Finding, AIAnalysis, TargetHost};
 use super::types::{CapabilityGap, AdaptiveContext, RouteLevel};
 
+pub struct InferenceConfig<'a> {
+    pub finding: &'a Finding,
+    pub target: &'a TargetHost,
+    pub attack_context: Option<&'a str>,
+    pub route_level: RouteLevel,
+    pub caveman: super::types::CavemanLevel,
+}
+
+pub struct DecisionConfig<'a> {
+    pub finding: &'a Finding,
+    pub target: &'a TargetHost,
+    pub plugins: &'a [crate::plugins::PluginMetadata],
+    pub attack_context: Option<&'a str>,
+    pub gap: Option<&'a CapabilityGap>,
+    pub adaptive_context: Option<&'a AdaptiveContext>,
+    pub route_level: RouteLevel,
+    pub caveman: super::types::CavemanLevel,
+}
+
 #[async_trait]
 pub trait LlmClient: Send + Sync {
-    async fn analyze(
-        &self, 
-        finding: &Finding, 
-        target: &TargetHost, 
-        attack_context: Option<&str>, 
-        route_level: RouteLevel,
-        caveman: super::types::CavemanLevel,
-    ) -> Result<AIAnalysis>;
+    async fn analyze(&self, config: InferenceConfig<'_>) -> Result<AIAnalysis>;
 
-    async fn decide_action(
-        &self, 
-        finding: &Finding, 
-        target: &TargetHost,
-        plugins: &[crate::plugins::PluginMetadata],
-        attack_context: Option<&str>,
-        gap: Option<&CapabilityGap>,
-        adaptive_context: Option<&AdaptiveContext>,
-        route_level: RouteLevel,
-        caveman: super::types::CavemanLevel,
-    ) -> Result<Option<(String, serde_json::Value)>>;
+    async fn decide_action(&self, config: DecisionConfig<'_>) -> Result<Option<(String, serde_json::Value)>>;
 }

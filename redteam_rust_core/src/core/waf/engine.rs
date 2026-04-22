@@ -71,7 +71,7 @@ impl WafEvasionEngine {
 
         // NEW: Observe previous failure if this is not the first block
         if adaptive_ctx.block_count > 1 {
-            if let Some(ref last_action) = adaptive_ctx.previous_actions.last() {
+            if let Some(last_action) = adaptive_ctx.previous_actions.last() {
                 let prev_strategy = match last_action.as_str() {
                     "HeaderRotation" => Some(EvasionStrategy::HeaderRotation),
                     "TlsMutation" => Some(EvasionStrategy::TlsMutation),

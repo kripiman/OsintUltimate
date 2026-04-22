@@ -1,38 +1,39 @@
 # OsintUltimate — Product Overview
 
 ## Purpose
-OsintUltimate (V14.1 "Sovereign Stealth Protocol") is a production-grade autonomous red team orchestration platform built in Rust. It performs multi-phase offensive security assessments — from passive OSINT through active exploitation and post-exploitation — under strict OPSEC constraints.
+OsintUltimate (V14.1 "Sovereign Stealth Protocol") is a production-grade autonomous red team orchestration platform built in Rust. It automates the full offensive security lifecycle — from passive OSINT through active exploitation, post-exploitation, and C2 persistence — under a strict "No-Proxy, No-Traffic" fail-closed egress policy.
 
 ## Value Proposition
-- Fully autonomous operation: single command drives recon → scan → exploit → persist → report
-- Fail-closed egress: aborts instantly if stealth infrastructure (proxies/VPS) is compromised
-- Multi-agent swarm with token-budget admission control to prevent starvation of critical tasks
-- AttackGraph DFS pathfinding for automated AD escalation and lateral movement
-- Integrated C2 sovereignty for persistent session maintenance
+- **Autonomous Operation**: Multi-agent swarm (Scout, Exploiter, C2-Operator, Planner, GhostReporter) that self-directs through the attack lifecycle without constant human input.
+- **Sovereign OPSEC**: Every network packet is routed through a managed SOCKS5/Shadowsocks/Hysteria egress layer; direct IP exposure is architecturally impossible in stealth mode.
+- **AI-Augmented Decision Making**: Tiered LLM routing (Ollama local → Gemini Flash/GPT-4o-mini → Gemini Pro/Claude 3.5) with token-budget admission control and Wenyan-Ultra compression.
+- **Plugin Ecosystem**: 60+ scanner plugins covering recon, enumeration, exploitation, lateral movement, persistence, compliance, and verification.
 
 ## Key Features
-- **Adaptive Posture Management**: state-machine transitions between GHOST / STRIKE / BREACH based on target sensitivity
-- **Sentinel Sovereign Orchestrator**: multi-phase waterfall discovery (Wayback → Chaos → Netlas → Shodan) with automatic fallback and API credit management
-- **Swarm Mode** (`--swarm`): priority-aware multi-agent pool (Scout / Exploiter / C2 / Reporter roles) with atomic TokenBudget
-- **Autonomous Mode** (`--autonomous`): full autopilot pipeline via `run_autopilot()`
-- **MCP Server** (`--mcp-server`): Model Context Protocol SSE server for LLM tool integration
-- **Real-time Dashboard** (`--dashboard <port>`): web UI with ed25519-signed JWT auth
-- **Plugin System**: dynamic `.so` loading via `libloading`; plugins cover recon, exploitation, lateral movement, persistence, compliance, reporting
-- **Stealth Infrastructure**: DigitalOcean ephemeral droplet pool with Shadowsocks/Hysteria (QUIC/UDP) proxy rotation; kill-switch on Ctrl-C destroys all droplets
-- **Multi-Sink Output**: JSONL, SQLite, tactical C2 webhook (HTTPS-only, SSRF-safe)
-- **Observability**: `tracing` + OpenTelemetry OTLP; optional JSON log mode; ActivityLog JSONL per event
+| Feature | Description |
+|---|---|
+| Adaptive Posture Management | State-machine: GHOST → STRIKE → BREACH based on detection feedback |
+| Fail-Closed Egress | `ProxyManager::get_client_fail_closed()` — aborts if no healthy proxy |
+| AttackGraph Correlation | DFS-based pathfinding; auto-identifies AD Path-to-DA |
+| Token Budget Admission | Priority-aware `TokenBudget` prevents AI cost runaway |
+| io-uring Native Scanner | Zero-copy SYN packet dispatch for high-throughput port scanning |
+| Lock-Free Sink | `SegQueue`-backed result pipeline; SQLite WAL + JSONL streaming |
+| Dynamic Plugin Loading | Ed25519-signed `.so`/`.dylib` plugins with ABI version enforcement |
+| MCP Server | Model Context Protocol SSE server for IDE/agent integration |
+| Dashboard | Real-time web UI with Ed25519-signed JWT auth |
+| DigitalOcean Autonomous Egress | JIT droplet provisioning with auto-destruction kill-switch |
 
 ## Target Users
-- Authorized red team operators conducting penetration tests
-- Security researchers performing vulnerability research on in-scope targets
-- Purple team exercises requiring Blue Team detection tracking
+- **Red Team Operators**: Authorized penetration testers running full-lifecycle engagements.
+- **Bug Bounty Hunters**: Automated recon and vulnerability discovery pipelines.
+- **Security Researchers**: Extensible platform for custom scanner plugin development.
 
 ## Use Cases
-- Full-spectrum autonomous penetration test against a single host or bulk target list (`--input`)
-- Stealth OSINT reconnaissance (GHOST posture, no active probes)
-- Vulnerability validation with AI-assisted exploit generation
-- Post-exploitation persistence and lateral movement in AD environments
-- Compliance and reporting automation
+1. **Autonomous Engagement**: `--autonomous` flag activates Sentinel agent; runs discovery → scanning → PoC validation → C2 deployment without intervention.
+2. **Swarm Mode**: `--swarm` distributes work across specialized AI agents with token budgeting.
+3. **Passive OSINT Only**: `--max-layer passive` restricts to zero-traffic certificate transparency, Wayback, Chaos, Netlas, Shodan queries.
+4. **Compliance Audit**: Trivy, Kubescape, Checkov, OSV Scanner plugins for infrastructure hardening.
+5. **AD Enumeration**: BloodHound + AdIngestor + CorrelationEngine for automated Path-to-DA discovery.
 
 ## Governance
-All Layer 4+ operations require explicit approval via the `ApprovalGate`. Platform is designed for **authorized security testing only**.
+All Layer 4+ (Exploitation) and Layer 5 (Post-Exploitation) operations require explicit approval via `ApprovalGate`. Risk score ≥ 70 triggers a mandatory human-in-the-loop halt ("Sovereign Handover").

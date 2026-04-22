@@ -75,7 +75,7 @@ impl<M: ExecutorMode> C2Operator for HavocScanner<M> {
         
         // 1. Stage payload on OTT server
         let server = crate::utils::payload_server::PayloadServer::new();
-        let token = server.stage_payload(std::path::PathBuf::from(payload_path));
+        let token = server.stage_payload(std::path::PathBuf::from(payload_path)).await;
         let server_port = server.start().await?;
         
         // 2. Determine delivery IP

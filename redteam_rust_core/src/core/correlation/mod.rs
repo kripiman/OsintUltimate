@@ -36,6 +36,12 @@ pub struct CorrelationEngine {
     graph: AttackGraph,
 }
 
+impl Default for CorrelationEngine {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl CorrelationEngine {
     pub fn new() -> Self {
         Self {
@@ -129,7 +135,7 @@ impl CorrelationEngine {
         let mut paths = Vec::new();
         let mut visited = HashSet::new();
 
-        for (source_id, _) in &self.graph.nodes {
+        for source_id in self.graph.nodes.keys() {
             // Find root nodes (e.g., Recon, NetworkPort)
             if self.is_root_node(source_id) {
                 self.dfs_paths(source_id, &mut vec![], &mut paths, &mut visited);
@@ -152,9 +158,7 @@ impl CorrelationEngine {
     pub fn get_context_summary(&self, finding_id: &str) -> Option<String> {
         let paths = self.get_attack_paths();
         // Buscar la ruta más relevante (mayor CVSS o más larga) que contenga este hallazgo
-        let relevant_path = paths.iter()
-            .filter(|p| p.nodes.contains(&finding_id.to_string()))
-            .next()?;
+        let relevant_path = paths.iter().find(|p| p.nodes.contains(&finding_id.to_string()))?;
 
         // Truncar la ruta hasta el hallazgo actual para dar contexto de "cómo llegamos aquí"
         let mut context_nodes = Vec::new();
@@ -196,7 +200,7 @@ impl CorrelationEngine {
             }
             
             // simple normalization
-            if current_path.len() > 0 {
+            if !current_path.is_empty() {
                  total_cvss /= current_path.len() as f32;
             }
 

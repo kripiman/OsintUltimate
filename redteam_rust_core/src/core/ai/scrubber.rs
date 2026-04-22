@@ -7,6 +7,12 @@ pub struct SecretScrubber {
     patterns: Vec<(Regex, &'static str)>,
 }
 
+impl Default for SecretScrubber {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl SecretScrubber {
     pub fn new() -> Self {
         let mut patterns = Vec::new();
@@ -44,7 +50,7 @@ impl SecretScrubber {
         if let Ok(re) = Regex::new(r"\b(127\.0\.0\.1|::1)\b") { patterns.push((re, "[LOCALHOST]")); }
 
         // 5. Cryptographic Material
-        if let Ok(re) = Regex::new(r"(?s)-----BEGIN (RSA|OPENSSH|EC|DSA|PGP) PRIVATE KEY-----.*?-----END \1 PRIVATE KEY-----") {
+        if let Ok(re) = Regex::new(r"(?s)-----BEGIN (?:RSA|OPENSSH|EC|DSA|PGP) PRIVATE KEY-----.*?-----END (?:RSA|OPENSSH|EC|DSA|PGP) PRIVATE KEY-----") {
             patterns.push((re, "[REDACTED_PRIVATE_KEY]"));
         }
 

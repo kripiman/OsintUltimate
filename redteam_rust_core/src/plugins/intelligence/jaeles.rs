@@ -12,6 +12,12 @@ pub struct JaelesScanner {
     binary_path: String,
 }
 
+impl Default for JaelesScanner {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl JaelesScanner {
     pub fn new() -> Self {
         let path = detect_tool("jaeles");

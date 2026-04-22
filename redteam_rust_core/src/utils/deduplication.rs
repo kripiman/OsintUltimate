@@ -15,6 +15,12 @@ pub struct DeduplicationEngine {
 
 static ENGINE: Lazy<DeduplicationEngine> = Lazy::new(DeduplicationEngine::new);
 
+impl Default for DeduplicationEngine {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl DeduplicationEngine {
     pub fn new() -> Self {
         Self { 

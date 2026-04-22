@@ -9,6 +9,12 @@ use tokio::process::Command;
 pub struct TrivyScanner {
     binary_path: String,
 }
+impl Default for TrivyScanner {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl TrivyScanner {
     pub fn new() -> Self {
         let path = detect_tool("trivy");

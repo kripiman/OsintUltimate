@@ -12,6 +12,12 @@ pub struct WPScanner {
     binary_path: String,
 }
 
+impl Default for WPScanner {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl WPScanner {
     pub fn new() -> Self {
         let path = detect_tool("wpscan");

@@ -1,5 +1,7 @@
 use crate::utils::{stealth_http::StealthClientBuilder, proxy::ProxyManager};
-use crate::models::{Finding, ValidationStatus, ValidationMetadata, TargetHost, Severity, PocStrategy};
+use crate::core::ai::TieredAIRouter;
+use crate::models::{Finding, ValidationStatus, ValidationMetadata, TargetHost, Severity};
+
 use crate::core::verification::interaction::OobInteractionManager;
 use anyhow::Result;
 use chrono::Utc;
@@ -145,12 +147,13 @@ impl ValidationPipeline {
     /// Captures interactions from external servers (SSRF, Blind RCE, etc.)
     pub async fn check_oob_verification(
         finding: &Finding,
+        target: &TargetHost,
         proxy_manager: Arc<ProxyManager>,
     ) -> Result<Option<String>> {
         let category = format!("{:?}", finding.category).to_lowercase();
         let title = finding.title.to_lowercase();
+        let evidence = &finding.evidence.data;
         
-        // Detect if finding is OOB-capable
         let is_oob_capable = category.contains("vulnerability") && (
             title.contains("ssrf") || 
             title.contains("oob") || 
@@ -162,23 +165,44 @@ impl ValidationPipeline {
             return Ok(None);
         }
 
-        let oob_mgr = OobInteractionManager::new(proxy_manager);
-        let oob_id = oob_mgr.generate_id();
-        let oob_domain = oob_mgr.get_oob_domain(&oob_id);
+        let om = OobInteractionManager::new(proxy_manager.clone());
+        
+        // --- Part 1: Retrospective Check ---
+        if let Some(id) = evidence.get("oob_id").and_then(|v| v.as_str()) {
+            info!("🧬 [OOB] checking retrospective hit for existing ID: {}", id);
+            if let Some(hit) = om.wait_for_interaction(id, 5).await? {
+                 return Ok(Some(format!("Confirmed OOB interaction ({}) via Retrospective ID: {}", hit.protocol, id)));
+            }
+        }
 
-        info!("🧬 [Validation] Layer 4: Testing OOB interaction via {}", oob_domain);
+        // --- Part 2: Proactive Re-execution (V15.5) ---
+        let fresh_id = om.generate_id();
         
-        // Trigger the PoC again with the OOB payload if available
-        // NOTE: In a full implementation, we'd use the PocValidator to re-run.
-        // For now, we check if there's an existing interaction in the evidence (retrospective hit)
-        // or we just query the server for the ID generated during the initial scan if it was provided.
-        
-        // V15.3 logic: If the original scan already used an OOB ID, it should be in the evidence.
-        let existing_id = finding.evidence.data.get("oob_id").and_then(|v| v.as_str());
-        
-        if let Some(id) = existing_id {
-            if let Some(hit) = oob_mgr.wait_for_interaction(id, 30).await? {
-                return Ok(Some(format!("Confirmed OOB interaction ({}) from {}", hit.protocol, hit.remote_address)));
+        let url = evidence.get("url").and_then(|v| v.as_str());
+        let payload = evidence.get("payload").and_then(|v| v.as_str());
+        let method = evidence.get("method").and_then(|v| v.as_str()).unwrap_or("GET");
+
+        if let (Some(u), Some(p)) = (url, payload) {
+            info!("🧬 [OOB] Proactive Re-execution: Triggering fresh PoC with ID: {}...", fresh_id);
+            
+            // Inyect fresh domain into payload
+            // This assumes the payload had a placeholder or a domain that can be replaced
+            let fresh_payload = if p.contains(".interactsh.com") {
+                // Replace old domain with fresh one
+                p.split('.').next().map(|prefix| p.replace(prefix, &fresh_id)).unwrap_or_else(|| p.to_string())
+            } else {
+                p.to_string() // Or append if it's a blind param
+            };
+
+            let fresh_url = u.replace(p, &fresh_payload);
+            let client = StealthClientBuilder::build(target, &proxy_manager)?;
+            
+            // Fire and forget the request (don't wait for response, wait for the OOB HIT)
+            let _ = client.request(method.parse()?, &fresh_url).send().await;
+            
+            // Poll for interaction
+            if let Some(hit) = om.wait_for_interaction(&fresh_id, 30).await? {
+                return Ok(Some(format!("Confirmed OOB interaction ({}) via PROACTIVE ID: {}", hit.protocol, fresh_id)));
             }
         }
 
@@ -191,6 +215,7 @@ impl ValidationPipeline {
         finding: &mut Finding,
         target: &TargetHost,
         proxy_manager: Arc<ProxyManager>,
+        router: Arc<TieredAIRouter>,
     ) -> Result<()> {
         info!("🔍 [Validation] Invocando Pipeline Anti-Alucinación (V15) para: {}", finding.id);
         
@@ -206,15 +231,15 @@ impl ValidationPipeline {
                 None
             });
         
-        let oob_proof = Self::check_oob_verification(finding, proxy_manager).await
+        let oob_proof = Self::check_oob_verification(finding, target, proxy_manager.clone()).await
             .unwrap_or_else(|e| {
                 error!("[Validation] Error in Layer 4: {}", e);
                 None
             });
         
-        let mut status = ValidationStatus::Unverified;
-        let mut confidence = finding.evidence.confidence;
-        let mut notes = String::new();
+        let status;
+        let confidence;
+        let notes;
 
         if !neg_control {
             status = ValidationStatus::PseudoFalse;
@@ -229,17 +254,38 @@ impl ValidationPipeline {
             status = ValidationStatus::Verified;
             confidence = 1.0;
             notes = format!("PASSED Proof of Execution: {}", proof_msg);
-        } else {
-            // Triage logic: High severities without proof are suspicious
-            if finding.severity >= Severity::High {
-                status = ValidationStatus::Suspicious;
-                confidence = 0.3;
-                notes = "PASSED Negative Control but NO technical proof for Critical/High finding. Verification required.".to_string();
+        } else if finding.severity >= Severity::High {
+            // Layer 3: AI Judge Escalation (Only if NO technical proof was found)
+            info!("🧠 [Validation] Layer 3: Escalating to Premium AI Judge for {} finding (No proof found).", finding.severity);
+            
+            let context = format!(
+                "NegControlPassed: {}\nTechnicalProof: {:?}\nOOBProof: {:?}\nFindingTitle: {}\nEvidence: {:?}",
+                neg_control, proof, oob_proof, finding.title, finding.evidence.data
+            );
+
+            // Per user request: Use Premium for High/Critical if they pass basic filters
+            let verdict = router.analyze_with_level(
+                finding, 
+                target, 
+                Some(&context), 
+                crate::core::ai::RouteLevel::Premium,
+                crate::core::ai::CavemanLevel::default()
+            ).await?;
+
+            if verdict.risk_score < 4 {
+                status = ValidationStatus::PseudoFalse;
+                confidence = 0.2;
+                notes = format!("AI JUDGE REJECTED: {}", verdict.summary);
             } else {
-                status = ValidationStatus::Unverified;
-                confidence = 0.5;
-                notes = "PASSED Negative Control. Proof of Execution skipped for low/medium severity.".to_string();
+                status = ValidationStatus::Verified;
+                confidence = (verdict.confidence as f32).max(0.7);
+                notes = format!("AI JUDGE VERIFIED: {} | {}", verdict.summary, verdict.stealth_notes);
             }
+        } else {
+            // Triage logic for lower severities
+            status = ValidationStatus::Unverified;
+            confidence = 0.5;
+            notes = "PASSED Negative Control. Skipping Layer 2/3 for low/medium severity.".to_string();
         }
 
         finding.validation = ValidationMetadata {
@@ -261,11 +307,36 @@ impl ValidationPipeline {
     }
 
     fn benignify(payload: &str) -> String {
-        // Simple heuristic to create a "benign" version of a payload
-        payload.replace("'", "a")
-               .replace("<script>", "hello")
-               .replace("1=1", "1=2")
-               .replace("../", "./")
-               .replace("sleep", "echo")
+        // V15.5 Hardening: Deep sanitization for multi-vector logic
+        let mut b = payload.to_string();
+        
+        // 1. Strings & Encodings
+        b = b.replace("'", "a").replace("\"", "b");
+        b = b.replace("%27", "a").replace("%22", "b");
+        b = b.replace("\\'", "a").replace("\\\"", "b");
+        
+        // 2. SQLi Logic
+        b = b.replace("1=1", "1=2").replace("OR 1=1", "AND 0=1");
+        b = b.replace("union select", "select");
+        b = b.replace("SLEEP(", "ECHO(").replace("PG_SLEEP(", "ECHO(");
+        b = b.replace("WAITFOR DELAY", "PRINT");
+        
+        // 3. XSS / Injection
+        b = b.replace("<script>", "hello").replace("</script>", "world");
+        b = b.replace("%3Cscript%3E", "hello");
+        b = b.replace("eval(", "print(");
+        
+        // 4. Path Traversal
+        b = b.replace("../", "./").replace("..\\", ".\\");
+        b = b.replace("%2E%2E%2F", "./");
+        
+        // 5. OOB / Command
+        b = b.replace("curl ", "echo ").replace("wget ", "echo ");
+        b = b.replace("nslookup ", "echo ").replace("ping ", "echo ");
+        
+        // 6. Template Injection
+        b = b.replace("{{", "{").replace("}}", "}");
+
+        b
     }
 }

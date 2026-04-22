@@ -26,6 +26,12 @@ pub struct GitleaksScanner {
     binary_path: String,
 }
 
+impl Default for GitleaksScanner {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl GitleaksScanner {
     pub fn new() -> Self {
         let path = detect_tool("gitleaks");

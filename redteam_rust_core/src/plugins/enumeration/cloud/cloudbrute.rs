@@ -9,6 +9,12 @@ use tokio::process::Command;
 pub struct CloudBruteScanner {
     binary_path: String,
 }
+impl Default for CloudBruteScanner {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl CloudBruteScanner {
     pub fn new() -> Self {
         let path = detect_tool("cloudbrute");

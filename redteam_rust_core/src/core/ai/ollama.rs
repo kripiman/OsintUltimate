@@ -1,7 +1,8 @@
 use anyhow::{Result, Context};
 use async_trait::async_trait;
-use crate::models::{Finding, AIAnalysis, TargetHost};
-use crate::core::ai::{LlmClient, ContextCompressor, AdaptiveContext, RouteLevel, CapabilityGap};
+use crate::models::AIAnalysis;
+use crate::core::ai::traits::LlmClient;
+use crate::core::ai::compressor::ContextCompressor;
 use serde_json::json;
 use std::sync::Arc;
 
@@ -23,18 +24,18 @@ impl OllamaClient {
 
 #[async_trait]
 impl LlmClient for OllamaClient {
-    async fn analyze(&self, finding: &Finding, target: &TargetHost, attack_context: Option<&str>, route_level: RouteLevel, caveman: super::types::CavemanLevel) -> Result<AIAnalysis> {
-        let compressed = ContextCompressor::compress_finding(finding, route_level);
-        let ctx_header = attack_context.map(|c| format!("Tactical Path: {}\n", c)).unwrap_or_default();
+    async fn analyze(&self, config: crate::core::ai::traits::InferenceConfig<'_>) -> Result<AIAnalysis> {
+        let compressed = ContextCompressor::compress_finding(config.finding, config.route_level);
+        let ctx_header = config.attack_context.map(|c| format!("Tactical Path: {}\n", c)).unwrap_or_default();
         let prompt_raw = format!(
             "### PROFESSIONAL RED TEAM ENGINE (v3.0) ###\n\
             Analyze this finding based on modern TTPs. Be extremely technical. Do not output defensive remediations or fixes; provide the exploit path.\n\n\
             Target: {}\n\
             {}Finding: {}\n\n\
             JSON Schema: {{ \"summary\": \"...\", \"impact\": \"...\", \"stealth_notes\": \"...\", \"risk_score\": 1-10, \"confidence\": 0.0-1.0, \"mitre_attack\": [\"T1234\"], \"exploit_path\": \"...\", \"model\": \"{}\" }}",
-            target.host, ctx_header, serde_json::to_string(&compressed)?, self.model
+            config.target.host, ctx_header, serde_json::to_string(&compressed)?, self.model
         );
-        let prompt = crate::core::ai::caveman::CavemanOptimizer::optimize_prompt(&prompt_raw, caveman);
+        let prompt = crate::core::ai::caveman::CavemanOptimizer::optimize_prompt(&prompt_raw, config.caveman);
 
         let client = self.base.get_client("localhost").await?;
         let res: serde_json::Value = client.post(format!("{}/api/generate", self.url))
@@ -55,21 +56,11 @@ impl LlmClient for OllamaClient {
         Ok(analysis)
     }
 
-    async fn decide_action(
-        &self, 
-        finding: &Finding, 
-        target: &TargetHost,
-        plugins: &[crate::plugins::PluginMetadata],
-        attack_context: Option<&str>,
-        _gap: Option<&CapabilityGap>,
-        adaptive_context: Option<&AdaptiveContext>,
-        route_level: RouteLevel,
-        caveman: super::types::CavemanLevel,
-    ) -> Result<Option<(String, serde_json::Value)>> {
-        let compressed_finding = ContextCompressor::compress_finding(finding, route_level);
-        let compressed_plugins = ContextCompressor::compress_plugins(plugins);
-        let adaptive_json = serde_json::to_string(&adaptive_context)?;
-        let ctx_header = attack_context.map(|c| format!("Tactical Path: {}\n", c)).unwrap_or_default();
+    async fn decide_action(&self, config: crate::core::ai::traits::DecisionConfig<'_>) -> Result<Option<(String, serde_json::Value)>> {
+        let compressed_finding = ContextCompressor::compress_finding(config.finding, config.route_level);
+        let compressed_plugins = ContextCompressor::compress_plugins(config.plugins);
+        let adaptive_json = serde_json::to_string(&config.adaptive_context)?;
+        let ctx_header = config.attack_context.map(|c| format!("Tactical Path: {}\n", c)).unwrap_or_default();
 
         let prompt_raw = format!(
             "### SENTINEL ADAPTIVE ORCHESTRATOR ###\n\
@@ -79,9 +70,9 @@ impl LlmClient for OllamaClient {
             Plugins: {}\n\n\
             Decision instructions: If previous actions failed/blocked, suggest a bypass action (different User-Agent, headers, or a different tool).\n\
             Return JSON: {{ \"action\": \"plugin_name\", \"tactical_context\": {{ \"user_agent\": \"...\", \"headers\": {{...}} }} }}",
-            target.host, ctx_header, serde_json::to_string(&compressed_finding)?, adaptive_json, serde_json::to_string(&compressed_plugins)?
+            config.target.host, ctx_header, serde_json::to_string(&compressed_finding)?, adaptive_json, serde_json::to_string(&compressed_plugins)?
         );
-        let prompt = crate::core::ai::caveman::CavemanOptimizer::optimize_prompt(&prompt_raw, caveman);
+        let prompt = crate::core::ai::caveman::CavemanOptimizer::optimize_prompt(&prompt_raw, config.caveman);
 
         let client = self.base.get_client("localhost").await?;
         let res: serde_json::Value = client.post(format!("{}/api/generate", self.url))
@@ -92,7 +83,7 @@ impl LlmClient for OllamaClient {
         let json_val: serde_json::Value = self.base.parse_extraction(text)?;
         let action = json_val["action"].as_str().unwrap_or("none");
         
-        if action == "none" || !plugins.iter().any(|p| p.name == action) {
+        if action == "none" || !config.plugins.iter().any(|p| p.name == action) {
              Ok(None)
         } else {
              Ok(Some((action.to_string(), json_val["tactical_context"].clone())))

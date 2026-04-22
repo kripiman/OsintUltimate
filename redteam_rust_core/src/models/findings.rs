@@ -352,7 +352,7 @@ impl Finding {
             for cwe in &self.cwe {
                 md.push_str(&format!("- [{0}](https://cwe.mitre.org/data/definitions/{1}.html)\n", cwe, cwe.replace("CWE-", "")));
             }
-            md.push_str("\n");
+            md.push('\n');
         }
 
         if let Some(ref tags) = self.mitre_attack {
@@ -360,7 +360,7 @@ impl Finding {
             for tag in tags {
                 md.push_str(&format!("- `{}`\n", tag));
             }
-            md.push_str("\n");
+            md.push('\n');
         }
 
         md.push_str("## Evidence\n\n");
@@ -377,7 +377,7 @@ impl Finding {
                 md.push_str(&format!("| {} | `{}` | `{}` | {} |\n", 
                     file.evidence_type, file.path, sha_short, file.collected_at));
             }
-            md.push_str("\n");
+            md.push('\n');
         }
 
         if let Some(ref tactical) = self.tactical_path {

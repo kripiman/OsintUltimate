@@ -50,6 +50,12 @@ pub struct TieredAIRouter {
     metrics: Arc<CacheMetrics>,
 }
 
+impl Default for TieredAIRouter {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl TieredAIRouter {
     pub fn new() -> Self {
         Self {
@@ -162,7 +168,14 @@ impl TieredAIRouter {
                 let effective_ctx = self.enrich_context_v15(finding, attack_context, current_level, Posture::Ghost, caveman).await;
 
                 for entry in providers {
-                    match entry.client.analyze(finding, target, effective_ctx.as_deref(), current_level, caveman).await {
+                    let config = crate::core::ai::traits::InferenceConfig {
+                        finding,
+                        target,
+                        attack_context: effective_ctx.as_deref(),
+                        route_level: current_level,
+                        caveman,
+                    };
+                    match entry.client.analyze(config).await {
                         Ok(analysis) => {
                             let mut analysis = analysis;
                             analysis.model = format!("{} (Tiered: {:?}, Provider: {:?})", analysis.model, current_level, entry.kind);
@@ -211,16 +224,18 @@ impl TieredAIRouter {
                 let effective_ctx = self.enrich_context_v15(finding, attack_context, current_level, posture, caveman).await;
 
                 for entry in providers {
-                    // V15: PLUGIN RAG OPTIMIZATION
-                    // Select only top 15 most relevant tools to save tokens and reduce model confusion
-                    let filtered_plugins = super::plugin_rag::PluginRagManager::select_tools(
-                        finding, 
-                        effective_ctx.as_deref(), 
-                        plugins, 
-                        15
-                    );
+                    let config = crate::core::ai::traits::DecisionConfig {
+                        finding,
+                        target,
+                        plugins: &filtered_plugins,
+                        attack_context: effective_ctx.as_deref(),
+                        gap: None,
+                        adaptive_context,
+                        route_level: current_level,
+                        caveman,
+                    };
                     
-                    match entry.client.decide_action(finding, target, &filtered_plugins, effective_ctx.as_deref(), None, adaptive_context, current_level, caveman).await {
+                    match entry.client.decide_action(config).await {
                         Ok(Some((action, context))) => {
                             return Ok(Some((action, context)));
                         }

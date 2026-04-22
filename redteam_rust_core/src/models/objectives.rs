@@ -130,7 +130,7 @@ impl OPPLAN {
         let mut visited = HashSet::new();
         let mut rec_stack = HashSet::new();
 
-        for (id, _) in &self.objectives {
+        for id in self.objectives.keys() {
             if self.has_cycle_util(id, &mut visited, &mut rec_stack) {
                 return Err(anyhow!("OPPLAN Error: Cyclic dependency detected involving objective '{}'", id));
             }

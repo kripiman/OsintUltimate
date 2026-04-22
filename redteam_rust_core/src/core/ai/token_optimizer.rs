@@ -105,22 +105,20 @@ static SYNONYMS: Lazy<HashMap<&'static str, &'static str>> = Lazy::new(|| {
     m.insert("repository", "repo");
     m.insert("dependency", "dep");
     m.insert("dependencies", "deps");
+    m.insert("security", "sec");
     m
 });
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Default)]
 pub enum OptimizationLevel {
     Off,
     Lite,
+    #[default]
     Full,
     Ultra,
 }
 
-impl Default for OptimizationLevel {
-    fn default() -> Self {
-        OptimizationLevel::Full
-    }
-}
 
 // ─── Strategy trait ───────────────────────────────────────────────────────────
 
@@ -313,6 +311,12 @@ pub struct PromptOptimizer {
     strategies: Vec<Box<dyn OptimizationStrategy>>,
 }
 
+impl Default for PromptOptimizer {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl PromptOptimizer {
     pub fn new() -> Self {
         Self {
@@ -378,6 +382,12 @@ pub static PROMPT_OPTIMIZER: Lazy<PromptOptimizer> = Lazy::new(PromptOptimizer::
 /// for a given query within a token budget.
 pub struct ContextRanker {
     cache: Mutex<HashMap<String, Vec<(String, f64)>>>,
+}
+
+impl Default for ContextRanker {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl ContextRanker {

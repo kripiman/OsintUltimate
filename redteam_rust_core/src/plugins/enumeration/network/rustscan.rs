@@ -11,6 +11,12 @@ pub struct RustScanScanner {
     binary_path: String,
 }
 
+impl Default for RustScanScanner {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl RustScanScanner {
     pub fn new() -> Self {
         let path = detect_tool("rustscan");

@@ -45,6 +45,12 @@ pub struct OSVScanner {
     binary_path: String,
 }
 
+impl Default for OSVScanner {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl OSVScanner {
     pub fn new() -> Self {
         let path = detect_tool("osv-scanner");

@@ -10,6 +10,12 @@ pub struct PayloadServer {
     staged_payloads: Arc<RwLock<HashMap<String, PathBuf>>>,
 }
 
+impl Default for PayloadServer {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl PayloadServer {
     pub fn new() -> Self {
         Self {
@@ -17,13 +23,10 @@ impl PayloadServer {
         }
     }
 
-    pub fn stage_payload(&self, payload_path: PathBuf) -> String {
+    pub async fn stage_payload(&self, payload_path: PathBuf) -> String {
         let token = Uuid::new_v4().to_string();
-        let payloads = self.staged_payloads.clone();
-        let token_clone = token.clone();
-        tokio::spawn(async move {
-            payloads.write().await.insert(token_clone, payload_path);
-        });
+        let mut payloads = self.staged_payloads.write().await;
+        payloads.insert(token.clone(), payload_path);
         token
     }
 
@@ -36,18 +39,21 @@ impl PayloadServer {
         
         let app = Router::new()
             .route("/:token", axum::routing::get(move |Path(token): Path<String>| async move {
-                let payloads = payloads.read().await;
-                if let Some(path) = payloads.get(&token) {
+                let mut payloads = payloads.write().await;
+                if let Some(path) = payloads.remove(&token) {
                     match ServeFile::new(path).try_call(axum::http::Request::new(())).await {
-                        Ok(response) => response.into_response(),
+                        Ok(response) => {
+                            info!("🎁 OTT: Payload {} descargado. Token invalidado.", token);
+                            response.into_response()
+                        },
                         Err(_) => (StatusCode::NOT_FOUND, "File not found").into_response(),
                     }
                 } else {
-                    (StatusCode::NOT_FOUND, "Token not found").into_response()
+                    (StatusCode::NOT_FOUND, "Token not found or already used").into_response()
                 }
             }));
 
-        let listener = tokio::net::TcpListener::bind("0.0.0.0:0").await?;
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await?;
         let port = listener.local_addr()?.port();
         
         info!("🚀 SOVEREIGN: Payload server listening on port {}", port);

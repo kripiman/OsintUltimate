@@ -78,6 +78,12 @@ pub struct StaticPolicy {
     roe: Option<RoE>,
 }
 
+impl Default for StaticPolicy {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl StaticPolicy {
     pub fn new() -> Self {
 
@@ -201,14 +207,15 @@ impl PolicyProvider for StaticPolicy {
     fn is_target_allowed(&self, target: &str) -> bool {
         // V14.2: Real Scope Validation using PSL + Regex fallbacks
         if self.in_scope_patterns.is_empty() && self.allowed_roots.is_empty() {
-            // If no policy is defined, we assume everything is allowed (Dev mode)
-            return true;
+            // Sprint 2: Fail-Closed Requirement
+            tracing::warn!("🛡️ V14.2 POLICY_MISSING: No policy.json defined. All targets rejected (Fail-Closed).");
+            return false;
         }
 
         // Phase C: PSL Domain Check (Preferred)
         if let Ok(domain) = addr::parse_domain_name(target) {
             if let Some(root) = domain.root() {
-                let root_str: &str = root.as_ref();
+                let root_str: &str = root;
                 if self.allowed_roots.contains(root_str) {
                     return true;
                 }

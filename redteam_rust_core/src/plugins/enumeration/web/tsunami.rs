@@ -34,6 +34,12 @@ pub struct TsunamiScanner {
     binary_path: String,
 }
 
+impl Default for TsunamiScanner {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl TsunamiScanner {
     pub fn new() -> Self {
         let path = detect_tool("tsunami");

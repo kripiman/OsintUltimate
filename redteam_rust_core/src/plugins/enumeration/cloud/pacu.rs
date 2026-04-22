@@ -7,6 +7,12 @@ use tracing::info;
 pub struct PacuScanner {
     binary_path: String,
 }
+impl Default for PacuScanner {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl PacuScanner {
     pub fn new() -> Self {
         let path = detect_tool("pacu");

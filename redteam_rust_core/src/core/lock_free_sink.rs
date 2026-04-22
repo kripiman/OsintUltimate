@@ -16,6 +16,12 @@ pub struct LockFreeResultSink {
     notify: Arc<Notify>,
 }
 
+impl Default for LockFreeResultSink {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl LockFreeResultSink {
     pub fn new() -> Self {
         Self {

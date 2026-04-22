@@ -9,6 +9,12 @@ use tokio::process::Command;
 pub struct FeroxbusterScanner {
     binary_path: String,
 }
+impl Default for FeroxbusterScanner {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl FeroxbusterScanner {
     pub fn new() -> Self {
         let path = detect_tool("feroxbuster");

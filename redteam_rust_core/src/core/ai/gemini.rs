@@ -1,7 +1,8 @@
 use anyhow::Result;
 use async_trait::async_trait;
-use crate::models::{Finding, AIAnalysis, TargetHost};
-use crate::core::ai::{LlmClient, ContextCompressor, AdaptiveContext, RouteLevel, CapabilityGap};
+use crate::models::AIAnalysis;
+use crate::core::ai::LlmClient;
+use crate::core::ai::ContextCompressor;
 use serde_json::json;
 use std::sync::Arc;
 
@@ -33,11 +34,11 @@ impl GeminiClient {
 
 #[async_trait]
 impl LlmClient for GeminiClient {
-    async fn analyze(&self, finding: &Finding, target: &TargetHost, attack_context: Option<&str>, route_level: RouteLevel, caveman: super::types::CavemanLevel) -> Result<AIAnalysis> {
-        let compressed = ContextCompressor::compress_finding(finding, route_level);
-        let ctx_header = attack_context.map(|c| format!("Tactical Path: {}\n", c)).unwrap_or_default();
-        let prompt_raw = format!("### PROFESSIONAL RED TEAM ENGINE ###\n{}Analyze this Red Team finding: {}. Target: {}. You must return a JSON object with 'summary', 'impact', 'stealth_notes', 'risk_score', 'confidence', 'mitre_attack', 'exploit_path' (DO NOT provide remediation/blue team fixes, only how to exploit), 'model'.", ctx_header, serde_json::to_string(&compressed)?, target.host);
-        let prompt = crate::core::ai::caveman::CavemanOptimizer::optimize_prompt(&prompt_raw, caveman);
+    async fn analyze(&self, config: crate::core::ai::traits::InferenceConfig<'_>) -> Result<AIAnalysis> {
+        let compressed = ContextCompressor::compress_finding(config.finding, config.route_level);
+        let ctx_header = config.attack_context.map(|c| format!("Tactical Path: {}\n", c)).unwrap_or_default();
+        let prompt_raw = format!("### PROFESSIONAL RED TEAM ENGINE ###\n{}Analyze this Red Team finding: {}. Target: {}. You must return a JSON object with 'summary', 'impact', 'stealth_notes', 'risk_score', 'confidence', 'mitre_attack', 'exploit_path' (DO NOT provide remediation/blue team fixes, only how to exploit), 'model'.", ctx_header, serde_json::to_string(&compressed)?, config.target.host);
+        let prompt = crate::core::ai::caveman::CavemanOptimizer::optimize_prompt(&prompt_raw, config.caveman);
         
         let mut last_error = None;
         let client = self.base.get_client("generativelanguage.googleapis.com").await?;
@@ -66,11 +67,11 @@ impl LlmClient for GeminiClient {
         Err(anyhow::anyhow!("Gemini analyze failed: {:?}", last_error))
     }
 
-    async fn decide_action(&self, finding: &Finding, target: &TargetHost, plugins: &[crate::plugins::PluginMetadata], attack_context: Option<&str>, _gap: Option<&CapabilityGap>, adaptive_context: Option<&AdaptiveContext>, route_level: RouteLevel, caveman: super::types::CavemanLevel) -> Result<Option<(String, serde_json::Value)>> {
-        let _ = ContextCompressor::compress_finding(finding, route_level);
-        let ctx_header = attack_context.map(|c| format!("Tactical Path: {}\n", c)).unwrap_or_default();
-        let prompt_raw = format!("### SENTINEL ORCHESTRATOR ###\n{}Decide next step for {}. History: {:?}. Finding: {}. Plugins: {}. Focus on WAF bypass.", ctx_header, target.host, adaptive_context, finding.id, plugins.len());
-        let prompt = crate::core::ai::caveman::CavemanOptimizer::optimize_prompt(&prompt_raw, caveman);
+    async fn decide_action(&self, config: crate::core::ai::traits::DecisionConfig<'_>) -> Result<Option<(String, serde_json::Value)>> {
+        let _ = ContextCompressor::compress_finding(config.finding, config.route_level);
+        let ctx_header = config.attack_context.map(|c| format!("Tactical Path: {}\n", c)).unwrap_or_default();
+        let prompt_raw = format!("### SENTINEL ORCHESTRATOR ###\n{}Decide next step for {}. History: {:?}. Finding: {}. Plugins: {}. Focus on WAF bypass.", ctx_header, config.target.host, config.adaptive_context, config.finding.id, config.plugins.len());
+        let prompt = crate::core::ai::caveman::CavemanOptimizer::optimize_prompt(&prompt_raw, config.caveman);
         
         let client = self.base.get_client("generativelanguage.googleapis.com").await?;
         for _ in 0..self.keys.len() {
@@ -81,7 +82,7 @@ impl LlmClient for GeminiClient {
                     if let Some(text) = val["candidates"][0]["content"]["parts"][0]["text"].as_str() {
                         let json_val: serde_json::Value = self.base.parse_extraction(text)?;
                         let action = json_val["action"].as_str().unwrap_or("none");
-                        if action == "none" || !plugins.iter().any(|p| p.name == action) { return Ok(None); }
+                        if action == "none" || !config.plugins.iter().any(|p| p.name == action) { return Ok(None); }
                         return Ok(Some((action.to_string(), json_val["tactical_context"].clone())));
                     }
                     self.rotate_key();

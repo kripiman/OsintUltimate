@@ -1,7 +1,8 @@
 use anyhow::{Result, Context};
 use async_trait::async_trait;
-use crate::models::{Finding, AIAnalysis, TargetHost};
-use crate::core::ai::{LlmClient, ContextCompressor, AdaptiveContext, RouteLevel, CapabilityGap};
+use crate::models::AIAnalysis;
+use crate::core::ai::traits::LlmClient;
+use crate::core::ai::compressor::ContextCompressor;
 use serde_json::json;
 use std::sync::Arc;
 
@@ -27,16 +28,16 @@ impl AntigravityClient {
 
 #[async_trait]
 impl LlmClient for AntigravityClient {
-    async fn analyze(&self, finding: &Finding, target: &TargetHost, attack_context: Option<&str>, route_level: RouteLevel, caveman: super::types::CavemanLevel) -> Result<AIAnalysis> {
-        let compressed = ContextCompressor::compress_finding(finding, route_level);
-        let ctx = attack_context.map(|c| format!(" Tactical Path: {}.", c)).unwrap_or_default();
-        let prompt_raw = format!("Analyze this: {}. Target: {}.{}", serde_json::to_string(&compressed)?, target.host, ctx);
-        let prompt = crate::core::ai::caveman::CavemanOptimizer::optimize_prompt(&prompt_raw, caveman);
+    async fn analyze(&self, config: crate::core::ai::traits::InferenceConfig<'_>) -> Result<AIAnalysis> {
+        let compressed = ContextCompressor::compress_finding(config.finding, config.route_level);
+        let ctx = config.attack_context.map(|c| format!(" Tactical Path: {}.", c)).unwrap_or_default();
+        let prompt_raw = format!("Analyze this: {}. Target: {}.{}", serde_json::to_string(&compressed)?, config.target.host, ctx);
+        let prompt = crate::core::ai::caveman::CavemanOptimizer::optimize_prompt(&prompt_raw, config.caveman);
         
         let url_obj = url::Url::parse(&self.endpoint)?;
         let host = url_obj.host_str().unwrap_or("antigravity-server");
         let client = self.base.get_client(host).await?;
-        let res = client.post(&format!("{}/v1/chat/completions", self.endpoint))
+        let res = client.post(format!("{}/v1/chat/completions", self.endpoint))
             .header("Authorization", format!("Bearer {}", self.key))
             .json(&json!({
                 "model": self.model,
@@ -53,7 +54,7 @@ impl LlmClient for AntigravityClient {
         Ok(analysis)
     }
 
-    async fn decide_action(&self, _finding: &Finding, _target: &TargetHost, _plugins: &[crate::plugins::PluginMetadata], _attack_context: Option<&str>, _gap: Option<&CapabilityGap>, _adaptive_context: Option<&AdaptiveContext>, _route_level: RouteLevel, _caveman: super::types::CavemanLevel) -> Result<Option<(String, serde_json::Value)>> {
+    async fn decide_action(&self, _config: crate::core::ai::traits::DecisionConfig<'_>) -> Result<Option<(String, serde_json::Value)>> {
         Ok(None)
     }
 }

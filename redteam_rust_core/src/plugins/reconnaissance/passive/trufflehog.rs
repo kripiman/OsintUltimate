@@ -11,6 +11,12 @@ pub struct TruffleHogScanner {
     binary_path: String,
 }
 
+impl Default for TruffleHogScanner {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl TruffleHogScanner {
     pub fn new() -> Self {
         let path = detect_tool("trufflehog");

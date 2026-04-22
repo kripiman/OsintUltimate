@@ -26,38 +26,40 @@ pub struct Orchestrator<M: ExecutorMode> {
     executor: Arc<StealthExecutor<M>>,
 }
 
+pub struct OrchestratorConfig<M: ExecutorMode> {
+    pub plugins: Arc<Vec<Box<dyn ScannerPlugin>>>,
+    pub concurrency: usize,
+    pub layer_policy: ScanLayerPolicy,
+    pub approval_gate: Arc<ApprovalGate>,
+    pub blackarch_bridge: Arc<crate::core::blackarch::BlackArchBridge>,
+    pub memory_monitor: Arc<crate::utils::memory_monitor::MemoryMonitor>,
+    pub sandbox: Arc<crate::core::sandbox::SandboxDispatcher>,
+    pub policy: Arc<dyn crate::core::policy::PolicyProvider>,
+    pub executor: Arc<StealthExecutor<M>>,
+}
+
 impl<M: ExecutorMode> Orchestrator<M> {
-    pub fn new(
-        plugins: Arc<Vec<Box<dyn ScannerPlugin>>>,
-        concurrency: usize,
-        layer_policy: ScanLayerPolicy,
-        approval_gate: Arc<ApprovalGate>,
-        blackarch_bridge: Arc<crate::core::blackarch::BlackArchBridge>,
-        memory_monitor: Arc<crate::utils::memory_monitor::MemoryMonitor>,
-        sandbox: Arc<crate::core::sandbox::SandboxDispatcher>,
-        policy: Arc<dyn crate::core::policy::PolicyProvider>,
-        executor: Arc<StealthExecutor<M>>,
-    ) -> Self {
-        let hard_limit = memory_monitor.hard_limit_mb();
+    pub fn new(config: OrchestratorConfig<M>) -> Self {
+        let hard_limit = config.memory_monitor.hard_limit_mb();
         let memory_semaphore = Arc::new(tokio::sync::Semaphore::new(hard_limit as usize));
 
         Self {
-            plugins,
-            concurrency,
-            layer_policy,
-            approval_gate,
-            blackarch_bridge,
+            plugins: config.plugins,
+            concurrency: config.concurrency,
+            layer_policy: config.layer_policy,
+            approval_gate: config.approval_gate,
+            blackarch_bridge: config.blackarch_bridge,
             memory_semaphore,
-            memory_monitor,
+            memory_monitor: config.memory_monitor,
             dashboard_tx: None,
             dashboard_targets: Arc::new(dashmap::DashMap::new()),
             swarm_mode: false,
             max_tokens: 0,
             ai_router: None,
-            sandbox,
+            sandbox: config.sandbox,
             proxy_manager: None,
-            policy,
-            executor,
+            policy: config.policy,
+            executor: config.executor,
         }
     }
 
@@ -130,16 +132,16 @@ impl<M: ExecutorMode> Orchestrator<M> {
         match (self.swarm_mode, self.ai_router.clone(), Some(output_tx.clone())) {
             (true, Some(router), Some(out_tx)) => {
                 info!("🐝 ORCHESTRATOR: Entering Swarm Mode (Max Tokens: {})", self.max_tokens);
-                let pipeline = Arc::new(crate::core::pipeline::Pipeline::new_minimal(plugins.clone(), self.sandbox.clone()));
-                let swarm = crate::core::swarm::SwarmOrchestrator::new(
+                let pipeline = Arc::new(crate::core::pipeline::Pipeline::new_minimal(plugins.clone(), self.sandbox.clone(), None, None));
+                let swarm = crate::core::swarm::SwarmOrchestrator::new(crate::core::swarm::SwarmConfig {
                     router,
                     pipeline,
-                    approval_gate.clone(),
-                    self.max_tokens,
-                    self.proxy_manager.clone(),
-                    self.executor.clone(),
-                    self.policy.clone(),
-                );
+                    approval_gate: approval_gate.clone(),
+                    max_tokens: self.max_tokens,
+                    proxy_manager: self.proxy_manager.clone(),
+                    executor: self.executor.clone(),
+                    policy: self.policy.clone(),
+                });
 
                 let swarm_stream = stream.map(move |target| {
                     let swarm = swarm.clone();
@@ -228,11 +230,10 @@ impl<M: ExecutorMode> Orchestrator<M> {
                             return (p.name().to_string(), Ok(Vec::new()));
                         }
 
-                        if lp.needs_approval(meta.layer) {
-                            if !approval_gate.is_approved(p.name()).await {
+                        if lp.needs_approval(meta.layer)
+                            && !approval_gate.is_approved(p.name()).await {
                                 return (p.name().to_string(), Ok(Vec::new()));
                             }
-                        }
                         
                         // ARCH-10: Dynamic Memory Permit Scaling
                         // If memory is tight, we increase the 'virtual cost' to throttle new heavy plugins.
@@ -243,7 +244,7 @@ impl<M: ExecutorMode> Orchestrator<M> {
                         };
                         
                         let total_capacity = memory_monitor_clone.hard_limit_mb();
-                        let base_permits = (meta.cost as u32).max(1) * (total_capacity / 10).max(10); // scale cost based on limit
+                        let base_permits = meta.cost.max(1) * (total_capacity / 10).max(10); // scale cost based on limit
                         let permits_needed = ((base_permits as f32 * multiplier) as u32).min(total_capacity.saturating_sub(1));
                         
                         let _permit = memory_semaphore_clone.acquire_many(permits_needed).await;
