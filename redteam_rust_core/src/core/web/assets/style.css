@@ -79,10 +79,21 @@ body::before {
 }
 
 .logo h1 {
-    font-size: 1.1rem;
+    font-size: 0.95rem;
     font-weight: 900;
-    letter-spacing: 3px;
+    letter-spacing: 2px;
     text-transform: uppercase;
+}
+
+.logo-img {
+    width: 38px;
+    height: 38px;
+    filter: drop-shadow(0 0 8px var(--accent-glow));
+    transition: transform 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+}
+
+.logo:hover .logo-img {
+    transform: scale(1.15) rotate(12deg);
 }
 
 .logo span {

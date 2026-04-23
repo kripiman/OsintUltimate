@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="mimicry_logo.png" width="200" alt="OsintUltimate Mimicry Octopus">
+</p>
+
 # 🔱 OsintUltimate (V14.1 Sovereign Stealth Protocol)
 
 > **Autonomous Red Team Orchestration & Sovereign Offensive Operations**
