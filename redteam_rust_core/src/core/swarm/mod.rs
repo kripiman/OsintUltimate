@@ -2,7 +2,7 @@ pub mod budget;
 pub mod orchestrator;
 
 pub use budget::{TokenBudget, TokenGuard, TaskPriority};
-pub use orchestrator::{SwarmOrchestrator, AgentRole};
+pub use orchestrator::{SwarmConfig, SwarmOrchestrator, AgentRole};
 
 #[cfg(test)]
 mod tests {

@@ -11,7 +11,7 @@ use std::sync::Arc;
 use tokio::sync::broadcast;
 
 use super::state::{DashboardState, ValidatedOperator};
-use super::models::{DashboardStats, SwarmAgentStatus, SwarmStatusResponse};
+use super::models::{DashboardStats, MissionRequest, SwarmAgentStatus, SwarmStatusResponse};
 
 pub async fn get_targets(
     _auth: ValidatedOperator,
@@ -145,6 +145,21 @@ pub async fn get_attack_graph(
         "nodes": nodes,
         "links": edges
     }))
+}
+
+pub async fn submit_mission(
+    _auth: ValidatedOperator,
+    State(state): State<Arc<DashboardState>>,
+    Json(req): Json<MissionRequest>,
+) -> impl IntoResponse {
+    if let Some(tx) = &state.mission_tx {
+        match tx.send(req).await {
+            Ok(_) => (StatusCode::ACCEPTED, "Mission queued").into_response(),
+            Err(_) => (StatusCode::SERVICE_UNAVAILABLE, "Engine not ready").into_response(),
+        }
+    } else {
+        (StatusCode::SERVICE_UNAVAILABLE, "Mission channel not configured").into_response()
+    }
 }
 
 pub async fn get_containers(_auth: ValidatedOperator) -> Json<Vec<serde_json::Value>> {

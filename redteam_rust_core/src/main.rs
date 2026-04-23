@@ -221,34 +221,34 @@ async fn main() -> Result<()> {
 
     // --- DASHBOARD ---
     if let Some(port) = args.dashboard {
-        use redteam_rust_core::core::web::{DashboardState, DashboardAuth, generate_dashboard_token};
+        use redteam_rust_core::core::web::{DashboardState, DashboardAuth, MissionRequest, generate_dashboard_token};
         use ed25519_dalek::SigningKey;
         use rand::RngCore;
 
         let (tx, targets) = (tokio::sync::broadcast::channel(1024).0, std::sync::Arc::new(dashmap::DashMap::new()));
-        
+
         let signing_key = SigningKey::generate(&mut rand::rngs::OsRng);
         let mut session_id = [0u8; 16];
         rand::rngs::OsRng.fill_bytes(&mut session_id);
-        
+
         let auth = std::sync::Arc::new(DashboardAuth {
             verifying_key: signing_key.verifying_key(),
             session_id,
         });
 
         let token = generate_dashboard_token(&signing_key, session_id, 86400);
-        
+
         // Securely write token to workspace/logs/dashboard.token (Sprint 1)
         let token_path = "workspace/logs/dashboard.token";
         let _ = tokio::fs::create_dir_all("workspace/logs").await;
-        
+
         use std::os::unix::fs::OpenOptionsExt;
         match std::fs::OpenOptions::new()
             .create(true)
             .write(true)
             .truncate(true)
             .mode(0o600)
-            .open(token_path) 
+            .open(token_path)
         {
             Ok(mut file) => {
                 use std::io::Write;
@@ -258,6 +258,14 @@ async fn main() -> Result<()> {
             Err(e) => warn!("⚠️ [DASHBOARD-AUTH] No se pudo guardar el token en disco ({}). No disponible para el operador.", e),
         }
 
+        let (mission_tx, mut mission_rx) = tokio::sync::mpsc::channel::<MissionRequest>(32);
+
+        tokio::spawn(async move {
+            while let Some(mission) = mission_rx.recv().await {
+                info!("📡 [MISSION-QUEUE] Target={} Profile={} Program={}", mission.target, mission.profile, mission.program_name);
+            }
+        });
+
         let dashboard_state = std::sync::Arc::new(DashboardState {
             targets,
             findings_tx: tx,
@@ -265,6 +273,7 @@ async fn main() -> Result<()> {
             approval_gate: Some(engine.approval_gate()),
             budget: None,
             auth: auth.clone(),
+            mission_tx: Some(std::sync::Arc::new(mission_tx)),
         });
         tokio::spawn(redteam_rust_core::core::web::start_dashboard(dashboard_state, port));
     }

@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>OsintUltimate | Operator Login</title>
+    <link rel="stylesheet" href="style.css">
+    <style>
+        body { display: flex; align-items: center; justify-content: center; min-height: 100vh; }
+        .login-box {
+            background: rgba(10, 10, 10, 0.85);
+            border: 1px solid rgba(204, 0, 0, 0.3);
+            border-radius: 12px;
+            padding: 2.5rem 2rem;
+            width: 100%;
+            max-width: 420px;
+            backdrop-filter: blur(12px);
+        }
+        .login-box h1 { font-size: 1.4rem; margin-bottom: 0.3rem; color: #fff; }
+        .login-box p { color: var(--text-dim, #666); font-size: 0.8rem; margin-bottom: 1.8rem; }
+        .login-box label { display: block; font-size: 0.75rem; color: var(--text-dim, #888); margin-bottom: 0.4rem; }
+        .login-box input[type="text"] {
+            width: 100%;
+            background: rgba(255,255,255,0.05);
+            border: 1px solid rgba(204,0,0,0.25);
+            border-radius: 6px;
+            padding: 0.7rem 0.9rem;
+            color: #fff;
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.75rem;
+            margin-bottom: 1.2rem;
+            box-sizing: border-box;
+        }
+        .login-box button {
+            width: 100%;
+            background: #cc0000;
+            border: none;
+            border-radius: 6px;
+            padding: 0.75rem;
+            color: #fff;
+            font-size: 0.9rem;
+            font-weight: 700;
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+        .login-box button:hover { background: #e60000; }
+        #error-msg { color: #ff4444; font-size: 0.75rem; margin-top: 0.8rem; display: none; }
+    </style>
+</head>
+<body>
+    <div class="glass-bg"></div>
+    <div class="login-box">
+        <h1>OSINT<span style="color:#cc0000">ULTIMATE</span></h1>
+        <p>Operator authentication required. Paste token from <code>workspace/logs/dashboard.token</code>.</p>
+        <label for="token-input">ACCESS TOKEN</label>
+        <input type="text" id="token-input" placeholder="Paste hex token here..." autocomplete="off" />
+        <button id="login-btn">Authenticate</button>
+        <div id="error-msg">Invalid or expired token. Check workspace/logs/dashboard.token.</div>
+    </div>
+    <script>
+        document.getElementById('login-btn').addEventListener('click', async () => {
+            const token = document.getElementById('token-input').value.trim();
+            if (!token) return;
+
+            try {
+                const res = await fetch('/api/v1/stats', {
+                    headers: { 'Authorization': 'Bearer ' + token }
+                });
+                if (res.ok) {
+                    sessionStorage.setItem('dashboard_token', token);
+                    window.location.href = '/';
+                } else {
+                    document.getElementById('error-msg').style.display = 'block';
+                }
+            } catch {
+                document.getElementById('error-msg').style.display = 'block';
+            }
+        });
+
+        document.getElementById('token-input').addEventListener('keydown', (e) => {
+            if (e.key === 'Enter') document.getElementById('login-btn').click();
+        });
+
+        // Redirect if already authenticated
+        (async () => {
+            const token = sessionStorage.getItem('dashboard_token');
+            if (token) {
+                const res = await fetch('/api/v1/stats', { headers: { 'Authorization': 'Bearer ' + token } }).catch(() => null);
+                if (res && res.ok) window.location.href = '/';
+            }
+        })();
+    </script>
+</body>
+</html>

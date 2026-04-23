@@ -36,3 +36,18 @@ pub struct WsEvent {
     pub payload: serde_json::Value,
     pub stats: DashboardStats,
 }
+
+#[derive(Debug, Clone, serde::Deserialize)]
+pub struct MissionRequest {
+    pub target: String,
+    pub program_name: String,
+    pub in_scope: Vec<String>,
+    pub out_of_scope: Vec<String>,
+    pub profile: String,
+    pub stealth: bool,
+    pub vuln_scan: bool,
+    pub oob_enabled: bool,
+    pub use_swarm: bool,
+    pub max_concurrency: u8,
+    pub notes: String,
+}

@@ -52,6 +52,7 @@ pub async fn start_dashboard(state: Arc<state::DashboardState>, port: u16) {
     let app = Router::new()
         .route("/", get(assets::serve_index))
         .route("/index.html", get(assets::serve_index))
+        .route("/login", get(assets::serve_login))
         .route("/:path", get(assets::serve_asset))
         .route("/api/v1/targets", get(handlers::get_targets))
         .route("/api/v1/stats", get(handlers::get_stats_handler))
@@ -61,6 +62,7 @@ pub async fn start_dashboard(state: Arc<state::DashboardState>, port: u16) {
         .route("/api/v1/findings/stream", get(handlers::findings_stream))
         .route("/api/v1/approvals", get(handlers::get_approvals))
         .route("/api/v1/approvals/:id/decision", post(handlers::post_approval_decision))
+        .route("/api/v2/missions", post(handlers::submit_mission))
         .layer(cors)
         .with_state(state);
 

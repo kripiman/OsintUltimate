@@ -23,3 +23,7 @@ pub async fn serve_asset(axum::extract::Path(path): axum::extract::Path<String>)
 pub async fn serve_index() -> impl IntoResponse {
     serve_asset(axum::extract::Path("index.html".to_string())).await
 }
+
+pub async fn serve_login() -> impl IntoResponse {
+    serve_asset(axum::extract::Path("login.html".to_string())).await
+}

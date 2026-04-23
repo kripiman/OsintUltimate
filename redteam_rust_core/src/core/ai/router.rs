@@ -227,7 +227,7 @@ impl TieredAIRouter {
                     let config = crate::core::ai::traits::DecisionConfig {
                         finding,
                         target,
-                        plugins: &filtered_plugins,
+                        plugins,
                         attack_context: effective_ctx.as_deref(),
                         gap: None,
                         adaptive_context,

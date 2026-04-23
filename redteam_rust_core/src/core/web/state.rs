@@ -5,10 +5,10 @@ use axum::{
 use axum::http::request::Parts;
 use axum::async_trait;
 use std::sync::Arc;
-use tokio::sync::broadcast;
+use tokio::sync::{broadcast, mpsc};
 use ed25519_dalek::{Signature, Verifier};
 use crate::models::{TargetHost, Finding};
-use super::models::DashboardAuth;
+use super::models::{DashboardAuth, MissionRequest};
 
 pub struct DashboardState {
     pub targets: Arc<dashmap::DashMap<String, TargetHost>>,
@@ -17,6 +17,7 @@ pub struct DashboardState {
     pub approval_gate: Option<Arc<crate::core::approval_gate::ApprovalGate>>,
     pub budget: Option<Arc<crate::core::swarm::TokenBudget>>,
     pub auth: Arc<DashboardAuth>,
+    pub mission_tx: Option<Arc<mpsc::Sender<MissionRequest>>>,
 }
 
 pub struct ValidatedOperator(pub crate::core::approval_gate::User);

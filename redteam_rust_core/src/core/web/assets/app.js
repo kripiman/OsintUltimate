@@ -2,6 +2,21 @@
  * OsintUltimate 4.0 Dashboard Controller
  */
 
+function getToken() {
+    return sessionStorage.getItem('dashboard_token') || '';
+}
+
+function authHeaders() {
+    return { 'Authorization': 'Bearer ' + getToken(), 'Content-Type': 'application/json' };
+}
+
+async function authFetch(url, opts = {}) {
+    opts.headers = { ...authHeaders(), ...(opts.headers || {}) };
+    const res = await fetch(url, opts);
+    if (res.status === 401) { window.location.href = '/login'; }
+    return res;
+}
+
 const UI = {
     tabs: document.querySelectorAll('.nav-links li'),
     panes: document.querySelectorAll('.tab-pane'),
@@ -45,7 +60,8 @@ UI.tabs.forEach(li => {
 
 // --- SSE Engine ---
 function initSSE() {
-    const evtSource = new EventSource("/api/v1/findings/stream");
+    const token = getToken();
+    const evtSource = new EventSource("/api/v1/findings/stream?token=" + token);
 
     evtSource.onmessage = (event) => {
         const data = JSON.parse(event.data);
@@ -88,7 +104,7 @@ async function refreshData() {
 }
 
 async function fetchStats() {
-    const res = await fetch('/api/v1/stats');
+    const res = await authFetch('/api/v1/stats');
     const stats = await res.json();
     updateGlobalStats(stats);
 }
@@ -105,7 +121,7 @@ function updateGlobalStats(stats) {
 }
 
 async function fetchTargets() {
-    const res = await fetch('/api/v1/targets');
+    const res = await authFetch('/api/v1/targets');
     const targets = await res.json();
     const tbody = document.querySelector('#target-table tbody');
     tbody.innerHTML = targets.map(t => `
@@ -120,7 +136,7 @@ async function fetchTargets() {
 }
 
 async function fetchFindings() {
-    const res = await fetch('/api/v1/targets'); // Finding list is derived from targets in current API
+    const res = await authFetch('/api/v1/targets'); // Finding list is derived from targets in current API
     const targets = await res.json();
     const tbody = document.querySelector('#finding-table tbody');
     
@@ -133,7 +149,7 @@ async function fetchFindings() {
 }
 
 async function fetchSwarmStatus() {
-    const res = await fetch('/api/v1/swarm/status');
+    const res = await authFetch('/api/v1/swarm/status');
     const data = await res.json();
     UI.swarmContainer.innerHTML = data.agents.map(a => `
         <div class="agent-card">
@@ -165,7 +181,7 @@ function initAttackGraph() {
 }
 
 async function updateAttackGraph() {
-    const res = await fetch('/api/v1/attack-graph');
+    const res = await authFetch('/api/v1/attack-graph');
     const data = await res.json();
     if (!svg) return;
 
@@ -227,13 +243,51 @@ function showApprovalModal(req) {
 }
 
 async function decide(id, decision) {
-    await fetch(`/api/v1/approvals/${id}/decision`, {
+    await authFetch(`/api/v1/approvals/${id}/decision`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ decision, reason: "Executed via Dashboard" })
     });
     UI.modal.style.display = 'none';
 }
+
+// --- Mission Form ---
+document.getElementById('missionForm').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const result = document.getElementById('m-result');
+    result.style.display = 'none';
+
+    const payload = {
+        target: document.getElementById('m-target').value.trim(),
+        program_name: document.getElementById('m-program').value.trim(),
+        in_scope: document.getElementById('m-inscope').value.split('\n').map(s => s.trim()).filter(Boolean),
+        out_of_scope: document.getElementById('m-outscope').value.split('\n').map(s => s.trim()).filter(Boolean),
+        profile: document.getElementById('m-profile').value,
+        stealth: document.getElementById('m-stealth').checked,
+        vuln_scan: document.getElementById('m-vulnscan').checked,
+        oob_enabled: document.getElementById('m-oob').checked,
+        use_swarm: document.getElementById('m-swarm').checked,
+        max_concurrency: parseInt(document.getElementById('m-concurrency').value),
+        notes: document.getElementById('m-notes').value.trim(),
+    };
+
+    try {
+        const res = await authFetch('/api/v2/missions', { method: 'POST', body: JSON.stringify(payload) });
+        result.style.display = 'block';
+        if (res.status === 202) {
+            result.style.color = '#00cc66';
+            result.textContent = '✅ Mission queued successfully.';
+            e.target.reset();
+            document.getElementById('m-concval').textContent = '20';
+        } else {
+            result.style.color = '#ff4444';
+            result.textContent = '❌ Error: ' + await res.text();
+        }
+    } catch (err) {
+        result.style.display = 'block';
+        result.style.color = '#ff4444';
+        result.textContent = '❌ Network error: ' + err.message;
+    }
+});
 
 // --- Kickoff ---
 initSSE();
