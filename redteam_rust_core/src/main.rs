@@ -208,6 +208,15 @@ async fn main() -> Result<()> {
         }
     }
 
+    // --- DISCORD NOTIFICATIONS (V14.1 Quick Alerts) ---
+    if let Some(webhook_url) = utils_config.discord_webhook_url.clone() {
+        if webhook_url.starts_with("https://discord.com/api/webhooks/") {
+            use redteam_rust_core::core::notifications::discord::DiscordSink;
+            multi_sink.add(Box::new(DiscordSink::new(webhook_url, engine.proxy_manager())));
+            info!("🔔 [DiscordSink] Notification routing attached for High/Critical findings.");
+        }
+    }
+
     // --- ACTIVITY LOG (TIMELINE) ---
     // V15: Quick Win integration to ensure timeline.jsonl is populated automatically
     let timeline_path = std::path::PathBuf::from("workspace/logs/timeline.jsonl");
@@ -322,8 +331,6 @@ async fn main() -> Result<()> {
     }
 
     // --- FINALIZATION ---
-    redteam_rust_core::utils::generate_report(&args.jsonl_output, &args.html_output).await.ok();
-    
     redteam_rust_core::utils::generate_report(&args.jsonl_output, &args.html_output).await.ok();
 
     redteam_rust_core::utils::shutdown_telemetry();

@@ -27,6 +27,7 @@ pub mod middleware;
 pub mod persistence;
 pub mod orchestrator;
 pub mod verification;
+pub mod notifications;
 
 #[cfg(test)]
 pub mod tests;
