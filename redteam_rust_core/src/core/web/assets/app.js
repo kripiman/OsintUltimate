@@ -289,6 +289,45 @@ document.getElementById('missionForm').addEventListener('submit', async (e) => {
     }
 });
 
+// --- Bounty Exporter ---
+async function exportReport(platform) {
+    const status = document.getElementById('export-status');
+    status.style.display = 'block';
+    status.style.color = 'var(--text-dim)';
+    status.textContent = `⏳ Generating ${platform.toUpperCase()} report...`;
+
+    try {
+        const res = await authFetch('/api/v2/export', {
+            method: 'POST',
+            body: JSON.stringify({ platform }),
+        });
+
+        if (!res.ok) {
+            status.style.color = '#ff4444';
+            status.textContent = '❌ Export failed: ' + await res.text();
+            return;
+        }
+
+        const blob = await res.blob();
+        const disposition = res.headers.get('Content-Disposition') || '';
+        const filenameMatch = disposition.match(/filename="([^"]+)"/);
+        const filename = filenameMatch ? filenameMatch[1] : `report_${platform}.md`;
+
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = filename;
+        a.click();
+        URL.revokeObjectURL(url);
+
+        status.style.color = '#00cc66';
+        status.textContent = `✅ Report downloaded: ${filename}`;
+    } catch (err) {
+        status.style.color = '#ff4444';
+        status.textContent = '❌ Network error: ' + err.message;
+    }
+}
+
 // --- Kickoff ---
 initSSE();
 setInterval(refreshData, 5000);

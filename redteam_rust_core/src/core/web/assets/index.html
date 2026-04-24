@@ -24,6 +24,7 @@
             <li data-tab="swarm">🐝 Swarm Monitor</li>
             <li data-tab="approvals">⚖️ Approvals</li>
             <li data-tab="launch">🚀 Launch Mission</li>
+            <li data-tab="export">📤 Export Report</li>
         </ul>
         <div class="sidebar-status">
             <div class="status-item">
@@ -192,6 +193,28 @@
                         <button type="submit" style="background:#cc0000;border:none;border-radius:6px;padding:0.75rem;color:#fff;font-size:0.9rem;font-weight:700;cursor:pointer">🚀 Launch Mission</button>
                         <div id="m-result" style="font-size:0.8rem;display:none"></div>
                     </form>
+                </div>
+            </div>
+            <!-- Export Report -->
+            <div class="tab-pane" id="export">
+                <div class="card">
+                    <h3>Bounty Report Exporter</h3>
+                    <p style="font-size:0.8rem;color:var(--text-dim);margin-bottom:1.5rem">Exports all High/Critical findings to platform-specific markdown. Downloads automatically.</p>
+                    <div style="display:flex;gap:1rem;flex-wrap:wrap">
+                        <button onclick="exportReport('h1')"
+                            style="background:#cc0000;border:none;border-radius:8px;padding:0.75rem 1.5rem;color:#fff;font-size:0.9rem;font-weight:700;cursor:pointer;min-width:160px">
+                            🐛 HackerOne
+                        </button>
+                        <button onclick="exportReport('bugcrowd')"
+                            style="background:#e65c00;border:none;border-radius:8px;padding:0.75rem 1.5rem;color:#fff;font-size:0.9rem;font-weight:700;cursor:pointer;min-width:160px">
+                            🔐 Bugcrowd
+                        </button>
+                        <button onclick="exportReport('intigriti')"
+                            style="background:#005fcc;border:none;border-radius:8px;padding:0.75rem 1.5rem;color:#fff;font-size:0.9rem;font-weight:700;cursor:pointer;min-width:160px">
+                            🏴 Intigriti
+                        </button>
+                    </div>
+                    <div id="export-status" style="margin-top:1rem;font-size:0.8rem;display:none"></div>
                 </div>
             </div>
         </section>

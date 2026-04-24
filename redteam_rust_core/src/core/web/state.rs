@@ -18,6 +18,7 @@ pub struct DashboardState {
     pub budget: Option<Arc<crate::core::swarm::TokenBudget>>,
     pub auth: Arc<DashboardAuth>,
     pub mission_tx: Option<Arc<mpsc::Sender<MissionRequest>>>,
+    pub discord_webhook_url: Option<String>,
 }
 
 pub struct ValidatedOperator(pub crate::core::approval_gate::User);

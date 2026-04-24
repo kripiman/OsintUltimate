@@ -283,6 +283,7 @@ async fn main() -> Result<()> {
             budget: None,
             auth: auth.clone(),
             mission_tx: Some(std::sync::Arc::new(mission_tx)),
+            discord_webhook_url: utils_config.discord_webhook_url.clone(),
         });
         tokio::spawn(redteam_rust_core::core::web::start_dashboard(dashboard_state, port));
     }

@@ -1,5 +1,6 @@
 use serde::{Deserialize, Serialize};
 use ed25519_dalek::VerifyingKey;
+use crate::models::ReportPlatform;
 
 pub struct DashboardAuth {
     pub verifying_key: VerifyingKey,
@@ -35,6 +36,11 @@ pub struct WsEvent {
     pub type_name: String,
     pub payload: serde_json::Value,
     pub stats: DashboardStats,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct ExportRequest {
+    pub platform: ReportPlatform,
 }
 
 #[derive(Debug, Clone, serde::Deserialize)]
