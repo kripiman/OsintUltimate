@@ -27,7 +27,7 @@ use crate::core::ai::types::RouteLevel;
 use crate::core::ai::{PROMPT_OPTIMIZER};
 use crate::core::ai::token_optimizer::PromptOptimizer;
 
-use crate::core::sink::SqliteSink;
+use crate::core::sink::PostgresSink;
 use crate::utils::tone::{tone_encode, tonl_encode, to_ascii_safe};
 use std::path::PathBuf;
 use moka::future::Cache;
@@ -37,7 +37,7 @@ pub struct McpServer {
     pub(crate) config: Arc<GlobalConfig>,
     pub(crate) sanitizer: Arc<DataSanitizer>,
     pub(crate) sessions: Arc<dashmap::DashMap<String, mpsc::Sender<Event>>>,
-    pub(crate) db: Option<Arc<SqliteSink>>,
+    pub(crate) db: Option<Arc<PostgresSink>>,
     pub(crate) plugin_cache: Cache<String, String>,
     // Delta cache: SHA-256 de archivos leídos para smart_file_read
     file_hash_cache: Arc<DashMap<String, String>>,
@@ -76,10 +76,11 @@ impl McpServer {
         }
     }
 
-    pub async fn with_sqlite(mut self, path: PathBuf) -> Self {
-        if let Ok(db) = SqliteSink::new(path).await {
+    pub async fn with_postgres(mut self, path: PathBuf) -> Self {
+        if let Ok(db) = PostgresSink::new(path).await {
             // Cargar métricas históricas de la base de datos
-            if let Ok(stats) = db.get_mcp_stats().await {
+            let stats_res: anyhow::Result<std::collections::HashMap<String, i64>> = db.get_mcp_stats().await;
+            if let Ok(stats) = stats_res {
                 if let Some(v) = stats.get("total_calls") { self.total_calls.store(*v as u32, Ordering::SeqCst); }
                 if let Some(v) = stats.get("cache_hits") { self.cache_hits.store(*v as u32, Ordering::SeqCst); }
                 if let Some(v) = stats.get("tokens_saved") { self.tokens_saved.store(*v as u64, Ordering::SeqCst); }
@@ -736,23 +737,26 @@ async fn handle_execute_plugin(state: &Arc<McpServer>, args: serde_json::Value) 
                     let mut f_filtered = f.clone();
                     
                     // Prefix Trust (F4.2)
-                    let prefix = if f.evidence.verified { "[VERIFIED]" } else { "[POTENTIAL]" };
-                    f_filtered.description = format!("{} {}", prefix, f.description);
-                    f_filtered.title = format!("{} {}", prefix, f.title);
+                    let verified = f.evidence.evidence.as_ref().map(|e| e.verified).unwrap_or(false);
+                    let prefix = if verified { "[VERIFIED]" } else { "[POTENTIAL]" };
+                    f_filtered.core.description = format!("{} {}", prefix, f.core.description);
+                    f_filtered.core.title = format!("{} {}", prefix, f.core.title);
 
                     // Semantic Filter (F1.1)
-                    f_filtered.description = state.sanitizer.filter_tool_output(plugin_name, &f_filtered.description);
+                    f_filtered.core.description = state.sanitizer.filter_tool_output(plugin_name, &f_filtered.core.description);
                     
-                    if let Some(obj) = f_filtered.evidence.data.as_object_mut() {
-                        if let Some(body) = obj.get_mut("body") {
-                            if let Some(s) = body.as_str() {
-                                let filtered_body = state.sanitizer.filter_tool_output(plugin_name, s);
-                                *body = serde_json::json!(filtered_body);
+                    if let Some(ref mut evidence) = f_filtered.evidence.evidence {
+                        if let Some(obj) = evidence.data.as_object_mut() {
+                            if let Some(body) = obj.get_mut("body") {
+                                if let Some(s) = body.as_str() {
+                                    let filtered_body = state.sanitizer.filter_tool_output(plugin_name, s);
+                                    *body = serde_json::json!(filtered_body);
+                                }
                             }
                         }
                     }
 
-                    match f.severity {
+                    match f.core.severity {
                         Severity::Critical if criticals.len() < 20 => criticals.push(f_filtered),
                         Severity::High if highs.len() < 30 => highs.push(f_filtered),
                         Severity::Medium if mediums.len() < 20 => mediums.push(f_filtered),

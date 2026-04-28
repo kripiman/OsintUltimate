@@ -8,7 +8,7 @@ pub struct ContextCompressor;
 
 impl ContextCompressor {
     pub fn compress_finding(finding: &Finding, _route_level: RouteLevel) -> serde_json::Value {
-        let mut ev = finding.evidence.data.clone();
+        let mut ev = finding.evidence.evidence.as_ref().map(|e| e.data.clone()).unwrap_or_else(|| serde_json::json!({}));
         
         // 1. Mandatory scrubbing
         if let Ok(sanitized) = serde_json::to_string(&ev).map(|s| SCRUBBER.scrub(&s)) {
@@ -22,13 +22,15 @@ impl ContextCompressor {
             Self::minify_evidence_object(obj, 512, false);
         }
 
+        let verified = finding.evidence.evidence.as_ref().map(|e| e.verified).unwrap_or(false);
+
         serde_json::json!({
-            "id": finding.id,
-            "sev": finding.severity,
-            "cat": finding.category,
-            "cvss": finding.cvss_score,
-            "conf": if finding.evidence.verified { "VERIFIED" } else { "POTENTIAL" },
-            "desc": finding.description.chars().take(200).collect::<String>(),
+            "id": finding.core.id,
+            "sev": finding.core.severity,
+            "cat": finding.core.category,
+            "cvss": finding.enrichment.cvss_score,
+            "conf": if verified { "VERIFIED" } else { "POTENTIAL" },
+            "desc": finding.core.description.chars().take(200).collect::<String>(),
             "ev": ev,
         })
     }
@@ -46,8 +48,8 @@ impl ContextCompressor {
     /// NEW V10: Compress target host info including tech stack for AI context.
     pub fn compress_target(target: &TargetHost) -> serde_json::value::Value {
         let tech_stack: Vec<String> = target.findings.iter()
-            .filter(|f| f.category == Category::TechnologyStack)
-            .filter_map(|f| f.evidence.data.get("plugins")?.as_object())
+            .filter(|f| f.core.category == Category::TechnologyStack)
+            .filter_map(|f| f.evidence.evidence.as_ref()?.data.get("plugins")?.as_object())
             .flat_map(|obj| obj.keys().cloned())
             .collect();
 
@@ -74,22 +76,24 @@ impl ContextCompressor {
     /// NEW V11: Specialized compression for source code findings to save tokens.
     pub fn compress_source_aware_finding(finding: &Finding) -> serde_json::Value {
         let mut base = serde_json::json!({
-            "id": finding.id,
-            "cat": finding.category,
-            "sev": finding.severity,
-            "desc": finding.description,
+            "id": finding.core.id,
+            "cat": finding.core.category,
+            "sev": finding.core.severity,
+            "desc": finding.core.description,
         });
 
-        if let (Some(obj), Some(ev)) = (base.as_object_mut(), finding.evidence.data.as_object()) {
-            let mut compressed_ev = ev.clone();
-            if let Some(val) = compressed_ev.get_mut("snippet") {
-                if let Some(s) = val.as_str() {
-                    if s.len() > 300 {
-                        *val = serde_json::json!(format!("{}... [TRUNCATED]", &s[..300]));
+        if let Some(ref evidence) = finding.evidence.evidence {
+            if let (Some(obj), Some(ev)) = (base.as_object_mut(), evidence.data.as_object()) {
+                let mut compressed_ev = ev.clone();
+                if let Some(val) = compressed_ev.get_mut("snippet") {
+                    if let Some(s) = val.as_str() {
+                        if s.len() > 300 {
+                            *val = serde_json::json!(format!("{}... [TRUNCATED]", &s[..300]));
+                        }
                     }
                 }
+                obj.insert("ev".to_string(), serde_json::Value::Object(compressed_ev));
             }
-            obj.insert("ev".to_string(), serde_json::Value::Object(compressed_ev));
         }
         base
     }

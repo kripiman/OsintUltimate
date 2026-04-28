@@ -1,0 +1,18 @@
+[Unit]
+Description=OsintUltimate Autonomous Red-Team Engine
+After=network.target docker.service
+Requires=docker.service
+
+[Service]
+Type=simple
+User=kripi
+WorkingDirectory=/home/kripi/Documentos/GitHub/OsintUltimate/redteam_rust_core
+EnvironmentFile=/home/kripi/Documentos/GitHub/OsintUltimate/.env.oracle
+ExecStart=/home/kripi/.cargo/bin/cargo run --release
+Restart=always
+RestartSec=5
+# Give enough time for hard exit to flush anything if needed (though it shouldn't)
+TimeoutStopSec=10
+
+[Install]
+WantedBy=multi-user.target

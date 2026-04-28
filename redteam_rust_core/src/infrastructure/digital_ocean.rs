@@ -100,7 +100,8 @@ runcmd:
         ProxyMode::Hysteria => format!(r#"#cloud-config
 package_update: true
 runcmd:
-  - wget https://github.com/apernet/hysteria/releases/latest/download/hysteria-linux-amd64 -O /usr/local/bin/hysteria
+  - wget https://github.com/apernet/hysteria/releases/download/app%2Fv2.5.2/hysteria-linux-amd64 -O /usr/local/bin/hysteria
+  - echo "13fcedd6aa1aabac6c905fbd598cfc84dd2e35384bc133464ffdd1c97a4cfdb6  /usr/local/bin/hysteria" | sha256sum -c || shutdown -h now
   - chmod +x /usr/local/bin/hysteria
   - openssl req -x509 -nodes -newkey rsa:2048 -keyout /etc/hysteria.key -out /etc/hysteria.crt -days 365 -subj "/C=US/ST=State/L=City/O=Organization/OU=Unit/CN=localhost"
   - echo "listen: :1080" > /etc/hysteria.yaml
@@ -145,12 +146,17 @@ impl DigitalOceanClient {
         let socks_user = "operator"; 
         let socks_pass = uuid::Uuid::new_v4().to_string()[..12].to_string(); // Professional entropy
 
+        let mut ssh_keys = vec![];
+        if let Ok(key) = std::env::var("DO_SSH_KEY_ID") {
+            ssh_keys.push(key);
+        }
+
         let request = CreateDropletRequest {
             name: name.to_string(),
             region: region.to_string(),
             size: "s-1vcpu-512mb".to_string(),
             image: "ubuntu-22-04-x64".to_string(),
-            ssh_keys: vec![], 
+            ssh_keys, 
             backups: false,
             ipv6: false,
             monitoring: true,

@@ -323,16 +323,16 @@ impl<M: ExecutorMode> Pipeline<M> {
 
             if let Some(id) = cve_id {
                 if let Ok(Some(meta)) = manager.get_or_fetch_cve(&id).await {
-                    info!("✨ V14.2 ENRICH: Enriched finding {} with cached metadata for {}", finding.id, id);
-                    if finding.tactical_path.is_none() {
-                        finding.tactical_path = meta.tactical_path;
+                    info!("✨ V14.2 ENRICH: Enriched finding {} with cached metadata for {}", finding.core.id, id);
+                    if finding.core.tactical_path.is_none() {
+                        finding.core.tactical_path = meta.tactical_path;
                     }
                     if let Some(score) = meta.cvss_score {
-                        finding.cvss_score = Some(score);
+                        finding.enrichment.cvss_score = Some(score);
                     }
                     for r in meta.references {
-                        if !finding.references.contains(&r) {
-                            finding.references.push(r);
+                        if !finding.enrichment.references.contains(&r) {
+                            finding.enrichment.references.push(r);
                         }
                     }
                 }

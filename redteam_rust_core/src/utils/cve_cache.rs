@@ -1,4 +1,4 @@
-use sqlx::SqlitePool;
+use sqlx::PgPool;
 use tokio::sync::OnceCell;
 use serde::{Serialize, Deserialize};
 use tracing::{info, warn};
@@ -16,11 +16,11 @@ pub struct CveMetadata {
 }
 
 pub struct CveCacheManager {
-    pool: SqlitePool,
+    pool: PgPool,
 }
 
 impl CveCacheManager {
-    pub fn init(pool: SqlitePool) {
+    pub fn init(pool: PgPool) {
         let _ = MANAGER.set(CveCacheManager { pool });
     }
 
@@ -31,7 +31,7 @@ impl CveCacheManager {
     /// Retrieves CVE metadata from the local SQLite cache.
     pub async fn get_cve(&self, cve_id: &str) -> anyhow::Result<Option<CveMetadata>> {
         let row: Option<(String,)> = sqlx::query_as(
-            "SELECT json_data FROM cve_cache WHERE cve_id = ?"
+            "SELECT json_data::text FROM cve_cache WHERE cve_id = $1"
         )
         .bind(cve_id)
         .fetch_optional(&self.pool)
@@ -134,7 +134,7 @@ impl CveCacheManager {
         let json = serde_json::to_string(metadata)?;
         
         sqlx::query(
-            "INSERT OR REPLACE INTO cve_cache (cve_id, json_data, last_updated) VALUES (?, ?, CURRENT_TIMESTAMP)"
+            "INSERT INTO cve_cache (cve_id, json_data, last_updated) VALUES ($1, $2::jsonb, CURRENT_TIMESTAMP) ON CONFLICT(cve_id) DO UPDATE SET json_data = EXCLUDED.json_data, last_updated = EXCLUDED.last_updated"
         )
         .bind(&metadata.cve_id)
         .bind(json)

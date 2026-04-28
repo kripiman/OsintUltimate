@@ -10,12 +10,11 @@ pub async fn spawn_tripwire_persister(
     mut rx: mpsc::Receiver<TripwireEvent>,
     db_url: &str,
 ) -> Result<tokio::task::JoinHandle<()>> {
-    let pool = sqlx::SqlitePool::connect(db_url).await
+    let pool = sqlx::PgPool::connect(db_url).await
         .context("Failed to connect to tripwire SQLite database")?;
 
     // Ensure WAL mode + create table
-    sqlx::query("PRAGMA journal_mode=WAL")
-        .execute(&pool).await?;
+    
     sqlx::query(
         "CREATE TABLE IF NOT EXISTS tripwire_events (
             id INTEGER PRIMARY KEY AUTOINCREMENT,

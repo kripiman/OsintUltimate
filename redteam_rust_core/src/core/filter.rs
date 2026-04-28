@@ -22,11 +22,12 @@ impl FalsePositiveFilter {
         let mut score = 0.0;
 
         // 1. Evidence Confidence (Inverse relationship)
-        let conf_factor = 1.0 - finding.evidence.confidence.clamp(0.0, 1.0);
+        let confidence = finding.evidence.evidence.as_ref().map(|e| e.confidence).unwrap_or(0.5);
+        let conf_factor = 1.0 - confidence.clamp(0.0, 1.0);
         score += conf_factor * 0.4; // 40% weight
 
         // 2. Keyword Heuristics in Description/Title
-        let text = format!("{} {}", finding.title, finding.description).to_lowercase();
+        let text = format!("{} {}", finding.core.title, finding.core.description).to_lowercase();
         let noise_keywords = [
             "timeout", "connection reset", "404 not found", "403 forbidden",
             "potential", "possible", "unconfirmed", "generic", "unknown version"
@@ -44,19 +45,20 @@ impl FalsePositiveFilter {
         }
 
         // 3. Category & Severity Context
-        match finding.severity {
+        match finding.core.severity {
             Severity::Info | Severity::Low => score += 0.2, // Low severity is naturally noisier
             Severity::Critical | Severity::High => score -= 0.1, // High severity gets benefit of the doubt
             _ => {}
         }
 
         // 4. Evidence Verification
-        if finding.evidence.verified {
+        let verified = finding.evidence.evidence.as_ref().map(|e| e.verified).unwrap_or(false);
+        if verified {
             score -= 0.3; // Verified findings are heavily discounted as noise
         }
         
         // 5. Verification vs AI Analysis
-        if finding.ai_analysis.is_none() && finding.evidence.confidence < 0.6 {
+        if finding.enrichment.ai_analysis.is_none() && confidence < 0.6 {
             score += 0.1; 
         }
 

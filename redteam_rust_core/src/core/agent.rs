@@ -64,21 +64,21 @@ impl<M: ExecutorMode> AutonomousAgent<M> {
         tokio::spawn(async move { let _ = pipeline.run_discovery(&target, tx_discovery).await; });
 
         while let Some(finding) = rx.recv().await {
-            if seen_finding_ids.contains(&finding.id) { continue; }
-            seen_finding_ids.insert(finding.id.clone());
+            if seen_finding_ids.contains(&finding.core.id) { continue; }
+            seen_finding_ids.insert(finding.core.id.clone());
             
             if let Some(ref log) = self.activity_log {
-                let _ = log.log(crate::utils::activity_log::EventKind::AgentStep, crate::utils::activity_log::Actor::Sentinel, &format!("Processing finding: {}", finding.title), Some(&initial_target.host), serde_json::json!({"finding_id": finding.id})).await;
+                let _ = log.log(crate::utils::activity_log::EventKind::AgentStep, crate::utils::activity_log::Actor::Sentinel, &format!("Processing finding: {}", finding.core.title), Some(&initial_target.host), serde_json::json!({"finding_id": finding.core.id})).await;
             }
 
             correlation_engine.add_finding(finding.clone());
-            let attack_context = correlation_engine.get_context_summary(&finding.id);
+            let attack_context = correlation_engine.get_context_summary(&finding.core.id);
             
             let analysis = self.router.analyze(&finding, &initial_target, attack_context.as_deref()).await?;
             let mut final_finding = finding.with_ai_analysis(analysis.clone());
             if let Some(tags) = analysis.mitre_attack { final_finding = final_finding.with_mitre_attack(tags); }
             
-            if analysis.risk_score >= 8 || final_finding.severity == crate::models::Severity::High || final_finding.severity == crate::models::Severity::Critical {
+            if analysis.risk_score >= 8 || final_finding.core.severity == crate::models::Severity::High || final_finding.core.severity == crate::models::Severity::Critical {
                 info!("🧪 SENTINEL: Detectado hallazgo crítico/alto. Iniciando pipeline de validación de PoC...");
                 let _ = self.poc_validator.validate(&mut final_finding, &initial_target, attack_context.as_deref()).await;
             }
@@ -92,7 +92,7 @@ impl<M: ExecutorMode> AutonomousAgent<M> {
             let _ = sink_tx.send(sink_target).await;
 
             let metadata = self.pipeline.get_plugin_metadata();
-            let attack_context = correlation_engine.get_context_summary(&final_finding.id);
+            let attack_context = correlation_engine.get_context_summary(&final_finding.core.id);
             if let Ok(Some((action, tactical))) = self.router.decide_action(&final_finding, &initial_target, &metadata, attack_context.as_deref(), Some(&adaptive_context)).await {
                 if let Some(ref log) = self.activity_log {
                     let _ = log.log(crate::utils::activity_log::EventKind::ToolCall, crate::utils::activity_log::Actor::Sentinel, &format!("AI decided action: {}", action), Some(&initial_target.host), tactical.clone()).await;

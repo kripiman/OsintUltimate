@@ -35,7 +35,7 @@ impl DataSink for DiscordSink {
     async fn write(&mut self, target: &TargetHost) -> Result<()> {
         // Find High or Critical findings
         let high_findings: Vec<_> = target.findings.iter()
-            .filter(|f| f.severity == Severity::High || f.severity == Severity::Critical)
+            .filter(|f| f.core.severity == Severity::High || f.core.severity == Severity::Critical)
             .collect();
 
         if high_findings.is_empty() {
@@ -45,14 +45,14 @@ impl DataSink for DiscordSink {
         debug!("📢 DiscordSink: Found {} high-severity findings for {}", high_findings.len(), target.host);
 
         for finding in high_findings {
-            let color = self.get_color_for_severity(&finding.severity);
+            let color = self.get_color_for_severity(&finding.core.severity);
             
             // Build the main embed
             let mut description = format!("**Category:** {:?}\n**Description:** {}\n", 
-                finding.category, finding.description);
+                finding.core.category, finding.core.description);
 
             // Add AI Analysis if available
-            if let Some(ai) = &finding.ai_analysis {
+            if let Some(ai) = &finding.enrichment.ai_analysis {
                 description.push_str("\n--- 🤖 **AI ANALYSIS** ---\n");
                 description.push_str(&format!("**Impact:** {}\n", ai.impact));
                 description.push_str(&format!("**Exploit Path:** {}\n", ai.exploit_path));
@@ -73,12 +73,12 @@ impl DataSink for DiscordSink {
                         },
                         {
                             "name": "⚠️ Severity",
-                            "value": format!("**{:?}**", finding.severity),
+                            "value": format!("**{:?}**", finding.core.severity),
                             "inline": true
                         },
                         {
                             "name": "👾 Agent",
-                            "value": finding.agent,
+                            "value": finding.context.agent,
                             "inline": true
                         }
                     ],
@@ -115,7 +115,6 @@ impl DataSink for DiscordSink {
     }
 
     async fn write_metadata(&mut self, _metadata: &ScanMetadata) -> Result<()> {
-        // We could send a "Scan Started" message here if desired
         Ok(())
     }
 

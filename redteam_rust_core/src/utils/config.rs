@@ -10,6 +10,8 @@ pub enum ProxyMode {
 
 pub struct Config {
     pub do_token: Option<String>,
+    pub do_ssh_key_id: Option<String>,
+    pub database_url: String,
     pub ollama_url: String,
     pub max_tokens: u32,
     pub soft_memory_limit_mb: usize,
@@ -33,6 +35,8 @@ impl Config {
     pub fn from_env() -> Self {
         Self {
             do_token: env::var("DIGITALOCEAN_TOKEN").ok(),
+            do_ssh_key_id: env::var("DO_SSH_KEY_ID").ok(),
+            database_url: env::var("DATABASE_URL").unwrap_or_else(|_| "postgres://osintuser:WENYANULTRA_SECURE_PASS@localhost:5432/osintdb".to_string()),
             ollama_url: env::var("OLLAMA_URL").unwrap_or_else(|_| "http://localhost:11434".to_string()),
             max_tokens: env::var("MAX_TOKENS")
                 .ok()

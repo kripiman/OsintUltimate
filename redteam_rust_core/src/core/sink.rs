@@ -3,7 +3,8 @@ use anyhow::{Context, Result};
 use async_trait::async_trait;
 use tokio::io::AsyncWriteExt;
 use std::path::PathBuf;
-use sqlx::{SqlitePool, sqlite::SqliteConnectOptions};
+use sqlx::PgPool;
+use sqlx::postgres::PgPoolOptions;
 use std::str::FromStr;
 use flate2::write::GzEncoder;
 use flate2::Compression;
@@ -214,128 +215,42 @@ impl DataSink for JsonlSink {
 }
 
 /// A DataSink that writes results to a SQLite database.
-pub struct SqliteSink {
-    pub(crate) pool: SqlitePool,
+pub struct PostgresSink {
+    pub(crate) pool: PgPool,
     scan_id: Option<i64>,
     command_line: String,
 }
 
-impl SqliteSink {
+impl PostgresSink {
     pub async fn new(path: impl Into<PathBuf>) -> Result<Self> {
         let path = path.into();
-        let connection_str = format!("sqlite://{}", path.display());
+        let connection_str = std::env::var("DATABASE_URL").unwrap_or_else(|_| "postgres://osintuser:WENYANULTRA_SECURE_PASS@localhost:5432/osintdb".to_string());
         
-        let options = SqliteConnectOptions::from_str(&connection_str)?
-            .create_if_missing(true)
-            .journal_mode(sqlx::sqlite::SqliteJournalMode::Wal);
-
-        let pool = SqlitePool::connect_with(options).await?;
+        let pool = sqlx::postgres::PgPoolOptions::new()
+            .max_connections(50)
+            .connect(&connection_str)
+            .await?;
 
         // Initialize schema
-        sqlx::query(
-            "CREATE TABLE IF NOT EXISTS scans (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                command_line TEXT NOT NULL,
-                timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
-            )"
-        ).execute(&pool).await?;
+        
 
-        sqlx::query(
-            "CREATE TABLE IF NOT EXISTS targets (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                scan_id INTEGER NOT NULL,
-                host TEXT NOT NULL,
-                ip TEXT,
-                status TEXT NOT NULL,
-                FOREIGN KEY(scan_id) REFERENCES scans(id)
-            )"
-        ).execute(&pool).await?;
+        
 
-        sqlx::query(
-            "CREATE TABLE IF NOT EXISTS findings (
-                id TEXT PRIMARY KEY,
-                target_id INTEGER NOT NULL,
-                category TEXT NOT NULL,
-                severity TEXT NOT NULL,
-                description TEXT NOT NULL,
-                evidence TEXT NOT NULL,
-                tactical_path TEXT,
-                mitre_attack TEXT,
-                ai_analysis TEXT,
-                cvss_vector TEXT,
-                objective_id TEXT,
-                agent TEXT,
-                iteration INTEGER,
-                FOREIGN KEY(target_id) REFERENCES targets(id)
-            )"
-        ).execute(&pool).await?;
+        
 
-        sqlx::query(
-            "CREATE TABLE IF NOT EXISTS objectives (
-                id TEXT PRIMARY KEY,
-                title TEXT NOT NULL,
-                description TEXT NOT NULL,
-                status TEXT NOT NULL,
-                depends_on TEXT,
-                priority INTEGER NOT NULL,
-                agent_assigned TEXT,
-                created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-                updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
-            )"
-        ).execute(&pool).await?;
+        
 
-        sqlx::query(
-            "CREATE TABLE IF NOT EXISTS agent_sessions (
-                id TEXT PRIMARY KEY,
-                agent_role TEXT NOT NULL,
-                target_id INTEGER NOT NULL,
-                posture TEXT NOT NULL,
-                memory_json TEXT NOT NULL,
-                last_updated DATETIME DEFAULT CURRENT_TIMESTAMP,
-                FOREIGN KEY(target_id) REFERENCES targets(id)
-            )"
-        ).execute(&pool).await?;
+        
 
-        sqlx::query(
-            "CREATE TABLE IF NOT EXISTS plugin_cache (
-                cache_key TEXT PRIMARY KEY,
-                output TEXT NOT NULL,
-                timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
-            )"
-        ).execute(&pool).await?;
+        
 
-        sqlx::query(
-            "CREATE TABLE IF NOT EXISTS mcp_stats (
-                stat_key TEXT PRIMARY KEY,
-                stat_value INTEGER DEFAULT 0
-            )"
-        ).execute(&pool).await?;
+        
 
-        sqlx::query(
-            "CREATE TABLE IF NOT EXISTS checkpoints (
-                trigger TEXT NOT NULL,
-                digest TEXT NOT NULL,
-                manifest TEXT NOT NULL,
-                content TEXT NOT NULL,
-                timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
-                PRIMARY KEY(trigger, digest)
-            )"
-        ).execute(&pool).await?;
+        
 
-        sqlx::query(
-            "CREATE TABLE IF NOT EXISTS deduplication (
-                finding_hash BLOB PRIMARY KEY,
-                first_seen INTEGER NOT NULL
-            )"
-        ).execute(&pool).await?;
+        
 
-        sqlx::query(
-            "CREATE TABLE IF NOT EXISTS cve_cache (
-                cve_id TEXT PRIMARY KEY,
-                json_data TEXT NOT NULL,
-                last_updated DATETIME DEFAULT CURRENT_TIMESTAMP
-            )"
-        ).execute(&pool).await?;
+        
 
         // V14.2: Initialize the DeduplicationEngine with the persistent pool
         crate::utils::deduplication::DeduplicationEngine::init(pool.clone()).await?;
@@ -353,7 +268,7 @@ impl SqliteSink {
     /// V15: Saves a plugin execution result to the persistent cache.
     pub async fn save_plugin_cache(&self, cache_key: &str, output: &str) -> Result<()> {
         sqlx::query(
-            "INSERT OR REPLACE INTO plugin_cache (cache_key, output, timestamp) VALUES (?, ?, CURRENT_TIMESTAMP)"
+            "INSERT INTO plugin_cache (cache_key, output, timestamp) VALUES ($1, $2, CURRENT_TIMESTAMP) ON CONFLICT(cache_key) DO UPDATE SET output = EXCLUDED.output, timestamp = EXCLUDED.timestamp"
         )
         .bind(cache_key)
         .bind(output)
@@ -365,7 +280,7 @@ impl SqliteSink {
     /// V15: Loads a plugin execution result from the persistent cache.
     pub async fn load_plugin_cache(&self, cache_key: &str) -> Result<Option<String>> {
         let row: Option<(String,)> = sqlx::query_as(
-            "SELECT output FROM plugin_cache WHERE cache_key = ?"
+            "SELECT output FROM plugin_cache WHERE cache_key = $1"
         )
         .bind(cache_key)
         .fetch_optional(&self.pool)
@@ -387,8 +302,8 @@ impl SqliteSink {
     pub async fn update_mcp_stats(&self, stats: std::collections::HashMap<String, i64>) -> Result<()> {
         for (key, value) in stats {
             sqlx::query(
-                "INSERT INTO mcp_stats (stat_key, stat_value) VALUES (?, ?)
-                 ON CONFLICT(stat_key) DO UPDATE SET stat_value = stat_value + excluded.stat_value"
+                "INSERT INTO mcp_stats (stat_key, stat_value) VALUES ($1, $2)
+                 ON CONFLICT(stat_key) DO UPDATE SET stat_value = mcp_stats.stat_value + EXCLUDED.stat_value"
             )
             .bind(key)
             .bind(value)
@@ -406,8 +321,8 @@ impl SqliteSink {
         let digest: String = hex::encode(hasher.finalize());
 
         sqlx::query(
-            "INSERT OR REPLACE INTO checkpoints (trigger, digest, manifest, content, timestamp)
-             VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP)"
+            "INSERT INTO checkpoints (trigger, digest, manifest, content, timestamp)
+             VALUES ($1, $2, $3, $4, CURRENT_TIMESTAMP) ON CONFLICT(trigger, digest) DO UPDATE SET manifest = EXCLUDED.manifest, content = EXCLUDED.content, timestamp = EXCLUDED.timestamp"
         )
         .bind(trigger)
         .bind(digest)
@@ -420,7 +335,7 @@ impl SqliteSink {
 
     pub async fn load_checkpoint(&self, trigger: &str, digest: &str) -> Result<Option<String>> {
         let row: Option<(String,)> = sqlx::query_as(
-            "SELECT content FROM checkpoints WHERE trigger = ? AND digest = ?"
+            "SELECT content FROM checkpoints WHERE trigger = $1 AND digest = $2"
         )
         .bind(trigger)
         .bind(digest)
@@ -432,8 +347,8 @@ impl SqliteSink {
     /// V15: Persists an agent session state to allow mission resumption.
     pub async fn save_agent_session(&self, session: &AgentSession) -> Result<()> {
         sqlx::query(
-            "INSERT OR REPLACE INTO agent_sessions (id, agent_role, target_id, posture, memory_json, last_updated)
-             VALUES (?, ?, ?, ?, ?, CURRENT_TIMESTAMP)"
+            "INSERT INTO agent_sessions (id, agent_role, target_id, posture, memory_json, last_updated)
+             VALUES ($1, $2, $3, $4, $5::jsonb, CURRENT_TIMESTAMP) ON CONFLICT(id) DO UPDATE SET posture = EXCLUDED.posture, memory_json = EXCLUDED.memory_json, last_updated = EXCLUDED.last_updated"
         )
         .bind(&session.id)
         .bind(&session.agent_role)
@@ -448,7 +363,7 @@ impl SqliteSink {
     /// V15: Loads an agent session state for a specific target.
     pub async fn load_agent_session(&self, session_id: &str) -> Result<Option<AgentSession>> {
         let res: Option<AgentSession> = sqlx::query_as(
-            "SELECT id, agent_role, target_id, posture, memory_json FROM agent_sessions WHERE id = ?"
+            "SELECT id, agent_role, target_id, posture, memory_json::text FROM agent_sessions WHERE id = $1"
         )
         .bind(session_id)
         .fetch_optional(&self.pool)
@@ -459,8 +374,8 @@ impl SqliteSink {
     /// PHASE 2: Saves or updates an operational objective.
     pub async fn save_objective(&self, objective: &crate::models::Objective) -> Result<()> {
         sqlx::query(
-            "INSERT OR REPLACE INTO objectives (id, title, description, status, depends_on, priority, agent_assigned, updated_at)
-             VALUES (?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)"
+            "INSERT INTO objectives (id, title, description, status, depends_on, priority, agent_assigned, updated_at)
+             VALUES ($1, $2, $3, $4, $5::jsonb, $6, $7, CURRENT_TIMESTAMP) ON CONFLICT(id) DO UPDATE SET status = EXCLUDED.status, depends_on = EXCLUDED.depends_on, priority = EXCLUDED.priority, agent_assigned = EXCLUDED.agent_assigned, updated_at = EXCLUDED.updated_at"
         )
         .bind(&objective.id)
         .bind(&objective.title)
@@ -486,13 +401,13 @@ pub struct AgentSession {
 }
 
 #[async_trait]
-impl DataSink for SqliteSink {
+impl DataSink for PostgresSink {
     async fn write(&mut self, target: &TargetHost) -> Result<()> {
-        let scan_id = self.scan_id.context("SqliteSink: scan_id not initialized (write_metadata must be called first)")?;
+        let scan_id = self.scan_id.context("PostgresSink: scan_id not initialized (write_metadata must be called first)")?;
         
         // Insert or update target
-        let row: (i64,) = sqlx::query_as(
-            "INSERT INTO targets (scan_id, host, ip, status) VALUES (?, ?, ?, ?) RETURNING id"
+        let row: (i32,) = sqlx::query_as(
+            "INSERT INTO targets (scan_id, host, ip, status) VALUES ($1, $2, $3, $4) RETURNING id"
         )
         .bind(scan_id)
         .bind(&target.host)
@@ -501,31 +416,27 @@ impl DataSink for SqliteSink {
         .fetch_one(&self.pool)
         .await?;
         
-        let target_id = row.0;
+        let target_id = row.0 as i32;
 
         // Insert findings
         for finding in target.findings.iter() {
-            let evidence = serde_json::to_string(&finding.evidence.data)?;
-            let mitre = finding.mitre_attack.as_ref().map(|m| serde_json::to_string(m).unwrap_or_default());
-            let ai = finding.ai_analysis.as_ref().map(|a| serde_json::to_string(a).unwrap_or_default());
+            let evidence = serde_json::to_string(&finding.evidence)?;
+            let enrichment = serde_json::to_string(&finding.enrichment)?;
+            let context = serde_json::to_string(&finding.context)?;
             
             sqlx::query(
-                "INSERT OR REPLACE INTO findings (id, target_id, category, severity, description, evidence, tactical_path, mitre_attack, ai_analysis, cvss_vector, objective_id, agent, iteration)
-                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
+                "INSERT INTO findings (id, target_id, category, severity, description, evidence, enrichment, context, timestamps)
+                 VALUES ($1, $2, $3, $4, $5, $6::jsonb, $7::jsonb, $8::jsonb, $9) ON CONFLICT(id) DO UPDATE SET category = EXCLUDED.category, severity = EXCLUDED.severity, description = EXCLUDED.description, evidence = EXCLUDED.evidence, enrichment = EXCLUDED.enrichment, context = EXCLUDED.context, timestamps = EXCLUDED.timestamps"
             )
-            .bind(&finding.id)
+            .bind(&finding.core.id)
             .bind(target_id)
-            .bind(format!("{:?}", finding.category))
-            .bind(format!("{:?}", finding.severity))
-            .bind(&finding.description)
+            .bind(format!("{:?}", finding.core.category))
+            .bind(format!("{:?}", finding.core.severity))
+            .bind(&finding.core.description)
             .bind(evidence)
-            .bind(&finding.tactical_path)
-            .bind(mitre)
-            .bind(ai)
-            .bind(&finding.cvss_vector)
-            .bind(&finding.objective_id)
-            .bind(&finding.agent)
-            .bind(finding.iteration as i64)
+            .bind(enrichment)
+            .bind(context)
+            .bind(finding.core.timestamps)
             .execute(&self.pool)
             .await?;
         }
@@ -536,14 +447,14 @@ impl DataSink for SqliteSink {
     async fn write_metadata(&mut self, metadata: &ScanMetadata) -> Result<()> {
         self.command_line = metadata.command_line.clone();
         
-        let row: (i64,) = sqlx::query_as(
-            "INSERT INTO scans (command_line) VALUES (?) RETURNING id"
+        let row: (i32,) = sqlx::query_as(
+            "INSERT INTO scans (command_line) VALUES ($1) RETURNING id"
         )
         .bind(&metadata.command_line)
         .fetch_one(&self.pool)
         .await?;
         
-        self.scan_id = Some(row.0);
+        self.scan_id = Some(row.0 as i64);
         Ok(())
     }
 
@@ -580,9 +491,9 @@ impl DataSink for MarkdownSink {
         
         for f in target.findings.iter() {
             self.findings_count += 1;
-            report.push_str(&format!("| {} | **{:?}** | {:?} | {} |\n", f.id, f.severity, f.category, f.description));
+            report.push_str(&format!("| {} | **{:?}** | {:?} | {} |\n", f.core.id, f.core.severity, f.core.category, f.core.description));
             
-            if let Some(ai) = &f.ai_analysis {
+            if let Some(ai) = &f.enrichment.ai_analysis {
                 report.push_str(&format!("\n> ### AI Analysis (Model: {})\n", ai.model));
                 report.push_str(&format!("> **Summary:** {}\n", ai.summary));
                 report.push_str(&format!("> **Impact:** {}\n", ai.impact));

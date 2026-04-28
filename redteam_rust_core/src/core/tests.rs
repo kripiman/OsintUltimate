@@ -133,13 +133,13 @@ mod tests {
 
     #[tokio::test]
     async fn test_objective_persistence() -> anyhow::Result<()> {
-        use crate::core::sink::SqliteSink;
+        use crate::core::sink::PostgresSink;
         use crate::models::{Objective, ObjectiveStatus, ObjectivePhase};
         use tempfile::tempdir;
 
         let tmp_dir = tempdir()?;
         let db_path = tmp_dir.path().join("opplan_test.db");
-        let sink = SqliteSink::new(db_path).await?;
+        let sink = PostgresSink::new(db_path).await?;
 
         let obj = Objective::new("OBJ-001", "Initial Access", "Gain a foothold in the perimeter.", ObjectivePhase::InitialAccess)
             .with_status(ObjectiveStatus::InProgress);

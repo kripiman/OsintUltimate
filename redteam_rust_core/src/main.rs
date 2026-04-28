@@ -8,7 +8,7 @@ use std::time::Duration;
 use redteam_rust_core::models::{TargetHost, TargetStatus};
 use redteam_rust_core::core::factory::EngineFactory;
 use redteam_rust_core::core::engine::{RedTeamEngine, app::EngineConfig};
-use redteam_rust_core::core::sink::{MultiSink, JsonlSink, SqliteSink, TacticalWebhookSink, DataSink};
+use redteam_rust_core::core::sink::{MultiSink, JsonlSink, PostgresSink, TacticalWebhookSink, DataSink};
 use redteam_rust_core::core::capability_layer::ScanLayer;
 use redteam_rust_core::utils::config::Config;
 use redteam_rust_core::utils::validate_target;
@@ -194,7 +194,7 @@ async fn main() -> Result<()> {
     // --- SINK SETUP ---
     let mut multi_sink = MultiSink::new();
     if let Some(ref db_path) = args.sqlite_output {
-        multi_sink.add(Box::new(SqliteSink::new(db_path).await?));
+        multi_sink.add(Box::new(PostgresSink::new(db_path).await?));
     } else {
         multi_sink.add(Box::new(JsonlSink::new(&args.jsonl_output).await?));
     }

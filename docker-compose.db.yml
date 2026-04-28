@@ -1,0 +1,28 @@
+version: '3.8'
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: osint_postgres
+    environment:
+      POSTGRES_USER: osintuser
+      POSTGRES_PASSWORD: WENYANULTRA_SECURE_PASS
+      POSTGRES_DB: osintdb
+    ports:
+      - "127.0.0.1:5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 4G
+    command: >
+      postgres
+      -c shared_buffers=1GB
+      -c work_mem=64MB
+      -c effective_cache_size=3GB
+      -c maintenance_work_mem=256MB
+      -c max_connections=200
+
+volumes:
+  pgdata:

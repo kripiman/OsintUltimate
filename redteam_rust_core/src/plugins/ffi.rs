@@ -247,7 +247,7 @@ impl crate::plugins::ScannerPlugin for FFIPluginWrapper {
                 let category = category_from_u8(f_ffi.category);
 
                 let mut finding = Finding::new(&uuid::Uuid::new_v4().to_string(), category, severity, &desc, evidence);
-                finding.title = title;
+                finding.core.title = title;
                 native_findings.push(finding);
             }
             

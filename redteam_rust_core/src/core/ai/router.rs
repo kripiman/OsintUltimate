@@ -92,15 +92,15 @@ impl TieredAIRouter {
         let mut hasher = SipHasher13::new_with_keys(SIPHASH_KEY.0, SIPHASH_KEY.1);
         target.host.hash(&mut hasher);
         target.ip.hash(&mut hasher);
-        finding.id.hash(&mut hasher);
-        finding.category.hash(&mut hasher);
+        finding.core.id.hash(&mut hasher);
+        finding.core.category.hash(&mut hasher);
         
         format!("f:{:x}", hasher.finish())
     }
 
     /// V10 HARDENING: AI-Decision logic is now WAF-aware and OPSEC-aware.
     pub fn classify(&self, finding: &Finding, target: &TargetHost) -> RouteLevel {
-        let cvss = finding.cvss_score.unwrap_or(0.0);
+        let cvss = finding.enrichment.cvss_score.unwrap_or(0.0);
         let mut level = if cvss >= 8.5 {
             RouteLevel::Premium
         } else if cvss >= 5.0 {
@@ -110,7 +110,7 @@ impl TieredAIRouter {
         };
 
         // Escalate for sensitive categories (Credentials, Exposed Assets)
-        if finding.category == crate::models::Category::CredentialLeak || finding.category == crate::models::Category::ExposedAsset {
+        if finding.core.category == crate::models::Category::CredentialLeak || finding.core.category == crate::models::Category::ExposedAsset {
             level = level.max(RouteLevel::Mid);
         }
 
@@ -128,9 +128,10 @@ impl TieredAIRouter {
         }
 
         // NEW V11: Source-aware findings prefer Local Code-Models (Tier 0) 
-        // because code snippets are large and local models are often fine-tuned for this.
-        if finding.evidence.data.get("type").and_then(|v| v.as_str()) == Some("source_aware") {
-            return RouteLevel::Local;
+        if let Some(ref evidence) = finding.evidence.evidence {
+            if evidence.data.get("type").and_then(|v| v.as_str()) == Some("source_aware") {
+                return RouteLevel::Local;
+            }
         }
 
         level
@@ -195,7 +196,7 @@ impl TieredAIRouter {
             }
         }
         
-        Err(anyhow!("All TieredAIRouter providers failed for {}", finding.id))
+        Err(anyhow!("All TieredAIRouter providers failed for {}", finding.core.id))
     }
 
     pub async fn decide_action(
@@ -252,7 +253,6 @@ impl TieredAIRouter {
     }
 
     /// V15.2: Unified Context Enrichment with Dynamic Budgeting and Token Optimization.
-    /// Synergy: Skills selected here directly influence Plugin weighting in PluginRagManager.
     async fn enrich_context_v15(
         &self,
         finding: &Finding,
@@ -264,21 +264,17 @@ impl TieredAIRouter {
         let mut effective_ctx = base_ctx.map(|s| s.to_string());
         
         if let Some(ref sm) = self.skill_manager {
-            // 1. Determine Dynamic Budget based on Tier
             let budget = match level {
                 RouteLevel::Local => 300,
                 RouteLevel::Mid => 800,
                 RouteLevel::Premium => 1500,
             };
 
-            // 2. Match Skills
             let skills = sm.match_for_context(finding, posture, level, budget).await;
             if !skills.is_empty() {
                 if let Some(injection) = sm.build_injection(&skills, caveman).await {
                     info!("🧠 [Router] Inyectando {} skills técnicos (Budget: {} tokens, Tier: {:?}).", skills.len(), budget, level);
                     
-                    // 3. Apply Token Optimization (Wenyan Ultra) for skill injection
-                    // Even if caveman is not Ultra, we want the skills themselves to be as dense as possible
                     let optimized_injection = if caveman >= CavemanLevel::Ultra {
                         PROMPT_OPTIMIZER.optimize(&injection, OptimizationLevel::Ultra)
                     } else if caveman == CavemanLevel::Lite {

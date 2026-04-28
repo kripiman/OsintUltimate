@@ -100,7 +100,7 @@ impl SkillManager {
         _route_level: RouteLevel,
         budget: u32,
     ) -> Vec<&Skill> {
-        let category_str = format!("{:?}", finding.category);
+        let category_str = format!("{:?}", finding.core.category);
         let posture_str = format!("{:?}", posture);
         
         let mut candidates: Vec<(usize, u32)> = Vec::new();
@@ -120,14 +120,15 @@ impl SkillManager {
                 // Check preconditions
                 if let Some(pre) = &s.preconditions {
                     if let Some(min_cvss) = pre.min_cvss {
-                        let actual_cvss = finding.cvss_score.unwrap_or(0.0);
+                        let actual_cvss = finding.enrichment.cvss_score.unwrap_or(0.0);
                         if actual_cvss < min_cvss { continue; }
                     }
                     if let Some(req_ver) = pre.requires_verified {
-                        if req_ver && !finding.evidence.verified { continue; }
+                        let verified = finding.evidence.evidence.as_ref().map(|e| e.verified).unwrap_or(false);
+                        if req_ver && !verified { continue; }
                     }
                     if let Some(req_tag) = &pre.requires_tag {
-                        if !finding.mitre_tags.contains(req_tag) { continue; }
+                        if !finding.enrichment.mitre_tags.contains(req_tag) { continue; }
                     }
                 }
 
@@ -136,7 +137,7 @@ impl SkillManager {
         }
 
         // 2. Score by Tags (Boost)
-        for tag in &finding.mitre_tags {
+        for tag in &finding.enrichment.mitre_tags {
             if let Some(indices) = self.by_tag.get(&tag.to_lowercase()) {
                 for &i in indices {
                     // Update score if already a candidate, or add as candidate
@@ -151,7 +152,7 @@ impl SkillManager {
                         let mut pre_passed = true;
                         if let Some(pre) = &s.preconditions {
                             if let Some(min_cvss) = pre.min_cvss {
-                                if finding.cvss_score.unwrap_or(0.0) < min_cvss { pre_passed = false; }
+                                if finding.enrichment.cvss_score.unwrap_or(0.0) < min_cvss { pre_passed = false; }
                             }
                         }
                         

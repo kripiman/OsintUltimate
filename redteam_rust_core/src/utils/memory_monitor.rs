@@ -96,7 +96,7 @@ impl MemoryMonitor {
                 
                 if curr > hard {
                     error!("CRITICAL: Memory {}MB/{}MB, triggering shutdown signal", curr, hard);
-                    // In a real app we might send a signal or exit
+                    std::process::exit(1);
                 } else if curr > soft {
                     warn!("Memory warning: {}MB/{}MB, activating backpressure", curr, soft);
                 }

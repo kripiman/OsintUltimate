@@ -86,12 +86,10 @@ impl<M: ExecutorMode> SwarmOrchestrator<M> {
     pub async fn run(&self, initial_target: TargetHost, sink_tx: mpsc::Sender<TargetHost>) -> Result<()> {
         info!("🐝 SWARM: Iniciando enjambre multi-agente para {}", initial_target.host);
         
-        // V15: OPPLAN / Engagement Initialization
         {
             let mut state_lock = self.engagement.lock().await;
             if state_lock.is_none() {
                 let mut state = EngagementState::new("ENG-001", "Default Mission");
-                // Inicializar objetivo principal si no hay plan
                 let root_obj = Objective::new("OBJ-ROOT", "Initial Exploration", &format!("Explore target {}", initial_target.host), ObjectivePhase::Recon);
                 state.opplan.add_objective(root_obj)?;
                 *state_lock = Some(state);
@@ -99,7 +97,6 @@ impl<M: ExecutorMode> SwarmOrchestrator<M> {
             }
         }
         
-        // 🔱 V14.1 READINESS GATE (Professional Grade)
         if let Some(ref pm) = self.proxy_manager {
             info!("⏳ SWARM: Verificando integridad de egreso (ProxyManager readiness)...");
             pm.wait_for_readiness(std::time::Duration::from_secs(30))
@@ -116,7 +113,6 @@ impl<M: ExecutorMode> SwarmOrchestrator<M> {
         let pipeline = self.pipeline.clone();
         let target = initial_target.clone();
         
-        // FASE 1: SCOUT - Discovery inicial
         let pipeline_clone = pipeline.clone();
         let discovery_tx_clone = discovery_tx.clone();
         let _handle = tokio::spawn(async move {
@@ -124,18 +120,15 @@ impl<M: ExecutorMode> SwarmOrchestrator<M> {
         });
 
         let mut join_set = tokio::task::JoinSet::new();
-        // V12 HARDENING (HIGH-002): Concurrent Agent Limit (DoS prevention)
         let agent_semaphore = Arc::new(tokio::sync::Semaphore::new(10));
-        let max_pending_tasks = 50; // V12 FIX (HIGH-001): Limit JoinSet size to prevent DoS
+        let max_pending_tasks = 50; 
 
-        // V14.2 SCOPE CHECK: Validate initial target before spawning agents
         if !self.policy.is_target_allowed(&initial_target.host) {
             error!("🛡️ V14.2 SCOPE VIOLATION: Target {} is NOT authorized in policy.json. Aborting swarm.", initial_target.host);
             return Ok(());
         }
 
         while let Some(finding) = discovery_rx.recv().await {
-            // V12 FIX: Limit JoinSet size to prevent DoS (HIGH-001)
             while join_set.len() >= max_pending_tasks {
                 if let Some(res) = join_set.join_next().await {
                      match res {
@@ -152,8 +145,8 @@ impl<M: ExecutorMode> SwarmOrchestrator<M> {
                 break;
             }
 
-            if seen_finding_ids.contains(&finding.id) { continue; }
-            seen_finding_ids.insert(finding.id.clone());
+            if seen_finding_ids.contains(&finding.core.id) { continue; }
+            seen_finding_ids.insert(finding.core.id.clone());
             {
                 let mut ce = correlation_engine.lock().await;
                 ce.add_finding(finding.clone());
@@ -165,14 +158,13 @@ impl<M: ExecutorMode> SwarmOrchestrator<M> {
             let paths = ce_handle.get_attack_paths();
             if let Some(da_path) = paths.iter().find(|p| p.description.contains("Windows") && p.total_cvss > 0.8) {
                 info!("🔱 V14.1 SOVEREIGN: High-value AD path detected! Prioritizing pivot: {}", da_path.description);
-                if da_path.nodes.contains(&finding.id) && finding.category == Category::Vulnerability {
+                if da_path.nodes.contains(&finding.core.id) && finding.core.category == Category::Vulnerability {
                     role = AgentRole::Exploiter;
                 }
             }
-            let attack_context = ce_handle.get_context_summary(&finding.id);
-            debug!("🐝 SWARM [Planner]: Asignando hallazgo {} al agente {:?}", finding.id, role);
+            let attack_context = ce_handle.get_context_summary(&finding.core.id);
+            debug!("🐝 SWARM [Planner]: Asignando hallazgo {} al agente {:?}", finding.core.id, role);
 
-            // 2. AGENT EXECUTION (ARCH-02: Concurrent Agent Execution)
             let orchestrator = Arc::new(self.clone_for_spawn()); 
             let finding_clone = finding.clone();
             let target_clone = initial_target.clone();
@@ -182,7 +174,6 @@ impl<M: ExecutorMode> SwarmOrchestrator<M> {
             let sink_tx_clone = sink_tx.clone();
             let semaphore = agent_semaphore.clone();
 
-            // V12 HARDENING: Use TokenGuard for RAII-based reservation
             let priority = match role {
                 AgentRole::Planner => TaskPriority::High,
                 AgentRole::Exploiter => TaskPriority::Normal,
@@ -192,22 +183,19 @@ impl<M: ExecutorMode> SwarmOrchestrator<M> {
             let guard = match TokenGuard::new(self.budget.clone(), 1000, priority) {
                 Some(g) => g,
                 None => {
-                    warn!("💸 SWARM: No hay presupuesto suficiente para spawnear agente {:?} (Hallazgo {}). Skipping.", role, finding.id);
+                    warn!("💸 SWARM: No hay presupuesto suficiente para spawnear agente {:?} (Hallazgo {}). Skipping.", role, finding.core.id);
                     continue;
                 }
             };
 
             join_set.spawn(async move {
                 let _permit = semaphore.acquire().await.ok();
-                // PFC-001/V12: Agent isolation via RAII and Panic handling
                 
-                // V13 HARDENING: Explicit catch_unwind to prevent any state leakage from panicked agents.
                 use std::panic::AssertUnwindSafe;
                 use futures::FutureExt;
 
-                let finding_id = finding_clone.id.clone();
+                let finding_id = finding_clone.core.id.clone();
                 let result = AssertUnwindSafe(async {
-                    // V13: Strategic Pivot Check (Professional Egress Management)
                     if orchestrator.budget.current_effective_total() > (orchestrator.budget.max_tokens as f64 * 0.95) as u32 
                        && role != AgentRole::GhostReporter {
                         warn!("🛡️ SWARM: CRITICAL BUDGET LIMIT! Tokens > 95%. Forcing emergency pivot to Passive Reporter for {}.", finding_id);
@@ -238,7 +226,6 @@ impl<M: ExecutorMode> SwarmOrchestrator<M> {
                         AgentRole::C2Operator => orchestrator.execute_c2_operator(finding_clone, &target_clone, &mut ctx_clone, &sink_tx_clone, guard).await,
                         AgentRole::GhostReporter => orchestrator.execute_reporter(finding_clone, &target_clone, &sink_tx_clone, guard).await,
                         AgentRole::Planner => {
-                            // Planner agents can now update the shared engine directly
                             let mut ce = ce_clone.lock().await;
                             ce.add_finding(finding_clone);
                             guard.commit(0);
@@ -257,8 +244,6 @@ impl<M: ExecutorMode> SwarmOrchestrator<M> {
             });
         }
         
-        // Wait for all agents to finish
-        // V12 HARDENING: Robust Agent Join and Error Reporting
         while let Some(res) = join_set.join_next().await {
             match res {
                 Ok(Ok(_)) => {},
@@ -278,23 +263,16 @@ impl<M: ExecutorMode> SwarmOrchestrator<M> {
     }
 
     async fn plan_next_step(&self, finding: &Finding, target: &TargetHost) -> Result<AgentRole> {
-        // V10: Use aggressive compression for planning to save tokens
         let _compressed = crate::core::ai::ContextCompressor::compress_swarm_context(finding, target);
         
-        // En v4 el Planner usa Gemini Flash (Mid) o Local por defecto para ahorrar tokens.
-        // Solo si el hallazgo es crítico escalamos a Premium.
-        let level = if finding.severity == Severity::Critical { RouteLevel::Premium } else { RouteLevel::Mid };
-        info!("🐝 SWARM [Planner]: Routing {} to {:?} tier.", finding.id, level);
+        let level = if finding.core.severity == Severity::Critical { RouteLevel::Premium } else { RouteLevel::Mid };
+        info!("🐝 SWARM [Planner]: Routing {} to {:?} tier.", finding.core.id, level);
         
-        // Lógica simplificada: 
-        // Recon/Port -> Scout
-        // Vulnerality/Misconfig -> Exploiter
-        // Otros -> Reporter
-        match finding.category {
+        match finding.core.category {
             Category::Recon | Category::NetworkPort | Category::TechnologyStack => Ok(AgentRole::Scout),
             Category::Vulnerability | Category::Misconfiguration | Category::CredentialLeak => {
-                // Si ya está verificado, pasar a C2
-                if finding.evidence.verified && finding.severity >= Severity::High {
+                let verified = finding.evidence.evidence.as_ref().map(|e| e.verified).unwrap_or(false);
+                if verified && finding.core.severity >= Severity::High {
                     Ok(AgentRole::C2Operator)
                 } else {
                     Ok(AgentRole::Exploiter)
@@ -308,12 +286,11 @@ impl<M: ExecutorMode> SwarmOrchestrator<M> {
         &self,
         task: AgentTask<'_, M>,
     ) -> Result<()> {
-        info!("🔍 SWARM [Scout]: Profundizando en hallazgo de infraestructura: {}", task.finding.title);
+        info!("🔍 SWARM [Scout]: Profundizando en hallazgo de infraestructura: {}", task.finding.core.title);
         
         let metadata = self.pipeline.get_plugin_metadata();
         match self.router.decide_action(&task.finding, task.target, &metadata, task.attack_context.as_deref(), Some(task.adaptive_ctx)).await {
             Ok(Some((action, tactical))) => {
-                // V12: Commit usage and transition guard
                 task.guard.commit(200); 
 
                 let mut task_target = task.target.clone();
@@ -325,7 +302,6 @@ impl<M: ExecutorMode> SwarmOrchestrator<M> {
                 }
             }
             Ok(None) => {
-                // Guard will auto-release on drop if not committed
             }
             Err(e) => {
                 return Err(e);
@@ -344,9 +320,8 @@ impl<M: ExecutorMode> SwarmOrchestrator<M> {
         task: AgentTask<'_, M>,
     ) -> Result<()> {
         let mut finding = task.finding;
-        info!("💥 SWARM [Exploiter]: Intentando validación/explotación de: {} [Posture: STRIKE]", finding.title);
+        info!("💥 SWARM [Exploiter]: Intentando validación/explotación de: {} [Posture: STRIKE]", finding.core.title);
         
-        // V14: Elevate to STRIKE posture during active exploitation
         task.adaptive_ctx.posture = crate::core::ai::Posture::Strike;
         
         match self.router.analyze(&finding, task.target, task.attack_context.as_deref()).await {
@@ -393,14 +368,12 @@ impl<M: ExecutorMode> SwarmOrchestrator<M> {
         adaptive_ctx.posture = crate::core::ai::Posture::Breach;
         guard.commit(500);
 
-        // V15: High-Professional Persistence Orchestration
         let orchestrator = PersistenceOrchestrator::new(self.router.clone(), self.executor.clone());
         if let Ok(plan) = orchestrator.generate_plan(&finding).await {
             info!("🎯 SWARM [C2Operator]: Tactical plan generated. Consolidating access...");
             if let Err(e) = orchestrator.consolidate(&plan, target).await {
                 warn!("⚠️ SWARM [C2Operator]: Consolidation failed: {}", e);
             } else {
-                // STAGE 2: Verification Loop
                 if let Ok(true) = orchestrator.verify_access(&plan, target).await {
                     info!("🛡️ SWARM [C2Operator]: Persistence Verified (APT-Level). Posture maintained.");
                 } else {
@@ -415,7 +388,6 @@ impl<M: ExecutorMode> SwarmOrchestrator<M> {
         }
 
         for c2 in operators {
-            // El orquestador ahora solo maneja el flujo de estados C2 (Routing)
             match c2.verify_session(target).await {
                 Ok(state) => {
                     use crate::core::c2::SessionState;
@@ -428,7 +400,6 @@ impl<M: ExecutorMode> SwarmOrchestrator<M> {
                         info!("🚀 SWARM [C2Operator]: Payload preparado en {}. Iniciando despliegue...", payload_path);
                         let _ = c2.deploy_payload(target, &payload_path).await;
                         
-                        // Generar hallazgo de persistencia para el sink
                         let mut sink_target = target.clone();
                         let mut final_findings = vec![finding.clone()];
                         final_findings.push(Finding::new(
@@ -461,7 +432,7 @@ impl<M: ExecutorMode> SwarmOrchestrator<M> {
         sink_tx: &mpsc::Sender<TargetHost>,
         guard: TokenGuard,
     ) -> Result<()> {
-        debug!("📝 SWARM [Reporter]: Archivando hallazgo informativo: {}", finding.title);
+        debug!("📝 SWARM [Reporter]: Archivando hallazgo informativo: {}", finding.core.title);
         guard.commit(0);
         let mut sink_target = target.clone();
         sink_target.findings = Arc::new(vec![finding]);

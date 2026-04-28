@@ -194,7 +194,7 @@ impl SourceAnalyzer {
                     "endpoint": if f.is_endpoint { Some(f.description.replace("Endpoint Detectado: ", "").replace("Endpoint Python: ", "")) } else { None }
                 })
             );
-            h.title = format!("SAST: {}", f.description);
+            h.core.title = format!("SAST: {}", f.description);
             h
         }).collect()
     }

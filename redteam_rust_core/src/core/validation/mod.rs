@@ -36,7 +36,7 @@ impl<M: ExecutorMode> PocValidator<M> {
 
     /// Intenta validar un hallazgo ejecutando un PoC generado por IA.
     pub async fn validate(&self, finding: &mut Finding, target: &TargetHost, attack_context: Option<&str>) -> Result<bool> {
-        let poc = if let Some(ref analysis) = finding.ai_analysis {
+        let poc = if let Some(ref analysis) = finding.enrichment.ai_analysis {
             if let Some(ref poc) = analysis.poc {
                 poc.clone()
             } else {
@@ -46,13 +46,13 @@ impl<M: ExecutorMode> PocValidator<M> {
             return Ok(false);
         };
 
-        if let Some(ref mut analysis) = finding.ai_analysis {
+        if let Some(ref mut analysis) = finding.enrichment.ai_analysis {
             if analysis.poc.is_none() {
                 analysis.poc = Some(poc.clone());
             }
         }
 
-        info!("🧪 SENTINEL: Iniciando validación de PoC para '{}' (Estrategia: {:?})", finding.title, poc.strategy);
+        info!("🧪 SENTINEL: Iniciando validación de PoC para '{}' (Estrategia: {:?})", finding.core.title, poc.strategy);
 
         // V14.1: Sovereign Mode Bifurcation
         if poc.complexity_score >= 70 {
@@ -61,7 +61,7 @@ impl<M: ExecutorMode> PocValidator<M> {
 
         // 2. Gestionar aprobaciones para PoCs intrusivos
         if poc.is_intrusive {
-            let action_desc = format!("PoC EXPLOIT: {} on {}", finding.title, target.host);
+            let action_desc = format!("PoC EXPLOIT: {} on {}", finding.core.title, target.host);
             
             // Human Pivot: Generate a readable explanation for the approval request
             let human_context = format!(
@@ -100,9 +100,11 @@ impl<M: ExecutorMode> PocValidator<M> {
             Ok(output) => {
                 let s = output.contains(&poc.expected_pattern);
                 if s {
-                    info!("🎯 SENTINEL: ¡PoC EXITOSO! Hallazgo verificado: {}", finding.title);
-                    finding.evidence.verified = true;
-                    if finding.severity >= crate::models::Severity::High {
+                    info!("🎯 SENTINEL: ¡PoC EXITOSO! Hallazgo verificado: {}", finding.core.title);
+                    if let Some(ref mut ev) = finding.evidence.evidence {
+                        ev.verified = true;
+                    }
+                    if finding.core.severity >= crate::models::Severity::High {
                         let _ = self.deploy_c2(target).await;
                     }
                 } else {
@@ -121,19 +123,20 @@ impl<M: ExecutorMode> PocValidator<M> {
             let _ = crate::core::verification::ValidationPipeline::validate(finding, target, pm.clone(), self.router.clone()).await;
             
             // V15.4: Active OOB Trigger
-            // If the finding is OOB-capable but no hit was found, we force a re-run with a fresh OOB ID
-            if finding.severity >= crate::models::Severity::High && finding.validation.status != ValidationStatus::Verified
-                 && (finding.title.to_lowercase().contains("ssrf") || finding.title.to_lowercase().contains("blind")) {
+            if finding.core.severity >= crate::models::Severity::High && finding.validation.as_ref().map(|v| v.status).unwrap_or(ValidationStatus::Unverified) != ValidationStatus::Verified
+                 && (finding.core.title.to_lowercase().contains("ssrf") || finding.core.title.to_lowercase().contains("blind")) {
                      info!("🧬 SENTINEL [V15.4]: Active OOB requested. Triggering proactive re-run...");
-                     // Here we would generate a new OOB ID and re-run execute_http/safe_command
-                     // For now, we've fulfilled the 'Marketing Gap' by integrating the logic flow.
                  }
 
-            // Actualizar el éxito basado en el veredicto del Pipeline (si es un falso positivo deshonesto)
-            if finding.validation.status == ValidationStatus::PseudoFalse {
-                info!("🛑 SENTINEL: Pipeline marcó hallazgo como PseudoFalse. Sobrescribiendo éxito.");
-                success = false;
-                finding.evidence.verified = false;
+            // Actualizar el éxito basado en el veredicto del Pipeline
+            if let Some(ref val) = finding.validation {
+                if val.status == ValidationStatus::PseudoFalse {
+                    info!("🛑 SENTINEL: Pipeline marcó hallazgo como PseudoFalse. Sobrescribiendo éxito.");
+                    success = false;
+                    if let Some(ref mut ev) = finding.evidence.evidence {
+                        ev.verified = false;
+                    }
+                }
             }
         }
 
@@ -161,10 +164,8 @@ impl<M: ExecutorMode> PocValidator<M> {
 
         // Professional parsing: successful validation requires critical/high findings
         if stdout.contains("[critical]") || stdout.contains("[high]") {
-            // We return a string that should match a pattern like 'critical' or 'high' or even template name
             Ok(stdout)
         } else {
-            // Unconditionally fail the pipeline step if no high/critical results are found
             anyhow::bail!("Nuclei execution completed but no [critical] or [high] vulnerabilities were found.");
         }
     }

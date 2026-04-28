@@ -167,44 +167,44 @@ const HTML_TEMPLATE: &str = r#"
               {{#each findings}}
               <div class="finding-item">
                 <div class="finding-header">
-                  <span class="severity-badge severity-{{severity}}">{{severity}}</span>
-                  {{#if cvss_score}}<span class="cvss-badge">CVSS {{cvss_score}}</span>{{/if}}
-                  <span style="font-weight: 700; color: #f1f5f9; text-transform: uppercase; font-size: 0.8125rem;">{{category}}</span>
-                  {{#each mitre_attack}}
+                  <span class="severity-badge severity-{{core.severity}}">{{core.severity}}</span>
+                  {{#if enrichment.cvss_score}}<span class="cvss-badge">CVSS {{enrichment.cvss_score}}</span>{{/if}}
+                  <span style="font-weight: 700; color: #f1f5f9; text-transform: uppercase; font-size: 0.8125rem;">{{core.category}}</span>
+                  {{#each enrichment.mitre_attack}}
                     <span class="mitre-badge">ATT&CK {{this}}</span>
                   {{/each}}
                 </div>
-                <div class="finding-description">{{description}}</div>
+                <div class="finding-description">{{core.description}}</div>
                 
-                {{#if ai_analysis}}
+                {{#if enrichment.ai_analysis}}
                 <div class="ai-analysis">
-                  <span class="ai-label">🤖 Sentinel Autonomous Reasoning ({{ai_analysis.model}})</span>
-                  <div><strong>Summary:</strong> {{ai_analysis.summary}}</div>
-                  <div style="margin-top: 8px;"><strong>Exposure Impact:</strong> {{ai_analysis.impact}}</div>
-                  <div style="margin-top: 8px; font-style: italic; color: var(--muted); border-top: 1px solid rgba(56, 189, 248, 0.1); padding-top: 8px;">Stealth Notes: {{ai_analysis.stealth_notes}}</div>
+                  <span class="ai-label">🤖 Sentinel Autonomous Reasoning ({{enrichment.ai_analysis.model}})</span>
+                  <div><strong>Summary:</strong> {{enrichment.ai_analysis.summary}}</div>
+                  <div style="margin-top: 8px;"><strong>Exposure Impact:</strong> {{enrichment.ai_analysis.impact}}</div>
+                  <div style="margin-top: 8px; font-style: italic; color: var(--muted); border-top: 1px solid rgba(56, 189, 248, 0.1); padding-top: 8px;">Stealth Notes: {{enrichment.ai_analysis.stealth_notes}}</div>
                 </div>
                 {{/if}}
 
-                {{#if tactical_path}}
+                {{#if evidence.tactical_path}}
                 <div class="tactical_path-box">
                   <span class="tactical-label">🛠️ Technical Tactical Path</span>
-                  <div>{{tactical_path}}</div>
+                  <div>{{evidence.tactical_path}}</div>
                 </div>
                 {{/if}}
 
-                {{#if references}}
+                {{#if enrichment.references}}
                 <div class="references-list">
                   <strong>References:</strong>
-                  {{#each references}}
+                  {{#each enrichment.references}}
                     <a href="{{this}}" target="_blank">🔗 {{this}}</a>
                   {{/each}}
                 </div>
                 {{/if}}
 
-                {{#if evidence.data}}
+                {{#if evidence.evidence.data}}
                   <details style="margin-top: 16px;">
                     <summary style="font-size: 0.75rem; color: var(--muted); cursor: pointer; text-transform: uppercase; font-weight: 700;">View Raw Evidence</summary>
-                    <div class="finding-evidence">{{json_stringify evidence.data}}</div>
+                    <div class="finding-evidence">{{json_stringify evidence.evidence.data}}</div>
                   </details>
                 {{/if}}
               </div>
@@ -283,14 +283,14 @@ pub async fn generate_report(jsonl_path: &str, output_path: &str) -> Result<()> 
             
             for f in target.findings.iter() {
                 stats.total_findings += 1;
-                if f.category == crate::models::Category::SCA {
+                if f.core.category == crate::models::Category::SCA {
                     stats.sca_count += 1;
                 }
-                if let Some(score) = f.cvss_score {
+                if let Some(score) = f.enrichment.cvss_score {
                     total_cvss += score;
                     cvss_count += 1;
                 }
-                let val = match f.severity {
+                let val = match f.core.severity {
                     crate::models::Severity::Critical => { stats.critical_count += 1; 4 },
                     crate::models::Severity::High => { stats.high_count += 1; 3 },
                     crate::models::Severity::Medium => { stats.medium_count += 1; 2 },
@@ -340,7 +340,7 @@ pub async fn generate_report(jsonl_path: &str, output_path: &str) -> Result<()> 
         if t.has_findings {
             for (i, f) in t.findings.iter().enumerate() {
                 let finding_id = format!("{}_f{}", host_id, i);
-                mermaid.push_str(&format!("  {} --> {}[\"{:?}\"]\n", host_id, finding_id, f.category));
+                mermaid.push_str(&format!("  {} --> {}[\"{:?}\"]\n", host_id, finding_id, f.core.category));
             }
         }
     }

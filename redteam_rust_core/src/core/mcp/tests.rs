@@ -12,7 +12,7 @@ async fn test_mcp_two_level_cache() -> anyhow::Result<()> {
     // Setup SQLite cache
     let tmp_dir = tempdir()?;
     let db_path = tmp_dir.path().join("mcp_test.db");
-    server = server.with_sqlite(db_path.clone()).await;
+    server = server.with_postgres(db_path.clone()).await;
     
     let cache_key = "TestPlugin:test.com";
     let test_output = "Compressed Result v14.1";

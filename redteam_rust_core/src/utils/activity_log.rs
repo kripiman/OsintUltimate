@@ -90,7 +90,7 @@ impl ActivityLog {
         self.log(
             EventKind::Finding,
             actor,
-            &format!("New finding discovered: {}", finding.title),
+            &format!("New finding discovered: {}", finding.core.title),
             target,
             serde_json::to_value(finding)?,
         ).await

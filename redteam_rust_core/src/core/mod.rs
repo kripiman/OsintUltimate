@@ -34,7 +34,7 @@ pub mod tests;
 
 pub use orchestrator::Orchestrator;
 pub use pipeline::{Pipeline, PipelineBuilder};
-pub use sink::{DataSink, JsonlSink, SqliteSink};
+pub use sink::{DataSink, JsonlSink, PostgresSink};
 pub use correlation::{CorrelationEngine, AttackGraph, AttackPath};
 pub use filter::FalsePositiveFilter;
 pub use validation::PocValidator;

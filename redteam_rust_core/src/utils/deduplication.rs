@@ -2,7 +2,7 @@ use dashmap::DashMap;
 use once_cell::sync::Lazy;
 use sha2::{Sha256, Digest};
 use crate::models::Finding;
-use sqlx::SqlitePool;
+use sqlx::PgPool;
 use tokio::sync::OnceCell;
 use tracing::{info, error};
 
@@ -10,7 +10,7 @@ use tracing::{info, error};
 /// Key: SHA256(finding.id + matched_at), Value: first_seen timestamp
 pub struct DeduplicationEngine {
     seen_hashes: DashMap<[u8; 32], i64>,
-    pool: OnceCell<SqlitePool>,
+    pool: OnceCell<PgPool>,
 }
 
 static ENGINE: Lazy<DeduplicationEngine> = Lazy::new(DeduplicationEngine::new);
@@ -30,7 +30,7 @@ impl DeduplicationEngine {
     }
 
     /// Initializes the engine with a persistent SQLite pool and loads existing hashes.
-    pub async fn init(pool: SqlitePool) -> anyhow::Result<()> {
+    pub async fn init(pool: PgPool) -> anyhow::Result<()> {
         let engine = &*ENGINE;
         
         // Load existing hashes from DB
@@ -55,13 +55,13 @@ impl DeduplicationEngine {
     /// Returns true if this finding was already seen this session or recorded in DB.
     /// MUST be called from within a Tokio async context (uses tokio::spawn internally).
     pub fn is_duplicate(finding: &Finding) -> bool {
-        let matched_at = finding.evidence.data
-            .get("matched_at")
+        let matched_at = finding.evidence.evidence.as_ref()
+            .and_then(|e| e.data.get("matched_at"))
             .map(|v| v.to_string())
             .unwrap_or_default();
 
         let mut hasher = Sha256::new();
-        hasher.update(finding.id.as_bytes());
+        hasher.update(finding.core.id.as_bytes());
         hasher.update(matched_at.as_bytes());
         let hash: [u8; 32] = hasher.finalize().into();
 
@@ -77,7 +77,7 @@ impl DeduplicationEngine {
             let pool = pool.clone();
             tokio::spawn(async move {
                 let res = sqlx::query(
-                    "INSERT OR IGNORE INTO deduplication (finding_hash, first_seen) VALUES (?, ?)"
+                    "INSERT INTO deduplication (finding_hash, first_seen) VALUES ($1, $2) ON CONFLICT(finding_hash) DO NOTHING"
                 )
                 .bind(hash.to_vec())
                 .bind(now)

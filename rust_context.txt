@@ -77,6 +77,9 @@ redteam_rust_core/
         sanitizer.rs
         server.rs
         tests.rs
+      notifications/
+        discord.rs
+        mod.rs
       policy/
         mod.rs
       skills/
@@ -140,6 +143,7 @@ redteam_rust_core/
     models/
       constants.rs
       engagement.rs
+      export.rs
       findings.rs
       mod.rs
       objectives_tests.rs
@@ -263,6 +267,7 @@ redteam_rust_core/
       mod.rs
     utils/
       activity_log.rs
+      bounty_exporter.rs
       common.rs
       config.rs
       cve_cache.rs
@@ -464,6 +469,68 @@ server.plugin_cache.insert(cache_key.to_string(), disk_hit.unwrap()).await;
 Ok(())
 </file>
 
+<file path="redteam_rust_core/src/core/notifications/discord.rs">
+use crate::core::sink::DataSink;
+use anyhow::Result;
+use async_trait::async_trait;
+use serde_json::json;
+⋮----
+use std::sync::Arc;
+⋮----
+pub struct DiscordSink {
+⋮----
+impl DiscordSink {
+pub fn new(webhook_url: String, pm: Arc<crate::utils::proxy::ProxyManager>) -> Self {
+⋮----
+fn get_color_for_severity(&self, severity: &Severity) -> u32 {
+⋮----
+impl DataSink for DiscordSink {
+async fn write(&mut self, target: &TargetHost) -> Result<()> {
+⋮----
+let high_findings: Vec<_> = target.findings.iter()
+.filter(|f| f.severity == Severity::High || f.severity == Severity::Critical)
+.collect();
+⋮----
+if high_findings.is_empty() {
+return Ok(());
+⋮----
+debug!("📢 DiscordSink: Found {} high-severity findings for {}", high_findings.len(), target.host);
+⋮----
+let color = self.get_color_for_severity(&finding.severity);
+⋮----
+let mut description = format!("**Category:** {:?}\n**Description:** {}\n",
+⋮----
+description.push_str("\n--- 🤖 **AI ANALYSIS** ---\n");
+description.push_str(&format!("**Impact:** {}\n", ai.impact));
+description.push_str(&format!("**Exploit Path:** {}\n", ai.exploit_path));
+⋮----
+let payload = json!({
+⋮----
+let host = url::Url::parse(&self.webhook_url)?.host_str().unwrap_or("discord.com").to_string();
+let (_, client) = self.proxy_manager.get_client_fail_closed(&host)?;
+⋮----
+let res = client.post(&self.webhook_url)
+.json(&payload)
+.send()
+⋮----
+Ok(resp) if resp.status().is_success() => {
+info!("✅ Notification sent to Discord for {}", target.host);
+⋮----
+error!("❌ Failed to send Discord notification: HTTP {}", resp.status());
+⋮----
+error!("❌ Discord network error: {}", e);
+⋮----
+Ok(())
+⋮----
+async fn write_metadata(&mut self, _metadata: &ScanMetadata) -> Result<()> {
+⋮----
+async fn close(&mut self) -> Result<()> {
+</file>
+
+<file path="redteam_rust_core/src/core/notifications/mod.rs">
+pub mod discord;
+</file>
+
 <file path="redteam_rust_core/src/core/swarm/budget.rs">
 use tracing::warn;
 use std::sync::Arc;
@@ -526,52 +593,6 @@ fn drop(&mut self) {
 ⋮----
 warn!("💸 SWARM: TokenGuard dropped without commitment. Releasing {} reserved tokens.", self.amount);
 self.budget.release_reservation(self.amount);
-</file>
-
-<file path="redteam_rust_core/src/core/swarm/mod.rs">
-pub mod budget;
-pub mod orchestrator;
-⋮----
-mod tests {
-⋮----
-use std::sync::atomic::Ordering;
-use std::sync::Arc;
-⋮----
-fn test_token_budget_reservation() {
-⋮----
-assert!(budget.reserve_tokens(2000, TaskPriority::High));
-assert_eq!(budget.current_effective_total(), 2000);
-⋮----
-assert_eq!(budget.current_effective_total(), 4000);
-⋮----
-assert!(!budget.reserve_tokens(1500, TaskPriority::High));
-⋮----
-fn test_token_budget_commitment() {
-⋮----
-budget.reserve_tokens(1000, TaskPriority::Normal);
-⋮----
-budget.commit_usage(800, 1000);
-⋮----
-assert_eq!(budget.current_total(), 800);
-assert_eq!(budget.current_effective_total(), 800);
-assert_eq!(budget.reserved_tokens.load(Ordering::Relaxed), 0);
-⋮----
-fn test_token_budget_exhaustion() {
-⋮----
-budget.reserve_tokens(900, TaskPriority::High);
-assert!(!budget.is_exhausted());
-⋮----
-budget.reserve_tokens(100, TaskPriority::High);
-assert!(budget.is_exhausted());
-⋮----
-fn test_token_budget_per_agent_limit() {
-let budget = Arc::new(TokenBudget::new(10000).with_max_per_agent(1000));
-⋮----
-let guard1 = TokenGuard::new(budget.clone(), 500, TaskPriority::High).unwrap();
-assert_eq!(guard1.amount, 500);
-⋮----
-let guard2 = TokenGuard::new(budget.clone(), 2000, TaskPriority::High).unwrap();
-assert_eq!(guard2.amount, 1000);
 </file>
 
 <file path="redteam_rust_core/src/core/verification/interaction.rs">
@@ -683,90 +704,6 @@ pub fn build_profile_pool() -> Vec<Arc<HttpFingerprint>> {
 let raw = vec![
 ⋮----
 raw.into_iter().map(Arc::new).collect()
-</file>
-
-<file path="redteam_rust_core/src/core/web/assets.rs">
-use rust_embed::RustEmbed;
-use axum::response::IntoResponse;
-⋮----
-pub struct Assets;
-⋮----
-pub async fn serve_asset(axum::extract::Path(path): axum::extract::Path<String>) -> impl IntoResponse {
-let asset = Assets::get(&path).or_else(|| Assets::get("index.html"));
-⋮----
-let mime = mime_guess::from_path(&path).first_or_octet_stream();
-⋮----
-[("Content-Type", mime.as_ref())],
-content.data.to_vec(),
-).into_response()
-⋮----
-None => (axum::http::StatusCode::NOT_FOUND, "Not Found").into_response(),
-⋮----
-pub async fn serve_index() -> impl IntoResponse {
-serve_asset(axum::extract::Path("index.html".to_string())).await
-</file>
-
-<file path="redteam_rust_core/src/core/web/models.rs">
-use ed25519_dalek::VerifyingKey;
-⋮----
-pub struct DashboardAuth {
-⋮----
-pub struct DashboardStats {
-⋮----
-pub struct SwarmAgentStatus {
-⋮----
-pub struct SwarmStatusResponse {
-⋮----
-pub struct WsEvent {
-</file>
-
-<file path="redteam_rust_core/src/core/web/state.rs">
-use axum::http::request::Parts;
-use axum::async_trait;
-use std::sync::Arc;
-use tokio::sync::broadcast;
-⋮----
-use super::models::DashboardAuth;
-⋮----
-pub struct DashboardState {
-⋮----
-pub struct ValidatedOperator(pub crate::core::approval_gate::User);
-⋮----
-type Rejection = (StatusCode, String);
-⋮----
-async fn from_request_parts(
-⋮----
-let auth_header = parts.headers.get("Authorization")
-.and_then(|h| h.to_str().ok())
-.ok_or((StatusCode::UNAUTHORIZED, "Missing Authorization header".to_string()))?;
-⋮----
-if !auth_header.starts_with("Bearer ") {
-return Err((StatusCode::UNAUTHORIZED, "Invalid Authorization header format".to_string()));
-⋮----
-.map_err(|_| (StatusCode::UNAUTHORIZED, "Invalid token encoding".to_string()))?;
-⋮----
-if token_bytes.len() != 96 {
-return Err((StatusCode::UNAUTHORIZED, "Invalid token length".to_string()));
-⋮----
-let (payload, signature_bytes) = token_bytes.split_at(32);
-⋮----
-.map_err(|_| (StatusCode::UNAUTHORIZED, "Invalid signature format".to_string()))?;
-⋮----
-state.auth.verifying_key.verify(payload, &signature)
-.map_err(|_| (StatusCode::UNAUTHORIZED, "Invalid cryptographic signature".to_string()))?;
-⋮----
-return Err((StatusCode::UNAUTHORIZED, "Token session mismatch".to_string()));
-⋮----
-let expiry = u64::from_be_bytes(expiry_bytes.try_into().unwrap());
-⋮----
-.duration_since(std::time::UNIX_EPOCH)
-.unwrap().as_secs();
-⋮----
-return Err((StatusCode::UNAUTHORIZED, "Token has expired".to_string()));
-⋮----
-Ok(ValidatedOperator(crate::core::approval_gate::User {
-id: "dashboard-operator".to_string(),
-name: "Authorized Operator".to_string(),
 </file>
 
 <file path="redteam_rust_core/src/infrastructure/decoy/config.rs">
@@ -929,6 +866,19 @@ pub fn update_tokens(&mut self, consumed: u32) {
 pub fn add_target(&mut self, host: &str) {
 if !self.targets_processed.contains(&host.to_string()) {
 self.targets_processed.push(host.to_string());
+</file>
+
+<file path="redteam_rust_core/src/models/export.rs">
+use super::Severity;
+⋮----
+pub enum ReportPlatform {
+⋮----
+impl ReportPlatform {
+pub fn display_name(&self) -> &str {
+⋮----
+pub fn severity_label(&self, severity: &Severity) -> &str {
+⋮----
+pub fn filename(&self) -> &str {
 </file>
 
 <file path="redteam_rust_core/src/models/objectives_tests.rs">
@@ -1446,6 +1396,116 @@ logger.log(EventKind::Note, Actor::System, "Test event", None, serde_json::json!
 assert_eq!(event.message, "Test event");
 assert_eq!(event.kind, EventKind::Note);
 assert!(event.data["test"].as_bool().unwrap());
+</file>
+
+<file path="redteam_rust_core/src/utils/bounty_exporter.rs">
+pub struct BountyExporter;
+⋮----
+impl BountyExporter {
+pub fn generate(findings: &[&Finding], platform: &ReportPlatform) -> String {
+⋮----
+.iter()
+.copied()
+.filter(|f| matches!(f.severity, Severity::High | Severity::Critical))
+.collect();
+⋮----
+if eligible.is_empty() {
+return format!(
+⋮----
+fn compress_evidence(finding: &Finding) -> String {
+let raw = serde_json::to_string_pretty(&finding.evidence.data).unwrap_or_default();
+⋮----
+if raw.len() > MAX {
+format!("{}\n... [+{} bytes truncated]", &raw[..MAX], raw.len() - MAX)
+⋮----
+fn poc_steps(finding: &Finding) -> String {
+⋮----
+if !ai.exploit_path.is_empty() {
+return ai.exploit_path.clone();
+⋮----
+if let Some(url) = finding.evidence.data.get("url").and_then(|v| v.as_str()) {
+return format!("1. Navigate to: `{}`\n2. Observe the response headers and body for vulnerability indicators.", url);
+⋮----
+"1. Capture the raw HTTP request from the 'Proof of Concept' section below.\n2. Replay the request in Burp Suite Repeater.\n3. Verify the impact in the response.".to_string()
+⋮----
+fn impact(finding: &Finding) -> String {
+⋮----
+if !ai.impact.is_empty() {
+return ai.impact.clone();
+⋮----
+format!("An attacker can leverage this {:?} severity issue in the {:?} category to compromise the target application's security posture.", finding.severity, finding.category)
+⋮----
+fn attack_scenario(finding: &Finding) -> String {
+⋮----
+if !ai.stealth_notes.is_empty() {
+return ai.stealth_notes.clone();
+⋮----
+"1. Attacker identifies the vulnerable endpoint.\n2. Attacker crafts a specific payload based on the observed behavior.\n3. Result: Unauthorized action or data exposure is achieved.".to_string()
+⋮----
+fn recommendation(finding: &Finding) -> String {
+⋮----
+_ if finding.title.to_lowercase().contains("xss") =>
+⋮----
+_ if finding.title.to_lowercase().contains("idor") || finding.title.to_lowercase().contains("bola") =>
+⋮----
+_ if finding.title.to_lowercase().contains("ssrf") =>
+⋮----
+}.to_string()
+⋮----
+fn generate_common_blocks(f: &Finding) -> String {
+⋮----
+out.push_str("## Summary\n");
+⋮----
+out.push_str(&ai.summary);
+⋮----
+out.push_str(&f.description);
+⋮----
+out.push_str("\n\n");
+⋮----
+out.push_str("## Vulnerability Details\n");
+out.push_str(&format!("- **Type:** {:?}\n", f.category));
+if let Some(url) = f.evidence.data.get("url").and_then(|v| v.as_str()) {
+out.push_str(&format!("- **Affected Endpoint:** {}\n", url));
+⋮----
+if !f.cwe.is_empty() {
+out.push_str(&format!("- **CWE:** {}\n", f.cwe.join(", ")));
+⋮----
+out.push_str("\n");
+⋮----
+out.push_str("## Steps to Reproduce\n");
+out.push_str(&Self::poc_steps(f));
+⋮----
+out.push_str("## Proof of Concept\n");
+out.push_str("Below is the raw evidence captured during validation:\n\n");
+out.push_str("```json\n");
+out.push_str(&Self::compress_evidence(f));
+out.push_str("\n```\n\n");
+⋮----
+out.push_str("## Impact\n");
+out.push_str(&Self::impact(f));
+⋮----
+out.push_str("## Attack Scenario\n");
+out.push_str(&Self::attack_scenario(f));
+⋮----
+out.push_str("## Recommendation\n");
+out.push_str(&Self::recommendation(f));
+⋮----
+if !f.references.is_empty() || !f.cwe.is_empty() {
+out.push_str("## References\n");
+⋮----
+out.push_str(&format!("- {}\n", r));
+⋮----
+out.push_str(&format!("- https://cwe.mitre.org/data/definitions/{}.html\n", c.replace("CWE-", "")));
+⋮----
+fn generate_h1(findings: &[&Finding]) -> String {
+⋮----
+out.push_str(&format!("# {}\n\n", f.title));
+out.push_str(&Self::generate_common_blocks(f));
+out.push_str("\n---\n\n");
+⋮----
+fn generate_bugcrowd(findings: &[&Finding]) -> String {
+⋮----
+fn generate_intigriti(findings: &[&Finding]) -> String {
 </file>
 
 <file path="redteam_rust_core/src/utils/cve_cache.rs">
@@ -2394,6 +2454,52 @@ pub async fn reset_history(&self) {
 used_lock.clear();
 </file>
 
+<file path="redteam_rust_core/src/core/swarm/mod.rs">
+pub mod budget;
+pub mod orchestrator;
+⋮----
+mod tests {
+⋮----
+use std::sync::atomic::Ordering;
+use std::sync::Arc;
+⋮----
+fn test_token_budget_reservation() {
+⋮----
+assert!(budget.reserve_tokens(2000, TaskPriority::High));
+assert_eq!(budget.current_effective_total(), 2000);
+⋮----
+assert_eq!(budget.current_effective_total(), 4000);
+⋮----
+assert!(!budget.reserve_tokens(1500, TaskPriority::High));
+⋮----
+fn test_token_budget_commitment() {
+⋮----
+budget.reserve_tokens(1000, TaskPriority::Normal);
+⋮----
+budget.commit_usage(800, 1000);
+⋮----
+assert_eq!(budget.current_total(), 800);
+assert_eq!(budget.current_effective_total(), 800);
+assert_eq!(budget.reserved_tokens.load(Ordering::Relaxed), 0);
+⋮----
+fn test_token_budget_exhaustion() {
+⋮----
+budget.reserve_tokens(900, TaskPriority::High);
+assert!(!budget.is_exhausted());
+⋮----
+budget.reserve_tokens(100, TaskPriority::High);
+assert!(budget.is_exhausted());
+⋮----
+fn test_token_budget_per_agent_limit() {
+let budget = Arc::new(TokenBudget::new(10000).with_max_per_agent(1000));
+⋮----
+let guard1 = TokenGuard::new(budget.clone(), 500, TaskPriority::High).unwrap();
+assert_eq!(guard1.amount, 500);
+⋮----
+let guard2 = TokenGuard::new(budget.clone(), 2000, TaskPriority::High).unwrap();
+assert_eq!(guard2.amount, 1000);
+</file>
+
 <file path="redteam_rust_core/src/core/validation/generator.rs">
 use crate::models::findings::PocDefinition;
 use crate::core::validation::PocValidator;
@@ -2662,117 +2768,28 @@ beta.fetch_add(1, Ordering::Relaxed);
 debug!("🛡️ WAF-EVASION: Policy update for {:?}: success={}", strategy, success);
 </file>
 
-<file path="redteam_rust_core/src/core/web/handlers.rs">
-use axum::http::StatusCode;
+<file path="redteam_rust_core/src/core/web/assets.rs">
+use rust_embed::RustEmbed;
 use axum::response::IntoResponse;
 ⋮----
-use std::convert::Infallible;
-use std::sync::Arc;
-use tokio::sync::broadcast;
+pub struct Assets;
 ⋮----
-pub async fn get_targets(
+pub async fn serve_asset(axum::extract::Path(path): axum::extract::Path<String>) -> impl IntoResponse {
+let asset = Assets::get(&path).or_else(|| Assets::get("index.html"));
 ⋮----
-let targets: Vec<serde_json::Value> = state.targets.iter().map(|kv| {
-let t = kv.value();
+let mime = mime_guess::from_path(&path).first_or_octet_stream();
 ⋮----
-}).collect();
-Json(targets)
+[("Content-Type", mime.as_ref())],
+content.data.to_vec(),
+).into_response()
 ⋮----
-pub async fn findings_stream(
+None => (axum::http::StatusCode::NOT_FOUND, "Not Found").into_response(),
 ⋮----
-let rx = state.findings_tx.subscribe();
+pub async fn serve_index() -> impl IntoResponse {
+serve_asset(axum::extract::Path("index.html".to_string())).await
 ⋮----
-match rx.recv().await {
-⋮----
-let stats = get_current_stats(&state);
-⋮----
-return Some((Ok(Event::default().data(data)), (rx, state)));
-⋮----
-Sse::new(stream).keep_alive(KeepAlive::default())
-⋮----
-pub fn get_current_stats(state: &DashboardState) -> DashboardStats {
-⋮----
-sys.refresh_all();
-⋮----
-let tokens = state.budget.as_ref().map(|b| b.current_total()).unwrap_or(0);
-let limit = state.budget.as_ref().map(|b| b.max_tokens).unwrap_or(0);
-⋮----
-ram_mb: sys.used_memory() / 1024 / 1024,
-⋮----
-pub async fn get_stats_handler(
-⋮----
-Json(get_current_stats(&state))
-⋮----
-pub async fn get_swarm_status(
-⋮----
-let agents = vec![
-⋮----
-Json(SwarmStatusResponse {
-⋮----
-pub async fn get_attack_graph(
-⋮----
-for kv in state.targets.iter() {
-⋮----
-nodes.push(serde_json::json!({
-⋮----
-for f in t.findings.iter() {
-⋮----
-edges.push(serde_json::json!({
-⋮----
-Json(serde_json::json!({
-⋮----
-pub async fn get_containers(_auth: ValidatedOperator) -> Json<Vec<serde_json::Value>> {
-Json(vec![
-⋮----
-pub async fn get_approvals(
-⋮----
-let approvals: Vec<serde_json::Value> = gate.pending_approvals.iter().map(|kv| {
-let req = kv.value();
-⋮----
-Json(approvals)
-⋮----
-Json(vec![])
-⋮----
-pub struct ApprovalDecisionPayload {
-⋮----
-pub async fn post_approval_decision(
-⋮----
-let _ = gate.approve(&id, &user, &payload.reason, payload.handover_payload).await;
-⋮----
-let _ = gate.reject(&id, &user, &payload.reason).await;
-⋮----
-(StatusCode::OK, "Decision recorded").into_response()
-⋮----
-(StatusCode::BAD_REQUEST, "Approval gate not configured").into_response()
-</file>
-
-<file path="redteam_rust_core/src/core/web/mod.rs">
-pub mod assets;
-pub mod handlers;
-pub mod models;
-pub mod state;
-⋮----
-use std::sync::Arc;
-⋮----
-pub fn generate_dashboard_token(
-⋮----
-.duration_since(std::time::UNIX_EPOCH)
-.unwrap().as_secs();
-⋮----
-payload[0..16].copy_from_slice(&session_id);
-payload[16..24].copy_from_slice(&now.to_be_bytes());
-payload[24..32].copy_from_slice(&(now + expiry_secs).to_be_bytes());
-⋮----
-let signature = signing_key.sign(&payload);
-⋮----
-combined.extend_from_slice(&payload);
-combined.extend_from_slice(&signature.to_bytes());
-⋮----
-let origin_str = origin.to_str().unwrap_or("");
-// Sprint 2: Exact matching including port to prevent subdomain hijacking/rebinding
-origin_str == format!("http:
-⋮----
-info!("🚀 DASHBOARD: Starting on http://{}", addr);
+pub async fn serve_login() -> impl IntoResponse {
+serve_asset(axum::extract::Path("login.html".to_string())).await
 </file>
 
 <file path="redteam_rust_core/src/core/capability_layer.rs">
@@ -4101,6 +4118,71 @@ pub fn profile_count(&self) -> usize {
 self.profiles.len()
 </file>
 
+<file path="redteam_rust_core/src/core/web/models.rs">
+use ed25519_dalek::VerifyingKey;
+use crate::models::ReportPlatform;
+⋮----
+pub struct DashboardAuth {
+⋮----
+pub struct DashboardStats {
+⋮----
+pub struct SwarmAgentStatus {
+⋮----
+pub struct SwarmStatusResponse {
+⋮----
+pub struct WsEvent {
+⋮----
+pub struct ExportRequest {
+⋮----
+pub struct MissionRequest {
+</file>
+
+<file path="redteam_rust_core/src/core/web/state.rs">
+use axum::http::request::Parts;
+use axum::async_trait;
+use std::sync::Arc;
+⋮----
+pub struct DashboardState {
+⋮----
+pub struct ValidatedOperator(pub crate::core::approval_gate::User);
+⋮----
+type Rejection = (StatusCode, String);
+⋮----
+async fn from_request_parts(
+⋮----
+let auth_header = parts.headers.get("Authorization")
+.and_then(|h| h.to_str().ok())
+.ok_or((StatusCode::UNAUTHORIZED, "Missing Authorization header".to_string()))?;
+⋮----
+if !auth_header.starts_with("Bearer ") {
+return Err((StatusCode::UNAUTHORIZED, "Invalid Authorization header format".to_string()));
+⋮----
+.map_err(|_| (StatusCode::UNAUTHORIZED, "Invalid token encoding".to_string()))?;
+⋮----
+if token_bytes.len() != 96 {
+return Err((StatusCode::UNAUTHORIZED, "Invalid token length".to_string()));
+⋮----
+let (payload, signature_bytes) = token_bytes.split_at(32);
+⋮----
+.map_err(|_| (StatusCode::UNAUTHORIZED, "Invalid signature format".to_string()))?;
+⋮----
+state.auth.verifying_key.verify(payload, &signature)
+.map_err(|_| (StatusCode::UNAUTHORIZED, "Invalid cryptographic signature".to_string()))?;
+⋮----
+return Err((StatusCode::UNAUTHORIZED, "Token session mismatch".to_string()));
+⋮----
+let expiry = u64::from_be_bytes(expiry_bytes.try_into().unwrap());
+⋮----
+.duration_since(std::time::UNIX_EPOCH)
+.unwrap().as_secs();
+⋮----
+return Err((StatusCode::UNAUTHORIZED, "Token has expired".to_string()));
+⋮----
+Ok(ValidatedOperator(crate::core::approval_gate::User {
+id: "dashboard-operator".to_string(),
+name: "Authorized Operator".to_string(),
+</file>
+
 <file path="redteam_rust_core/src/core/blackarch.rs">
 use crate::plugins::Capability;
 ⋮----
@@ -4821,16 +4903,6 @@ username: Some("user".to_string()),
 password: Some("pass".to_string()),
 ⋮----
 assert_eq!(cfg.url(), "socks5h://user:pass@1.2.3.4:1080");
-</file>
-
-<file path="redteam_rust_core/src/models/mod.rs">
-pub mod findings;
-pub mod scan_result;
-pub mod objectives;
-pub mod constants;
-pub mod engagement;
-⋮----
-pub use engagement::EngagementState;
 </file>
 
 <file path="redteam_rust_core/src/plugins/enumeration/network/nmap/parser.rs">
@@ -5601,6 +5673,160 @@ let res = client.get(format!("http://{}{}", target_ip, payload)).send().await?;
 Ok(format!("Status: {}\nBody: {}", res.status(), res.text().await?.chars().take(1000).collect::<String>()))
 </file>
 
+<file path="redteam_rust_core/src/core/web/handlers.rs">
+use axum::response::IntoResponse;
+⋮----
+use std::convert::Infallible;
+use std::sync::Arc;
+use tokio::sync::broadcast;
+⋮----
+use crate::utils::bounty_exporter::BountyExporter;
+⋮----
+pub async fn get_targets(
+⋮----
+let targets: Vec<serde_json::Value> = state.targets.iter().map(|kv| {
+let t = kv.value();
+⋮----
+}).collect();
+Json(targets)
+⋮----
+pub async fn findings_stream(
+⋮----
+let rx = state.findings_tx.subscribe();
+⋮----
+match rx.recv().await {
+⋮----
+let stats = get_current_stats(&state);
+⋮----
+return Some((Ok(Event::default().data(data)), (rx, state)));
+⋮----
+Sse::new(stream).keep_alive(KeepAlive::default())
+⋮----
+pub fn get_current_stats(state: &DashboardState) -> DashboardStats {
+⋮----
+sys.refresh_all();
+⋮----
+let tokens = state.budget.as_ref().map(|b| b.current_total()).unwrap_or(0);
+let limit = state.budget.as_ref().map(|b| b.max_tokens).unwrap_or(0);
+⋮----
+ram_mb: sys.used_memory() / 1024 / 1024,
+⋮----
+pub async fn get_stats_handler(
+⋮----
+Json(get_current_stats(&state))
+⋮----
+pub async fn get_swarm_status(
+⋮----
+let agents = vec![
+⋮----
+Json(SwarmStatusResponse {
+⋮----
+pub async fn get_attack_graph(
+⋮----
+for kv in state.targets.iter() {
+⋮----
+nodes.push(serde_json::json!({
+⋮----
+for f in t.findings.iter() {
+⋮----
+edges.push(serde_json::json!({
+⋮----
+Json(serde_json::json!({
+⋮----
+pub async fn submit_mission(
+⋮----
+match tx.send(req).await {
+Ok(_) => (StatusCode::ACCEPTED, "Mission queued").into_response(),
+Err(_) => (StatusCode::SERVICE_UNAVAILABLE, "Engine not ready").into_response(),
+⋮----
+(StatusCode::SERVICE_UNAVAILABLE, "Mission channel not configured").into_response()
+⋮----
+pub async fn export_report(
+⋮----
+let all_findings: Vec<_> = state.targets.iter()
+.flat_map(|kv| kv.value().findings.iter().cloned().collect::<Vec<_>>())
+.collect();
+⋮----
+let refs: Vec<&crate::models::Finding> = all_findings.iter().collect();
+⋮----
+let platform_name = req.platform.display_name();
+let count = refs.iter()
+.filter(|f| matches!(f.severity, crate::models::Severity::High | crate::models::Severity::Critical))
+.count();
+⋮----
+let url = webhook_url.clone();
+⋮----
+let _ = reqwest::Client::new().post(&url).json(&payload).send().await;
+⋮----
+let filename = req.platform.filename().to_string();
+⋮----
+.status(StatusCode::OK)
+.header(header::CONTENT_TYPE, "text/markdown; charset=utf-8")
+.header(
+⋮----
+format!("attachment; filename=\"{}\"", filename),
+⋮----
+.body(Body::from(markdown))
+.unwrap_or_else(|_| {
+⋮----
+.status(StatusCode::INTERNAL_SERVER_ERROR)
+.body(Body::empty())
+.unwrap()
+⋮----
+pub async fn get_containers(_auth: ValidatedOperator) -> Json<Vec<serde_json::Value>> {
+Json(vec![
+⋮----
+pub async fn get_approvals(
+⋮----
+let approvals: Vec<serde_json::Value> = gate.pending_approvals.iter().map(|kv| {
+let req = kv.value();
+⋮----
+Json(approvals)
+⋮----
+Json(vec![])
+⋮----
+pub struct ApprovalDecisionPayload {
+⋮----
+pub async fn post_approval_decision(
+⋮----
+let _ = gate.approve(&id, &user, &payload.reason, payload.handover_payload).await;
+⋮----
+let _ = gate.reject(&id, &user, &payload.reason).await;
+⋮----
+(StatusCode::OK, "Decision recorded").into_response()
+⋮----
+(StatusCode::BAD_REQUEST, "Approval gate not configured").into_response()
+</file>
+
+<file path="redteam_rust_core/src/core/web/mod.rs">
+pub mod assets;
+pub mod handlers;
+pub mod models;
+pub mod state;
+⋮----
+use std::sync::Arc;
+⋮----
+pub fn generate_dashboard_token(
+⋮----
+.duration_since(std::time::UNIX_EPOCH)
+.unwrap().as_secs();
+⋮----
+payload[0..16].copy_from_slice(&session_id);
+payload[16..24].copy_from_slice(&now.to_be_bytes());
+payload[24..32].copy_from_slice(&(now + expiry_secs).to_be_bytes());
+⋮----
+let signature = signing_key.sign(&payload);
+⋮----
+combined.extend_from_slice(&payload);
+combined.extend_from_slice(&signature.to_bytes());
+⋮----
+let origin_str = origin.to_str().unwrap_or("");
+// Sprint 2: Exact matching including port to prevent subdomain hijacking/rebinding
+origin_str == format!("http:
+⋮----
+info!("🚀 DASHBOARD: Starting on http://{}", addr);
+</file>
+
 <file path="redteam_rust_core/src/core/native_scanner.rs">
 use std::net::Ipv4Addr;
 use std::os::unix::io::AsRawFd;
@@ -5832,6 +6058,19 @@ sink.save_objective(&obj).await?;
 ⋮----
 assert_eq!(row.0, "Initial Access");
 assert_eq!(row.1, "in_progress");
+</file>
+
+<file path="redteam_rust_core/src/models/mod.rs">
+pub mod findings;
+pub mod scan_result;
+pub mod objectives;
+pub mod constants;
+pub mod engagement;
+pub mod export;
+⋮----
+pub use engagement::EngagementState;
+⋮----
+pub use export::ReportPlatform;
 </file>
 
 <file path="redteam_rust_core/src/plugins/privilege_escalation/privesc_hunter.rs">
@@ -6799,138 +7038,6 @@ async fn decide_action(&self, _config: crate::core::ai::traits::DecisionConfig<'
 Ok(None)
 </file>
 
-<file path="redteam_rust_core/src/core/ai/router.rs">
-use std::sync::Arc;
-use tracing::info;
-use thiserror::Error;
-⋮----
-use std::time::Duration;
-use std::sync::atomic::Ordering;
-use moka::future::Cache;
-use siphasher::sip::SipHasher13;
-use once_cell::sync::Lazy;
-⋮----
-use crate::plugins::PluginMetadata;
-use crate::core::ai::traits::LlmClient;
-use super::compressor::ContextCompressor;
-⋮----
-pub enum RouterError {
-⋮----
-impl RouterError {
-fn from_anyhow(err: &anyhow::Error) -> Self {
-let msg = err.to_string().to_lowercase();
-if msg.contains("401") || msg.contains("unauthorized") || msg.contains("invalid") {
-⋮----
-} else if msg.contains("429") || msg.contains("rate limit") || msg.contains("too many") {
-⋮----
-} else if msg.contains("500") || msg.contains("502") || msg.contains("503") || msg.contains("unreachable") {
-⋮----
-pub struct TieredAIRouter {
-⋮----
-impl Default for TieredAIRouter {
-fn default() -> Self {
-⋮----
-impl TieredAIRouter {
-pub fn new() -> Self {
-⋮----
-.max_capacity(5000)
-.time_to_live(Duration::from_secs(7200))
-.build(),
-⋮----
-pub fn with_skills(mut self, sm: Arc<crate::core::skills::SkillManager>) -> Self {
-self.skill_manager = Some(sm);
-⋮----
-pub fn add_provider(&mut self, level: RouteLevel, kind: LlmProviderKind, priority: u8, client: Arc<dyn LlmClient>) {
-⋮----
-let level_providers = self.providers.entry(level).or_default();
-level_providers.push(entry);
-⋮----
-level_providers.sort_by_key(|p| p.priority);
-⋮----
-fn calculate_finding_cache_key(finding: &Finding, target: &TargetHost) -> String {
-⋮----
-target.host.hash(&mut hasher);
-target.ip.hash(&mut hasher);
-finding.id.hash(&mut hasher);
-finding.category.hash(&mut hasher);
-⋮----
-format!("f:{:x}", hasher.finish())
-⋮----
-pub fn classify(&self, finding: &Finding, target: &TargetHost) -> RouteLevel {
-let cvss = finding.cvss_score.unwrap_or(0.0);
-⋮----
-level = level.max(RouteLevel::Mid);
-⋮----
-if let Some(tech) = target_ctx.get("tech").and_then(|t| t.as_array()) {
-⋮----
-if let Some(name) = t.as_str() {
-if waf_tech.iter().any(|&w| name.to_lowercase().contains(w)) {
-⋮----
-if finding.evidence.data.get("type").and_then(|v| v.as_str()) == Some("source_aware") {
-⋮----
-pub async fn analyze(&self, finding: &Finding, target: &TargetHost, attack_context: Option<&str>) -> Result<AIAnalysis> {
-let level = self.classify(finding, target);
-⋮----
-self.analyze_with_level(finding, target, attack_context, level, caveman).await
-⋮----
-pub async fn analyze_with_level(&self, finding: &Finding, target: &TargetHost, attack_context: Option<&str>, target_level: RouteLevel, caveman: super::types::CavemanLevel) -> Result<AIAnalysis> {
-⋮----
-if let Some(cached) = self.analysis_cache.get(&cache_key) {
-self.metrics.hits.fetch_add(1, Ordering::Relaxed);
-return Ok(cached);
-⋮----
-self.metrics.misses.fetch_add(1, Ordering::Relaxed);
-⋮----
-if let Some(providers) = self.providers.get(&current_level) {
-⋮----
-let effective_ctx = self.enrich_context_v15(finding, attack_context, current_level, Posture::Ghost, caveman).await;
-⋮----
-attack_context: effective_ctx.as_deref(),
-⋮----
-match entry.client.analyze(config).await {
-⋮----
-analysis.model = format!("{} (Tiered: {:?}, Provider: {:?})", analysis.model, current_level, entry.kind);
-self.analysis_cache.insert(cache_key, analysis.clone()).await;
-return Ok(analysis);
-⋮----
-if matches!(router_err, RouterError::Unauthorized) {
-⋮----
-Err(anyhow!("All TieredAIRouter providers failed for {}", finding.id))
-⋮----
-pub async fn decide_action(
-⋮----
-let target_level = self.classify(finding, target);
-⋮----
-let caveman = adaptive_context.map(|c| c.current_caveman).unwrap_or_default();
-let posture = adaptive_context.map(|c| c.posture).unwrap_or(Posture::Ghost);
-⋮----
-let effective_ctx = self.enrich_context_v15(finding, attack_context, current_level, posture, caveman).await;
-⋮----
-match entry.client.decide_action(config).await {
-⋮----
-return Ok(Some((action, context)));
-⋮----
-Ok(None)
-⋮----
-async fn enrich_context_v15(
-⋮----
-let mut effective_ctx = base_ctx.map(|s| s.to_string());
-⋮----
-let skills = sm.match_for_context(finding, posture, level, budget).await;
-if !skills.is_empty() {
-if let Some(injection) = sm.build_injection(&skills, caveman).await {
-info!("🧠 [Router] Inyectando {} skills técnicos (Budget: {} tokens, Tier: {:?}).", skills.len(), budget, level);
-⋮----
-PROMPT_OPTIMIZER.optimize(&injection, OptimizationLevel::Ultra)
-⋮----
-PROMPT_OPTIMIZER.optimize(&injection, OptimizationLevel::Lite)
-⋮----
-PROMPT_OPTIMIZER.optimize(&injection, OptimizationLevel::Full)
-⋮----
-effective_ctx = Some(match effective_ctx {
-Some(ctx) => format!("{}\n{}", optimized_injection, ctx),
-</file>
-
 <file path="redteam_rust_core/src/core/validation/sovereign.rs">
 use crate::core::validation::PocValidator;
 use anyhow::Result;
@@ -7366,50 +7473,6 @@ fn urlencode(s: &str) -> String {
 urlencoding::encode(s).to_string()
 </file>
 
-<file path="redteam_rust_core/src/utils/config.rs">
-use std::env;
-⋮----
-pub enum ProxyMode {
-⋮----
-pub struct Config {
-⋮----
-impl Config {
-pub fn from_env() -> Self {
-⋮----
-do_token: env::var("DIGITALOCEAN_TOKEN").ok(),
-ollama_url: env::var("OLLAMA_URL").unwrap_or_else(|_| "http://localhost:11434".to_string()),
-⋮----
-.ok()
-.and_then(|s| s.parse().ok())
-.unwrap_or(4096),
-⋮----
-.unwrap_or(600),
-⋮----
-.unwrap_or(900),
-⋮----
-.unwrap_or(10),
-⋮----
-.map(|s| match s.to_lowercase().as_str() {
-⋮----
-.unwrap_or(ProxyMode::Dante),
-⋮----
-.unwrap_or(0),
-chaos_api_key: env::var("CHAOS_API_KEY").ok(),
-netlas_api_key: env::var("NETLAS_API_KEY").ok(),
-securitytrails_api_key: env::var("SECURITYTRAILS_API_KEY").ok(),
-shodan_api_key: env::var("SHODAN_API_KEY").ok(),
-criminalip_api_key: env::var("CRIMINALIP_API_KEY").ok(),
-⋮----
-.unwrap_or(33),
-caido_api_key: env::var("CAIDO_API_KEY").ok(),
-caido_api_url: env::var("CAIDO_API_URL").unwrap_or_else(|_| "http://localhost:8080/graphql".to_string()),
-mcp_token: env::var("MCP_TOKEN").ok(),
-⋮----
-pub fn require_do_token(&self) -> Result<String> {
-self.do_token.clone()
-.ok_or_else(|| anyhow!("DIGITALOCEAN_TOKEN environment variable not set"))
-</file>
-
 <file path="redteam_rust_core/src/utils/tone.rs">
 use std::collections::HashMap;
 ⋮----
@@ -7682,6 +7745,138 @@ assert!(tonl.len() < plain.len(),
 fn test_tonl_dict_compresses_repeated_keys() {
 ⋮----
 assert!(encoded.contains('$'));
+</file>
+
+<file path="redteam_rust_core/src/core/ai/router.rs">
+use std::sync::Arc;
+use tracing::info;
+use thiserror::Error;
+⋮----
+use std::time::Duration;
+use std::sync::atomic::Ordering;
+use moka::future::Cache;
+use siphasher::sip::SipHasher13;
+use once_cell::sync::Lazy;
+⋮----
+use crate::plugins::PluginMetadata;
+use crate::core::ai::traits::LlmClient;
+use super::compressor::ContextCompressor;
+⋮----
+pub enum RouterError {
+⋮----
+impl RouterError {
+fn from_anyhow(err: &anyhow::Error) -> Self {
+let msg = err.to_string().to_lowercase();
+if msg.contains("401") || msg.contains("unauthorized") || msg.contains("invalid") {
+⋮----
+} else if msg.contains("429") || msg.contains("rate limit") || msg.contains("too many") {
+⋮----
+} else if msg.contains("500") || msg.contains("502") || msg.contains("503") || msg.contains("unreachable") {
+⋮----
+pub struct TieredAIRouter {
+⋮----
+impl Default for TieredAIRouter {
+fn default() -> Self {
+⋮----
+impl TieredAIRouter {
+pub fn new() -> Self {
+⋮----
+.max_capacity(5000)
+.time_to_live(Duration::from_secs(7200))
+.build(),
+⋮----
+pub fn with_skills(mut self, sm: Arc<crate::core::skills::SkillManager>) -> Self {
+self.skill_manager = Some(sm);
+⋮----
+pub fn add_provider(&mut self, level: RouteLevel, kind: LlmProviderKind, priority: u8, client: Arc<dyn LlmClient>) {
+⋮----
+let level_providers = self.providers.entry(level).or_default();
+level_providers.push(entry);
+⋮----
+level_providers.sort_by_key(|p| p.priority);
+⋮----
+fn calculate_finding_cache_key(finding: &Finding, target: &TargetHost) -> String {
+⋮----
+target.host.hash(&mut hasher);
+target.ip.hash(&mut hasher);
+finding.id.hash(&mut hasher);
+finding.category.hash(&mut hasher);
+⋮----
+format!("f:{:x}", hasher.finish())
+⋮----
+pub fn classify(&self, finding: &Finding, target: &TargetHost) -> RouteLevel {
+let cvss = finding.cvss_score.unwrap_or(0.0);
+⋮----
+level = level.max(RouteLevel::Mid);
+⋮----
+if let Some(tech) = target_ctx.get("tech").and_then(|t| t.as_array()) {
+⋮----
+if let Some(name) = t.as_str() {
+if waf_tech.iter().any(|&w| name.to_lowercase().contains(w)) {
+⋮----
+if finding.evidence.data.get("type").and_then(|v| v.as_str()) == Some("source_aware") {
+⋮----
+pub async fn analyze(&self, finding: &Finding, target: &TargetHost, attack_context: Option<&str>) -> Result<AIAnalysis> {
+let level = self.classify(finding, target);
+⋮----
+self.analyze_with_level(finding, target, attack_context, level, caveman).await
+⋮----
+pub async fn analyze_with_level(&self, finding: &Finding, target: &TargetHost, attack_context: Option<&str>, target_level: RouteLevel, caveman: super::types::CavemanLevel) -> Result<AIAnalysis> {
+⋮----
+if let Some(cached) = self.analysis_cache.get(&cache_key) {
+self.metrics.hits.fetch_add(1, Ordering::Relaxed);
+return Ok(cached);
+⋮----
+self.metrics.misses.fetch_add(1, Ordering::Relaxed);
+⋮----
+if let Some(providers) = self.providers.get(&current_level) {
+⋮----
+let effective_ctx = self.enrich_context_v15(finding, attack_context, current_level, Posture::Ghost, caveman).await;
+⋮----
+attack_context: effective_ctx.as_deref(),
+⋮----
+match entry.client.analyze(config).await {
+⋮----
+analysis.model = format!("{} (Tiered: {:?}, Provider: {:?})", analysis.model, current_level, entry.kind);
+self.analysis_cache.insert(cache_key, analysis.clone()).await;
+return Ok(analysis);
+⋮----
+if matches!(router_err, RouterError::Unauthorized) {
+⋮----
+Err(anyhow!("All TieredAIRouter providers failed for {}", finding.id))
+⋮----
+pub async fn decide_action(
+⋮----
+let target_level = self.classify(finding, target);
+⋮----
+let caveman = adaptive_context.map(|c| c.current_caveman).unwrap_or_default();
+let posture = adaptive_context.map(|c| c.posture).unwrap_or(Posture::Ghost);
+⋮----
+let effective_ctx = self.enrich_context_v15(finding, attack_context, current_level, posture, caveman).await;
+⋮----
+match entry.client.decide_action(config).await {
+⋮----
+return Ok(Some((action, context)));
+⋮----
+Ok(None)
+⋮----
+async fn enrich_context_v15(
+⋮----
+let mut effective_ctx = base_ctx.map(|s| s.to_string());
+⋮----
+let skills = sm.match_for_context(finding, posture, level, budget).await;
+if !skills.is_empty() {
+if let Some(injection) = sm.build_injection(&skills, caveman).await {
+info!("🧠 [Router] Inyectando {} skills técnicos (Budget: {} tokens, Tier: {:?}).", skills.len(), budget, level);
+⋮----
+PROMPT_OPTIMIZER.optimize(&injection, OptimizationLevel::Ultra)
+⋮----
+PROMPT_OPTIMIZER.optimize(&injection, OptimizationLevel::Lite)
+⋮----
+PROMPT_OPTIMIZER.optimize(&injection, OptimizationLevel::Full)
+⋮----
+effective_ctx = Some(match effective_ctx {
+Some(ctx) => format!("{}\n{}", optimized_injection, ctx),
 </file>
 
 <file path="redteam_rust_core/src/core/swarm/orchestrator.rs">
@@ -9157,6 +9352,51 @@ alert.clone()
 ).with_tactical_path(alert.get("solution").and_then(|s| s.as_str()).unwrap_or("No tactical path identified")));
 ⋮----
 Ok(findings)
+</file>
+
+<file path="redteam_rust_core/src/utils/config.rs">
+use std::env;
+⋮----
+pub enum ProxyMode {
+⋮----
+pub struct Config {
+⋮----
+impl Config {
+pub fn from_env() -> Self {
+⋮----
+do_token: env::var("DIGITALOCEAN_TOKEN").ok(),
+ollama_url: env::var("OLLAMA_URL").unwrap_or_else(|_| "http://localhost:11434".to_string()),
+⋮----
+.ok()
+.and_then(|s| s.parse().ok())
+.unwrap_or(4096),
+⋮----
+.unwrap_or(600),
+⋮----
+.unwrap_or(900),
+⋮----
+.unwrap_or(10),
+⋮----
+.map(|s| match s.to_lowercase().as_str() {
+⋮----
+.unwrap_or(ProxyMode::Dante),
+⋮----
+.unwrap_or(0),
+chaos_api_key: env::var("CHAOS_API_KEY").ok(),
+netlas_api_key: env::var("NETLAS_API_KEY").ok(),
+securitytrails_api_key: env::var("SECURITYTRAILS_API_KEY").ok(),
+shodan_api_key: env::var("SHODAN_API_KEY").ok(),
+criminalip_api_key: env::var("CRIMINALIP_API_KEY").ok(),
+⋮----
+.unwrap_or(33),
+caido_api_key: env::var("CAIDO_API_KEY").ok(),
+caido_api_url: env::var("CAIDO_API_URL").unwrap_or_else(|_| "http://localhost:8080/graphql".to_string()),
+mcp_token: env::var("MCP_TOKEN").ok(),
+discord_webhook_url: env::var("DISCORD_WEBHOOK_URL").ok(),
+⋮----
+pub fn require_do_token(&self) -> Result<String> {
+self.do_token.clone()
+.ok_or_else(|| anyhow!("DIGITALOCEAN_TOKEN environment variable not set"))
 </file>
 
 <file path="redteam_rust_core/src/core/mcp/sanitizer.rs">
@@ -12918,45 +13158,6 @@ fn as_c2_operator(&self) -> Option<&dyn C2Operator> {
 Some(self)
 </file>
 
-<file path="redteam_rust_core/src/core/mod.rs">
-pub mod agent;
-pub mod skills;
-pub mod pipeline;
-pub mod sink;
-pub mod plugin_loader;
-pub mod capability_layer;
-pub mod approval_gate;
-pub mod blackarch;
-pub mod ai;
-pub mod waf;
-pub mod correlation;
-pub mod web;
-pub mod filter;
-pub mod lock_free_sink;
-pub mod native_scanner;
-pub mod validation;
-pub mod swarm;
-pub mod resource_manager;
-pub mod sandbox;
-pub mod mcp;
-pub mod source_analyzer;
-pub mod factory;
-pub mod engine;
-pub mod c2;
-pub mod policy;
-pub mod middleware;
-pub mod persistence;
-pub mod orchestrator;
-pub mod verification;
-⋮----
-pub mod tests;
-⋮----
-pub use orchestrator::Orchestrator;
-⋮----
-pub use filter::FalsePositiveFilter;
-pub use validation::PocValidator;
-</file>
-
 <file path="redteam_rust_core/src/models/findings.rs">
 use std::fmt;
 ⋮----
@@ -13195,6 +13396,46 @@ mod tests {
 async fn test_nmap_target_validation() {
 assert!(TARGET_HOST_RE.is_match("google.com"));
 assert!(!TARGET_HOST_RE.is_match("google.com; rm -rf /"));
+</file>
+
+<file path="redteam_rust_core/src/core/mod.rs">
+pub mod agent;
+pub mod skills;
+pub mod pipeline;
+pub mod sink;
+pub mod plugin_loader;
+pub mod capability_layer;
+pub mod approval_gate;
+pub mod blackarch;
+pub mod ai;
+pub mod waf;
+pub mod correlation;
+pub mod web;
+pub mod filter;
+pub mod lock_free_sink;
+pub mod native_scanner;
+pub mod validation;
+pub mod swarm;
+pub mod resource_manager;
+pub mod sandbox;
+pub mod mcp;
+pub mod source_analyzer;
+pub mod factory;
+pub mod engine;
+pub mod c2;
+pub mod policy;
+pub mod middleware;
+pub mod persistence;
+pub mod orchestrator;
+pub mod verification;
+pub mod notifications;
+⋮----
+pub mod tests;
+⋮----
+pub use orchestrator::Orchestrator;
+⋮----
+pub use filter::FalsePositiveFilter;
+pub use validation::PocValidator;
 </file>
 
 <file path="redteam_rust_core/src/plugins/mod.rs">
@@ -13726,6 +13967,7 @@ fn drop(&mut self) {
 
 <file path="redteam_rust_core/src/utils/mod.rs">
 pub mod report_gen;
+pub mod bounty_exporter;
 pub mod config;
 pub mod common;
 pub mod liveness;
@@ -14579,6 +14821,12 @@ if parsed_url.scheme() == "https" && is_ssrf_safe_host_async(parsed_url.host_str
 let c2_token = std::env::var("C2_TOKEN").ok();
 multi_sink.add(Box::new(TacticalWebhookSink::new(parsed_url.to_string(), c2_token, engine.proxy_manager())?));
 ⋮----
+if let Some(webhook_url) = utils_config.discord_webhook_url.clone() {
+if webhook_url.starts_with("https://discord.com/api/webhooks/") {
+use redteam_rust_core::core::notifications::discord::DiscordSink;
+multi_sink.add(Box::new(DiscordSink::new(webhook_url, engine.proxy_manager())));
+info!("🔔 [DiscordSink] Notification routing attached for High/Critical findings.");
+⋮----
 multi_sink.add(Box::new(redteam_rust_core::core::sink::TimelineSink::new(act_log_arc)));
 info!("📝 [TimelineSink] Acitivity log routing attached.");
 ⋮----
@@ -14607,9 +14855,14 @@ info!("🔑 [DASHBOARD-AUTH] Token de acceso guardado de forma segura en {}", to
 ⋮----
 Err(e) => warn!("⚠️ [DASHBOARD-AUTH] No se pudo guardar el token en disco ({}). No disponible para el operador.", e),
 ⋮----
+while let Some(mission) = mission_rx.recv().await {
+info!("📡 [MISSION-QUEUE] Target={} Profile={} Program={}", mission.target, mission.profile, mission.program_name);
+⋮----
 approval_gate: Some(engine.approval_gate()),
 ⋮----
 auth: auth.clone(),
+mission_tx: Some(std::sync::Arc::new(mission_tx)),
+discord_webhook_url: utils_config.discord_webhook_url.clone(),
 ⋮----
 let target_stream: futures::stream::BoxStream<'static, String> = if let Some(input_path) = args.input.clone() {
 ⋮----

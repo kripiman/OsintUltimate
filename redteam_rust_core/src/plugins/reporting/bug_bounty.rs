@@ -11,34 +11,34 @@ pub struct BugBountyReport {
 /// Generates one report per finding that is Medium severity or above.
 pub fn generate_reports(target: &TargetHost) -> Vec<BugBountyReport> {
     target.findings.iter()
-        .filter(|f| matches!(f.severity, Severity::Critical | Severity::High | Severity::Medium))
+        .filter(|f| matches!(f.core.severity, Severity::Critical | Severity::High | Severity::Medium))
         .map(|f| build_report(target, f))
         .collect()
 }
 
 fn build_report(target: &TargetHost, finding: &Finding) -> BugBountyReport {
-    let slug = finding.id.to_lowercase().replace(['_', ' '], "-");
+    let slug = finding.core.id.to_lowercase().replace(['_', ' '], "-");
     let filename = format!("{}_{}.md", target.host.replace('.', "_"), slug);
 
     let mut md = String::new();
 
     // Title
-    let _ = writeln!(md, "# {}", finding.title);
+    let _ = writeln!(md, "# {}", finding.core.title);
     let _ = writeln!(md);
 
     // Metadata table
     let _ = writeln!(md, "| Field | Value |");
     let _ = writeln!(md, "|---|---|");
-    let _ = writeln!(md, "| **Severity** | {} |", severity_label(&finding.severity));
-    if let Some(score) = finding.cvss_score {
+    let _ = writeln!(md, "| **Severity** | {} |", severity_label(&finding.core.severity));
+    if let Some(score) = finding.enrichment.cvss_score {
         let _ = writeln!(md, "| **CVSS Score** | {:.1} |", score);
     }
     let _ = writeln!(md, "| **Asset** | `{}` |", target.host);
     if let Some(ip) = &target.ip {
         let _ = writeln!(md, "| **IP** | `{}` |", ip);
     }
-    let _ = writeln!(md, "| **Finding ID** | `{}` |", finding.id);
-    if let Some(mitre) = &finding.mitre_attack {
+    let _ = writeln!(md, "| **Finding ID** | `{}` |", finding.core.id);
+    if let Some(mitre) = &finding.enrichment.mitre_attack {
         let _ = writeln!(md, "| **MITRE ATT&CK** | {} |", mitre.join(", "));
     }
     let _ = writeln!(md);
@@ -46,28 +46,30 @@ fn build_report(target: &TargetHost, finding: &Finding) -> BugBountyReport {
     // Description
     let _ = writeln!(md, "## Description");
     let _ = writeln!(md);
-    let _ = writeln!(md, "{}", finding.description);
+    let _ = writeln!(md, "{}", finding.core.description);
     let _ = writeln!(md);
 
     // Impact — use AI analysis if available, otherwise derive from severity
     let _ = writeln!(md, "## Impact");
     let _ = writeln!(md);
-    if let Some(ai) = &finding.ai_analysis {
+    if let Some(ai) = &finding.enrichment.ai_analysis {
         let _ = writeln!(md, "{}", ai.impact);
     } else {
-        let _ = writeln!(md, "{}", default_impact(&finding.severity));
+        let _ = writeln!(md, "{}", default_impact(&finding.core.severity));
     }
     let _ = writeln!(md);
 
     // Steps to reproduce
     let _ = writeln!(md, "## Steps to Reproduce");
     let _ = writeln!(md);
-    let matched_at = finding.evidence.data
-        .get("matched_at")
+    
+    let evidence_data = finding.evidence.evidence.as_ref();
+    let matched_at = evidence_data
+        .and_then(|e| e.data.get("matched_at"))
         .and_then(|v| v.as_str())
         .unwrap_or(&target.host);
-    let template_id = finding.evidence.data
-        .get("template_id")
+    let template_id = evidence_data
+        .and_then(|e| e.data.get("template_id"))
         .and_then(|v| v.as_str())
         .unwrap_or("");
 
@@ -82,14 +84,16 @@ fn build_report(target: &TargetHost, finding: &Finding) -> BugBountyReport {
     let _ = writeln!(md, "## Proof of Concept");
     let _ = writeln!(md);
     let _ = writeln!(md, "```");
-    let _ = writeln!(md, "{}", serde_json::to_string_pretty(&finding.evidence.data).unwrap_or_default());
+    if let Some(e) = evidence_data {
+        let _ = writeln!(md, "{}", serde_json::to_string_pretty(&e.data).unwrap_or_default());
+    }
     let _ = writeln!(md, "```");
     let _ = writeln!(md);
 
     // Exploit Path
     let _ = writeln!(md, "## Exploit Path");
     let _ = writeln!(md);
-    if let Some(ai) = &finding.ai_analysis {
+    if let Some(ai) = &finding.enrichment.ai_analysis {
         let _ = writeln!(md, "{}", ai.exploit_path);
     } else {
         let _ = writeln!(md, "Please refer to the PoC evidence to understand the exploit step-by-step.");
@@ -97,10 +101,10 @@ fn build_report(target: &TargetHost, finding: &Finding) -> BugBountyReport {
     let _ = writeln!(md);
 
     // References
-    if !finding.references.is_empty() {
+    if !finding.enrichment.references.is_empty() {
         let _ = writeln!(md, "## References");
         let _ = writeln!(md);
-        for r in &finding.references {
+        for r in &finding.enrichment.references {
             let _ = writeln!(md, "- {}", r);
         }
         let _ = writeln!(md);
