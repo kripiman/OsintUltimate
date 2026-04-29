@@ -1,7 +1,7 @@
 use std::sync::Arc;
 use anyhow::Result;
 use crate::core::ai::{TieredAIRouter, RouteLevel, LlmProviderKind};
-use crate::core::ai::{OllamaClient, GeminiClient, AnthropicClient, OpenAIClient, AzureOpenAIClient, AntigravityClient};
+use crate::core::ai::{OllamaClient, GeminiClient, AnthropicClient, OpenAIClient, AzureOpenAIClient, AntigravityClient, KimiClient, ClaudeCodeClient};
 use crate::utils::{InfrastructureType, HardwareInfo, proxy::ProxyManager};
 
 pub struct EngineFactory;
@@ -76,6 +76,22 @@ impl EngineFactory {
                 "claude-3-5-sonnet-20240620".to_string(),
                 pm.clone()
             )?));
+        }
+
+        if let Ok(key) = std::env::var("KIMI_API_KEY") {
+            router.add_provider(RouteLevel::Premium, LlmProviderKind::Kimi, 1, Arc::new(KimiClient::new(
+                key,
+                std::env::var("KIMI_MODEL").unwrap_or_else(|_| "kimi-for-coding".to_string()),
+                pm.clone()
+            )?));
+        }
+
+        if let Ok(enabled) = std::env::var("CLAUDE_CODE_ENABLED") {
+            if enabled == "true" {
+                router.add_provider(RouteLevel::Premium, LlmProviderKind::ClaudeCode, 2, Arc::new(ClaudeCodeClient::new(
+                    pm.clone()
+                )?));
+            }
         }
 
         // Tier 2: Premium Failover (Antigravity Bridge)

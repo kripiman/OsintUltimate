@@ -36,7 +36,7 @@ Para reducir el "bleed" de créditos API y permitir contextos masivos, OsintUlti
 4.  **Article Stripper**: Elimina artículos definidos e indefinidos (a, an, the).
 5.  **Filler Remover**: Limpia palabras de cortesía o relleno innecesario.
 6.  **Synonym Mapper**: Abrevia términos técnicos largos (e.g., `vulnerability` -> `vuln`).
-7.  **Suffix Lemmatizer**: Elimina sufijos gramaticales (-ing, -ed, -ly) solo en prosa, preservando el código fuente.
+7.  **Suffix Lemmatizer**: Elimina sufijos gramaticales (-ing, -ed, -ly) con una heurística de detección de código endurecida para prevenir la corrupción de contextos técnicos.
 8.  **Punctuation Pruner**: (Modo Ultra) Elimina puntuación no estructural.
 9.  **Wenyan Ultra**: (Modo Ultra) Sustituye términos técnicos comunes por glifos CJK de un solo carácter (e.g., `security` -> `安`).
 10. **Deduplicator**: Pase final para eliminar redundancias introducidas por las etapas anteriores.
@@ -80,7 +80,7 @@ Antes de que cualquier dato llegue a proveedores de IA externos (Azure/OpenAI/An
 
 - **Identity Masking**: Reemplaza nombres de usuarios, IPs internas y paths sensibles por placeholders sintéticos.
 - **Credential Stripping**: Elimina automáticamente tokens, API keys y hashes detectados en el contexto de ataque.
-- **Tactical Cache**: (Arch-v4) Utiliza un caché persistente basado en `SipHash-1-3` para evitar enviar el mismo hallazgo crítico a la IA varias veces, protegiendo tanto el presupuesto como la exposición de datos.
+- **Tactical Cache**: Utiliza una caché **LRU (moka)** para evitar enviar el mismo hallazgo crítico a la IA varias veces, protegiendo tanto el presupuesto como la exposición de datos y garantizando la consistencia del contexto bajo carga masiva.
 
 ---
 

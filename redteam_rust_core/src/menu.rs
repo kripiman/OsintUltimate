@@ -21,7 +21,7 @@ pub fn show_menu() -> Result<Option<Args>> {
         input: None,
         jsonl_output: "scan_result.jsonl".to_string(),
         html_output: "scan_report.html".to_string(),
-        sqlite_output: None,
+        postgres_url: None,
         concurrency: 10,
         scripts: None,
         stealth: false,

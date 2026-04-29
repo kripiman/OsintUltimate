@@ -299,15 +299,16 @@ impl<M: ExecutorMode> Orchestrator<M> {
                     }
                 }
                 
-                // QA-005 FIX: All tasks are done, so we are the only Arc holder.
-                // Extract owned target and append findings directly — no clone needed.
-                // QA-005 FIX: Attempt to extract owned target. Fallback to clone if other references exist (safe side).
+                // QA-005 FIX: Remove from dashboard_targets temporarily to drop the Arc reference count.
+                // This allows Arc::try_unwrap to succeed and gives us unique ownership without deep cloning.
+                dashboard_targets.remove(&target_ref.host);
+
                 let mut target = Arc::try_unwrap(target_ref)
                     .unwrap_or_else(|arc| (*arc).clone());
                 
-                let mut findings = (*target.findings).clone();
-                findings.append(&mut all_findings);
-                target.findings = Arc::new(findings);
+                if !all_findings.is_empty() {
+                    Arc::make_mut(&mut target.findings).append(&mut all_findings);
+                }
                 // --- NEW: BlackArch Dynamic Tool Suggestion ---
                 let mut suggestions = Vec::new();
                 for finding in target.findings.iter() {
@@ -331,9 +332,7 @@ impl<M: ExecutorMode> Orchestrator<M> {
                 }
 
                 if !suggestions.is_empty() {
-                    let mut current_suggestions = (*target.tool_suggestions).clone();
-                    current_suggestions.extend(suggestions);
-                    target.tool_suggestions = Arc::new(current_suggestions);
+                    Arc::make_mut(&mut target.tool_suggestions).extend(suggestions);
                 }
 
                 if plugin_error {

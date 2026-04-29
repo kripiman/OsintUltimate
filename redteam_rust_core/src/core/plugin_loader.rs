@@ -113,7 +113,7 @@ impl DynamicPluginLoader {
 
         // V12 HARDENING: Acquire lock/handle BEFORE reading bytes for verification.
         #[cfg(unix)]
-        let (_file, fd) = {
+        let (mut _file, fd) = {
             let f = std::fs::File::open(&canonical_path).context("Failed to open plugin for FD loading")?;
             use std::os::unix::io::AsRawFd;
             let fd = f.as_raw_fd();
@@ -121,7 +121,7 @@ impl DynamicPluginLoader {
         };
 
         #[cfg(windows)]
-        let _lock = {
+        let mut _lock = {
             use std::os::windows::fs::OpenOptionsExt;
             std::fs::OpenOptions::new()
                 .read(true)
@@ -131,9 +131,17 @@ impl DynamicPluginLoader {
         };
 
         // V13 HARDENING: Signature & Integrity verification WHILE HOLDING THE LOCK.
-        let plugin_bytes = std::fs::read(&canonical_path)
-            .with_context(|| format!("V13 Violation: Failed to read plugin bytes for integrity check at {:?}", canonical_path))?;
-        
+        // F2-002 FIX: Read directly from the locked file descriptor, NOT the canonical path to prevent TOCTOU.
+        let mut plugin_bytes = Vec::new();
+        use std::io::Read;
+        #[cfg(unix)]
+        _file.read_to_end(&mut plugin_bytes)
+            .with_context(|| format!("V13 Violation: Failed to read plugin bytes from locked FD at {:?}", canonical_path))?;
+            
+        #[cfg(windows)]
+        _lock.read_to_end(&mut plugin_bytes)
+            .with_context(|| format!("V13 Violation: Failed to read plugin bytes from locked handle at {:?}", canonical_path))?;
+
         Self::verify_signature_from_bytes(&canonical_path, &plugin_bytes)?;
 
         let lib = {

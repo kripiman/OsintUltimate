@@ -28,7 +28,7 @@ pub struct Args {
     #[arg(long, default_value = "scan_report.html")]
     pub html_output: String,
     #[arg(long)]
-    pub sqlite_output: Option<String>,
+    pub postgres_url: Option<String>,
     #[arg(short, long, default_value_t = 10)]
     pub concurrency: usize,
     #[arg(long)]
@@ -177,15 +177,18 @@ async fn main() -> Result<()> {
         // Global Kill-Switch Integration
         let token_clean = token.clone();
         let pm_clean = engine.proxy_manager();
+        let shutdown_signal = engine.shutdown_token();
         tokio::spawn(async move {
             tokio::signal::ctrl_c().await.ok();
             warn!("⚠️ [KILL-SWITCH] Interrupt detected. Commencing autonomous cleanup of all ephemeral egress nodes...");
+            shutdown_signal.cancel();
             let do_client = redteam_rust_core::infrastructure::digital_ocean::DigitalOceanClient::new(token_clean, pm_clean);
             if let Err(e) = do_client.destroy_all_ephemeral_droplets().await {
                 error!("❌ [KILL-SWITCH] Failed to clean up DigitalOcean droplets: {}", e);
             } else {
                 info!("🛡️ [KILL-SWITCH] Cleanup complete. Sovereign egress terminated safely.");
             }
+            tokio::time::sleep(std::time::Duration::from_secs(2)).await;
             std::process::exit(0);
         });
     }
@@ -193,8 +196,8 @@ async fn main() -> Result<()> {
 
     // --- SINK SETUP ---
     let mut multi_sink = MultiSink::new();
-    if let Some(ref db_path) = args.sqlite_output {
-        multi_sink.add(Box::new(PostgresSink::new(db_path).await?));
+    if let Some(ref db_url) = args.postgres_url {
+        multi_sink.add(Box::new(PostgresSink::new(db_url).await?));
     } else {
         multi_sink.add(Box::new(JsonlSink::new(&args.jsonl_output).await?));
     }

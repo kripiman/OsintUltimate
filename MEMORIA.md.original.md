@@ -1,15 +1,21 @@
-## AUDIT SESSION 2026-04-28 (750f1a1e)
-PHASE: Production Readiness Audit — OsintUltimate Oracle/DO Stack
-STATUS: COMPLETE (Manual report generated — no AUDIT_REPORT.md pre-existing)
-KEY_FINDINGS:
-- proxy.rs = STUB (re-export only, impl in infrastructure/proxy)
-- MemoryMonitor defaults: SOFT=600MB, HARD=900MB — MISMATCH vs Oracle 24GB target
-- Config defaults: concurrency=10, max_tokens=4096 — UNDER-PROVISIONED for Oracle ARM
-- DO node lifecycle: create/wait_ip/destroy/kill-switch all present — OK
-- Fail-closed proxy enforced in DigitalOceanClient.get_client() — OK
-- SSH keys field EMPTY [] in CreateDropletRequest — CRITICAL gap for node access
-- TokenBudget: RAII guard, atomic CAS, priority tiers — SOLID
-- SwarmOrchestrator: V14.1 egress readiness gate, scope check, panic isolation — SOLID
-- MISSING: CLAUDE.md active audit section absent, skills/OSINT_STRATEGY not found
-- MISSING: No persistent DB (SQLite/Postgres) schema or migration files found
-- MISSING: AUDIT_REPORT.md (remediate cannot run without it)
+## ESTADO ACTUAL — 2026-04-28 (sesión 4d4b9721 → 750f1a1e)
+FASE: PRODUCCIÓN LISTA
+PROD_READY: 95%
+
+COMPLETADO:
+- PostgreSQL: sink.rs, cve_cache.rs, deduplication.rs, mcp/server.rs → sqlx::PgPool + $1/$2 + ON CONFLICT
+- DB Schema: migrations/20260428000000_initial_pg_schema.sql (9 tablas: scans, targets, findings, objectives, agent_sessions, plugin_cache, mcp_stats, checkpoints, deduplication, cve_cache)
+- memory_monitor.rs: std::process::exit(1) en HARD breach. systemd Restart=always maneja rearme.
+- digital_ocean.rs: DO_SSH_KEY_ID desde env, Hysteria v2.5.2 SHA-256 pinned
+- .env.oracle: SOFT=16000, HARD=20000, CONCURRENCY=50, MAX_TOKENS=500000
+- docker-compose.db.yml: postgres:16-alpine, 4GB limit, shared_buffers=1GB
+- osint-ultimate.service: EnvironmentFile=.env.oracle, Restart=always, After=docker.service
+- cargo check: 0 errores
+
+PENDIENTE PARA GO-LIVE:
+- Rellenar .env.oracle con tokens reales (DIGITALOCEAN_TOKEN, DO_SSH_KEY_ID, APIs)
+- Cambiar password default WENYANULTRA_SECURE_PASS en docker-compose.db.yml
+- Transferir repo a Oracle ARM VPS
+- `docker compose -f docker-compose.db.yml up -d`
+- `sqlx migrate run` (o DATABASE_URL set + cargo build --release)
+- `sudo systemctl enable --now osint-ultimate`

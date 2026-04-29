@@ -30,6 +30,8 @@ pub enum LlmProviderKind {
     OpenAI,
     AzureOpenAI,
     Antigravity, // V15: OpenSource/Custom Failover Endpoint
+    Kimi,
+    ClaudeCode,
 }
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]

@@ -15,6 +15,8 @@ pub mod azure;
 pub mod anthropic;
 pub mod openai;
 pub mod antigravity;
+pub mod kimi;
+pub mod claude_code;
 
 pub use types::*;
 pub use traits::*;
@@ -30,3 +32,5 @@ pub use azure::*;
 pub use anthropic::*;
 pub use openai::*;
 pub use antigravity::*;
+pub use kimi::*;
+pub use claude_code::*;

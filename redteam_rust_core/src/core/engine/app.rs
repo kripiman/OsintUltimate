@@ -63,7 +63,6 @@ impl RedTeamEngine<crate::utils::executor::GhostMode> {
         let memory_monitor = Arc::new(MemoryMonitor::new(soft_limit as u32, hard_limit as u32));
         let res_mgr = SysResourceManager::new();
         let policy = Arc::new(crate::core::policy::StaticPolicy::new());
-        let sandbox = Arc::new(SandboxDispatcher::new(res_mgr).with_policy(policy.clone()));
         let approval_gate = Arc::new(ApprovalGate::for_red_team());
         let proxy_manager = Arc::new(crate::utils::proxy::ProxyManager::new(
             config.proxies.clone().unwrap_or_default(),
@@ -71,6 +70,9 @@ impl RedTeamEngine<crate::utils::executor::GhostMode> {
             config.proxy_mode,
             config.proxy_pool_size,
         ));
+        let sandbox = Arc::new(SandboxDispatcher::new(res_mgr)
+            .with_policy(policy.clone())
+            .with_proxy_manager(proxy_manager.clone()));
 
         let executor = Arc::new(crate::utils::executor::StealthExecutor::new(
             policy.clone(),
@@ -101,7 +103,6 @@ impl RedTeamEngine<crate::utils::executor::GhostMode> {
         ));
         let res_mgr = SysResourceManager::new();
         let policy = Arc::new(crate::core::policy::StaticPolicy::new());
-        let sandbox = Arc::new(SandboxDispatcher::new(res_mgr).with_policy(policy.clone()));
         let approval_gate = Arc::new(ApprovalGate::for_red_team());
         let proxy_manager = Arc::new(crate::utils::proxy::ProxyManager::new(
             config.proxies.clone().unwrap_or_default(),
@@ -109,6 +110,9 @@ impl RedTeamEngine<crate::utils::executor::GhostMode> {
             config.proxy_mode,
             config.proxy_pool_size,
         ));
+        let sandbox = Arc::new(SandboxDispatcher::new(res_mgr)
+            .with_policy(policy.clone())
+            .with_proxy_manager(proxy_manager.clone()));
 
         let executor = Arc::new(crate::utils::executor::StealthExecutor::new(
             policy.clone(),

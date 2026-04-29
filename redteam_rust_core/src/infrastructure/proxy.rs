@@ -55,6 +55,7 @@ pub struct ProxyManager {
     // V14.1 High-Speed Egress
     pub proxy_mode: ProxyMode,
     pub proxy_pool_size: u32,
+    health_checker_handle: Option<tokio::task::AbortHandle>,
 }
 
 impl ProxyManager {
@@ -87,6 +88,7 @@ impl ProxyManager {
             managed_exits: Arc::new(DashMap::new()),
             proxy_mode,
             proxy_pool_size,
+            health_checker_handle: None,
         };
 
         // Start background health checker if there can be proxies
@@ -109,10 +111,13 @@ impl ProxyManager {
     }
 
     fn start_health_checker(&mut self) {
+        if let Some(h) = self.health_checker_handle.take() {
+            h.abort();
+        }
         let managed_exits = self.managed_exits.clone();
         
         // QA-007 FIX: Store AbortHandle so the task is cancelled when ProxyManager is dropped
-        let _handle = tokio::spawn(async move {
+        let handle = tokio::spawn(async move {
             loop {
                 let sleep_secs = {
                     let mut rng = rand::thread_rng();
@@ -157,6 +162,7 @@ impl ProxyManager {
                 }
             }
         });
+        self.health_checker_handle = Some(handle.abort_handle());
     }
 
     /// Internal method to lazily build a reqwest::Client for a specific proxy
@@ -333,9 +339,27 @@ impl ProxyManager {
                 _ => {
                     // Professional Mode: Use proxychains-ng for everything else
                     info!("🛡️ ProxyManager: Wrapping '{}' with proxychains-ng via {}", tool, proxy_url);
-                    // Check if proxychains is available in PATH is done by StealthExecutor
-                    // Here we just modify the args for the generic wrapper
-                    args.insert(0, tool.to_string());
+                    let clean_proxy = proxy_url.strip_prefix("socks5h://").unwrap_or(&proxy_url).strip_prefix("socks5://").unwrap_or(&proxy_url);
+                    let addr_part = clean_proxy.split('@').last().unwrap_or(clean_proxy);
+                    let parts: Vec<&str> = addr_part.split(':').collect();
+                    
+                    if parts.len() == 2 {
+                        let ip = parts[0];
+                        let port = parts[1];
+                        let conf = format!("strict_chain\nproxy_dns\nremote_dns_subnet 224\ntcp_read_time_out 15000\ntcp_connect_time_out 8000\n[ProxyList]\nsocks5 {} {}\n", ip, port);
+                        
+                        let conf_path = std::env::temp_dir().join(format!("px_{}_{}.conf", std::process::id(), rand::random::<u32>()));
+                        if let Err(e) = std::fs::write(&conf_path, conf) {
+                            warn!("Failed to write proxychains config: {}", e);
+                            args.insert(0, tool.to_string());
+                        } else {
+                            args.insert(0, tool.to_string());
+                            args.insert(0, conf_path.to_string_lossy().into_owned());
+                            args.insert(0, "-f".to_string());
+                        }
+                    } else {
+                        args.insert(0, tool.to_string());
+                    }
                 }
             }
             Ok(())
@@ -615,9 +639,11 @@ transport:
     }
 }
 
-// Drop implementation removed as health_checker_handle was unused.
 impl Drop for ProxyManager {
     fn drop(&mut self) {
+        if let Some(handle) = self.health_checker_handle.take() {
+            handle.abort();
+        }
         info!("ProxyManager: Shutting down.");
     }
 }

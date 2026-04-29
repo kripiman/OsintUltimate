@@ -25,12 +25,14 @@ graph TD
     Stealth -->|Sí| ProxyGate{Proxy Disponible?}
     
     ProxyGate -->|No| Failure[V14.1 OPSEC Block]
-    ProxyGate -->|Sí| Wrapper[proxychains4 WRAP]
+    ProxyGate -->|Sí| Conf[Gen Dynamic proxychains.conf]
+    
+    Conf --> Wrapper[proxychains4 -f WRAP]
     
     Wrapper --> Spawn[Proceso Aislado]
     Native --> Spawn
     
-    Spawn --> Shield[V15 Egress Shield]
+    Spawn --> Shield[v0.1 Egress Shield]
     Shield --> Result[Hallazgo Sanitizado]
 ```
 
@@ -44,12 +46,19 @@ El `ProxyManager` no es solo un rotador de IPs, sino un sistema de gestión de i
 *   **RT-Identity (Identity Bonding)**: El sistema asigna un **User-Agent** persistente a cada host objetivo. Esto evita que los WAFs detecten incoherencias en la identidad del navegador durante una sesión de ataque prolongada.
 *   **Managed Exits**: OsintUltimate gestiona sus propios nodos de salida (DigitalOcean VPS) que son auditados cada 60 segundos mediante comprobaciones de salud (TCP Ping). Si un nodo falla, es expulsado inmediatamente del pool activo.
 
-### Supervisión (Supervisor Task)
-Un hilo de fondo monitorea constantemente la latencia y disponibilidad de los proxies. Solo los nodos con latencias estables son seleccionados para tareas críticas como el enrutamiento de agentes de Swarm.
+### Supervisión y Resiliencia
+- **Task Leak Protection**: El supervisor de proxies utiliza `AbortHandle` para garantizar el cierre total de tareas asíncronas al finalizar la misión, evitando fugas de memoria en ejecuciones prolongadas.
+- **Health Checks**: Un hilo de fondo monitorea constantemente la latencia y disponibilidad de los proxies. Solo los nodos con latencias estables son seleccionados para tareas críticas.
 
 ---
 
-## 3. Escudo de Salida (V15 Egress Shield)
+## 3. Sandboxing y Aislamiento de Herramientas
+
+OsintUltimate utiliza Docker para aislar la ejecución de herramientas externas, garantizando que el entorno del host permanezca inalterado.
+
+### Hardened Sandbox (v0.1.0)
+- **Proxy Injection**: El `SandboxDispatcher` detecta automáticamente el estado del `ProxyManager`. Si el sigilo está activo, inyecta variables de entorno (`ALL_PROXY`, `HTTP_PROXY`, etc.) dentro del contenedor.
+- **Network Isolation**: Los contenedores operan con políticas de red restringidas, forzando todo el tráfico saliente a través de la infraestructura de egreso gestionada.
 
 Toda la información que sale de un binario y entra en la pipeline es procesada por el **Egress Shield** para evitar fugas de información sensible y ruido innecesario.
 

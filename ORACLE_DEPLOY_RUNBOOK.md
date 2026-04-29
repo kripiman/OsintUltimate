@@ -1,6 +1,7 @@
 # OsintUltimate — Oracle Cloud ARM Production Runbook
-**Target**: Ubuntu 24.04 · ARM64 (Ampere A1, 24 GB RAM) · `tu_dominio.com`  
-**Versión arquitectura**: V14.3 Sovereign Swarm Hardened + Tailscale OPSEC  
+
+**Target**: Ubuntu 24.04 · ARM64 (Ampere A1, 24 GB RAM) · `tu_dominio.com`
+**Versión arquitectura**: V14.3 Sovereign Swarm Hardened + Tailscale OPSEC
 **Dashboard**: Axum bind `127.0.0.1:8080` → Nginx → HTTPS solo via **red Tailscale WireGuard**
 
 ```
@@ -10,8 +11,8 @@
 ```
 
 > [!IMPORTANT]
-> Reemplaza **`tu_dominio.com`**, **`TU_IP_ORACLE`** y **`TU_TAILNET`** en cada bloque antes de ejecutar.  
-> El puerto 443 **nunca se abre** a internet. Solo SSH (22) y WireGuard (UDP 41641).  
+> Reemplaza **`tu_dominio.com`**, **`TU_IP_ORACLE`** y **`TU_TAILNET`** en cada bloque antes de ejecutar.
+> El puerto 443 **nunca se abre** a internet. Solo SSH (22) y WireGuard (UDP 41641).
 > Ejecuta todos los comandos como el usuario de despliegue (`osint`) salvo donde se indique `sudo`.
 
 ---
@@ -703,16 +704,17 @@ chmod +x $APP_DIR/scripts/healthcheck.sh
 
 Consola Oracle → **Networking → VCN → Security Lists → Default → Ingress Rules**:
 
-| Protocolo | Puerto | Fuente | Descripción |
-|-----------|--------|--------|-------------|
-| TCP | 22 | `TU_IP_PUBLICA/32` | SSH — solo tu IP |
-| TCP | 80 | `0.0.0.0/0` | HTTP ACME challenge (certbot dominio público) |
-| UDP | 41641 | `0.0.0.0/0` | **Tailscale WireGuard** — NAT traversal |
+| Protocolo | Puerto | Fuente               | Descripción                                   |
+| --------- | ------ | -------------------- | ---------------------------------------------- |
+| TCP       | 22     | `TU_IP_PUBLICA/32` | SSH — solo tu IP                              |
+| TCP       | 80     | `0.0.0.0/0`        | HTTP ACME challenge (certbot dominio público) |
+| UDP       | 41641  | `0.0.0.0/0`        | **Tailscale WireGuard** — NAT traversal |
 
 > [!NOTE]
 > Si Tailscale logra conectar por DERP relay sin el UDP directo (lo hace en la mayoría de casos), el 41641 tampoco es estrictamente necesario. Pero abrirlo mejora la latencia del túnel WireGuard.
 
 **Reglas que NO existen (comparado con la configuración anterior):**
+
 - ~~TCP 443 → 0.0.0.0/0~~ ← eliminado intencionalmente
 
 **Egress**: Allow All.

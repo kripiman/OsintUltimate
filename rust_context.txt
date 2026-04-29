@@ -53,8 +53,10 @@ redteam_rust_core/
         azure.rs
         base.rs
         caveman.rs
+        claude_code.rs
         compressor.rs
         gemini.rs
+        kimi.rs
         mod.rs
         off_path.rs
         ollama.rs
@@ -300,6 +302,105 @@ redteam_rust_core/
 <files>
 This section contains the contents of the repository's files.
 
+<file path="redteam_rust_core/src/core/ai/claude_code.rs">
+use async_trait::async_trait;
+use crate::models::AIAnalysis;
+use crate::core::ai::traits::LlmClient;
+use crate::core::ai::compressor::ContextCompressor;
+use std::sync::Arc;
+use tokio::process::Command;
+⋮----
+pub struct ClaudeCodeClient {
+⋮----
+impl ClaudeCodeClient {
+pub fn new(pm: Arc<crate::utils::proxy::ProxyManager>) -> Result<Self> {
+Ok(Self {
+⋮----
+impl LlmClient for ClaudeCodeClient {
+async fn analyze(&self, config: crate::core::ai::traits::InferenceConfig<'_>) -> Result<AIAnalysis> {
+⋮----
+let ctx = config.attack_context.map(|c| format!(" Tactical Path: {}.", c)).unwrap_or_default();
+let prompt_raw = format!("Analyze this: {}. Target: {}.{}", serde_json::to_string(&compressed)?, config.target.host, ctx);
+⋮----
+let full_prompt = format!("### PROFESSIONAL RED TEAM ENGINE ###\nReturn strictly JSON. You must include these fields: 'summary', 'impact', 'stealth_notes', 'risk_score', 'confidence', 'mitre_attack', 'exploit_path', 'model'. DO NOT output defensive remediations or fixes; provide the exploit path.\n\n{}", prompt);
+⋮----
+.arg("-p")
+.arg(&full_prompt)
+.output()
+⋮----
+.context("Failed to execute claude code CLI. Ensure 'claude' is in PATH")?;
+⋮----
+let text = String::from_utf8_lossy(&output.stdout).to_string();
+⋮----
+if text.trim().is_empty() {
+⋮----
+Ok(serde_json::from_value(self.base.parse_extraction(&text)?)?)
+⋮----
+async fn decide_action(&self, config: crate::core::ai::traits::DecisionConfig<'_>) -> Result<Option<(String, serde_json::Value)>> {
+⋮----
+let ctx_header = config.attack_context.map(|c| format!("Tactical Path: {}\n", c)).unwrap_or_default();
+let prompt_raw = format!("### SENTINEL ORCHESTRATOR ###\n{}Decide next step for {}. History: {:?}. Finding: {}. Plugins: {}. Focus on WAF bypass. Return JSON with 'action' (must match a plugin name exactly or 'none') and 'tactical_context' (JSON object).", ctx_header, config.target.host, config.adaptive_context, config.finding.id, config.plugins.len());
+⋮----
+let full_prompt = format!("You are a Sentinel Orchestrator. Return strictly JSON with 'action' and 'tactical_context'.\n\n{}", prompt);
+⋮----
+.context("Failed to execute claude code CLI.")?;
+⋮----
+if text.trim().is_empty() { return Ok(None); }
+⋮----
+if let Ok(json_val) = self.base.parse_extraction(&text) {
+let action = json_val["action"].as_str().unwrap_or("none");
+if action == "none" || !config.plugins.iter().any(|p| p.name == action) { return Ok(None); }
+return Ok(Some((action.to_string(), json_val["tactical_context"].clone())));
+⋮----
+Ok(None)
+</file>
+
+<file path="redteam_rust_core/src/core/ai/kimi.rs">
+use async_trait::async_trait;
+use crate::models::AIAnalysis;
+use crate::core::ai::traits::LlmClient;
+use crate::core::ai::compressor::ContextCompressor;
+use serde_json::json;
+use std::sync::Arc;
+⋮----
+pub struct KimiClient {
+⋮----
+impl KimiClient {
+pub fn new(key: String, model: String, pm: Arc<crate::utils::proxy::ProxyManager>) -> Result<Self> {
+Ok(Self {
+⋮----
+impl LlmClient for KimiClient {
+async fn analyze(&self, config: crate::core::ai::traits::InferenceConfig<'_>) -> Result<AIAnalysis> {
+⋮----
+let ctx = config.attack_context.map(|c| format!(" Tactical Path: {}.", c)).unwrap_or_default();
+let prompt_raw = format!("Analyze this: {}. Target: {}.{}", serde_json::to_string(&compressed)?, config.target.host, ctx);
+⋮----
+let client = self.base.get_client("api.kimi.com").await?;
+let res = client.post("https://api.kimi.com/coding/v1/chat/completions")
+.header("Authorization", format!("Bearer {}", self.key))
+.json(&json!({
+⋮----
+})).send().await?.json::<serde_json::Value>().await?;
+⋮----
+let text = res["choices"][0]["message"]["content"].as_str().context("Kimi Code API response format error")?;
+Ok(serde_json::from_value(self.base.parse_extraction(text)?)?)
+⋮----
+async fn decide_action(&self, config: crate::core::ai::traits::DecisionConfig<'_>) -> Result<Option<(String, serde_json::Value)>> {
+⋮----
+let ctx_header = config.attack_context.map(|c| format!("Tactical Path: {}\n", c)).unwrap_or_default();
+let prompt_raw = format!("### SENTINEL ORCHESTRATOR ###\n{}Decide next step for {}. History: {:?}. Finding: {}. Plugins: {}. Focus on WAF bypass. Return JSON with 'action' (must match a plugin name exactly or 'none') and 'tactical_context' (JSON object).", ctx_header, config.target.host, config.adaptive_context, config.finding.id, config.plugins.len());
+⋮----
+.json(&serde_json::json!({
+⋮----
+if let Some(text) = res["choices"][0]["message"]["content"].as_str() {
+if let Ok(json_val) = self.base.parse_extraction(text) {
+let action = json_val["action"].as_str().unwrap_or("none");
+if action == "none" || !config.plugins.iter().any(|p| p.name == action) { return Ok(None); }
+return Ok(Some((action.to_string(), json_val["tactical_context"].clone())));
+⋮----
+Ok(None)
+</file>
+
 <file path="redteam_rust_core/src/core/ai/base.rs">
 use std::sync::Arc;
 ⋮----
@@ -435,96 +536,6 @@ engine.add_edge(&source, &target);
 pub mod app;
 ⋮----
 pub use app::RedTeamEngine;
-</file>
-
-<file path="redteam_rust_core/src/core/mcp/tests.rs">
-use crate::plugins::GlobalConfig;
-use crate::utils::executor::GhostMode;
-use std::sync::Arc;
-use tempfile::tempdir;
-⋮----
-async fn test_mcp_two_level_cache() -> anyhow::Result<()> {
-⋮----
-let tmp_dir = tempdir()?;
-let db_path = tmp_dir.path().join("mcp_test.db");
-server = server.with_sqlite(db_path.clone()).await;
-⋮----
-assert!(server.plugin_cache.get(cache_key).is_none());
-⋮----
-assert!(db.load_plugin_cache(cache_key).await?.is_none());
-⋮----
-server.plugin_cache.insert(cache_key.to_string(), test_output.to_string()).await;
-⋮----
-db.save_plugin_cache(cache_key, test_output).await?;
-⋮----
-assert_eq!(server.plugin_cache.get(cache_key), Some(test_output.to_string()));
-⋮----
-server.plugin_cache.invalidate(cache_key).await;
-⋮----
-let disk_hit = db.load_plugin_cache(cache_key).await?;
-assert_eq!(disk_hit, Some(test_output.to_string()));
-⋮----
-server.plugin_cache.insert(cache_key.to_string(), disk_hit.unwrap()).await;
-⋮----
-Ok(())
-</file>
-
-<file path="redteam_rust_core/src/core/notifications/discord.rs">
-use crate::core::sink::DataSink;
-use anyhow::Result;
-use async_trait::async_trait;
-use serde_json::json;
-⋮----
-use std::sync::Arc;
-⋮----
-pub struct DiscordSink {
-⋮----
-impl DiscordSink {
-pub fn new(webhook_url: String, pm: Arc<crate::utils::proxy::ProxyManager>) -> Self {
-⋮----
-fn get_color_for_severity(&self, severity: &Severity) -> u32 {
-⋮----
-impl DataSink for DiscordSink {
-async fn write(&mut self, target: &TargetHost) -> Result<()> {
-⋮----
-let high_findings: Vec<_> = target.findings.iter()
-.filter(|f| f.severity == Severity::High || f.severity == Severity::Critical)
-.collect();
-⋮----
-if high_findings.is_empty() {
-return Ok(());
-⋮----
-debug!("📢 DiscordSink: Found {} high-severity findings for {}", high_findings.len(), target.host);
-⋮----
-let color = self.get_color_for_severity(&finding.severity);
-⋮----
-let mut description = format!("**Category:** {:?}\n**Description:** {}\n",
-⋮----
-description.push_str("\n--- 🤖 **AI ANALYSIS** ---\n");
-description.push_str(&format!("**Impact:** {}\n", ai.impact));
-description.push_str(&format!("**Exploit Path:** {}\n", ai.exploit_path));
-⋮----
-let payload = json!({
-⋮----
-let host = url::Url::parse(&self.webhook_url)?.host_str().unwrap_or("discord.com").to_string();
-let (_, client) = self.proxy_manager.get_client_fail_closed(&host)?;
-⋮----
-let res = client.post(&self.webhook_url)
-.json(&payload)
-.send()
-⋮----
-Ok(resp) if resp.status().is_success() => {
-info!("✅ Notification sent to Discord for {}", target.host);
-⋮----
-error!("❌ Failed to send Discord notification: HTTP {}", resp.status());
-⋮----
-error!("❌ Discord network error: {}", e);
-⋮----
-Ok(())
-⋮----
-async fn write_metadata(&mut self, _metadata: &ScanMetadata) -> Result<()> {
-⋮----
-async fn close(&mut self) -> Result<()> {
 </file>
 
 <file path="redteam_rust_core/src/core/notifications/mod.rs">
@@ -734,38 +745,6 @@ pub(crate) struct CloudflareDnsResponse {
 pub(crate) struct CloudflareDnsRecord {
 ⋮----
 pub(crate) struct CloudflareError {
-</file>
-
-<file path="redteam_rust_core/src/infrastructure/decoy/persistence.rs">
-use tokio::sync::mpsc;
-⋮----
-use super::models::TripwireEvent;
-⋮----
-pub async fn spawn_tripwire_persister(
-⋮----
-.context("Failed to connect to tripwire SQLite database")?;
-⋮----
-.execute(&pool).await?;
-⋮----
-).execute(&pool).await?;
-⋮----
-while let Some(event) = rx.recv().await {
-⋮----
-.bind(&event.fqdn)
-.bind(&event.source_ip)
-.bind(&event.method)
-.bind(&event.path)
-.bind(&event.user_agent)
-.bind(&event.headers_json)
-.bind(&event.ja3_hash)
-.bind(event.triggered_at.to_rfc3339())
-.execute(&pool)
-⋮----
-error!("🚨 TRIPWIRE: Failed to persist event: {}", e);
-⋮----
-info!("🍯 DECOY: Tripwire persister shutting down.");
-⋮----
-Ok(handle)
 </file>
 
 <file path="redteam_rust_core/src/infrastructure/mod.rs">
@@ -1249,369 +1228,6 @@ pub mod trufflehog;
 pub mod osint;
 pub mod passive;
 pub mod active;
-</file>
-
-<file path="redteam_rust_core/src/plugins/reporting/bug_bounty.rs">
-use std::fmt::Write;
-⋮----
-pub struct BugBountyReport {
-⋮----
-pub fn generate_reports(target: &TargetHost) -> Vec<BugBountyReport> {
-target.findings.iter()
-.filter(|f| matches!(f.severity, Severity::Critical | Severity::High | Severity::Medium))
-.map(|f| build_report(target, f))
-.collect()
-⋮----
-fn build_report(target: &TargetHost, finding: &Finding) -> BugBountyReport {
-let slug = finding.id.to_lowercase().replace(['_', ' '], "-");
-let filename = format!("{}_{}.md", target.host.replace('.', "_"), slug);
-⋮----
-let _ = writeln!(md, "# {}", finding.title);
-let _ = writeln!(md);
-⋮----
-let _ = writeln!(md, "| Field | Value |");
-let _ = writeln!(md, "|---|---|");
-let _ = writeln!(md, "| **Severity** | {} |", severity_label(&finding.severity));
-⋮----
-let _ = writeln!(md, "| **CVSS Score** | {:.1} |", score);
-⋮----
-let _ = writeln!(md, "| **Asset** | `{}` |", target.host);
-⋮----
-let _ = writeln!(md, "| **IP** | `{}` |", ip);
-⋮----
-let _ = writeln!(md, "| **Finding ID** | `{}` |", finding.id);
-⋮----
-let _ = writeln!(md, "| **MITRE ATT&CK** | {} |", mitre.join(", "));
-⋮----
-let _ = writeln!(md, "## Description");
-⋮----
-let _ = writeln!(md, "{}", finding.description);
-⋮----
-let _ = writeln!(md, "## Impact");
-⋮----
-let _ = writeln!(md, "{}", ai.impact);
-⋮----
-let _ = writeln!(md, "{}", default_impact(&finding.severity));
-⋮----
-let _ = writeln!(md, "## Steps to Reproduce");
-⋮----
-.get("matched_at")
-.and_then(|v| v.as_str())
-.unwrap_or(&target.host);
-⋮----
-.get("template_id")
-⋮----
-.unwrap_or("");
-⋮----
-let _ = writeln!(md, "1. Navigate to or send a request to: `{}`", matched_at);
-if !template_id.is_empty() {
-let _ = writeln!(md, "2. The vulnerability was detected via Nuclei template: `{}`", template_id);
-⋮----
-let _ = writeln!(md, "3. Observe the response matches the vulnerability pattern described above.");
-⋮----
-// PoC evidence
-let _ = writeln!(md, "## Proof of Concept");
-⋮----
-let _ = writeln!(md, "```");
-let _ = writeln!(md, "{}", serde_json::to_string_pretty(&finding.evidence.data).unwrap_or_default());
-⋮----
-let _ = writeln!(md, "## Exploit Path");
-⋮----
-let _ = writeln!(md, "{}", ai.exploit_path);
-⋮----
-let _ = writeln!(md, "Please refer to the PoC evidence to understand the exploit step-by-step.");
-⋮----
-if !finding.references.is_empty() {
-let _ = writeln!(md, "## References");
-⋮----
-let _ = writeln!(md, "- {}", r);
-⋮----
-fn severity_label(s: &Severity) -> &'static str {
-⋮----
-fn default_impact(s: &Severity) -> &'static str {
-</file>
-
-<file path="redteam_rust_core/src/utils/activity_log.rs">
-use std::path::PathBuf;
-⋮----
-use tokio::io::AsyncWriteExt;
-use std::sync::Arc;
-use tokio::sync::Mutex;
-use crate::models::Finding;
-⋮----
-pub enum EventKind {
-⋮----
-pub enum Actor {
-⋮----
-pub struct LogEvent {
-⋮----
-pub struct ActivityLog {
-⋮----
-impl ActivityLog {
-pub async fn new(path: PathBuf) -> Result<Self> {
-⋮----
-if let Some(parent) = path.parent() {
-⋮----
-.create(true)
-.append(true)
-.open(&path)
-⋮----
-.with_context(|| format!("ActivityLog: Failed to open log file at {}", path.display()))?;
-⋮----
-Ok(Self {
-⋮----
-pub async fn log(&self, kind: EventKind, actor: Actor, message: &str, target: Option<&str>, data: serde_json::Value) -> Result<()> {
-⋮----
-ts: chrono::Utc::now().timestamp_millis() as f64 / 1000.0,
-⋮----
-message: message.to_string(),
-target: target.map(|s| s.to_string()),
-⋮----
-line.push('\n');
-⋮----
-let mut file = self.file.lock().await;
-file.write_all(line.as_bytes()).await?;
-file.flush().await?;
-⋮----
-Ok(())
-⋮----
-pub async fn log_finding(&self, finding: &Finding, actor: Actor, target: Option<&str>) -> Result<()> {
-self.log(
-⋮----
-&format!("New finding discovered: {}", finding.title),
-⋮----
-pub fn path(&self) -> &std::path::Path {
-⋮----
-mod tests {
-⋮----
-use tempfile::tempdir;
-⋮----
-async fn test_activity_log_creation_and_append() -> Result<()> {
-let dir = tempdir()?;
-let log_path = dir.path().join("timeline.jsonl");
-let logger = ActivityLog::new(log_path.clone()).await?;
-⋮----
-logger.log(EventKind::Note, Actor::System, "Test event", None, serde_json::json!({"test": true})).await?;
-⋮----
-assert_eq!(event.message, "Test event");
-assert_eq!(event.kind, EventKind::Note);
-assert!(event.data["test"].as_bool().unwrap());
-</file>
-
-<file path="redteam_rust_core/src/utils/bounty_exporter.rs">
-pub struct BountyExporter;
-⋮----
-impl BountyExporter {
-pub fn generate(findings: &[&Finding], platform: &ReportPlatform) -> String {
-⋮----
-.iter()
-.copied()
-.filter(|f| matches!(f.severity, Severity::High | Severity::Critical))
-.collect();
-⋮----
-if eligible.is_empty() {
-return format!(
-⋮----
-fn compress_evidence(finding: &Finding) -> String {
-let raw = serde_json::to_string_pretty(&finding.evidence.data).unwrap_or_default();
-⋮----
-if raw.len() > MAX {
-format!("{}\n... [+{} bytes truncated]", &raw[..MAX], raw.len() - MAX)
-⋮----
-fn poc_steps(finding: &Finding) -> String {
-⋮----
-if !ai.exploit_path.is_empty() {
-return ai.exploit_path.clone();
-⋮----
-if let Some(url) = finding.evidence.data.get("url").and_then(|v| v.as_str()) {
-return format!("1. Navigate to: `{}`\n2. Observe the response headers and body for vulnerability indicators.", url);
-⋮----
-"1. Capture the raw HTTP request from the 'Proof of Concept' section below.\n2. Replay the request in Burp Suite Repeater.\n3. Verify the impact in the response.".to_string()
-⋮----
-fn impact(finding: &Finding) -> String {
-⋮----
-if !ai.impact.is_empty() {
-return ai.impact.clone();
-⋮----
-format!("An attacker can leverage this {:?} severity issue in the {:?} category to compromise the target application's security posture.", finding.severity, finding.category)
-⋮----
-fn attack_scenario(finding: &Finding) -> String {
-⋮----
-if !ai.stealth_notes.is_empty() {
-return ai.stealth_notes.clone();
-⋮----
-"1. Attacker identifies the vulnerable endpoint.\n2. Attacker crafts a specific payload based on the observed behavior.\n3. Result: Unauthorized action or data exposure is achieved.".to_string()
-⋮----
-fn recommendation(finding: &Finding) -> String {
-⋮----
-_ if finding.title.to_lowercase().contains("xss") =>
-⋮----
-_ if finding.title.to_lowercase().contains("idor") || finding.title.to_lowercase().contains("bola") =>
-⋮----
-_ if finding.title.to_lowercase().contains("ssrf") =>
-⋮----
-}.to_string()
-⋮----
-fn generate_common_blocks(f: &Finding) -> String {
-⋮----
-out.push_str("## Summary\n");
-⋮----
-out.push_str(&ai.summary);
-⋮----
-out.push_str(&f.description);
-⋮----
-out.push_str("\n\n");
-⋮----
-out.push_str("## Vulnerability Details\n");
-out.push_str(&format!("- **Type:** {:?}\n", f.category));
-if let Some(url) = f.evidence.data.get("url").and_then(|v| v.as_str()) {
-out.push_str(&format!("- **Affected Endpoint:** {}\n", url));
-⋮----
-if !f.cwe.is_empty() {
-out.push_str(&format!("- **CWE:** {}\n", f.cwe.join(", ")));
-⋮----
-out.push_str("\n");
-⋮----
-out.push_str("## Steps to Reproduce\n");
-out.push_str(&Self::poc_steps(f));
-⋮----
-out.push_str("## Proof of Concept\n");
-out.push_str("Below is the raw evidence captured during validation:\n\n");
-out.push_str("```json\n");
-out.push_str(&Self::compress_evidence(f));
-out.push_str("\n```\n\n");
-⋮----
-out.push_str("## Impact\n");
-out.push_str(&Self::impact(f));
-⋮----
-out.push_str("## Attack Scenario\n");
-out.push_str(&Self::attack_scenario(f));
-⋮----
-out.push_str("## Recommendation\n");
-out.push_str(&Self::recommendation(f));
-⋮----
-if !f.references.is_empty() || !f.cwe.is_empty() {
-out.push_str("## References\n");
-⋮----
-out.push_str(&format!("- {}\n", r));
-⋮----
-out.push_str(&format!("- https://cwe.mitre.org/data/definitions/{}.html\n", c.replace("CWE-", "")));
-⋮----
-fn generate_h1(findings: &[&Finding]) -> String {
-⋮----
-out.push_str(&format!("# {}\n\n", f.title));
-out.push_str(&Self::generate_common_blocks(f));
-out.push_str("\n---\n\n");
-⋮----
-fn generate_bugcrowd(findings: &[&Finding]) -> String {
-⋮----
-fn generate_intigriti(findings: &[&Finding]) -> String {
-</file>
-
-<file path="redteam_rust_core/src/utils/cve_cache.rs">
-use sqlx::SqlitePool;
-use tokio::sync::OnceCell;
-⋮----
-pub struct CveMetadata {
-⋮----
-pub struct CveCacheManager {
-⋮----
-impl CveCacheManager {
-pub fn init(pool: SqlitePool) {
-let _ = MANAGER.set(CveCacheManager { pool });
-⋮----
-pub fn global() -> Option<&'static CveCacheManager> {
-MANAGER.get()
-⋮----
-/// Retrieves CVE metadata from the local SQLite cache.
-    pub async fn get_cve(&self, cve_id: &str) -> anyhow::Result<Option<CveMetadata>> {
-⋮----
-pub async fn get_cve(&self, cve_id: &str) -> anyhow::Result<Option<CveMetadata>> {
-⋮----
-.bind(cve_id)
-.fetch_optional(&self.pool)
-⋮----
-return Ok(Some(metadata));
-⋮----
-Ok(None)
-⋮----
-/// Fetches CVE metadata from NVD API v2 if not in local cache, then saves it.
-    /// Rate limit: 5 req/30s anonymous, 50 req/30s with API key (NVD_API_KEY env var).
-⋮----
-/// Rate limit: 5 req/30s anonymous, 50 req/30s with API key (NVD_API_KEY env var).
-    pub async fn get_or_fetch_cve(&self, cve_id: &str) -> anyhow::Result<Option<CveMetadata>> {
-⋮----
-pub async fn get_or_fetch_cve(&self, cve_id: &str) -> anyhow::Result<Option<CveMetadata>> {
-// Cache hit — return immediately
-if let Some(cached) = self.get_cve(cve_id).await? {
-return Ok(Some(cached));
-⋮----
-// Cache miss — fetch from NVD API v2
-let url = format!("https://services.nvd.nist.gov/rest/json/cves/2.0?cveId={}", cve_id);
-let mut req = reqwest::Client::new().get(&url)
-.header("User-Agent", "OsintUltimate/14.2 (security-research)");
-⋮----
-req = req.header("apiKey", key);
-⋮----
-let resp = match req.send().await {
-⋮----
-warn!("V14.2 CVE-FETCH: NVD request failed for {}: {}", cve_id, e);
-return Ok(None);
-⋮----
-if !resp.status().is_success() {
-warn!("V14.2 CVE-FETCH: NVD returned {} for {}", resp.status(), cve_id);
-⋮----
-let body: serde_json::Value = resp.json().await?;
-⋮----
-let vuln = match body.pointer("/vulnerabilities/0/cve") {
-⋮----
-None => return Ok(None),
-⋮----
-.pointer("/descriptions")
-.and_then(|d| d.as_array())
-.and_then(|arr| arr.iter().find(|e| e.get("lang").and_then(|l| l.as_str()) == Some("en")))
-.and_then(|e| e.get("value"))
-.and_then(|v| v.as_str())
-.unwrap_or("No description available")
-.to_string();
-⋮----
-// Try CVSS v3.1 first, fall back to v3.0, then v2
-⋮----
-.pointer("/metrics/cvssMetricV31/0/cvssData/baseScore")
-.or_else(|| vuln.pointer("/metrics/cvssMetricV30/0/cvssData/baseScore"))
-.or_else(|| vuln.pointer("/metrics/cvssMetricV2/0/cvssData/baseScore"))
-.and_then(|v| v.as_f64())
-.map(|s| s as f32);
-⋮----
-.pointer("/metrics/cvssMetricV31/0/cvssData/baseSeverity")
-.or_else(|| vuln.pointer("/metrics/cvssMetricV30/0/cvssData/baseSeverity"))
-⋮----
-.unwrap_or("UNKNOWN")
-⋮----
-.pointer("/references")
-.and_then(|r| r.as_array())
-.map(|arr| arr.iter()
-.filter_map(|e| e.get("url").and_then(|u| u.as_str()).map(String::from))
-.take(5) // Cap at 5 references to keep reports clean
-.collect())
-.unwrap_or_default();
-⋮----
-cve_id: cve_id.to_string(),
-⋮----
-tactical_path: None, // NVD doesn't provide exploit paths
-⋮----
-self.save_cve(&metadata).await?;
-info!("🌐 V14.2 CVE-FETCH: Fetched and cached {} from NVD", cve_id);
-Ok(Some(metadata))
-⋮----
-pub async fn save_cve(&self, metadata: &CveMetadata) -> anyhow::Result<()> {
-⋮----
-.bind(&metadata.cve_id)
-.bind(json)
-.execute(&self.pool)
-⋮----
-info!("💾 V14.2 CVE-CACHE: Cached metadata for {}", metadata.cve_id);
-Ok(())
 </file>
 
 <file path="redteam_rust_core/src/utils/cvss.rs">
@@ -2232,110 +1848,6 @@ assert!(!scores.is_empty());
 assert!(scores[0].0.contains("proxy") || scores[0].0.contains("audit"));
 </file>
 
-<file path="redteam_rust_core/src/core/correlation/mod.rs">
-use tracing::info;
-⋮----
-pub mod ad_ingestor;
-⋮----
-pub struct AttackPath {
-⋮----
-pub struct AttackGraph {
-⋮----
-impl AttackGraph {
-pub fn new() -> Self {
-⋮----
-pub fn add_node(&mut self, finding: Finding) {
-self.nodes.insert(finding.id.clone(), finding);
-⋮----
-pub fn add_edge(&mut self, source_id: &str, target_id: &str) {
-self.edges.entry(source_id.to_string()).or_default().push(target_id.to_string());
-⋮----
-pub struct CorrelationEngine {
-⋮----
-impl Default for CorrelationEngine {
-fn default() -> Self {
-⋮----
-impl CorrelationEngine {
-⋮----
-pub fn add_finding(&mut self, finding: Finding) {
-let is_new = !self.graph.nodes.contains_key(&finding.id);
-self.graph.add_node(finding.clone());
-⋮----
-self.correlate_new_finding(&finding);
-⋮----
-info!("🔱 V14.1 SOVEREIGN: Manually adding AttackGraph edge: {} -> {}", source_id, target_id);
-self.graph.add_edge(source_id, target_id);
-⋮----
-fn correlate_new_finding(&mut self, new_finding: &Finding) {
-⋮----
-let existing_nodes: Vec<Finding> = self.graph.nodes.values().cloned().collect();
-⋮----
-self.graph.add_edge(&existing.id, &new_finding.id);
-⋮----
-if let (Some(u_sid), Some(c_sid)) = (existing.evidence.data.get("SID"), new_finding.evidence.data.get("SID")) {
-⋮----
-info!("🔱 V14.1 SOVEREIGN: Correlation AD relationship detected between {} and {}", existing.id, new_finding.id);
-⋮----
-if let (Some(a_type), Some(b_type)) = (existing.evidence.data.get("type"), new_finding.evidence.data.get("type")) {
-⋮----
-let a_end = existing.evidence.data.get("endpoint").and_then(|v| v.as_str());
-let b_end = new_finding.evidence.data.get("endpoint").and_then(|v| v.as_str());
-⋮----
-if ae.to_lowercase().contains(&be.to_lowercase()) || be.to_lowercase().contains(&ae.to_lowercase()) {
-⋮----
-self.graph.add_edge(&new_finding.id, &existing.id);
-⋮----
-pub fn get_attack_paths(&self) -> Vec<AttackPath> {
-⋮----
-for source_id in self.graph.nodes.keys() {
-⋮----
-if self.is_root_node(source_id) {
-self.dfs_paths(source_id, &mut vec![], &mut paths, &mut visited);
-⋮----
-paths.sort_by(|a, b| b.total_cvss.partial_cmp(&a.total_cvss).unwrap_or(std::cmp::Ordering::Equal));
-⋮----
-fn is_root_node(&self, node_id: &str) -> bool {
-if let Some(node) = self.graph.nodes.get(node_id) {
-matches!(node.category, Category::Recon | Category::NetworkPort | Category::TechnologyStack)
-⋮----
-pub fn get_context_summary(&self, finding_id: &str) -> Option<String> {
-let paths = self.get_attack_paths();
-⋮----
-let relevant_path = paths.iter().find(|p| p.nodes.contains(&finding_id.to_string()))?;
-⋮----
-context_nodes.push(format!("{:?}", node.category));
-⋮----
-Some(context_nodes.join(" -> "))
-⋮----
-fn dfs_paths(&self, current: &str, current_path: &mut Vec<String>, all_paths: &mut Vec<AttackPath>, visited: &mut HashSet<String>) {
-current_path.push(current.to_string());
-visited.insert(current.to_string());
-⋮----
-if let Some(neighbors) = self.graph.edges.get(current) {
-⋮----
-if !visited.contains(neighbor) {
-⋮----
-self.dfs_paths(neighbor, current_path, all_paths, visited);
-⋮----
-if is_leaf && current_path.len() > 1 {
-⋮----
-for id in current_path.iter() {
-if let Some(node) = self.graph.nodes.get(id) {
-total_cvss += node.cvss_score.unwrap_or(0.0);
-desc_parts.push(format!("{:?}", node.category));
-⋮----
-if !current_path.is_empty() {
-total_cvss /= current_path.len() as f32;
-⋮----
-all_paths.push(AttackPath {
-nodes: current_path.clone(),
-⋮----
-description: desc_parts.join(" -> "),
-⋮----
-visited.remove(current);
-current_path.pop();
-</file>
-
 <file path="redteam_rust_core/src/core/mcp/mod.rs">
 pub mod protocol;
 pub mod sanitizer;
@@ -2367,91 +1879,94 @@ pub enum McpContent {
 pub struct McpInitializeRequest {
 </file>
 
-<file path="redteam_rust_core/src/core/skills/mod.rs">
-use std::path::Path;
+<file path="redteam_rust_core/src/core/mcp/tests.rs">
+use crate::plugins::GlobalConfig;
+use crate::utils::executor::GhostMode;
+use std::sync::Arc;
+use tempfile::tempdir;
+⋮----
+async fn test_mcp_two_level_cache() -> anyhow::Result<()> {
+⋮----
+let tmp_dir = tempdir()?;
+let db_path = tmp_dir.path().join("mcp_test.db");
+server = server.with_postgres(db_path.clone()).await;
+⋮----
+assert!(server.plugin_cache.get(cache_key).is_none());
+⋮----
+assert!(db.load_plugin_cache(cache_key).await?.is_none());
+⋮----
+server.plugin_cache.insert(cache_key.to_string(), test_output.to_string()).await;
+⋮----
+db.save_plugin_cache(cache_key, test_output).await?;
+⋮----
+assert_eq!(server.plugin_cache.get(cache_key), Some(test_output.to_string()));
+⋮----
+server.plugin_cache.invalidate(cache_key).await;
+⋮----
+let disk_hit = db.load_plugin_cache(cache_key).await?;
+assert_eq!(disk_hit, Some(test_output.to_string()));
+⋮----
+server.plugin_cache.insert(cache_key.to_string(), disk_hit.unwrap()).await;
+⋮----
+Ok(())
+</file>
+
+<file path="redteam_rust_core/src/core/notifications/discord.rs">
+use crate::core::sink::DataSink;
+use anyhow::Result;
+use async_trait::async_trait;
+use serde_json::json;
+⋮----
 use std::sync::Arc;
 ⋮----
-use crate::models::Finding;
+pub struct DiscordSink {
 ⋮----
-pub struct SkillMitre {
+impl DiscordSink {
+pub fn new(webhook_url: String, pm: Arc<crate::utils::proxy::ProxyManager>) -> Self {
 ⋮----
-pub struct SkillPreconditions {
+fn get_color_for_severity(&self, severity: &Severity) -> u32 {
 ⋮----
-pub struct Skill {
+impl DataSink for DiscordSink {
+async fn write(&mut self, target: &TargetHost) -> Result<()> {
 ⋮----
-pub struct SkillManager {
+let high_findings: Vec<_> = target.findings.iter()
+.filter(|f| f.core.severity == Severity::High || f.core.severity == Severity::Critical)
+.collect();
 ⋮----
-impl SkillManager {
-pub fn load_from_dir<P: AsRef<Path>>(dir: P) -> Result<Self> {
+if high_findings.is_empty() {
+return Ok(());
 ⋮----
-let dir_path = dir.as_ref();
+debug!("📢 DiscordSink: Found {} high-severity findings for {}", high_findings.len(), target.host);
 ⋮----
-if !dir_path.exists() {
-warn!("⚠️ [Skills] Directory {} does not exist. Starting with empty skill set.", dir_path.display());
-return Ok(Self {
+let color = self.get_color_for_severity(&finding.core.severity);
 ⋮----
-let path = entry?.path();
-if path.extension().and_then(|e| e.to_str()) == Some("json") {
+let mut description = format!("**Category:** {:?}\n**Description:** {}\n",
 ⋮----
-.with_context(|| format!("Failed to parse skill: {}", path.display()))?;
-skills.push(skill);
+description.push_str("\n--- 🤖 **AI ANALYSIS** ---\n");
+description.push_str(&format!("**Impact:** {}\n", ai.impact));
+description.push_str(&format!("**Exploit Path:** {}\n", ai.exploit_path));
 ⋮----
-for (i, s) in skills.iter().enumerate() {
+let payload = json!({
 ⋮----
-by_category.entry(cat.clone()).or_default().push(i);
+let host = url::Url::parse(&self.webhook_url)?.host_str().unwrap_or("discord.com").to_string();
+let (_, client) = self.proxy_manager.get_client_fail_closed(&host)?;
 ⋮----
-by_tag.entry(tag.to_lowercase()).or_default().push(i);
+let res = client.post(&self.webhook_url)
+.json(&payload)
+.send()
 ⋮----
-info!("🧠 [Skills] Loaded {} professional tactical skills from {}", skills.len(), dir_path.display());
+Ok(resp) if resp.status().is_success() => {
+info!("✅ Notification sent to Discord for {}", target.host);
 ⋮----
-Ok(Self {
+error!("❌ Failed to send Discord notification: HTTP {}", resp.status());
 ⋮----
-pub async fn match_for_context(
+error!("❌ Discord network error: {}", e);
 ⋮----
-let category_str = format!("{:?}", finding.category);
-let posture_str = format!("{:?}", posture);
+Ok(())
 ⋮----
-let used_lock = self.used_skills.lock().await;
+async fn write_metadata(&mut self, _metadata: &ScanMetadata) -> Result<()> {
 ⋮----
-if let Some(indices) = self.by_category.get(&category_str) {
-⋮----
-if used_lock.contains(&s.id) { continue; }
-⋮----
-if !s.posture_match.is_empty() && !s.posture_match.contains(&posture_str) { continue; }
-⋮----
-let actual_cvss = finding.cvss_score.unwrap_or(0.0);
-⋮----
-if !finding.mitre_tags.contains(req_tag) { continue; }
-⋮----
-candidates.push((i, 10));
-⋮----
-if let Some(indices) = self.by_tag.get(&tag.to_lowercase()) {
-⋮----
-if let Some(entry) = candidates.iter_mut().find(|c| c.0 == i) {
-⋮----
-if finding.cvss_score.unwrap_or(0.0) < min_cvss { pre_passed = false; }
-⋮----
-candidates.push((i, 15));
-⋮----
-candidates.sort_by(|a, b| b.1.cmp(&a.1));
-⋮----
-selected.push(s);
-⋮----
-pub async fn build_injection(&self, matched: &[&Skill], caveman: CavemanLevel) -> Option<String> {
-if matched.is_empty() { return None; }
-⋮----
-let mut used_lock = self.used_skills.lock().await;
-⋮----
-fragments.push(format!("[MITRE {}] {}", s.mitre.technique.as_deref().unwrap_or(&s.mitre.tactic), s.prompt_fragment));
-⋮----
-used_lock.insert(s.id.clone());
-⋮----
-let composite = fragments.join(" | ");
-Some(crate::core::ai::caveman::CavemanOptimizer::optimize_prompt(&composite, caveman))
-⋮----
-pub async fn reset_history(&self) {
-⋮----
-used_lock.clear();
+async fn close(&mut self) -> Result<()> {
 </file>
 
 <file path="redteam_rust_core/src/core/swarm/mod.rs">
@@ -2513,220 +2028,6 @@ Ok(poc)
 ⋮----
 .context("IA payload recovery failed.")?;
 Ok(poc_json)
-</file>
-
-<file path="redteam_rust_core/src/core/verification/pipeline.rs">
-use crate::core::ai::TieredAIRouter;
-⋮----
-use crate::core::verification::interaction::OobInteractionManager;
-use anyhow::Result;
-use chrono::Utc;
-use std::sync::Arc;
-⋮----
-use serde_json::Value;
-⋮----
-pub struct ValidationPipeline;
-⋮----
-impl ValidationPipeline {
-⋮----
-pub async fn check_negative_control(
-⋮----
-let url = match evidence.get("url").and_then(|v| v.as_str()) {
-⋮----
-warn!("[Validation] No URL found in evidence for Negative Control.");
-return Ok(true);
-⋮----
-let method = evidence.get("method").and_then(|v| v.as_str()).unwrap_or("GET");
-let payload = evidence.get("payload").and_then(|v| v.as_str()).unwrap_or("");
-⋮----
-if payload.is_empty() {
-⋮----
-// 1. Create Benign Payload
-⋮----
-// 2. Perform Benign Request
-info!("🧬 [Validation] Layer 1: Performing Negative Control with benign payload: '{}'", benign_payload);
-⋮----
-// Replace payload in URL if it's GET, or in body if POST
-let benign_url = url.replace(payload, &benign_payload);
-let res = client.request(method.parse()?, &benign_url).send().await?;
-let status = res.status();
-let body = res.text().await.unwrap_or_default();
-⋮----
-// 3. Validation Logic:
-// If the vulnerability signature (e.g. 500 error, reflection, or specific pattern)
-// is EXACTLY the same with the benign payload, then it's a False Positive.
-let original_status = evidence.get("response_status").and_then(|v| v.as_u64()).unwrap_or(200) as u16;
-let expected_pattern = evidence.get("expected_pattern").and_then(|v| v.as_str()).unwrap_or("");
-⋮----
-if status.as_u16() == original_status && !expected_pattern.is_empty() && body.contains(expected_pattern) {
-warn!("❌ [Validation] Negative Control FAILED: Benign request produced same 'vulnerability' signature.");
-return Ok(false);
-⋮----
-Ok(true)
-⋮----
-/// Layer 2: Proof of Execution
-    /// Deep check for technical artifacts of success. Focused on High/Critical findings.
-⋮----
-/// Deep check for technical artifacts of success. Focused on High/Critical findings.
-    pub async fn verify_proof(
-⋮----
-pub async fn verify_proof(
-⋮----
-return Ok(None);
-⋮----
-let category = format!("{:?}", finding.category).to_lowercase();
-⋮----
-// SQL Injection Handler
-if category.contains("vulnerability") && finding.title.to_lowercase().contains("sqli") {
-return Ok(Self::verify_sqli(evidence, target, proxy_manager).await);
-⋮----
-if finding.title.to_lowercase().contains("lfi") || finding.title.to_lowercase().contains("inclusion") {
-return Ok(Self::verify_lfi(evidence).await);
-⋮----
-if finding.title.to_lowercase().contains("rce") || finding.title.to_lowercase().contains("execution") {
-return Ok(Self::verify_rce(evidence).await);
-⋮----
-if finding.title.to_lowercase().contains("xss") {
-return Ok(Self::verify_xss(evidence).await);
-⋮----
-Ok(None)
-⋮----
-async fn verify_sqli(evidence: &Value, _target: &TargetHost, _pm: &ProxyManager) -> Option<String> {
-let timing = evidence.get("time_taken_ms").and_then(|v| v.as_u64()).unwrap_or(0);
-⋮----
-return Some(format!("Confirmed SQLi via time-delay signature ({}ms).", timing));
-⋮----
-let body = evidence.get("response_body").and_then(|v| v.as_str()).unwrap_or("");
-⋮----
-if body.to_lowercase().contains(err) {
-return Some(format!("Confirmed SQLi via error-based signature: '{}'", err));
-⋮----
-async fn verify_lfi(evidence: &Value) -> Option<String> {
-⋮----
-if body.contains("root:x:0:0:") || body.contains("[extensions]") || body.contains("boot loader") {
-return Some("Confirmed LFI via system file marker detection (/etc/passwd or win.ini).".to_string());
-⋮----
-async fn verify_rce(evidence: &Value) -> Option<String> {
-⋮----
-if body.contains("uid=") && body.contains("gid=") || body.contains("Windows IP Configuration") {
-return Some("Confirmed RCE via command output verification (id/ipconfig).".to_string());
-⋮----
-async fn verify_xss(evidence: &Value) -> Option<String> {
-⋮----
-let nonce = evidence.get("nonce").and_then(|v| v.as_str()).unwrap_or("");
-if !nonce.is_empty() && body.contains(&format!("<script>confirm('{}')</script>", nonce)) {
-return Some("Confirmed XSS via exact nonce reflection in script context.".to_string());
-⋮----
-/// Layer 4: OOB Verification
-    /// Captures interactions from external servers (SSRF, Blind RCE, etc.)
-⋮----
-/// Captures interactions from external servers (SSRF, Blind RCE, etc.)
-    pub async fn check_oob_verification(
-⋮----
-pub async fn check_oob_verification(
-⋮----
-let title = finding.title.to_lowercase();
-⋮----
-let is_oob_capable = category.contains("vulnerability") && (
-title.contains("ssrf") ||
-title.contains("oob") ||
-title.contains("blind") ||
-⋮----
-let om = OobInteractionManager::new(proxy_manager.clone());
-⋮----
-if let Some(id) = evidence.get("oob_id").and_then(|v| v.as_str()) {
-info!("🧬 [OOB] checking retrospective hit for existing ID: {}", id);
-if let Some(hit) = om.wait_for_interaction(id, 5).await? {
-return Ok(Some(format!("Confirmed OOB interaction ({}) via Retrospective ID: {}", hit.protocol, id)));
-⋮----
-let fresh_id = om.generate_id();
-⋮----
-let url = evidence.get("url").and_then(|v| v.as_str());
-let payload = evidence.get("payload").and_then(|v| v.as_str());
-⋮----
-info!("🧬 [OOB] Proactive Re-execution: Triggering fresh PoC with ID: {}...", fresh_id);
-⋮----
-let fresh_payload = if p.contains(".interactsh.com") {
-⋮----
-p.split('.').next().map(|prefix| p.replace(prefix, &fresh_id)).unwrap_or_else(|| p.to_string())
-⋮----
-p.to_string()
-⋮----
-let fresh_url = u.replace(p, &fresh_payload);
-⋮----
-let _ = client.request(method.parse()?, &fresh_url).send().await;
-⋮----
-if let Some(hit) = om.wait_for_interaction(&fresh_id, 30).await? {
-return Ok(Some(format!("Confirmed OOB interaction ({}) via PROACTIVE ID: {}", hit.protocol, fresh_id)));
-⋮----
-pub async fn validate(
-⋮----
-info!("🔍 [Validation] Invocando Pipeline Anti-Alucinación (V15) para: {}", finding.id);
-⋮----
-.unwrap_or_else(|e| {
-error!("[Validation] Error in Layer 1: {}", e);
-⋮----
-error!("[Validation] Error in Layer 2: {}", e);
-⋮----
-let oob_proof = Self::check_oob_verification(finding, target, proxy_manager.clone()).await
-⋮----
-error!("[Validation] Error in Layer 4: {}", e);
-⋮----
-notes = "FAILED Negative Control: Evidence signature observed in benign conditions. Likely AI Hallucination or Static String.".to_string();
-⋮----
-let p_msg = proof.as_ref().map(|s| format!(" | {}", s)).unwrap_or_default();
-notes = format!("PASSED OOB Verification: {}{}", oob_msg, p_msg);
-⋮----
-notes = format!("PASSED Proof of Execution: {}", proof_msg);
-⋮----
-info!("🧠 [Validation] Layer 3: Escalating to Premium AI Judge for {} finding (No proof found).", finding.severity);
-⋮----
-let context = format!(
-⋮----
-let verdict = router.analyze_with_level(
-⋮----
-Some(&context),
-⋮----
-notes = format!("AI JUDGE REJECTED: {}", verdict.summary);
-⋮----
-confidence = (verdict.confidence as f32).max(0.7);
-notes = format!("AI JUDGE VERIFIED: {} | {}", verdict.summary, verdict.stealth_notes);
-⋮----
-notes = "PASSED Negative Control. Skipping Layer 2/3 for low/medium severity.".to_string();
-⋮----
-proof_of_execution: oob_proof.or(proof),
-validated_at: Some(Utc::now()),
-⋮----
-info!("✅ [Validation] Finding verificado con éxito.");
-⋮----
-warn!("⚠️ [Validation] Finding marcado como FALSO POSITIVO (Layer 1).");
-⋮----
-Ok(())
-⋮----
-fn benignify(payload: &str) -> String {
-⋮----
-let mut b = payload.to_string();
-⋮----
-b = b.replace("'", "a").replace("\"", "b");
-b = b.replace("%27", "a").replace("%22", "b");
-b = b.replace("\\'", "a").replace("\\\"", "b");
-⋮----
-b = b.replace("1=1", "1=2").replace("OR 1=1", "AND 0=1");
-b = b.replace("union select", "select");
-b = b.replace("SLEEP(", "ECHO(").replace("PG_SLEEP(", "ECHO(");
-b = b.replace("WAITFOR DELAY", "PRINT");
-⋮----
-b = b.replace("<script>", "hello").replace("</script>", "world");
-b = b.replace("%3Cscript%3E", "hello");
-b = b.replace("eval(", "print(");
-⋮----
-b = b.replace("../", "./").replace("..\\", ".\\");
-b = b.replace("%2E%2E%2F", "./");
-⋮----
-b = b.replace("curl ", "echo ").replace("wget ", "echo ");
-b = b.replace("nslookup ", "echo ").replace("ping ", "echo ");
-⋮----
-b = b.replace("{{", "{").replace("}}", "}");
 </file>
 
 <file path="redteam_rust_core/src/core/waf/policy.rs">
@@ -2829,33 +2130,6 @@ fn test_approval_policy() {
 ⋮----
 assert!(policy.is_plugin_allowed(ScanLayer::Scanning));
 assert!(!policy.is_plugin_allowed(ScanLayer::Exploitation));
-</file>
-
-<file path="redteam_rust_core/src/core/filter.rs">
-pub struct FalsePositiveFilter {
-⋮----
-impl FalsePositiveFilter {
-pub fn new(noise_threshold: f32) -> Self {
-⋮----
-pub fn evaluate(&self, finding: &Finding) -> bool {
-let score = self.calculate_noise_score(finding);
-⋮----
-fn calculate_noise_score(&self, finding: &Finding) -> f32 {
-⋮----
-let conf_factor = 1.0 - finding.evidence.confidence.clamp(0.0, 1.0);
-⋮----
-let text = format!("{} {}", finding.title, finding.description).to_lowercase();
-⋮----
-if text.contains(kw) {
-⋮----
-score += (keyword_hits as f32 * 0.15).clamp(0.0, 0.3);
-⋮----
-if finding.ai_analysis.is_none() && finding.evidence.confidence < 0.6 {
-⋮----
-score.clamp(0.0, 1.0)
-⋮----
-impl Default for FalsePositiveFilter {
-fn default() -> Self {
 </file>
 
 <file path="redteam_rust_core/src/core/middleware.rs">
@@ -3024,123 +2298,6 @@ info!("✅ [Persistence] [DRY-RUN] Vector asíncrono. Se verificaría el estado 
 Ok(true)
 </file>
 
-<file path="redteam_rust_core/src/core/source_analyzer.rs">
-use std::process::Command;
-use uuid::Uuid;
-use regex::Regex;
-use std::fs;
-use tracing::info;
-⋮----
-pub struct SourceAnalyzer {
-⋮----
-pub struct SourceFinding {
-⋮----
-impl SourceAnalyzer {
-pub fn new(root: PathBuf) -> Self {
-⋮----
-pub async fn from_git(url: &str) -> Result<Self> {
-let id = Uuid::new_v4().to_string();
-let tmp_dir = std::env::temp_dir().join(format!("osint_src_{}", id));
-⋮----
-info!("📂 SAST: Clonando repositorio {} en {:?}", url, tmp_dir);
-⋮----
-.arg("clone")
-.arg("--depth")
-.arg("1")
-.arg(url)
-.arg(".")
-.current_dir(&tmp_dir)
-.output()
-.context("Fallo al ejecutar git clone. ¿Está git instalado?")?;
-⋮----
-if !output.status.success() {
-⋮----
-return Err(anyhow::anyhow!("Error al clonar repositorio: {}", err));
-⋮----
-Ok(Self::new(tmp_dir))
-⋮----
-pub async fn analyze(&self) -> Result<Vec<SourceFinding>> {
-⋮----
-self.walk_dir(&self.root_dir, &mut results)?;
-Ok(results)
-⋮----
-fn walk_dir(&self, dir: &Path, results: &mut Vec<SourceFinding>) -> Result<()> {
-if dir.is_dir() {
-⋮----
-let path = entry.path();
-if path.is_dir() {
-⋮----
-let name = path.file_name().and_then(|n| n.to_str()).unwrap_or("");
-⋮----
-self.walk_dir(&path, results)?;
-⋮----
-self.analyze_file(&path, results)?;
-⋮----
-Ok(())
-⋮----
-fn analyze_file(&self, path: &Path, results: &mut Vec<SourceFinding>) -> Result<()> {
-let ext = path.extension().and_then(|s| s.to_str()).unwrap_or("");
-⋮----
-"js" | "ts" | "jsx" | "tsx" => self.analyze_javascript(path, results),
-"py" => self.analyze_python(path, results),
-_ => Ok(()),
-⋮----
-fn analyze_javascript(&self, path: &Path, results: &mut Vec<SourceFinding>) -> Result<()> {
-⋮----
-let re_routes = Regex::new(r#"\.(get|post|put|delete|patch|all)\s*\(\s*['"]([^'"]+)['"]"#).unwrap();
-for (i, line) in content.lines().enumerate() {
-if let Some(cap) = re_routes.captures(line) {
-results.push(SourceFinding {
-file: path.to_string_lossy().to_string(),
-⋮----
-snippet: line.trim().to_string(),
-description: format!("Endpoint Detectado: {} {}", cap[1].to_uppercase(), &cap[2]),
-⋮----
-let re = Regex::new(pattern).unwrap();
-⋮----
-if re.is_match(line) {
-⋮----
-description: desc.to_string(),
-⋮----
-fn analyze_python(&self, path: &Path, results: &mut Vec<SourceFinding>) -> Result<()> {
-⋮----
-let re_routes = Regex::new(r#"@(app|router|blueprint)\.(get|post|route)\s*\(['"]([^'"]+)['"]"#).unwrap();
-⋮----
-description: format!("Endpoint Python: {} {}", cap[2].to_uppercase(), &cap[3]),
-⋮----
-pub fn to_core_findings(&self, findings: &[SourceFinding]) -> Vec<Finding> {
-findings.iter().map(|f| {
-⋮----
-&format!("sast-{}", Uuid::new_v4()),
-⋮----
-f.severity.clone(),
-⋮----
-h.title = format!("SAST: {}", f.description);
-⋮----
-}).collect()
-⋮----
-mod tests {
-⋮----
-use tempfile::tempdir;
-⋮----
-async fn test_js_analysis() -> Result<()> {
-let dir = tempdir()?;
-let file_path = dir.path().join("test.js");
-⋮----
-let analyzer = SourceAnalyzer::new(dir.path().to_path_buf());
-let results = analyzer.analyze().await?;
-⋮----
-assert!(results.iter().any(|r| r.is_endpoint && r.description.contains("/api/v1/test")));
-assert!(results.iter().any(|r| !r.is_endpoint && r.description.contains("eval()")));
-⋮----
-async fn test_python_analysis() -> Result<()> {
-⋮----
-let file_path = dir.path().join("app.py");
-⋮----
-assert!(results.iter().any(|r| r.is_endpoint && r.description.contains("/login")));
-assert!(results.iter().any(|r| !r.is_endpoint && r.description.contains("os.system")));
-</file>
-
 <file path="redteam_rust_core/src/infrastructure/decoy/controller.rs">
 use chrono::Utc;
 use dashmap::DashMap;
@@ -3259,6 +2416,36 @@ self.active_decoys.iter().map(|e| e.key().clone()).collect()
 ⋮----
 pub fn is_our_canary(&self, fqdn: &str) -> bool {
 self.active_decoys.contains_key(fqdn)
+</file>
+
+<file path="redteam_rust_core/src/infrastructure/decoy/persistence.rs">
+use tokio::sync::mpsc;
+⋮----
+use super::models::TripwireEvent;
+⋮----
+pub async fn spawn_tripwire_persister(
+⋮----
+.context("Failed to connect to tripwire SQLite database")?;
+⋮----
+).execute(&pool).await?;
+⋮----
+while let Some(event) = rx.recv().await {
+⋮----
+.bind(&event.fqdn)
+.bind(&event.source_ip)
+.bind(&event.method)
+.bind(&event.path)
+.bind(&event.user_agent)
+.bind(&event.headers_json)
+.bind(&event.ja3_hash)
+.bind(event.triggered_at.to_rfc3339())
+.execute(&pool)
+⋮----
+error!("🚨 TRIPWIRE: Failed to persist event: {}", e);
+⋮----
+info!("🍯 DECOY: Tripwire persister shutting down.");
+⋮----
+Ok(handle)
 </file>
 
 <file path="redteam_rust_core/src/models/objectives.rs">
@@ -3594,6 +2781,89 @@ pub mod sliver_sovereign;
 pub mod ligolo;
 </file>
 
+<file path="redteam_rust_core/src/plugins/reporting/bug_bounty.rs">
+use std::fmt::Write;
+⋮----
+pub struct BugBountyReport {
+⋮----
+pub fn generate_reports(target: &TargetHost) -> Vec<BugBountyReport> {
+target.findings.iter()
+.filter(|f| matches!(f.core.severity, Severity::Critical | Severity::High | Severity::Medium))
+.map(|f| build_report(target, f))
+.collect()
+⋮----
+fn build_report(target: &TargetHost, finding: &Finding) -> BugBountyReport {
+let slug = finding.core.id.to_lowercase().replace(['_', ' '], "-");
+let filename = format!("{}_{}.md", target.host.replace('.', "_"), slug);
+⋮----
+let _ = writeln!(md, "# {}", finding.core.title);
+let _ = writeln!(md);
+⋮----
+let _ = writeln!(md, "| Field | Value |");
+let _ = writeln!(md, "|---|---|");
+let _ = writeln!(md, "| **Severity** | {} |", severity_label(&finding.core.severity));
+⋮----
+let _ = writeln!(md, "| **CVSS Score** | {:.1} |", score);
+⋮----
+let _ = writeln!(md, "| **Asset** | `{}` |", target.host);
+⋮----
+let _ = writeln!(md, "| **IP** | `{}` |", ip);
+⋮----
+let _ = writeln!(md, "| **Finding ID** | `{}` |", finding.core.id);
+⋮----
+let _ = writeln!(md, "| **MITRE ATT&CK** | {} |", mitre.join(", "));
+⋮----
+let _ = writeln!(md, "## Description");
+⋮----
+let _ = writeln!(md, "{}", finding.core.description);
+⋮----
+let _ = writeln!(md, "## Impact");
+⋮----
+let _ = writeln!(md, "{}", ai.impact);
+⋮----
+let _ = writeln!(md, "{}", default_impact(&finding.core.severity));
+⋮----
+let _ = writeln!(md, "## Steps to Reproduce");
+⋮----
+let evidence_data = finding.evidence.evidence.as_ref();
+⋮----
+.and_then(|e| e.data.get("matched_at"))
+.and_then(|v| v.as_str())
+.unwrap_or(&target.host);
+⋮----
+.and_then(|e| e.data.get("template_id"))
+⋮----
+.unwrap_or("");
+⋮----
+let _ = writeln!(md, "1. Navigate to or send a request to: `{}`", matched_at);
+if !template_id.is_empty() {
+let _ = writeln!(md, "2. The vulnerability was detected via Nuclei template: `{}`", template_id);
+⋮----
+let _ = writeln!(md, "3. Observe the response matches the vulnerability pattern described above.");
+⋮----
+// PoC evidence
+let _ = writeln!(md, "## Proof of Concept");
+⋮----
+let _ = writeln!(md, "```");
+⋮----
+let _ = writeln!(md, "{}", serde_json::to_string_pretty(&e.data).unwrap_or_default());
+⋮----
+let _ = writeln!(md, "## Exploit Path");
+⋮----
+let _ = writeln!(md, "{}", ai.exploit_path);
+⋮----
+let _ = writeln!(md, "Please refer to the PoC evidence to understand the exploit step-by-step.");
+⋮----
+if !finding.enrichment.references.is_empty() {
+let _ = writeln!(md, "## References");
+⋮----
+let _ = writeln!(md, "- {}", r);
+⋮----
+fn severity_label(s: &Severity) -> &'static str {
+⋮----
+fn default_impact(s: &Severity) -> &'static str {
+</file>
+
 <file path="redteam_rust_core/src/plugins/reporting/mod.rs">
 pub mod bug_bounty;
 </file>
@@ -3749,59 +3019,289 @@ pub mod caido;
 pub mod poc;
 </file>
 
-<file path="redteam_rust_core/src/utils/deduplication.rs">
-use dashmap::DashMap;
-use once_cell::sync::Lazy;
+<file path="redteam_rust_core/src/utils/activity_log.rs">
+use std::path::PathBuf;
 ⋮----
+use tokio::io::AsyncWriteExt;
+use std::sync::Arc;
+use tokio::sync::Mutex;
 use crate::models::Finding;
-use sqlx::SqlitePool;
-use tokio::sync::OnceCell;
 ⋮----
-pub struct DeduplicationEngine {
+pub enum EventKind {
 ⋮----
-impl Default for DeduplicationEngine {
-fn default() -> Self {
+pub enum Actor {
 ⋮----
-impl DeduplicationEngine {
-pub fn new() -> Self {
+pub struct LogEvent {
 ⋮----
-pub async fn init(pool: SqlitePool) -> anyhow::Result<()> {
+pub struct ActivityLog {
 ⋮----
-.fetch_all(&pool)
+impl ActivityLog {
+pub async fn new(path: PathBuf) -> Result<Self> {
 ⋮----
-info!("🛡️ V14.2 DEDUPE: Loading {} persistent hashes from SQLite", rows.len());
+if let Some(parent) = path.parent() {
 ⋮----
-if let Ok(hash) = hash_vec.try_into() {
-engine.seen_hashes.insert(hash, first_seen);
+.create(true)
+.append(true)
+.open(&path)
 ⋮----
-let _ = engine.pool.set(pool);
+.with_context(|| format!("ActivityLog: Failed to open log file at {}", path.display()))?;
+⋮----
+Ok(Self {
+⋮----
+pub async fn log(&self, kind: EventKind, actor: Actor, message: &str, target: Option<&str>, data: serde_json::Value) -> Result<()> {
+⋮----
+ts: chrono::Utc::now().timestamp_millis() as f64 / 1000.0,
+⋮----
+message: message.to_string(),
+target: target.map(|s| s.to_string()),
+⋮----
+line.push('\n');
+⋮----
+let mut file = self.file.lock().await;
+file.write_all(line.as_bytes()).await?;
+file.flush().await?;
+⋮----
 Ok(())
 ⋮----
-pub fn is_duplicate(finding: &Finding) -> bool {
+pub async fn log_finding(&self, finding: &Finding, actor: Actor, target: Option<&str>) -> Result<()> {
+self.log(
 ⋮----
-.get("matched_at")
-.map(|v| v.to_string())
+&format!("New finding discovered: {}", finding.core.title),
+⋮----
+pub fn path(&self) -> &std::path::Path {
+⋮----
+mod tests {
+⋮----
+use tempfile::tempdir;
+⋮----
+async fn test_activity_log_creation_and_append() -> Result<()> {
+let dir = tempdir()?;
+let log_path = dir.path().join("timeline.jsonl");
+let logger = ActivityLog::new(log_path.clone()).await?;
+⋮----
+logger.log(EventKind::Note, Actor::System, "Test event", None, serde_json::json!({"test": true})).await?;
+⋮----
+assert_eq!(event.message, "Test event");
+assert_eq!(event.kind, EventKind::Note);
+assert!(event.data["test"].as_bool().unwrap());
+</file>
+
+<file path="redteam_rust_core/src/utils/bounty_exporter.rs">
+pub struct BountyExporter;
+⋮----
+impl BountyExporter {
+pub fn generate(findings: &[&Finding], platform: &ReportPlatform) -> String {
+⋮----
+.iter()
+.copied()
+.filter(|f| matches!(f.core.severity, Severity::High | Severity::Critical))
+.collect();
+⋮----
+if eligible.is_empty() {
+return format!(
+⋮----
+fn compress_evidence(finding: &Finding) -> String {
+let raw = finding.evidence.evidence.as_ref()
+.map(|e| serde_json::to_string_pretty(&e.data).unwrap_or_default())
 .unwrap_or_default();
 ⋮----
-hasher.update(finding.id.as_bytes());
-hasher.update(matched_at.as_bytes());
-let hash: [u8; 32] = hasher.finalize().into();
+if raw.len() > MAX {
+format!("{}\n... [+{} bytes truncated]", &raw[..MAX], raw.len() - MAX)
 ⋮----
-if ENGINE.seen_hashes.contains_key(&hash) {
+fn poc_steps(finding: &Finding) -> String {
 ⋮----
-let now = chrono::Utc::now().timestamp();
-ENGINE.seen_hashes.insert(hash, now);
+if !ai.exploit_path.is_empty() {
+return ai.exploit_path.clone();
 ⋮----
-if let Some(pool) = ENGINE.pool.get() {
-let pool = pool.clone();
+if let Some(url) = finding.evidence.evidence.as_ref().and_then(|e| e.data.get("url")).and_then(|v| v.as_str()) {
+return format!("1. Navigate to: `{}`\n2. Observe the response headers and body for vulnerability indicators.", url);
 ⋮----
-.bind(hash.to_vec())
-.bind(now)
-.execute(&pool)
+"1. Capture the raw HTTP request from the 'Proof of Concept' section below.\n2. Replay the request in Burp Suite Repeater.\n3. Verify the impact in the response.".to_string()
 ⋮----
-error!("❌ V14.2 DEDUPE: Failed to persist hash to SQLite: {}", e);
+fn impact(finding: &Finding) -> String {
 ⋮----
-pub fn global() -> &'static DeduplicationEngine {
+if !ai.impact.is_empty() {
+return ai.impact.clone();
+⋮----
+format!("An attacker can leverage this {:?} severity issue in the {:?} category to compromise the target application's security posture.", finding.core.severity, finding.core.category)
+⋮----
+fn attack_scenario(finding: &Finding) -> String {
+⋮----
+if !ai.stealth_notes.is_empty() {
+return ai.stealth_notes.clone();
+⋮----
+"1. Attacker identifies the vulnerable endpoint.\n2. Attacker crafts a specific payload based on the observed behavior.\n3. Result: Unauthorized action or data exposure is achieved.".to_string()
+⋮----
+fn recommendation(finding: &Finding) -> String {
+⋮----
+_ if finding.core.title.to_lowercase().contains("xss") =>
+⋮----
+_ if finding.core.title.to_lowercase().contains("idor") || finding.core.title.to_lowercase().contains("bola") =>
+⋮----
+_ if finding.core.title.to_lowercase().contains("ssrf") =>
+⋮----
+}.to_string()
+⋮----
+fn generate_common_blocks(f: &Finding) -> String {
+⋮----
+out.push_str("## Summary\n");
+⋮----
+out.push_str(&ai.summary);
+⋮----
+out.push_str(&f.core.description);
+⋮----
+out.push_str("\n\n");
+⋮----
+out.push_str("## Vulnerability Details\n");
+out.push_str(&format!("- **Type:** {:?}\n", f.core.category));
+if let Some(url) = f.evidence.evidence.as_ref().and_then(|e| e.data.get("url")).and_then(|v| v.as_str()) {
+out.push_str(&format!("- **Affected Endpoint:** {}\n", url));
+⋮----
+if !f.enrichment.cwe.is_empty() {
+out.push_str(&format!("- **CWE:** {}\n", f.enrichment.cwe.join(", ")));
+⋮----
+out.push_str("\n");
+⋮----
+out.push_str("## Steps to Reproduce\n");
+out.push_str(&Self::poc_steps(f));
+⋮----
+out.push_str("## Proof of Concept\n");
+out.push_str("Below is the raw evidence captured during validation:\n\n");
+out.push_str("```json\n");
+out.push_str(&Self::compress_evidence(f));
+out.push_str("\n```\n\n");
+⋮----
+out.push_str("## Impact\n");
+out.push_str(&Self::impact(f));
+⋮----
+out.push_str("## Attack Scenario\n");
+out.push_str(&Self::attack_scenario(f));
+⋮----
+out.push_str("## Recommendation\n");
+out.push_str(&Self::recommendation(f));
+⋮----
+if !f.enrichment.references.is_empty() || !f.enrichment.cwe.is_empty() {
+out.push_str("## References\n");
+⋮----
+out.push_str(&format!("- {}\n", r));
+⋮----
+out.push_str(&format!("- https://cwe.mitre.org/data/definitions/{}.html\n", c.replace("CWE-", "")));
+⋮----
+fn generate_h1(findings: &[&Finding]) -> String {
+⋮----
+out.push_str(&format!("# {}\n\n", f.core.title));
+out.push_str(&Self::generate_common_blocks(f));
+out.push_str("\n---\n\n");
+⋮----
+fn generate_bugcrowd(findings: &[&Finding]) -> String {
+⋮----
+fn generate_intigriti(findings: &[&Finding]) -> String {
+</file>
+
+<file path="redteam_rust_core/src/utils/cve_cache.rs">
+use sqlx::PgPool;
+use tokio::sync::OnceCell;
+⋮----
+pub struct CveMetadata {
+⋮----
+pub struct CveCacheManager {
+⋮----
+impl CveCacheManager {
+pub fn init(pool: PgPool) {
+let _ = MANAGER.set(CveCacheManager { pool });
+⋮----
+pub fn global() -> Option<&'static CveCacheManager> {
+MANAGER.get()
+⋮----
+/// Retrieves CVE metadata from the local SQLite cache.
+    pub async fn get_cve(&self, cve_id: &str) -> anyhow::Result<Option<CveMetadata>> {
+⋮----
+pub async fn get_cve(&self, cve_id: &str) -> anyhow::Result<Option<CveMetadata>> {
+⋮----
+.bind(cve_id)
+.fetch_optional(&self.pool)
+⋮----
+return Ok(Some(metadata));
+⋮----
+Ok(None)
+⋮----
+/// Fetches CVE metadata from NVD API v2 if not in local cache, then saves it.
+    /// Rate limit: 5 req/30s anonymous, 50 req/30s with API key (NVD_API_KEY env var).
+⋮----
+/// Rate limit: 5 req/30s anonymous, 50 req/30s with API key (NVD_API_KEY env var).
+    pub async fn get_or_fetch_cve(&self, cve_id: &str) -> anyhow::Result<Option<CveMetadata>> {
+⋮----
+pub async fn get_or_fetch_cve(&self, cve_id: &str) -> anyhow::Result<Option<CveMetadata>> {
+// Cache hit — return immediately
+if let Some(cached) = self.get_cve(cve_id).await? {
+return Ok(Some(cached));
+⋮----
+// Cache miss — fetch from NVD API v2
+let url = format!("https://services.nvd.nist.gov/rest/json/cves/2.0?cveId={}", cve_id);
+let mut req = reqwest::Client::new().get(&url)
+.header("User-Agent", "OsintUltimate/14.2 (security-research)");
+⋮----
+req = req.header("apiKey", key);
+⋮----
+let resp = match req.send().await {
+⋮----
+warn!("V14.2 CVE-FETCH: NVD request failed for {}: {}", cve_id, e);
+return Ok(None);
+⋮----
+if !resp.status().is_success() {
+warn!("V14.2 CVE-FETCH: NVD returned {} for {}", resp.status(), cve_id);
+⋮----
+let body: serde_json::Value = resp.json().await?;
+⋮----
+let vuln = match body.pointer("/vulnerabilities/0/cve") {
+⋮----
+None => return Ok(None),
+⋮----
+.pointer("/descriptions")
+.and_then(|d| d.as_array())
+.and_then(|arr| arr.iter().find(|e| e.get("lang").and_then(|l| l.as_str()) == Some("en")))
+.and_then(|e| e.get("value"))
+.and_then(|v| v.as_str())
+.unwrap_or("No description available")
+.to_string();
+⋮----
+// Try CVSS v3.1 first, fall back to v3.0, then v2
+⋮----
+.pointer("/metrics/cvssMetricV31/0/cvssData/baseScore")
+.or_else(|| vuln.pointer("/metrics/cvssMetricV30/0/cvssData/baseScore"))
+.or_else(|| vuln.pointer("/metrics/cvssMetricV2/0/cvssData/baseScore"))
+.and_then(|v| v.as_f64())
+.map(|s| s as f32);
+⋮----
+.pointer("/metrics/cvssMetricV31/0/cvssData/baseSeverity")
+.or_else(|| vuln.pointer("/metrics/cvssMetricV30/0/cvssData/baseSeverity"))
+⋮----
+.unwrap_or("UNKNOWN")
+⋮----
+.pointer("/references")
+.and_then(|r| r.as_array())
+.map(|arr| arr.iter()
+.filter_map(|e| e.get("url").and_then(|u| u.as_str()).map(String::from))
+.take(5) // Cap at 5 references to keep reports clean
+.collect())
+.unwrap_or_default();
+⋮----
+cve_id: cve_id.to_string(),
+⋮----
+tactical_path: None, // NVD doesn't provide exploit paths
+⋮----
+self.save_cve(&metadata).await?;
+info!("🌐 V14.2 CVE-FETCH: Fetched and cached {} from NVD", cve_id);
+Ok(Some(metadata))
+⋮----
+pub async fn save_cve(&self, metadata: &CveMetadata) -> anyhow::Result<()> {
+⋮----
+.bind(&metadata.cve_id)
+.bind(json)
+.execute(&self.pool)
+⋮----
+info!("💾 V14.2 CVE-CACHE: Cached metadata for {}", metadata.cve_id);
+Ok(())
 </file>
 
 <file path="redteam_rust_core/src/utils/downloader.rs">
@@ -3859,55 +3359,6 @@ use rand_distr::Distribution;
 ⋮----
 let sample = self.dist.sample(&mut rng);
 (sample * 1000.0).clamp(self.min_ms as f64, self.max_ms as f64) as u64
-</file>
-
-<file path="redteam_rust_core/src/utils/memory_monitor.rs">
-use std::sync::Arc;
-⋮----
-use std::fs;
-use std::time::Duration;
-⋮----
-pub struct MemoryMonitor {
-⋮----
-impl MemoryMonitor {
-pub fn new(soft_limit_mb: u32, hard_limit_mb: u32) -> Self {
-⋮----
-for line in status.lines() {
-if line.starts_with("VmRSS:") {
-if let Some(kb_str) = line.split_whitespace().nth(1) {
-⋮----
-current_clone.store(bytes, Ordering::Relaxed);
-⋮----
-let p = peak_clone.load(Ordering::Relaxed);
-⋮----
-peak_clone.store(bytes, Ordering::Relaxed);
-⋮----
-pub fn current_mb(&self) -> u32 {
-(self.current.load(Ordering::Relaxed) / 1_000_000) as u32
-⋮----
-pub fn soft_limit_mb(&self) -> u32 {
-⋮----
-pub fn hard_limit_mb(&self) -> u32 {
-⋮----
-pub fn peak_mb(&self) -> u32 {
-(self.peak.load(Ordering::Relaxed) / 1_000_000) as u32
-⋮----
-pub fn should_trigger_backpressure(&self) -> bool {
-self.current_mb() > self.soft_limit_mb
-⋮----
-pub fn is_critical(&self) -> bool {
-self.current_mb() > self.hard_limit_mb
-⋮----
-pub fn start_logging(&self) {
-⋮----
-let curr = (curr_atom.load(Ordering::Relaxed) / 1_000_000) as u32;
-let peak = (peak_atom.load(Ordering::Relaxed) / 1_000_000) as u32;
-⋮----
-error!("CRITICAL: Memory {}MB/{}MB, triggering shutdown signal", curr, hard);
-⋮----
-warn!("Memory warning: {}MB/{}MB, activating backpressure", curr, soft);
-⋮----
-info!("Memory Status: {}MB (Peak: {}MB)", curr, peak);
 </file>
 
 <file path="redteam_rust_core/src/utils/security.rs">
@@ -3980,6 +3431,199 @@ pub struct DecisionConfig<'a> {
 pub trait LlmClient: Send + Sync {
 </file>
 
+<file path="redteam_rust_core/src/core/correlation/mod.rs">
+use tracing::info;
+⋮----
+pub mod ad_ingestor;
+⋮----
+pub struct AttackPath {
+⋮----
+pub struct AttackGraph {
+⋮----
+impl AttackGraph {
+pub fn new() -> Self {
+⋮----
+pub fn add_node(&mut self, finding: Finding) {
+self.nodes.insert(finding.core.id.clone(), finding);
+⋮----
+pub fn add_edge(&mut self, source_id: &str, target_id: &str) {
+self.edges.entry(source_id.to_string()).or_default().push(target_id.to_string());
+⋮----
+pub struct CorrelationEngine {
+⋮----
+impl Default for CorrelationEngine {
+fn default() -> Self {
+⋮----
+impl CorrelationEngine {
+⋮----
+pub fn add_finding(&mut self, finding: Finding) {
+let is_new = !self.graph.nodes.contains_key(&finding.core.id);
+self.graph.add_node(finding.clone());
+⋮----
+self.correlate_new_finding(&finding);
+⋮----
+info!("🔱 V14.1 SOVEREIGN: Manually adding AttackGraph edge: {} -> {}", source_id, target_id);
+self.graph.add_edge(source_id, target_id);
+⋮----
+fn correlate_new_finding(&mut self, new_finding: &Finding) {
+let existing_nodes: Vec<Finding> = self.graph.nodes.values().cloned().collect();
+⋮----
+let evidence_new = new_finding.evidence.evidence.as_ref();
+let evidence_existing = existing.evidence.evidence.as_ref();
+⋮----
+self.graph.add_edge(&existing.core.id, &new_finding.core.id);
+⋮----
+if let (Some(u_sid), Some(c_sid)) = (ev_ext.data.get("SID"), ev_new.data.get("SID")) {
+⋮----
+info!("🔱 V14.1 SOVEREIGN: Correlation AD relationship detected between {} and {}", existing.core.id, new_finding.core.id);
+⋮----
+if let (Some(a_type), Some(b_type)) = (ev_ext.data.get("type"), ev_new.data.get("type")) {
+⋮----
+let a_end = ev_ext.data.get("endpoint").and_then(|v| v.as_str());
+let b_end = ev_new.data.get("endpoint").and_then(|v| v.as_str());
+⋮----
+if ae.to_lowercase().contains(&be.to_lowercase()) || be.to_lowercase().contains(&ae.to_lowercase()) {
+⋮----
+self.graph.add_edge(&new_finding.core.id, &existing.core.id);
+⋮----
+pub fn get_attack_paths(&self) -> Vec<AttackPath> {
+⋮----
+for source_id in self.graph.nodes.keys() {
+if self.is_root_node(source_id) {
+self.dfs_paths(source_id, &mut vec![], &mut paths, &mut visited);
+⋮----
+paths.sort_by(|a, b| b.total_cvss.partial_cmp(&a.total_cvss).unwrap_or(std::cmp::Ordering::Equal));
+⋮----
+fn is_root_node(&self, node_id: &str) -> bool {
+if let Some(node) = self.graph.nodes.get(node_id) {
+matches!(node.core.category, Category::Recon | Category::NetworkPort | Category::TechnologyStack)
+⋮----
+pub fn get_context_summary(&self, finding_id: &str) -> Option<String> {
+let paths = self.get_attack_paths();
+let relevant_path = paths.iter().find(|p| p.nodes.contains(&finding_id.to_string()))?;
+⋮----
+context_nodes.push(format!("{:?}", node.core.category));
+⋮----
+Some(context_nodes.join(" -> "))
+⋮----
+fn dfs_paths(&self, current: &str, current_path: &mut Vec<String>, all_paths: &mut Vec<AttackPath>, visited: &mut HashSet<String>) {
+current_path.push(current.to_string());
+visited.insert(current.to_string());
+⋮----
+if let Some(neighbors) = self.graph.edges.get(current) {
+⋮----
+if !visited.contains(neighbor) {
+⋮----
+self.dfs_paths(neighbor, current_path, all_paths, visited);
+⋮----
+if is_leaf && current_path.len() > 1 {
+⋮----
+for id in current_path.iter() {
+if let Some(node) = self.graph.nodes.get(id) {
+total_cvss += node.enrichment.cvss_score.unwrap_or(0.0);
+desc_parts.push(format!("{:?}", node.core.category));
+⋮----
+if !current_path.is_empty() {
+total_cvss /= current_path.len() as f32;
+⋮----
+all_paths.push(AttackPath {
+nodes: current_path.clone(),
+⋮----
+description: desc_parts.join(" -> "),
+⋮----
+visited.remove(current);
+current_path.pop();
+</file>
+
+<file path="redteam_rust_core/src/core/skills/mod.rs">
+use std::path::Path;
+use std::sync::Arc;
+⋮----
+use crate::models::Finding;
+⋮----
+pub struct SkillMitre {
+⋮----
+pub struct SkillPreconditions {
+⋮----
+pub struct Skill {
+⋮----
+pub struct SkillManager {
+⋮----
+impl SkillManager {
+pub fn load_from_dir<P: AsRef<Path>>(dir: P) -> Result<Self> {
+⋮----
+let dir_path = dir.as_ref();
+⋮----
+if !dir_path.exists() {
+warn!("⚠️ [Skills] Directory {} does not exist. Starting with empty skill set.", dir_path.display());
+return Ok(Self {
+⋮----
+let path = entry?.path();
+if path.extension().and_then(|e| e.to_str()) == Some("json") {
+⋮----
+.with_context(|| format!("Failed to parse skill: {}", path.display()))?;
+skills.push(skill);
+⋮----
+for (i, s) in skills.iter().enumerate() {
+⋮----
+by_category.entry(cat.clone()).or_default().push(i);
+⋮----
+by_tag.entry(tag.to_lowercase()).or_default().push(i);
+⋮----
+info!("🧠 [Skills] Loaded {} professional tactical skills from {}", skills.len(), dir_path.display());
+⋮----
+Ok(Self {
+⋮----
+pub async fn match_for_context(
+⋮----
+let category_str = format!("{:?}", finding.core.category);
+let posture_str = format!("{:?}", posture);
+⋮----
+let used_lock = self.used_skills.lock().await;
+⋮----
+if let Some(indices) = self.by_category.get(&category_str) {
+⋮----
+if used_lock.contains(&s.id) { continue; }
+⋮----
+if !s.posture_match.is_empty() && !s.posture_match.contains(&posture_str) { continue; }
+⋮----
+let actual_cvss = finding.enrichment.cvss_score.unwrap_or(0.0);
+⋮----
+let verified = finding.evidence.evidence.as_ref().map(|e| e.verified).unwrap_or(false);
+⋮----
+if !finding.enrichment.mitre_tags.contains(req_tag) { continue; }
+⋮----
+candidates.push((i, 10));
+⋮----
+if let Some(indices) = self.by_tag.get(&tag.to_lowercase()) {
+⋮----
+if let Some(entry) = candidates.iter_mut().find(|c| c.0 == i) {
+⋮----
+if finding.enrichment.cvss_score.unwrap_or(0.0) < min_cvss { pre_passed = false; }
+⋮----
+candidates.push((i, 15));
+⋮----
+candidates.sort_by(|a, b| b.1.cmp(&a.1));
+⋮----
+selected.push(s);
+⋮----
+pub async fn build_injection(&self, matched: &[&Skill], caveman: CavemanLevel) -> Option<String> {
+if matched.is_empty() { return None; }
+⋮----
+let mut used_lock = self.used_skills.lock().await;
+⋮----
+fragments.push(format!("[MITRE {}] {}", s.mitre.technique.as_deref().unwrap_or(&s.mitre.tactic), s.prompt_fragment));
+⋮----
+used_lock.insert(s.id.clone());
+⋮----
+let composite = fragments.join(" | ");
+Some(crate::core::ai::caveman::CavemanOptimizer::optimize_prompt(&composite, caveman))
+⋮----
+pub async fn reset_history(&self) {
+⋮----
+used_lock.clear();
+</file>
+
 <file path="redteam_rust_core/src/core/validation/remote.rs">
 use anyhow::Result;
 use async_trait::async_trait;
@@ -4018,6 +3662,207 @@ let stderr = String::from_utf8_lossy(&output.stderr).to_string();
 ⋮----
 if output.status.success() {
 Ok(stdout)
+</file>
+
+<file path="redteam_rust_core/src/core/verification/pipeline.rs">
+use crate::core::ai::TieredAIRouter;
+⋮----
+use crate::core::verification::interaction::OobInteractionManager;
+use anyhow::Result;
+use chrono::Utc;
+use std::sync::Arc;
+⋮----
+use serde_json::Value;
+⋮----
+pub struct ValidationPipeline;
+⋮----
+impl ValidationPipeline {
+⋮----
+pub async fn check_negative_control(
+⋮----
+let evidence_data = finding.evidence.evidence.as_ref();
+⋮----
+warn!("[Validation] No evidence found for Negative Control.");
+return Ok(true);
+⋮----
+let url = match evidence.get("url").and_then(|v| v.as_str()) {
+⋮----
+warn!("[Validation] No URL found in evidence for Negative Control.");
+⋮----
+let method = evidence.get("method").and_then(|v| v.as_str()).unwrap_or("GET");
+let payload = evidence.get("payload").and_then(|v| v.as_str()).unwrap_or("");
+⋮----
+if payload.is_empty() {
+⋮----
+info!("🧬 [Validation] Layer 1: Performing Negative Control with benign payload: '{}'", benign_payload);
+⋮----
+let benign_url = url.replace(payload, &benign_payload);
+let res = client.request(method.parse()?, &benign_url).send().await?;
+let status = res.status();
+let body = res.text().await.unwrap_or_default();
+⋮----
+let original_status = evidence.get("response_status").and_then(|v| v.as_u64()).unwrap_or(200) as u16;
+let expected_pattern = evidence.get("expected_pattern").and_then(|v| v.as_str()).unwrap_or("");
+⋮----
+if status.as_u16() == original_status && !expected_pattern.is_empty() && body.contains(expected_pattern) {
+warn!("❌ [Validation] Negative Control FAILED: Benign request produced same 'vulnerability' signature.");
+return Ok(false);
+⋮----
+Ok(true)
+⋮----
+/// Layer 2: Proof of Execution
+    pub async fn verify_proof(
+⋮----
+pub async fn verify_proof(
+⋮----
+return Ok(None);
+⋮----
+let category = format!("{:?}", finding.core.category).to_lowercase();
+⋮----
+None => return Ok(None),
+⋮----
+if category.contains("vulnerability") && finding.core.title.to_lowercase().contains("sqli") {
+return Ok(Self::verify_sqli(evidence, target, proxy_manager).await);
+⋮----
+if finding.core.title.to_lowercase().contains("lfi") || finding.core.title.to_lowercase().contains("inclusion") {
+return Ok(Self::verify_lfi(evidence).await);
+⋮----
+if finding.core.title.to_lowercase().contains("rce") || finding.core.title.to_lowercase().contains("execution") {
+return Ok(Self::verify_rce(evidence).await);
+⋮----
+if finding.core.title.to_lowercase().contains("xss") {
+return Ok(Self::verify_xss(evidence).await);
+⋮----
+Ok(None)
+⋮----
+async fn verify_sqli(evidence: &Value, _target: &TargetHost, _pm: &ProxyManager) -> Option<String> {
+let timing = evidence.get("time_taken_ms").and_then(|v| v.as_u64()).unwrap_or(0);
+⋮----
+return Some(format!("Confirmed SQLi via time-delay signature ({}ms).", timing));
+⋮----
+let body = evidence.get("response_body").and_then(|v| v.as_str()).unwrap_or("");
+⋮----
+if body.to_lowercase().contains(err) {
+return Some(format!("Confirmed SQLi via error-based signature: '{}'", err));
+⋮----
+async fn verify_lfi(evidence: &Value) -> Option<String> {
+⋮----
+if body.contains("root:x:0:0:") || body.contains("[extensions]") || body.contains("boot loader") {
+return Some("Confirmed LFI via system file marker detection (/etc/passwd or win.ini).".to_string());
+⋮----
+async fn verify_rce(evidence: &Value) -> Option<String> {
+⋮----
+if body.contains("uid=") && body.contains("gid=") || body.contains("Windows IP Configuration") {
+return Some("Confirmed RCE via command output verification (id/ipconfig).".to_string());
+⋮----
+async fn verify_xss(evidence: &Value) -> Option<String> {
+⋮----
+let nonce = evidence.get("nonce").and_then(|v| v.as_str()).unwrap_or("");
+if !nonce.is_empty() && body.contains(&format!("<script>confirm('{}')</script>", nonce)) {
+return Some("Confirmed XSS via exact nonce reflection in script context.".to_string());
+⋮----
+/// Layer 4: OOB Verification
+    pub async fn check_oob_verification(
+⋮----
+pub async fn check_oob_verification(
+⋮----
+let title = finding.core.title.to_lowercase();
+⋮----
+let is_oob_capable = category.contains("vulnerability") && (
+title.contains("ssrf") ||
+title.contains("oob") ||
+title.contains("blind") ||
+⋮----
+let om = OobInteractionManager::new(proxy_manager.clone());
+⋮----
+if let Some(id) = evidence.get("oob_id").and_then(|v| v.as_str()) {
+info!("🧬 [OOB] checking retrospective hit for existing ID: {}", id);
+if let Some(hit) = om.wait_for_interaction(id, 5).await? {
+return Ok(Some(format!("Confirmed OOB interaction ({}) via Retrospective ID: {}", hit.protocol, id)));
+⋮----
+let fresh_id = om.generate_id();
+⋮----
+let url = evidence.get("url").and_then(|v| v.as_str());
+let payload = evidence.get("payload").and_then(|v| v.as_str());
+⋮----
+info!("🧬 [OOB] Proactive Re-execution: Triggering fresh PoC with ID: {}...", fresh_id);
+⋮----
+let fresh_payload = if p.contains(".interactsh.com") {
+p.split('.').next().map(|prefix| p.replace(prefix, &fresh_id)).unwrap_or_else(|| p.to_string())
+⋮----
+p.to_string()
+⋮----
+let fresh_url = u.replace(p, &fresh_payload);
+⋮----
+let _ = client.request(method.parse()?, &fresh_url).send().await;
+⋮----
+if let Some(hit) = om.wait_for_interaction(&fresh_id, 30).await? {
+return Ok(Some(format!("Confirmed OOB interaction ({}) via PROACTIVE ID: {}", hit.protocol, fresh_id)));
+⋮----
+pub async fn validate(
+⋮----
+info!("🔍 [Validation] Invocando Pipeline Anti-Alucinación (V15) para: {}", finding.core.id);
+⋮----
+.unwrap_or_else(|e| {
+error!("[Validation] Error in Layer 1: {}", e);
+⋮----
+error!("[Validation] Error in Layer 2: {}", e);
+⋮----
+let oob_proof = Self::check_oob_verification(finding, target, proxy_manager.clone()).await
+⋮----
+error!("[Validation] Error in Layer 4: {}", e);
+⋮----
+notes = "FAILED Negative Control: Evidence signature observed in benign conditions. Likely AI Hallucination or Static String.".to_string();
+⋮----
+let p_msg = proof.as_ref().map(|s| format!(" | {}", s)).unwrap_or_default();
+notes = format!("PASSED OOB Verification: {}{}", oob_msg, p_msg);
+⋮----
+notes = format!("PASSED Proof of Execution: {}", proof_msg);
+⋮----
+info!("🧠 [Validation] Layer 3: Escalating to Premium AI Judge for {} finding (No proof found).", finding.core.severity);
+⋮----
+let evidence_data = finding.evidence.evidence.as_ref().map(|e| &e.data);
+let context = format!(
+⋮----
+let verdict = router.analyze_with_level(
+⋮----
+Some(&context),
+⋮----
+notes = format!("AI JUDGE REJECTED: {}", verdict.summary);
+⋮----
+confidence = (verdict.confidence as f32).max(0.7);
+notes = format!("AI JUDGE VERIFIED: {} | {}", verdict.summary, verdict.stealth_notes);
+⋮----
+notes = "PASSED Negative Control. Skipping Layer 2/3 for low/medium severity.".to_string();
+⋮----
+finding.validation = Some(ValidationMetadata {
+⋮----
+proof_of_execution: oob_proof.or(proof),
+validated_at: Some(Utc::now()),
+⋮----
+info!("✅ [Validation] Finding verificado con éxito.");
+⋮----
+warn!("⚠️ [Validation] Finding marcado como FALSO POSITIVO (Layer 1).");
+⋮----
+Ok(())
+⋮----
+fn benignify(payload: &str) -> String {
+let mut b = payload.to_string();
+b = b.replace("'", "a").replace("\"", "b");
+b = b.replace("%27", "a").replace("%22", "b");
+b = b.replace("\\'", "a").replace("\\\"", "b");
+b = b.replace("1=1", "1=2").replace("OR 1=1", "AND 0=1");
+b = b.replace("union select", "select");
+b = b.replace("SLEEP(", "ECHO(").replace("PG_SLEEP(", "ECHO(");
+b = b.replace("WAITFOR DELAY", "PRINT");
+b = b.replace("<script>", "hello").replace("</script>", "world");
+b = b.replace("%3Cscript%3E", "hello");
+b = b.replace("eval(", "print(");
+b = b.replace("../", "./").replace("..\\", ".\\");
+b = b.replace("%2E%2E%2F", "./");
+b = b.replace("curl ", "echo ").replace("wget ", "echo ");
+b = b.replace("nslookup ", "echo ").replace("ping ", "echo ");
+b = b.replace("{{", "{").replace("}}", "}");
 </file>
 
 <file path="redteam_rust_core/src/core/waf/engine.rs">
@@ -4433,6 +4278,153 @@ impl Default for SliverOperator<Staged> {
 fn default() -> Self {
 ⋮----
 pub fn new() -> Self {
+</file>
+
+<file path="redteam_rust_core/src/core/filter.rs">
+pub struct FalsePositiveFilter {
+⋮----
+impl FalsePositiveFilter {
+pub fn new(noise_threshold: f32) -> Self {
+⋮----
+pub fn evaluate(&self, finding: &Finding) -> bool {
+let score = self.calculate_noise_score(finding);
+⋮----
+fn calculate_noise_score(&self, finding: &Finding) -> f32 {
+⋮----
+let confidence = finding.evidence.evidence.as_ref().map(|e| e.confidence).unwrap_or(0.5);
+let conf_factor = 1.0 - confidence.clamp(0.0, 1.0);
+⋮----
+let text = format!("{} {}", finding.core.title, finding.core.description).to_lowercase();
+⋮----
+if text.contains(kw) {
+⋮----
+score += (keyword_hits as f32 * 0.15).clamp(0.0, 0.3);
+⋮----
+let verified = finding.evidence.evidence.as_ref().map(|e| e.verified).unwrap_or(false);
+⋮----
+if finding.enrichment.ai_analysis.is_none() && confidence < 0.6 {
+⋮----
+score.clamp(0.0, 1.0)
+⋮----
+impl Default for FalsePositiveFilter {
+fn default() -> Self {
+</file>
+
+<file path="redteam_rust_core/src/core/source_analyzer.rs">
+use std::process::Command;
+use uuid::Uuid;
+use regex::Regex;
+use std::fs;
+use tracing::info;
+⋮----
+pub struct SourceAnalyzer {
+⋮----
+pub struct SourceFinding {
+⋮----
+impl SourceAnalyzer {
+pub fn new(root: PathBuf) -> Self {
+⋮----
+pub async fn from_git(url: &str) -> Result<Self> {
+let id = Uuid::new_v4().to_string();
+let tmp_dir = std::env::temp_dir().join(format!("osint_src_{}", id));
+⋮----
+info!("📂 SAST: Clonando repositorio {} en {:?}", url, tmp_dir);
+⋮----
+.arg("clone")
+.arg("--depth")
+.arg("1")
+.arg(url)
+.arg(".")
+.current_dir(&tmp_dir)
+.output()
+.context("Fallo al ejecutar git clone. ¿Está git instalado?")?;
+⋮----
+if !output.status.success() {
+⋮----
+return Err(anyhow::anyhow!("Error al clonar repositorio: {}", err));
+⋮----
+Ok(Self::new(tmp_dir))
+⋮----
+pub async fn analyze(&self) -> Result<Vec<SourceFinding>> {
+⋮----
+self.walk_dir(&self.root_dir, &mut results)?;
+Ok(results)
+⋮----
+fn walk_dir(&self, dir: &Path, results: &mut Vec<SourceFinding>) -> Result<()> {
+if dir.is_dir() {
+⋮----
+let path = entry.path();
+if path.is_dir() {
+⋮----
+let name = path.file_name().and_then(|n| n.to_str()).unwrap_or("");
+⋮----
+self.walk_dir(&path, results)?;
+⋮----
+self.analyze_file(&path, results)?;
+⋮----
+Ok(())
+⋮----
+fn analyze_file(&self, path: &Path, results: &mut Vec<SourceFinding>) -> Result<()> {
+let ext = path.extension().and_then(|s| s.to_str()).unwrap_or("");
+⋮----
+"js" | "ts" | "jsx" | "tsx" => self.analyze_javascript(path, results),
+"py" => self.analyze_python(path, results),
+_ => Ok(()),
+⋮----
+fn analyze_javascript(&self, path: &Path, results: &mut Vec<SourceFinding>) -> Result<()> {
+⋮----
+let re_routes = Regex::new(r#"\.(get|post|put|delete|patch|all)\s*\(\s*['"]([^'"]+)['"]"#).unwrap();
+for (i, line) in content.lines().enumerate() {
+if let Some(cap) = re_routes.captures(line) {
+results.push(SourceFinding {
+file: path.to_string_lossy().to_string(),
+⋮----
+snippet: line.trim().to_string(),
+description: format!("Endpoint Detectado: {} {}", cap[1].to_uppercase(), &cap[2]),
+⋮----
+let re = Regex::new(pattern).unwrap();
+⋮----
+if re.is_match(line) {
+⋮----
+description: desc.to_string(),
+⋮----
+fn analyze_python(&self, path: &Path, results: &mut Vec<SourceFinding>) -> Result<()> {
+⋮----
+let re_routes = Regex::new(r#"@(app|router|blueprint)\.(get|post|route)\s*\(['"]([^'"]+)['"]"#).unwrap();
+⋮----
+description: format!("Endpoint Python: {} {}", cap[2].to_uppercase(), &cap[3]),
+⋮----
+pub fn to_core_findings(&self, findings: &[SourceFinding]) -> Vec<Finding> {
+findings.iter().map(|f| {
+⋮----
+&format!("sast-{}", Uuid::new_v4()),
+⋮----
+f.severity.clone(),
+⋮----
+h.core.title = format!("SAST: {}", f.description);
+⋮----
+}).collect()
+⋮----
+mod tests {
+⋮----
+use tempfile::tempdir;
+⋮----
+async fn test_js_analysis() -> Result<()> {
+let dir = tempdir()?;
+let file_path = dir.path().join("test.js");
+⋮----
+let analyzer = SourceAnalyzer::new(dir.path().to_path_buf());
+let results = analyzer.analyze().await?;
+⋮----
+assert!(results.iter().any(|r| r.is_endpoint && r.description.contains("/api/v1/test")));
+assert!(results.iter().any(|r| !r.is_endpoint && r.description.contains("eval()")));
+⋮----
+async fn test_python_analysis() -> Result<()> {
+⋮----
+let file_path = dir.path().join("app.py");
+⋮----
+assert!(results.iter().any(|r| r.is_endpoint && r.description.contains("/login")));
+assert!(results.iter().any(|r| !r.is_endpoint && r.description.contains("os.system")));
 </file>
 
 <file path="redteam_rust_core/src/infrastructure/decoy/mod.rs">
@@ -5161,6 +5153,110 @@ pub mod engine;
 pub mod sovereign_recon;
 </file>
 
+<file path="redteam_rust_core/src/utils/deduplication.rs">
+use dashmap::DashMap;
+use once_cell::sync::Lazy;
+⋮----
+use crate::models::Finding;
+use sqlx::PgPool;
+use tokio::sync::OnceCell;
+⋮----
+pub struct DeduplicationEngine {
+⋮----
+impl Default for DeduplicationEngine {
+fn default() -> Self {
+⋮----
+impl DeduplicationEngine {
+pub fn new() -> Self {
+⋮----
+pub async fn init(pool: PgPool) -> anyhow::Result<()> {
+⋮----
+.fetch_all(&pool)
+⋮----
+info!("🛡️ V14.2 DEDUPE: Loading {} persistent hashes from SQLite", rows.len());
+⋮----
+if let Ok(hash) = hash_vec.try_into() {
+engine.seen_hashes.insert(hash, first_seen);
+⋮----
+let _ = engine.pool.set(pool);
+Ok(())
+⋮----
+pub fn is_duplicate(finding: &Finding) -> bool {
+let matched_at = finding.evidence.evidence.as_ref()
+.and_then(|e| e.data.get("matched_at"))
+.map(|v| v.to_string())
+.unwrap_or_default();
+⋮----
+hasher.update(finding.core.id.as_bytes());
+hasher.update(matched_at.as_bytes());
+let hash: [u8; 32] = hasher.finalize().into();
+⋮----
+if ENGINE.seen_hashes.contains_key(&hash) {
+⋮----
+let now = chrono::Utc::now().timestamp();
+ENGINE.seen_hashes.insert(hash, now);
+⋮----
+if let Some(pool) = ENGINE.pool.get() {
+let pool = pool.clone();
+⋮----
+.bind(hash.to_vec())
+.bind(now)
+.execute(&pool)
+⋮----
+error!("❌ V14.2 DEDUPE: Failed to persist hash to SQLite: {}", e);
+⋮----
+pub fn global() -> &'static DeduplicationEngine {
+</file>
+
+<file path="redteam_rust_core/src/utils/memory_monitor.rs">
+use std::sync::Arc;
+⋮----
+use std::fs;
+use std::time::Duration;
+⋮----
+pub struct MemoryMonitor {
+⋮----
+impl MemoryMonitor {
+pub fn new(soft_limit_mb: u32, hard_limit_mb: u32) -> Self {
+⋮----
+for line in status.lines() {
+if line.starts_with("VmRSS:") {
+if let Some(kb_str) = line.split_whitespace().nth(1) {
+⋮----
+current_clone.store(bytes, Ordering::Relaxed);
+⋮----
+let p = peak_clone.load(Ordering::Relaxed);
+⋮----
+peak_clone.store(bytes, Ordering::Relaxed);
+⋮----
+pub fn current_mb(&self) -> u32 {
+(self.current.load(Ordering::Relaxed) / 1_000_000) as u32
+⋮----
+pub fn soft_limit_mb(&self) -> u32 {
+⋮----
+pub fn hard_limit_mb(&self) -> u32 {
+⋮----
+pub fn peak_mb(&self) -> u32 {
+(self.peak.load(Ordering::Relaxed) / 1_000_000) as u32
+⋮----
+pub fn should_trigger_backpressure(&self) -> bool {
+self.current_mb() > self.soft_limit_mb
+⋮----
+pub fn is_critical(&self) -> bool {
+self.current_mb() > self.hard_limit_mb
+⋮----
+pub fn start_logging(&self) {
+⋮----
+let curr = (curr_atom.load(Ordering::Relaxed) / 1_000_000) as u32;
+let peak = (peak_atom.load(Ordering::Relaxed) / 1_000_000) as u32;
+⋮----
+error!("CRITICAL: Memory {}MB/{}MB, triggering shutdown signal", curr, hard);
+⋮----
+warn!("Memory warning: {}MB/{}MB, activating backpressure", curr, soft);
+⋮----
+info!("Memory Status: {}MB (Peak: {}MB)", curr, peak);
+</file>
+
 <file path="redteam_rust_core/src/utils/output_filter.rs">
 use regex::Regex;
 use once_cell::sync::Lazy;
@@ -5390,6 +5486,8 @@ pub mod azure;
 pub mod anthropic;
 pub mod openai;
 pub mod antigravity;
+pub mod kimi;
+pub mod claude_code;
 </file>
 
 <file path="redteam_rust_core/src/core/ai/scrubber.rs">
@@ -5968,96 +6066,6 @@ pub fn can_allocate(&self, req_mb: u64) -> bool {
 let available_mb = self.available_ram_mb.load(std::sync::atomic::Ordering::Relaxed);
 ⋮----
 warn!("⚠️ [SysResourceManager] OOM Protection Activated! Requested: {} MB, but only {} MB available.", req_mb, available_mb);
-</file>
-
-<file path="redteam_rust_core/src/core/tests.rs">
-use anyhow::Result;
-use std::sync::Arc;
-⋮----
-mod tests {
-⋮----
-struct MockSink;
-⋮----
-impl DataSink for MockSink {
-async fn write(&mut self, _: &TargetHost) -> Result<()> { Ok(()) }
-async fn write_metadata(&mut self, _: &crate::models::ScanMetadata) -> Result<()> { Ok(()) }
-async fn close(&mut self) -> Result<()> { Ok(()) }
-⋮----
-async fn test_multi_sink_logic() -> Result<()> {
-⋮----
-multi.add(Box::new(MockSink));
-⋮----
-host: "test.local".to_string(),
-⋮----
-multi.write(&target).await?;
-Ok(())
-⋮----
-fn test_ai_waf_escalation() {
-⋮----
-host: "waf.com".to_string(),
-⋮----
-findings: Arc::new(vec![
-⋮----
-let level = router.classify(&finding, &target_waf);
-assert_eq!(level, RouteLevel::Mid);
-⋮----
-fn test_finding_to_markdown() {
-⋮----
-.with_cvss_vector("CVSS:4.0/AV:N/AC:L/AT:N/PR:N/UI:N/VC:H/VI:H/VA:H/SC:L/SI:L/SA:L")
-.with_cwe(vec!["CWE-89".to_string()])
-.with_consolidation_urgency(ConsolidationUrgency::Immediate)
-.with_execution_context("OBJ-001", "Scout", 1);
-⋮----
-let md = finding.to_markdown();
-assert!(md.contains("# Finding: Test Finding"));
-assert!(md.contains("**Severity**: **High**"));
-assert!(md.contains("CVSS Vector"));
-assert!(md.contains("CWE-89"));
-assert!(md.contains("🚨 Immediate"));
-assert!(md.contains("OBJ-001"));
-⋮----
-fn test_roe_testing_window() {
-⋮----
-engagement_name: "Test".to_string(),
-client: "Client".to_string(),
-start_date: "".to_string(),
-end_date: "".to_string(),
-testing_window: "24/7".to_string(),
-in_scope: vec![],
-out_of_scope: vec![],
-prohibited_actions: vec![],
-permitted_actions: vec![],
-escalation_contacts: vec![],
-incident_procedure: "".to_string(),
-authorization_reference: "".to_string(),
-⋮----
-let policy = StaticPolicy::new().with_roe(roe_24_7);
-assert!(policy.is_within_testing_window());
-⋮----
-testing_window: "Mon-Fri 00:00-01:00 UTC".to_string(),
-⋮----
-let policy_restricted = StaticPolicy::new().with_roe(roe_restricted);
-// This will depend on when the test is run, but we can check if it returns a bool
-let result = policy_restricted.is_within_testing_window();
-println!("Testing window result (restricted): {}", result);
-⋮----
-async fn test_objective_persistence() -> anyhow::Result<()> {
-use crate::core::sink::SqliteSink;
-⋮----
-use tempfile::tempdir;
-⋮----
-let tmp_dir = tempdir()?;
-let db_path = tmp_dir.path().join("opplan_test.db");
-⋮----
-.with_status(ObjectiveStatus::InProgress);
-⋮----
-sink.save_objective(&obj).await?;
-⋮----
-.bind("OBJ-001")
-.fetch_one(&sink.pool)
-⋮----
-assert_eq!(row.0, "Initial Access");
-assert_eq!(row.1, "in_progress");
 </file>
 
 <file path="redteam_rust_core/src/models/mod.rs">
@@ -6836,64 +6844,6 @@ if action == "none" || !config.plugins.iter().any(|p| p.name == action) { Ok(Non
 else { Ok(Some((action.to_string(), json_val["tactical_context"].clone()))) }
 </file>
 
-<file path="redteam_rust_core/src/core/ai/compressor.rs">
-use crate::plugins::PluginMetadata;
-use super::types::RouteLevel;
-use super::scrubber::SCRUBBER;
-⋮----
-pub struct ContextCompressor;
-⋮----
-impl ContextCompressor {
-pub fn compress_finding(finding: &Finding, _route_level: RouteLevel) -> serde_json::Value {
-let mut ev = finding.evidence.data.clone();
-⋮----
-if let Ok(sanitized) = serde_json::to_string(&ev).map(|s| SCRUBBER.scrub(&s)) {
-⋮----
-if let Some(obj) = ev.as_object_mut() {
-⋮----
-pub fn compress_plugins(plugins: &[PluginMetadata]) -> Vec<serde_json::value::Value> {
-plugins.iter().map(|p| {
-⋮----
-}).collect()
-⋮----
-pub fn compress_target(target: &TargetHost) -> serde_json::value::Value {
-let tech_stack: Vec<String> = target.findings.iter()
-.filter(|f| f.category == Category::TechnologyStack)
-.filter_map(|f| f.evidence.data.get("plugins")?.as_object())
-.flat_map(|obj| obj.keys().cloned())
-.collect();
-⋮----
-pub fn compress_swarm_context(finding: &Finding, _target: &TargetHost) -> serde_json::Value {
-⋮----
-if let Some(ev) = base.get_mut("ev").and_then(|e| e.as_object_mut()) {
-ev.remove("body");
-ev.remove("raw_response");
-⋮----
-pub fn compress_source_aware_finding(finding: &Finding) -> serde_json::Value {
-⋮----
-if let (Some(obj), Some(ev)) = (base.as_object_mut(), finding.evidence.data.as_object()) {
-let mut compressed_ev = ev.clone();
-if let Some(val) = compressed_ev.get_mut("snippet") {
-if let Some(s) = val.as_str() {
-if s.len() > 300 {
-⋮----
-obj.insert("ev".to_string(), serde_json::Value::Object(compressed_ev));
-⋮----
-fn minify_evidence_object(obj: &mut serde_json::Map<String, serde_json::Value>, body_limit: usize, planner_only: bool) {
-⋮----
-if let Some(val) = obj.get_mut("body") {
-⋮----
-if s.len() > body_limit {
-⋮----
-vec!["server", "x-powered-by"]
-⋮----
-vec![
-⋮----
-fn minify_headers(obj: &mut serde_json::Map<String, serde_json::Value>, whitelist: &[&str]) {
-if let Some(h_obj) = obj.get_mut("headers").and_then(|h| h.as_object_mut()) {
-h_obj.retain(|k, _| whitelist.contains(&k.to_lowercase().as_str()));
-</file>
-
 <file path="redteam_rust_core/src/core/ai/gemini.rs">
 use anyhow::Result;
 use async_trait::async_trait;
@@ -7038,62 +6988,6 @@ async fn decide_action(&self, _config: crate::core::ai::traits::DecisionConfig<'
 Ok(None)
 </file>
 
-<file path="redteam_rust_core/src/core/validation/sovereign.rs">
-use crate::core::validation::PocValidator;
-use anyhow::Result;
-⋮----
-use std::time::Duration;
-⋮----
-use crate::models::findings::PocDefinition;
-use crate::core::c2::C2Operator;
-use crate::core::approval_gate::ApprovalStatus::Approved;
-use crate::utils::executor::ExecutorMode;
-⋮----
-pub(crate) async fn deploy_c2(&self, target: &TargetHost) -> Result<()> {
-⋮----
-let sovereign_operator = crate::plugins::lateral_movement::sliver_sovereign::SovereignSliverOperator::<M>::new(self.executor.clone()).await?;
-⋮----
-match sovereign_operator.prepare_payload(target).await {
-⋮----
-info!("🔱 V14.1 SOVEREIGN: Autonomous C2 payload staged at {}. Deploying...", payload_path);
-⋮----
-use crate::core::c2::SessionState;
-match sovereign_operator.verify_session(target).await? {
-⋮----
-info!("🎯 V14.1 SOVEREIGN: C2 SESSION ALREADY ESTABLISHED for {}", target.host);
-⋮----
-sovereign_operator.deploy_payload(target, &payload_path).await?;
-⋮----
-if sovereign_operator.verify_session(target).await? == SessionState::Sovereign {
-info!("🎯 V14.1 SOVEREIGN: AUTONOMOUS C2 SESSION ESTABLISHED for {}", target.host);
-⋮----
-Err(e) => warn!("⚠️ V14.1 SOVEREIGN: Autonomous C2 deployment failed: {}", e),
-⋮----
-Ok(())
-⋮----
-pub(crate) async fn sovereign_handover(&self, finding: &mut Finding, target: &TargetHost, poc: &PocDefinition) -> Result<bool> {
-info!("🏛️ SOVEREIGN MODE: High complexity exploit detected. Initiating HALT for mission briefing.");
-⋮----
-let raw_instruction = format!("Generate a professional mission briefing for a human operator to manually validate this: {}. Target: {}. Strategy: {:?}", finding.title, target.host, poc.strategy);
-⋮----
-let analysis = self.router.analyze_with_level(finding, target, Some(&human_instruction), crate::core::ai::RouteLevel::Premium, crate::core::ai::CavemanLevel::Off).await?;
-⋮----
-let context = format!(
-⋮----
-let req_id = self.approval_gate.request_approval(&format!("HANDOVER: {}", finding.title), 100, &self.operator, &context).await?;
-⋮----
-if self.approval_gate.wait_for_approval(&id, 1200).await {
-if let Some(status) = self.approval_gate.approval_cache().get(&id) {
-⋮----
-info!("🚀 SOVEREIGN: Handover received. Executing...");
-let output = self.execute_raw_payload(payload, target).await?;
-let success = output.contains(&poc.expected_pattern) || output.to_lowercase().contains("success");
-⋮----
-return Ok(success);
-⋮----
-Ok(false)
-</file>
-
 <file path="redteam_rust_core/src/core/approval_gate.rs">
 use dashmap::DashMap;
 ⋮----
@@ -7214,6 +7108,96 @@ assert!(result.unwrap().is_none());
 async fn test_high_risk_requires_approval() {
 ⋮----
 assert!(result.unwrap().is_some());
+</file>
+
+<file path="redteam_rust_core/src/core/tests.rs">
+use anyhow::Result;
+use std::sync::Arc;
+⋮----
+mod tests {
+⋮----
+struct MockSink;
+⋮----
+impl DataSink for MockSink {
+async fn write(&mut self, _: &TargetHost) -> Result<()> { Ok(()) }
+async fn write_metadata(&mut self, _: &crate::models::ScanMetadata) -> Result<()> { Ok(()) }
+async fn close(&mut self) -> Result<()> { Ok(()) }
+⋮----
+async fn test_multi_sink_logic() -> Result<()> {
+⋮----
+multi.add(Box::new(MockSink));
+⋮----
+host: "test.local".to_string(),
+⋮----
+multi.write(&target).await?;
+Ok(())
+⋮----
+fn test_ai_waf_escalation() {
+⋮----
+host: "waf.com".to_string(),
+⋮----
+findings: Arc::new(vec![
+⋮----
+let level = router.classify(&finding, &target_waf);
+assert_eq!(level, RouteLevel::Mid);
+⋮----
+fn test_finding_to_markdown() {
+⋮----
+.with_cvss_vector("CVSS:4.0/AV:N/AC:L/AT:N/PR:N/UI:N/VC:H/VI:H/VA:H/SC:L/SI:L/SA:L")
+.with_cwe(vec!["CWE-89".to_string()])
+.with_consolidation_urgency(ConsolidationUrgency::Immediate)
+.with_execution_context("OBJ-001", "Scout", 1);
+⋮----
+let md = finding.to_markdown();
+assert!(md.contains("# Finding: Test Finding"));
+assert!(md.contains("**Severity**: **High**"));
+assert!(md.contains("CVSS Vector"));
+assert!(md.contains("CWE-89"));
+assert!(md.contains("🚨 Immediate"));
+assert!(md.contains("OBJ-001"));
+⋮----
+fn test_roe_testing_window() {
+⋮----
+engagement_name: "Test".to_string(),
+client: "Client".to_string(),
+start_date: "".to_string(),
+end_date: "".to_string(),
+testing_window: "24/7".to_string(),
+in_scope: vec![],
+out_of_scope: vec![],
+prohibited_actions: vec![],
+permitted_actions: vec![],
+escalation_contacts: vec![],
+incident_procedure: "".to_string(),
+authorization_reference: "".to_string(),
+⋮----
+let policy = StaticPolicy::new().with_roe(roe_24_7);
+assert!(policy.is_within_testing_window());
+⋮----
+testing_window: "Mon-Fri 00:00-01:00 UTC".to_string(),
+⋮----
+let policy_restricted = StaticPolicy::new().with_roe(roe_restricted);
+// This will depend on when the test is run, but we can check if it returns a bool
+let result = policy_restricted.is_within_testing_window();
+println!("Testing window result (restricted): {}", result);
+⋮----
+async fn test_objective_persistence() -> anyhow::Result<()> {
+use crate::core::sink::PostgresSink;
+⋮----
+use tempfile::tempdir;
+⋮----
+let tmp_dir = tempdir()?;
+let db_path = tmp_dir.path().join("opplan_test.db");
+⋮----
+.with_status(ObjectiveStatus::InProgress);
+⋮----
+sink.save_objective(&obj).await?;
+⋮----
+.bind("OBJ-001")
+.fetch_one(&sink.pool)
+⋮----
+assert_eq!(row.0, "Initial Access");
+assert_eq!(row.1, "in_progress");
 </file>
 
 <file path="redteam_rust_core/src/plugins/enumeration/web/ffuf.rs">
@@ -7747,406 +7731,119 @@ fn test_tonl_dict_compresses_repeated_keys() {
 assert!(encoded.contains('$'));
 </file>
 
-<file path="redteam_rust_core/src/core/ai/router.rs">
-use std::sync::Arc;
-use tracing::info;
-use thiserror::Error;
-⋮----
-use std::time::Duration;
-use std::sync::atomic::Ordering;
-use moka::future::Cache;
-use siphasher::sip::SipHasher13;
-use once_cell::sync::Lazy;
-⋮----
+<file path="redteam_rust_core/src/core/ai/compressor.rs">
 use crate::plugins::PluginMetadata;
-use crate::core::ai::traits::LlmClient;
-use super::compressor::ContextCompressor;
+use super::types::RouteLevel;
+use super::scrubber::SCRUBBER;
 ⋮----
-pub enum RouterError {
+pub struct ContextCompressor;
 ⋮----
-impl RouterError {
-fn from_anyhow(err: &anyhow::Error) -> Self {
-let msg = err.to_string().to_lowercase();
-if msg.contains("401") || msg.contains("unauthorized") || msg.contains("invalid") {
+impl ContextCompressor {
+pub fn compress_finding(finding: &Finding, _route_level: RouteLevel) -> serde_json::Value {
+let mut ev = finding.evidence.evidence.as_ref().map(|e| e.data.clone()).unwrap_or_else(|| serde_json::json!({}));
 ⋮----
-} else if msg.contains("429") || msg.contains("rate limit") || msg.contains("too many") {
+if let Ok(sanitized) = serde_json::to_string(&ev).map(|s| SCRUBBER.scrub(&s)) {
 ⋮----
-} else if msg.contains("500") || msg.contains("502") || msg.contains("503") || msg.contains("unreachable") {
+if let Some(obj) = ev.as_object_mut() {
 ⋮----
-pub struct TieredAIRouter {
+let verified = finding.evidence.evidence.as_ref().map(|e| e.verified).unwrap_or(false);
 ⋮----
-impl Default for TieredAIRouter {
-fn default() -> Self {
+pub fn compress_plugins(plugins: &[PluginMetadata]) -> Vec<serde_json::value::Value> {
+plugins.iter().map(|p| {
 ⋮----
-impl TieredAIRouter {
-pub fn new() -> Self {
+}).collect()
 ⋮----
-.max_capacity(5000)
-.time_to_live(Duration::from_secs(7200))
-.build(),
+pub fn compress_target(target: &TargetHost) -> serde_json::value::Value {
+let tech_stack: Vec<String> = target.findings.iter()
+.filter(|f| f.core.category == Category::TechnologyStack)
+.filter_map(|f| f.evidence.evidence.as_ref()?.data.get("plugins")?.as_object())
+.flat_map(|obj| obj.keys().cloned())
+.collect();
 ⋮----
-pub fn with_skills(mut self, sm: Arc<crate::core::skills::SkillManager>) -> Self {
-self.skill_manager = Some(sm);
+pub fn compress_swarm_context(finding: &Finding, _target: &TargetHost) -> serde_json::Value {
 ⋮----
-pub fn add_provider(&mut self, level: RouteLevel, kind: LlmProviderKind, priority: u8, client: Arc<dyn LlmClient>) {
+if let Some(ev) = base.get_mut("ev").and_then(|e| e.as_object_mut()) {
+ev.remove("body");
+ev.remove("raw_response");
 ⋮----
-let level_providers = self.providers.entry(level).or_default();
-level_providers.push(entry);
+pub fn compress_source_aware_finding(finding: &Finding) -> serde_json::Value {
 ⋮----
-level_providers.sort_by_key(|p| p.priority);
+if let (Some(obj), Some(ev)) = (base.as_object_mut(), evidence.data.as_object()) {
+let mut compressed_ev = ev.clone();
+if let Some(val) = compressed_ev.get_mut("snippet") {
+if let Some(s) = val.as_str() {
+if s.len() > 300 {
 ⋮----
-fn calculate_finding_cache_key(finding: &Finding, target: &TargetHost) -> String {
+obj.insert("ev".to_string(), serde_json::Value::Object(compressed_ev));
 ⋮----
-target.host.hash(&mut hasher);
-target.ip.hash(&mut hasher);
-finding.id.hash(&mut hasher);
-finding.category.hash(&mut hasher);
+fn minify_evidence_object(obj: &mut serde_json::Map<String, serde_json::Value>, body_limit: usize, planner_only: bool) {
 ⋮----
-format!("f:{:x}", hasher.finish())
+if let Some(val) = obj.get_mut("body") {
 ⋮----
-pub fn classify(&self, finding: &Finding, target: &TargetHost) -> RouteLevel {
-let cvss = finding.cvss_score.unwrap_or(0.0);
+if s.len() > body_limit {
 ⋮----
-level = level.max(RouteLevel::Mid);
+vec!["server", "x-powered-by"]
 ⋮----
-if let Some(tech) = target_ctx.get("tech").and_then(|t| t.as_array()) {
+vec![
 ⋮----
-if let Some(name) = t.as_str() {
-if waf_tech.iter().any(|&w| name.to_lowercase().contains(w)) {
-⋮----
-if finding.evidence.data.get("type").and_then(|v| v.as_str()) == Some("source_aware") {
-⋮----
-pub async fn analyze(&self, finding: &Finding, target: &TargetHost, attack_context: Option<&str>) -> Result<AIAnalysis> {
-let level = self.classify(finding, target);
-⋮----
-self.analyze_with_level(finding, target, attack_context, level, caveman).await
-⋮----
-pub async fn analyze_with_level(&self, finding: &Finding, target: &TargetHost, attack_context: Option<&str>, target_level: RouteLevel, caveman: super::types::CavemanLevel) -> Result<AIAnalysis> {
-⋮----
-if let Some(cached) = self.analysis_cache.get(&cache_key) {
-self.metrics.hits.fetch_add(1, Ordering::Relaxed);
-return Ok(cached);
-⋮----
-self.metrics.misses.fetch_add(1, Ordering::Relaxed);
-⋮----
-if let Some(providers) = self.providers.get(&current_level) {
-⋮----
-let effective_ctx = self.enrich_context_v15(finding, attack_context, current_level, Posture::Ghost, caveman).await;
-⋮----
-attack_context: effective_ctx.as_deref(),
-⋮----
-match entry.client.analyze(config).await {
-⋮----
-analysis.model = format!("{} (Tiered: {:?}, Provider: {:?})", analysis.model, current_level, entry.kind);
-self.analysis_cache.insert(cache_key, analysis.clone()).await;
-return Ok(analysis);
-⋮----
-if matches!(router_err, RouterError::Unauthorized) {
-⋮----
-Err(anyhow!("All TieredAIRouter providers failed for {}", finding.id))
-⋮----
-pub async fn decide_action(
-⋮----
-let target_level = self.classify(finding, target);
-⋮----
-let caveman = adaptive_context.map(|c| c.current_caveman).unwrap_or_default();
-let posture = adaptive_context.map(|c| c.posture).unwrap_or(Posture::Ghost);
-⋮----
-let effective_ctx = self.enrich_context_v15(finding, attack_context, current_level, posture, caveman).await;
-⋮----
-match entry.client.decide_action(config).await {
-⋮----
-return Ok(Some((action, context)));
-⋮----
-Ok(None)
-⋮----
-async fn enrich_context_v15(
-⋮----
-let mut effective_ctx = base_ctx.map(|s| s.to_string());
-⋮----
-let skills = sm.match_for_context(finding, posture, level, budget).await;
-if !skills.is_empty() {
-if let Some(injection) = sm.build_injection(&skills, caveman).await {
-info!("🧠 [Router] Inyectando {} skills técnicos (Budget: {} tokens, Tier: {:?}).", skills.len(), budget, level);
-⋮----
-PROMPT_OPTIMIZER.optimize(&injection, OptimizationLevel::Ultra)
-⋮----
-PROMPT_OPTIMIZER.optimize(&injection, OptimizationLevel::Lite)
-⋮----
-PROMPT_OPTIMIZER.optimize(&injection, OptimizationLevel::Full)
-⋮----
-effective_ctx = Some(match effective_ctx {
-Some(ctx) => format!("{}\n{}", optimized_injection, ctx),
+fn minify_headers(obj: &mut serde_json::Map<String, serde_json::Value>, whitelist: &[&str]) {
+if let Some(h_obj) = obj.get_mut("headers").and_then(|h| h.as_object_mut()) {
+h_obj.retain(|k, _| whitelist.contains(&k.to_lowercase().as_str()));
 </file>
 
-<file path="redteam_rust_core/src/core/swarm/orchestrator.rs">
-use crate::core::pipeline::Pipeline;
+<file path="redteam_rust_core/src/core/validation/sovereign.rs">
+use crate::core::validation::PocValidator;
+use anyhow::Result;
 ⋮----
-use crate::core::approval_gate::ApprovalGate;
+use std::time::Duration;
 ⋮----
-use std::sync::Arc;
-use tokio::sync::mpsc;
+use crate::models::findings::PocDefinition;
+use crate::core::c2::C2Operator;
+use crate::core::approval_gate::ApprovalStatus::Approved;
+use crate::utils::executor::ExecutorMode;
 ⋮----
-use std::collections::HashSet;
+pub(crate) async fn deploy_c2(&self, target: &TargetHost) -> Result<()> {
+let sovereign_operator = crate::plugins::lateral_movement::sliver_sovereign::SovereignSliverOperator::<M>::new(self.executor.clone()).await?;
 ⋮----
-use crate::core::persistence::PersistenceOrchestrator;
+match sovereign_operator.prepare_payload(target).await {
 ⋮----
-pub enum AgentRole {
-⋮----
-pub struct SwarmOrchestrator<M: ExecutorMode = crate::utils::executor::GhostMode> where M: Clone {
-⋮----
-pub struct SwarmConfig<M: ExecutorMode> {
-⋮----
-pub struct AgentTask<'a, M: ExecutorMode> {
-⋮----
-pub fn new(config: SwarmConfig<M>) -> Self {
-⋮----
-id: "swarm-orchestrator".to_string(),
-name: "Osint-Swarm".to_string(),
-⋮----
-pub fn clone_for_spawn(&self) -> Self {
-self.clone()
-⋮----
-pub async fn run(&self, initial_target: TargetHost, sink_tx: mpsc::Sender<TargetHost>) -> Result<()> {
-info!("🐝 SWARM: Iniciando enjambre multi-agente para {}", initial_target.host);
-⋮----
-// V15: OPPLAN / Engagement Initialization
-⋮----
-let mut state_lock = self.engagement.lock().await;
-if state_lock.is_none() {
-⋮----
-// Inicializar objetivo principal si no hay plan
-let root_obj = Objective::new("OBJ-ROOT", "Initial Exploration", &format!("Explore target {}", initial_target.host), ObjectivePhase::Recon);
-state.opplan.add_objective(root_obj)?;
-*state_lock = Some(state);
-info!("🗺️ SWARM [V15]: OPPLAN Framework initialized.");
-⋮----
-// 🔱 V14.1 READINESS GATE (Professional Grade)
-⋮----
-info!("⏳ SWARM: Verificando integridad de egreso (ProxyManager readiness)...");
-pm.wait_for_readiness(std::time::Duration::from_secs(30))
-⋮----
-.context("V14.1 OPSEC Block: Swarm cannot start without healthy egress proxies.")?;
-info!("✅ SWARM: Egress verificado. Sparking the swarm.");
-⋮----
-let pipeline = self.pipeline.clone();
-let target = initial_target.clone();
-⋮----
-// FASE 1: SCOUT - Discovery inicial
-let pipeline_clone = pipeline.clone();
-let discovery_tx_clone = discovery_tx.clone();
-⋮----
-let _ = pipeline_clone.run_discovery(&target, discovery_tx_clone).await;
-⋮----
-// V12 HARDENING (HIGH-002): Concurrent Agent Limit (DoS prevention)
-⋮----
-let max_pending_tasks = 50; // V12 FIX (HIGH-001): Limit JoinSet size to prevent DoS
-⋮----
-// V14.2 SCOPE CHECK: Validate initial target before spawning agents
-if !self.policy.is_target_allowed(&initial_target.host) {
-error!("🛡️ V14.2 SCOPE VIOLATION: Target {} is NOT authorized in policy.json. Aborting swarm.", initial_target.host);
-return Ok(());
-⋮----
-while let Some(finding) = discovery_rx.recv().await {
-// V12 FIX: Limit JoinSet size to prevent DoS (HIGH-001)
-while join_set.len() >= max_pending_tasks {
-if let Some(res) = join_set.join_next().await {
-⋮----
-Ok(Err(e)) => error!("🐝 SWARM [Agent Error]: {}", e),
-Err(e) => error!("🐝 SWARM [Task Error]: Join error: {}", e),
-⋮----
-if self.budget.is_exhausted() {
-warn!("💸 SWARM: Presupuesto de tokens agotado ({}). Deteniendo enjambre.", self.budget.current_total());
-⋮----
-if seen_finding_ids.contains(&finding.id) { continue; }
-seen_finding_ids.insert(finding.id.clone());
-⋮----
-let mut ce = correlation_engine.lock().await;
-ce.add_finding(finding.clone());
-⋮----
-let mut role = self.plan_next_step(&finding, &initial_target).await?;
-⋮----
-let ce_handle = correlation_engine.lock().await;
-let paths = ce_handle.get_attack_paths();
-if let Some(da_path) = paths.iter().find(|p| p.description.contains("Windows") && p.total_cvss > 0.8) {
-info!("🔱 V14.1 SOVEREIGN: High-value AD path detected! Prioritizing pivot: {}", da_path.description);
-if da_path.nodes.contains(&finding.id) && finding.category == Category::Vulnerability {
-⋮----
-let attack_context = ce_handle.get_context_summary(&finding.id);
-debug!("🐝 SWARM [Planner]: Asignando hallazgo {} al agente {:?}", finding.id, role);
-⋮----
-// 2. AGENT EXECUTION (ARCH-02: Concurrent Agent Execution)
-let orchestrator = Arc::new(self.clone_for_spawn());
-let finding_clone = finding.clone();
-let target_clone = initial_target.clone();
-let mut scout_tx = discovery_tx.clone();
-let mut ctx_clone = adaptive_context.clone();
-let ce_clone = correlation_engine.clone();
-let sink_tx_clone = sink_tx.clone();
-let semaphore = agent_semaphore.clone();
-⋮----
-// V12 HARDENING: Use TokenGuard for RAII-based reservation
-⋮----
-let guard = match TokenGuard::new(self.budget.clone(), 1000, priority) {
-⋮----
-warn!("💸 SWARM: No hay presupuesto suficiente para spawnear agente {:?} (Hallazgo {}). Skipping.", role, finding.id);
-⋮----
-join_set.spawn(async move {
-let _permit = semaphore.acquire().await.ok();
-// PFC-001/V12: Agent isolation via RAII and Panic handling
-⋮----
-// V13 HARDENING: Explicit catch_unwind to prevent any state leakage from panicked agents.
-use std::panic::AssertUnwindSafe;
-use futures::FutureExt;
-⋮----
-let finding_id = finding_clone.id.clone();
-let result = AssertUnwindSafe(async {
-// V13: Strategic Pivot Check (Professional Egress Management)
-if orchestrator.budget.current_effective_total() > (orchestrator.budget.max_tokens as f64 * 0.95) as u32
-⋮----
-warn!("🛡️ SWARM: CRITICAL BUDGET LIMIT! Tokens > 95%. Forcing emergency pivot to Passive Reporter for {}.", finding_id);
-return orchestrator.execute_reporter(finding_clone, &target_clone, &sink_tx_clone, guard).await;
-⋮----
-AgentRole::Scout => orchestrator.execute_scout(AgentTask::<M> {
-⋮----
-AgentRole::Exploiter => orchestrator.execute_exploiter(AgentTask::<M> {
-⋮----
-AgentRole::C2Operator => orchestrator.execute_c2_operator(finding_clone, &target_clone, &mut ctx_clone, &sink_tx_clone, guard).await,
-AgentRole::GhostReporter => orchestrator.execute_reporter(finding_clone, &target_clone, &sink_tx_clone, guard).await,
-⋮----
-// Planner agents can now update the shared engine directly
-let mut ce = ce_clone.lock().await;
-ce.add_finding(finding_clone);
-guard.commit(0);
-Ok(())
-⋮----
-}).catch_unwind().await;
-⋮----
-error!("🛑 SWARM CRITICAL: Agent {:?} for finding {} caught a PANIC. Isolating.", role, finding_id);
-⋮----
-// Wait for all agents to finish
-// V12 HARDENING: Robust Agent Join and Error Reporting
-while let Some(res) = join_set.join_next().await {
-⋮----
-if e.is_panic() {
-error!("🛑 SWARM CRITICAL: Agent task PANICKED! Isolation active. Continuing other agents.");
-⋮----
-error!("🐝 SWARM [Task Error]: Join error: {}", e);
-⋮----
-info!("🛑 SWARM: Enjambre finalizado. Consumo total: {} tokens.", self.budget.current_total());
-⋮----
-async fn plan_next_step(&self, finding: &Finding, target: &TargetHost) -> Result<AgentRole> {
-// V10: Use aggressive compression for planning to save tokens
-⋮----
-// En v4 el Planner usa Gemini Flash (Mid) o Local por defecto para ahorrar tokens.
-// Solo si el hallazgo es crítico escalamos a Premium.
-⋮----
-info!("🐝 SWARM [Planner]: Routing {} to {:?} tier.", finding.id, level);
-⋮----
-// Lógica simplificada:
-// Recon/Port -> Scout
-// Vulnerality/Misconfig -> Exploiter
-// Otros -> Reporter
-⋮----
-Category::Recon | Category::NetworkPort | Category::TechnologyStack => Ok(AgentRole::Scout),
-⋮----
-// Si ya está verificado, pasar a C2
-⋮----
-Ok(AgentRole::C2Operator)
-⋮----
-Ok(AgentRole::Exploiter)
-⋮----
-_ => Ok(AgentRole::GhostReporter),
-⋮----
-async fn execute_scout(
-⋮----
-info!("🔍 SWARM [Scout]: Profundizando en hallazgo de infraestructura: {}", task.finding.title);
-⋮----
-let metadata = self.pipeline.get_plugin_metadata();
-match self.router.decide_action(&task.finding, task.target, &metadata, task.attack_context.as_deref(), Some(task.adaptive_ctx)).await {
-⋮----
-task.guard.commit(200);
-⋮----
-let mut task_target = task.target.clone();
-⋮----
-let results = self.pipeline.run_specific_plugin(&action, &task_target).await?;
-⋮----
-let _ = task.tx.send(nf).await;
-⋮----
-return Err(e);
-⋮----
-let mut sink_target = task.target.clone();
-sink_target.findings = Arc::new(vec![task.finding]);
-let _ = task.sink_tx.send(sink_target).await;
-⋮----
-async fn execute_exploiter(
-⋮----
-info!("💥 SWARM [Exploiter]: Intentando validación/explotación de: {} [Posture: STRIKE]", finding.title);
-⋮----
-match self.router.analyze(&finding, task.target, task.attack_context.as_deref()).await {
-⋮----
-task.guard.commit(usage);
-finding = finding.with_ai_analysis(analysis.clone());
-⋮----
-self.router.clone(),
-self.approval_gate.clone(),
-self.operator.clone(),
-self.executor.clone(),
-self.policy.clone(),
-self.proxy_manager.clone(),
-⋮----
-let _ = poc_validator.validate(&mut finding, task.target, task.attack_context.as_deref()).await;
-⋮----
-warn!("⚠️ SWARM [Exploiter]: Error en análisis de explotación: {}", e);
-⋮----
-sink_target.findings = Arc::new(vec![finding]);
-⋮----
-async fn execute_c2_operator(
-⋮----
-info!("🔱 SWARM [C2Operator]: Orchestrating offensive persistence for {} [Posture: BREACH]", target.host);
-⋮----
-guard.commit(500);
-⋮----
-let orchestrator = PersistenceOrchestrator::new(self.router.clone(), self.executor.clone());
-if let Ok(plan) = orchestrator.generate_plan(&finding).await {
-info!("🎯 SWARM [C2Operator]: Tactical plan generated. Consolidating access...");
-if let Err(e) = orchestrator.consolidate(&plan, target).await {
-warn!("⚠️ SWARM [C2Operator]: Consolidation failed: {}", e);
-⋮----
-if let Ok(true) = orchestrator.verify_access(&plan, target).await {
-info!("🛡️ SWARM [C2Operator]: Persistence Verified (APT-Level). Posture maintained.");
-⋮----
-warn!("⚠️ SWARM [C2Operator]: Persistence verification failed. Payload might have been detected or blocked.");
-⋮----
-let operators = self.pipeline.get_c2_operators();
-if operators.is_empty() {
-warn!("⚠️ SWARM [C2Operator]: No se encontraron operadores C2 cargados en la pipeline.");
-⋮----
-match c2.verify_session(target).await {
+info!("🔱 V14.1 SOVEREIGN: Autonomous C2 payload staged at {}. Deploying...", payload_path);
 ⋮----
 use crate::core::c2::SessionState;
+match sovereign_operator.verify_session(target).await? {
 ⋮----
-info!("🎯 SWARM [C2Operator]: Sesión activa detectada. Omitiendo despliegue.");
+info!("🎯 V14.1 SOVEREIGN: C2 SESSION ALREADY ESTABLISHED for {}", target.host);
 ⋮----
-if let Ok(payload_path) = c2.prepare_payload(target).await {
-info!("🚀 SWARM [C2Operator]: Payload preparado en {}. Iniciando despliegue...", payload_path);
-let _ = c2.deploy_payload(target, &payload_path).await;
+sovereign_operator.deploy_payload(target, &payload_path).await?;
 ⋮----
-let mut sink_target = target.clone();
-let mut final_findings = vec![finding.clone()];
-final_findings.push(Finding::new(
+if sovereign_operator.verify_session(target).await? == SessionState::Sovereign {
+info!("🎯 V14.1 SOVEREIGN: AUTONOMOUS C2 SESSION ESTABLISHED for {}", target.host);
 ⋮----
-&format!("Persistence payload deployed via C2 Operator: {}", payload_path),
+Err(e) => warn!("⚠️ V14.1 SOVEREIGN: Autonomous C2 deployment failed: {}", e),
 ⋮----
-let _ = sink_tx.send(sink_target).await;
+Ok(())
 ⋮----
-Err(e) => debug!("🐝 SWARM [C2Operator]: Operador falló verificación: {}", e),
+pub(crate) async fn sovereign_handover(&self, finding: &mut Finding, target: &TargetHost, poc: &PocDefinition) -> Result<bool> {
+info!("🏛️ SOVEREIGN MODE: High complexity exploit detected. Initiating HALT for mission briefing.");
 ⋮----
-warn!("⚠️ SWARM [C2Operator]: No se pudo establecer persistencia con ningún operador disponible.");
+let raw_instruction = format!("Generate a professional mission briefing for a human operator to manually validate this: {}. Target: {}. Strategy: {:?}", finding.core.title, target.host, poc.strategy);
 ⋮----
-async fn execute_reporter(
+let analysis = self.router.analyze_with_level(finding, target, Some(&human_instruction), crate::core::ai::RouteLevel::Premium, crate::core::ai::CavemanLevel::Off).await?;
 ⋮----
-debug!("📝 SWARM [Reporter]: Archivando hallazgo informativo: {}", finding.title);
+let context = format!(
+⋮----
+let req_id = self.approval_gate.request_approval(&format!("HANDOVER: {}", finding.core.title), 100, &self.operator, &context).await?;
+⋮----
+if self.approval_gate.wait_for_approval(&id, 1200).await {
+if let Some(status) = self.approval_gate.approval_cache().get(&id) {
+⋮----
+info!("🚀 SOVEREIGN: Handover received. Executing...");
+let output = self.execute_raw_payload(payload, target).await?;
+let success = output.contains(&poc.expected_pattern) || output.to_lowercase().contains("success");
+⋮----
+return Ok(success);
+⋮----
+Ok(false)
 </file>
 
 <file path="redteam_rust_core/src/core/factory.rs">
@@ -8186,6 +7883,12 @@ vec![std::env::var("GEMINI_API_KEYS").unwrap().split(',').next().unwrap().to_str
 router.add_provider(RouteLevel::Premium, LlmProviderKind::Anthropic, 1, Arc::new(AnthropicClient::new(
 ⋮----
 "claude-3-5-sonnet-20240620".to_string(),
+⋮----
+router.add_provider(RouteLevel::Premium, LlmProviderKind::Kimi, 1, Arc::new(KimiClient::new(
+⋮----
+std::env::var("KIMI_MODEL").unwrap_or_else(|_| "kimi-for-coding".to_string()),
+⋮----
+router.add_provider(RouteLevel::Premium, LlmProviderKind::ClaudeCode, 2, Arc::new(ClaudeCodeClient::new(
 ⋮----
 router.add_provider(RouteLevel::Premium, LlmProviderKind::Antigravity, 5, Arc::new(AntigravityClient::new(
 ⋮----
@@ -9354,49 +9057,136 @@ alert.clone()
 Ok(findings)
 </file>
 
-<file path="redteam_rust_core/src/utils/config.rs">
-use std::env;
+<file path="redteam_rust_core/src/core/ai/router.rs">
+use std::sync::Arc;
+use tracing::info;
+use thiserror::Error;
 ⋮----
-pub enum ProxyMode {
+use std::time::Duration;
+use std::sync::atomic::Ordering;
+use moka::future::Cache;
+use siphasher::sip::SipHasher13;
+use once_cell::sync::Lazy;
 ⋮----
-pub struct Config {
+use crate::plugins::PluginMetadata;
+use crate::core::ai::traits::LlmClient;
+use super::compressor::ContextCompressor;
 ⋮----
-impl Config {
-pub fn from_env() -> Self {
+pub enum RouterError {
 ⋮----
-do_token: env::var("DIGITALOCEAN_TOKEN").ok(),
-ollama_url: env::var("OLLAMA_URL").unwrap_or_else(|_| "http://localhost:11434".to_string()),
+impl RouterError {
+fn from_anyhow(err: &anyhow::Error) -> Self {
+let msg = err.to_string().to_lowercase();
+if msg.contains("401") || msg.contains("unauthorized") || msg.contains("invalid") {
 ⋮----
-.ok()
-.and_then(|s| s.parse().ok())
-.unwrap_or(4096),
+} else if msg.contains("429") || msg.contains("rate limit") || msg.contains("too many") {
 ⋮----
-.unwrap_or(600),
+} else if msg.contains("500") || msg.contains("502") || msg.contains("503") || msg.contains("unreachable") {
 ⋮----
-.unwrap_or(900),
+pub struct TieredAIRouter {
 ⋮----
-.unwrap_or(10),
+impl Default for TieredAIRouter {
+fn default() -> Self {
 ⋮----
-.map(|s| match s.to_lowercase().as_str() {
+impl TieredAIRouter {
+pub fn new() -> Self {
 ⋮----
-.unwrap_or(ProxyMode::Dante),
+.max_capacity(5000)
+.time_to_live(Duration::from_secs(7200))
+.build(),
 ⋮----
-.unwrap_or(0),
-chaos_api_key: env::var("CHAOS_API_KEY").ok(),
-netlas_api_key: env::var("NETLAS_API_KEY").ok(),
-securitytrails_api_key: env::var("SECURITYTRAILS_API_KEY").ok(),
-shodan_api_key: env::var("SHODAN_API_KEY").ok(),
-criminalip_api_key: env::var("CRIMINALIP_API_KEY").ok(),
+pub fn with_skills(mut self, sm: Arc<crate::core::skills::SkillManager>) -> Self {
+self.skill_manager = Some(sm);
 ⋮----
-.unwrap_or(33),
-caido_api_key: env::var("CAIDO_API_KEY").ok(),
-caido_api_url: env::var("CAIDO_API_URL").unwrap_or_else(|_| "http://localhost:8080/graphql".to_string()),
-mcp_token: env::var("MCP_TOKEN").ok(),
-discord_webhook_url: env::var("DISCORD_WEBHOOK_URL").ok(),
+pub fn add_provider(&mut self, level: RouteLevel, kind: LlmProviderKind, priority: u8, client: Arc<dyn LlmClient>) {
 ⋮----
-pub fn require_do_token(&self) -> Result<String> {
-self.do_token.clone()
-.ok_or_else(|| anyhow!("DIGITALOCEAN_TOKEN environment variable not set"))
+let level_providers = self.providers.entry(level).or_default();
+level_providers.push(entry);
+⋮----
+level_providers.sort_by_key(|p| p.priority);
+⋮----
+fn calculate_finding_cache_key(finding: &Finding, target: &TargetHost) -> String {
+⋮----
+target.host.hash(&mut hasher);
+target.ip.hash(&mut hasher);
+finding.core.id.hash(&mut hasher);
+finding.core.category.hash(&mut hasher);
+⋮----
+format!("f:{:x}", hasher.finish())
+⋮----
+pub fn classify(&self, finding: &Finding, target: &TargetHost) -> RouteLevel {
+let cvss = finding.enrichment.cvss_score.unwrap_or(0.0);
+⋮----
+level = level.max(RouteLevel::Mid);
+⋮----
+if let Some(tech) = target_ctx.get("tech").and_then(|t| t.as_array()) {
+⋮----
+if let Some(name) = t.as_str() {
+if waf_tech.iter().any(|&w| name.to_lowercase().contains(w)) {
+⋮----
+if evidence.data.get("type").and_then(|v| v.as_str()) == Some("source_aware") {
+⋮----
+pub async fn analyze(&self, finding: &Finding, target: &TargetHost, attack_context: Option<&str>) -> Result<AIAnalysis> {
+let level = self.classify(finding, target);
+⋮----
+self.analyze_with_level(finding, target, attack_context, level, caveman).await
+⋮----
+pub async fn analyze_with_level(&self, finding: &Finding, target: &TargetHost, attack_context: Option<&str>, target_level: RouteLevel, caveman: super::types::CavemanLevel) -> Result<AIAnalysis> {
+⋮----
+if let Some(cached) = self.analysis_cache.get(&cache_key) {
+self.metrics.hits.fetch_add(1, Ordering::Relaxed);
+return Ok(cached);
+⋮----
+self.metrics.misses.fetch_add(1, Ordering::Relaxed);
+⋮----
+if let Some(providers) = self.providers.get(&current_level) {
+⋮----
+let effective_ctx = self.enrich_context_v15(finding, attack_context, current_level, Posture::Ghost, caveman).await;
+⋮----
+attack_context: effective_ctx.as_deref(),
+⋮----
+match entry.client.analyze(config).await {
+⋮----
+analysis.model = format!("{} (Tiered: {:?}, Provider: {:?})", analysis.model, current_level, entry.kind);
+self.analysis_cache.insert(cache_key, analysis.clone()).await;
+return Ok(analysis);
+⋮----
+if matches!(router_err, RouterError::Unauthorized) {
+⋮----
+Err(anyhow!("All TieredAIRouter providers failed for {}", finding.core.id))
+⋮----
+pub async fn decide_action(
+⋮----
+let target_level = self.classify(finding, target);
+⋮----
+let caveman = adaptive_context.map(|c| c.current_caveman).unwrap_or_default();
+let posture = adaptive_context.map(|c| c.posture).unwrap_or(Posture::Ghost);
+⋮----
+let effective_ctx = self.enrich_context_v15(finding, attack_context, current_level, posture, caveman).await;
+⋮----
+match entry.client.decide_action(config).await {
+⋮----
+return Ok(Some((action, context)));
+⋮----
+Ok(None)
+⋮----
+async fn enrich_context_v15(
+⋮----
+let mut effective_ctx = base_ctx.map(|s| s.to_string());
+⋮----
+let skills = sm.match_for_context(finding, posture, level, budget).await;
+if !skills.is_empty() {
+if let Some(injection) = sm.build_injection(&skills, caveman).await {
+info!("🧠 [Router] Inyectando {} skills técnicos (Budget: {} tokens, Tier: {:?}).", skills.len(), budget, level);
+⋮----
+PROMPT_OPTIMIZER.optimize(&injection, OptimizationLevel::Ultra)
+⋮----
+PROMPT_OPTIMIZER.optimize(&injection, OptimizationLevel::Lite)
+⋮----
+PROMPT_OPTIMIZER.optimize(&injection, OptimizationLevel::Full)
+⋮----
+effective_ctx = Some(match effective_ctx {
+Some(ctx) => format!("{}\n{}", optimized_injection, ctx),
 </file>
 
 <file path="redteam_rust_core/src/core/mcp/sanitizer.rs">
@@ -9590,89 +9380,244 @@ assert!(!out.contains("50%"), "genérica debe eliminar progress bar");
 assert!(!out.contains("===="), "genérica debe eliminar separador");
 </file>
 
-<file path="redteam_rust_core/src/core/validation/mod.rs">
-use crate::core::ai::TieredAIRouter;
+<file path="redteam_rust_core/src/core/swarm/orchestrator.rs">
+use crate::core::pipeline::Pipeline;
 ⋮----
-use crate::models::findings::PocStrategy;
+use crate::core::approval_gate::ApprovalGate;
 ⋮----
-use crate::core::policy::PolicyProvider;
-use anyhow::Result;
 use std::sync::Arc;
+use tokio::sync::mpsc;
 ⋮----
-mod executor;
-mod generator;
-mod sovereign;
-pub mod remote;
+use std::collections::HashSet;
 ⋮----
-pub struct PocValidator<M: ExecutorMode> {
+use crate::core::persistence::PersistenceOrchestrator;
 ⋮----
-pub fn new(
+pub enum AgentRole {
 ⋮----
-pub async fn validate(&self, finding: &mut Finding, target: &TargetHost, attack_context: Option<&str>) -> Result<bool> {
+pub struct SwarmOrchestrator<M: ExecutorMode = crate::utils::executor::GhostMode> where M: Clone {
 ⋮----
-poc.clone()
+pub struct SwarmConfig<M: ExecutorMode> {
 ⋮----
-self.generate_poc(finding, target, attack_context).await?
+pub struct AgentTask<'a, M: ExecutorMode> {
 ⋮----
-return Ok(false);
+pub fn new(config: SwarmConfig<M>) -> Self {
 ⋮----
-if analysis.poc.is_none() {
-analysis.poc = Some(poc.clone());
+id: "swarm-orchestrator".to_string(),
+name: "Osint-Swarm".to_string(),
 ⋮----
-info!("🧪 SENTINEL: Iniciando validación de PoC para '{}' (Estrategia: {:?})", finding.title, poc.strategy);
+pub fn clone_for_spawn(&self) -> Self {
+self.clone()
 ⋮----
-return self.sovereign_handover(finding, target, &poc).await;
+pub async fn run(&self, initial_target: TargetHost, sink_tx: mpsc::Sender<TargetHost>) -> Result<()> {
+info!("🐝 SWARM: Iniciando enjambre multi-agente para {}", initial_target.host);
 ⋮----
-let action_desc = format!("PoC EXPLOIT: {} on {}", finding.title, target.host);
+let mut state_lock = self.engagement.lock().await;
+if state_lock.is_none() {
 ⋮----
-let human_context = format!(
+let root_obj = Objective::new("OBJ-ROOT", "Initial Exploration", &format!("Explore target {}", initial_target.host), ObjectivePhase::Recon);
+state.opplan.add_objective(root_obj)?;
+*state_lock = Some(state);
+info!("🗺️ SWARM [V15]: OPPLAN Framework initialized.");
 ⋮----
-let req_id = self.approval_gate.request_approval(
+info!("⏳ SWARM: Verificando integridad de egreso (ProxyManager readiness)...");
+pm.wait_for_readiness(std::time::Duration::from_secs(30))
 ⋮----
-info!("⏳ SENTINEL: PoC intrusivo requiere aprobación manual (ID: {})", id);
-if !self.approval_gate.wait_for_approval(&id, 600).await {
-warn!("🚫 SENTINEL: Validación abortada por falta de aprobación.");
+.context("V14.1 OPSEC Block: Swarm cannot start without healthy egress proxies.")?;
+info!("✅ SWARM: Egress verificado. Sparking the swarm.");
 ⋮----
-PocStrategy::SafeCommand => self.execute_safe_command(&poc.payload, target).await,
-PocStrategy::HttpPayload => self.execute_http(&poc.payload, target).await,
-PocStrategy::TcpCheck => self.execute_tcp_check(&poc.payload, target).await,
-PocStrategy::IcmpPing => self.execute_icmp_ping(target).await,
-PocStrategy::NucleiTemplate => self.execute_nuclei(&poc.payload, target).await,
-PocStrategy::HumanVerified => Ok("PoC verificado por operador.".to_string()),
+let pipeline = self.pipeline.clone();
+let target = initial_target.clone();
 ⋮----
-let s = output.contains(&poc.expected_pattern);
+let pipeline_clone = pipeline.clone();
+let discovery_tx_clone = discovery_tx.clone();
 ⋮----
-info!("🎯 SENTINEL: ¡PoC EXITOSO! Hallazgo verificado: {}", finding.title);
+let _ = pipeline_clone.run_discovery(&target, discovery_tx_clone).await;
 ⋮----
-let _ = self.deploy_c2(target).await;
+if !self.policy.is_target_allowed(&initial_target.host) {
+error!("🛡️ V14.2 SCOPE VIOLATION: Target {} is NOT authorized in policy.json. Aborting swarm.", initial_target.host);
+return Ok(());
 ⋮----
-warn!("❌ SENTINEL: PoC fallido. El patrón esperado '{}' no se encontró o no se detectaron severidades críticas/altas.", poc.expected_pattern);
+while let Some(finding) = discovery_rx.recv().await {
+while join_set.len() >= max_pending_tasks {
+if let Some(res) = join_set.join_next().await {
 ⋮----
-error!("⚠️ SENTINEL: Error durante la ejecución del PoC: {}", e);
+Ok(Err(e)) => error!("🐝 SWARM [Agent Error]: {}", e),
+Err(e) => error!("🐝 SWARM [Task Error]: Join error: {}", e),
 ⋮----
-let _ = crate::core::verification::ValidationPipeline::validate(finding, target, pm.clone(), self.router.clone()).await;
+if self.budget.is_exhausted() {
+warn!("💸 SWARM: Presupuesto de tokens agotado ({}). Deteniendo enjambre.", self.budget.current_total());
 ⋮----
-&& (finding.title.to_lowercase().contains("ssrf") || finding.title.to_lowercase().contains("blind")) {
-info!("🧬 SENTINEL [V15.4]: Active OOB requested. Triggering proactive re-run...");
+if seen_finding_ids.contains(&finding.core.id) { continue; }
+seen_finding_ids.insert(finding.core.id.clone());
 ⋮----
-info!("🛑 SENTINEL: Pipeline marcó hallazgo como PseudoFalse. Sobrescribiendo éxito.");
+let mut ce = correlation_engine.lock().await;
+ce.add_finding(finding.clone());
 ⋮----
-Ok(success)
+let mut role = self.plan_next_step(&finding, &initial_target).await?;
 ⋮----
-async fn execute_nuclei(&self, template_path: &str, target: &TargetHost) -> Result<String> {
-info!("🧬 SENTINEL: Ejecutando Nuclei con plantilla '{}' sobre {}", template_path, target.host);
+let ce_handle = correlation_engine.lock().await;
+let paths = ce_handle.get_attack_paths();
+if let Some(da_path) = paths.iter().find(|p| p.description.contains("Windows") && p.total_cvss > 0.8) {
+info!("🔱 V14.1 SOVEREIGN: High-value AD path detected! Prioritizing pivot: {}", da_path.description);
+if da_path.nodes.contains(&finding.core.id) && finding.core.category == Category::Vulnerability {
 ⋮----
-let args = vec![
+let attack_context = ce_handle.get_context_summary(&finding.core.id);
+debug!("🐝 SWARM [Planner]: Asignando hallazgo {} al agente {:?}", finding.core.id, role);
 ⋮----
-let output = self.executor.execute_and_wait("nuclei", args).await?;
-let stdout = String::from_utf8_lossy(&output.stdout).to_string();
-let stderr = String::from_utf8_lossy(&output.stderr).to_string();
+let orchestrator = Arc::new(self.clone_for_spawn());
+let finding_clone = finding.clone();
+let target_clone = initial_target.clone();
+let mut scout_tx = discovery_tx.clone();
+let mut ctx_clone = adaptive_context.clone();
+let ce_clone = correlation_engine.clone();
+let sink_tx_clone = sink_tx.clone();
+let semaphore = agent_semaphore.clone();
 ⋮----
-if !output.status.success() {
+let guard = match TokenGuard::new(self.budget.clone(), 1000, priority) {
 ⋮----
-if stdout.contains("[critical]") || stdout.contains("[high]") {
+warn!("💸 SWARM: No hay presupuesto suficiente para spawnear agente {:?} (Hallazgo {}). Skipping.", role, finding.core.id);
 ⋮----
-Ok(stdout)
+join_set.spawn(async move {
+let _permit = semaphore.acquire().await.ok();
+⋮----
+use std::panic::AssertUnwindSafe;
+use futures::FutureExt;
+⋮----
+let finding_id = finding_clone.core.id.clone();
+let result = AssertUnwindSafe(async {
+if orchestrator.budget.current_effective_total() > (orchestrator.budget.max_tokens as f64 * 0.95) as u32
+⋮----
+warn!("🛡️ SWARM: CRITICAL BUDGET LIMIT! Tokens > 95%. Forcing emergency pivot to Passive Reporter for {}.", finding_id);
+return orchestrator.execute_reporter(finding_clone, &target_clone, &sink_tx_clone, guard).await;
+⋮----
+AgentRole::Scout => orchestrator.execute_scout(AgentTask::<M> {
+⋮----
+AgentRole::Exploiter => orchestrator.execute_exploiter(AgentTask::<M> {
+⋮----
+AgentRole::C2Operator => orchestrator.execute_c2_operator(finding_clone, &target_clone, &mut ctx_clone, &sink_tx_clone, guard).await,
+AgentRole::GhostReporter => orchestrator.execute_reporter(finding_clone, &target_clone, &sink_tx_clone, guard).await,
+⋮----
+let mut ce = ce_clone.lock().await;
+ce.add_finding(finding_clone);
+guard.commit(0);
+Ok(())
+⋮----
+}).catch_unwind().await;
+⋮----
+error!("🛑 SWARM CRITICAL: Agent {:?} for finding {} caught a PANIC. Isolating.", role, finding_id);
+⋮----
+while let Some(res) = join_set.join_next().await {
+⋮----
+if e.is_panic() {
+error!("🛑 SWARM CRITICAL: Agent task PANICKED! Isolation active. Continuing other agents.");
+⋮----
+error!("🐝 SWARM [Task Error]: Join error: {}", e);
+⋮----
+info!("🛑 SWARM: Enjambre finalizado. Consumo total: {} tokens.", self.budget.current_total());
+⋮----
+async fn plan_next_step(&self, finding: &Finding, target: &TargetHost) -> Result<AgentRole> {
+⋮----
+info!("🐝 SWARM [Planner]: Routing {} to {:?} tier.", finding.core.id, level);
+⋮----
+Category::Recon | Category::NetworkPort | Category::TechnologyStack => Ok(AgentRole::Scout),
+⋮----
+let verified = finding.evidence.evidence.as_ref().map(|e| e.verified).unwrap_or(false);
+⋮----
+Ok(AgentRole::C2Operator)
+⋮----
+Ok(AgentRole::Exploiter)
+⋮----
+_ => Ok(AgentRole::GhostReporter),
+⋮----
+async fn execute_scout(
+⋮----
+info!("🔍 SWARM [Scout]: Profundizando en hallazgo de infraestructura: {}", task.finding.core.title);
+⋮----
+let metadata = self.pipeline.get_plugin_metadata();
+match self.router.decide_action(&task.finding, task.target, &metadata, task.attack_context.as_deref(), Some(task.adaptive_ctx)).await {
+⋮----
+task.guard.commit(200);
+⋮----
+let mut task_target = task.target.clone();
+⋮----
+let results = self.pipeline.run_specific_plugin(&action, &task_target).await?;
+⋮----
+let _ = task.tx.send(nf).await;
+⋮----
+return Err(e);
+⋮----
+let mut sink_target = task.target.clone();
+sink_target.findings = Arc::new(vec![task.finding]);
+let _ = task.sink_tx.send(sink_target).await;
+⋮----
+async fn execute_exploiter(
+⋮----
+info!("💥 SWARM [Exploiter]: Intentando validación/explotación de: {} [Posture: STRIKE]", finding.core.title);
+⋮----
+match self.router.analyze(&finding, task.target, task.attack_context.as_deref()).await {
+⋮----
+task.guard.commit(usage);
+finding = finding.with_ai_analysis(analysis.clone());
+⋮----
+self.router.clone(),
+self.approval_gate.clone(),
+self.operator.clone(),
+self.executor.clone(),
+self.policy.clone(),
+self.proxy_manager.clone(),
+⋮----
+let _ = poc_validator.validate(&mut finding, task.target, task.attack_context.as_deref()).await;
+⋮----
+warn!("⚠️ SWARM [Exploiter]: Error en análisis de explotación: {}", e);
+⋮----
+sink_target.findings = Arc::new(vec![finding]);
+⋮----
+async fn execute_c2_operator(
+⋮----
+info!("🔱 SWARM [C2Operator]: Orchestrating offensive persistence for {} [Posture: BREACH]", target.host);
+⋮----
+guard.commit(500);
+⋮----
+let orchestrator = PersistenceOrchestrator::new(self.router.clone(), self.executor.clone());
+if let Ok(plan) = orchestrator.generate_plan(&finding).await {
+info!("🎯 SWARM [C2Operator]: Tactical plan generated. Consolidating access...");
+if let Err(e) = orchestrator.consolidate(&plan, target).await {
+warn!("⚠️ SWARM [C2Operator]: Consolidation failed: {}", e);
+⋮----
+if let Ok(true) = orchestrator.verify_access(&plan, target).await {
+info!("🛡️ SWARM [C2Operator]: Persistence Verified (APT-Level). Posture maintained.");
+⋮----
+warn!("⚠️ SWARM [C2Operator]: Persistence verification failed. Payload might have been detected or blocked.");
+⋮----
+let operators = self.pipeline.get_c2_operators();
+if operators.is_empty() {
+warn!("⚠️ SWARM [C2Operator]: No se encontraron operadores C2 cargados en la pipeline.");
+⋮----
+match c2.verify_session(target).await {
+⋮----
+use crate::core::c2::SessionState;
+⋮----
+info!("🎯 SWARM [C2Operator]: Sesión activa detectada. Omitiendo despliegue.");
+⋮----
+if let Ok(payload_path) = c2.prepare_payload(target).await {
+info!("🚀 SWARM [C2Operator]: Payload preparado en {}. Iniciando despliegue...", payload_path);
+let _ = c2.deploy_payload(target, &payload_path).await;
+⋮----
+let mut sink_target = target.clone();
+let mut final_findings = vec![finding.clone()];
+final_findings.push(Finding::new(
+⋮----
+&format!("Persistence payload deployed via C2 Operator: {}", payload_path),
+⋮----
+let _ = sink_tx.send(sink_target).await;
+⋮----
+Err(e) => debug!("🐝 SWARM [C2Operator]: Operador falló verificación: {}", e),
+⋮----
+warn!("⚠️ SWARM [C2Operator]: No se pudo establecer persistencia con ningún operador disponible.");
+⋮----
+async fn execute_reporter(
+⋮----
+debug!("📝 SWARM [Reporter]: Archivando hallazgo informativo: {}", finding.core.title);
 </file>
 
 <file path="redteam_rust_core/src/plugins/compliance/kubescape.rs">
@@ -11464,6 +11409,91 @@ findings.push(Finding::new(
 Ok(findings)
 </file>
 
+<file path="redteam_rust_core/src/core/validation/mod.rs">
+use crate::core::ai::TieredAIRouter;
+⋮----
+use crate::models::findings::PocStrategy;
+⋮----
+use crate::core::policy::PolicyProvider;
+use anyhow::Result;
+use std::sync::Arc;
+⋮----
+mod executor;
+mod generator;
+mod sovereign;
+pub mod remote;
+⋮----
+pub struct PocValidator<M: ExecutorMode> {
+⋮----
+pub fn new(
+⋮----
+pub async fn validate(&self, finding: &mut Finding, target: &TargetHost, attack_context: Option<&str>) -> Result<bool> {
+⋮----
+poc.clone()
+⋮----
+self.generate_poc(finding, target, attack_context).await?
+⋮----
+return Ok(false);
+⋮----
+if analysis.poc.is_none() {
+analysis.poc = Some(poc.clone());
+⋮----
+info!("🧪 SENTINEL: Iniciando validación de PoC para '{}' (Estrategia: {:?})", finding.core.title, poc.strategy);
+⋮----
+return self.sovereign_handover(finding, target, &poc).await;
+⋮----
+let action_desc = format!("PoC EXPLOIT: {} on {}", finding.core.title, target.host);
+⋮----
+let human_context = format!(
+⋮----
+let req_id = self.approval_gate.request_approval(
+⋮----
+info!("⏳ SENTINEL: PoC intrusivo requiere aprobación manual (ID: {})", id);
+if !self.approval_gate.wait_for_approval(&id, 600).await {
+warn!("🚫 SENTINEL: Validación abortada por falta de aprobación.");
+⋮----
+PocStrategy::SafeCommand => self.execute_safe_command(&poc.payload, target).await,
+PocStrategy::HttpPayload => self.execute_http(&poc.payload, target).await,
+PocStrategy::TcpCheck => self.execute_tcp_check(&poc.payload, target).await,
+PocStrategy::IcmpPing => self.execute_icmp_ping(target).await,
+PocStrategy::NucleiTemplate => self.execute_nuclei(&poc.payload, target).await,
+PocStrategy::HumanVerified => Ok("PoC verificado por operador.".to_string()),
+⋮----
+let s = output.contains(&poc.expected_pattern);
+⋮----
+info!("🎯 SENTINEL: ¡PoC EXITOSO! Hallazgo verificado: {}", finding.core.title);
+⋮----
+let _ = self.deploy_c2(target).await;
+⋮----
+warn!("❌ SENTINEL: PoC fallido. El patrón esperado '{}' no se encontró o no se detectaron severidades críticas/altas.", poc.expected_pattern);
+⋮----
+error!("⚠️ SENTINEL: Error durante la ejecución del PoC: {}", e);
+⋮----
+let _ = crate::core::verification::ValidationPipeline::validate(finding, target, pm.clone(), self.router.clone()).await;
+⋮----
+if finding.core.severity >= crate::models::Severity::High && finding.validation.as_ref().map(|v| v.status).unwrap_or(ValidationStatus::Unverified) != ValidationStatus::Verified
+&& (finding.core.title.to_lowercase().contains("ssrf") || finding.core.title.to_lowercase().contains("blind")) {
+info!("🧬 SENTINEL [V15.4]: Active OOB requested. Triggering proactive re-run...");
+⋮----
+info!("🛑 SENTINEL: Pipeline marcó hallazgo como PseudoFalse. Sobrescribiendo éxito.");
+⋮----
+Ok(success)
+⋮----
+async fn execute_nuclei(&self, template_path: &str, target: &TargetHost) -> Result<String> {
+info!("🧬 SENTINEL: Ejecutando Nuclei con plantilla '{}' sobre {}", template_path, target.host);
+⋮----
+let args = vec![
+⋮----
+let output = self.executor.execute_and_wait("nuclei", args).await?;
+let stdout = String::from_utf8_lossy(&output.stdout).to_string();
+let stderr = String::from_utf8_lossy(&output.stderr).to_string();
+⋮----
+if !output.status.success() {
+⋮----
+if stdout.contains("[critical]") || stdout.contains("[high]") {
+Ok(stdout)
+</file>
+
 <file path="redteam_rust_core/src/plugins/enumeration/web/kiterunner.rs">
 use crate::utils::tool_detection::detect_tool;
 use async_trait::async_trait;
@@ -11734,78 +11764,6 @@ if !line.trim().is_empty() {
 findings.push(Finding::new(
 ⋮----
 &format!("Vulnerability detected by Jaeles: {}", line),
-⋮----
-Ok(findings)
-</file>
-
-<file path="redteam_rust_core/src/plugins/intelligence/searchsploit.rs">
-use crate::utils::tool_detection::detect_tool;
-use async_trait::async_trait;
-⋮----
-use tracing::info;
-use std::process::Stdio;
-use tokio::process::Command;
-pub struct SearchsploitScanner {
-⋮----
-impl Default for SearchsploitScanner {
-fn default() -> Self {
-⋮----
-impl SearchsploitScanner {
-pub fn new() -> Self {
-let path = detect_tool("searchsploit");
-⋮----
-impl ScannerPlugin for SearchsploitScanner {
-fn name(&self) -> &'static str {
-⋮----
-fn metadata(&self) -> crate::plugins::PluginMetadata {
-⋮----
-name: self.name().to_string(),
-description: "Automated security analysis using this plugin.".to_string(),
-⋮----
-capabilities: self.capabilities(),
-⋮----
-category: "Intelligence".to_string(),
-mitre_attacks: vec![],
-⋮----
-fn capabilities(&self) -> Vec<Capability> {
-vec![Capability::VulnerabilityScanning]
-⋮----
-async fn check_dependencies(&self) -> Result<bool> {
-Ok(crate::utils::check_tool_availability("searchsploit").await)
-⋮----
-async fn scan(&self, target: &TargetHost) -> Result<Vec<Finding>> {
-⋮----
-// Searchsploit identifies exploits based on service versions found in other findings
-// We iterate through existing findings to find software versions
-for finding in target.findings.iter() {
-⋮----
-// Try to extract software name from description or evidence
-// This is a simplified heuristic
-let query: String = if let Some(product) = finding.evidence.data.get("product") {
-product.as_str().unwrap_or("").to_string()
-⋮----
-finding.description.clone()
-⋮----
-if query.len() > 3 {
-info!("SearchsploitScanner: searching exploits for '{}'", query);
-⋮----
-.arg("--json")
-.arg(&query)
-.stdin(Stdio::null())
-.stdout(Stdio::piped())
-.stderr(Stdio::null())
-.spawn();
-⋮----
-let output = c.wait_with_output().await.context("Failed to wait for searchsploit")?;
-⋮----
-if let Some(results) = json_data.get("RESULTS_EXPLOIT") {
-if results.as_array().is_some_and(|a| !a.is_empty()) {
-findings.push(Finding::new(
-⋮----
-&format!("Public exploits found for '{}'", query),
-⋮----
-.with_mitre_attack(vec!["T1588.006".to_string()])
-.with_tactical_path("Investigate identified exploits and patch the affected software."));
 ⋮----
 Ok(findings)
 </file>
@@ -12264,6 +12222,81 @@ self.resolved_ip.as_deref()
 fn default_arc_json() -> Arc<serde_json::Value> {
 </file>
 
+<file path="redteam_rust_core/src/plugins/intelligence/searchsploit.rs">
+use crate::utils::tool_detection::detect_tool;
+use async_trait::async_trait;
+⋮----
+use tracing::info;
+use std::process::Stdio;
+use tokio::process::Command;
+pub struct SearchsploitScanner {
+⋮----
+impl Default for SearchsploitScanner {
+fn default() -> Self {
+⋮----
+impl SearchsploitScanner {
+pub fn new() -> Self {
+let path = detect_tool("searchsploit");
+⋮----
+impl ScannerPlugin for SearchsploitScanner {
+fn name(&self) -> &'static str {
+⋮----
+fn metadata(&self) -> crate::plugins::PluginMetadata {
+⋮----
+name: self.name().to_string(),
+description: "Automated security analysis using this plugin.".to_string(),
+⋮----
+capabilities: self.capabilities(),
+⋮----
+category: "Intelligence".to_string(),
+mitre_attacks: vec![],
+⋮----
+fn capabilities(&self) -> Vec<Capability> {
+vec![Capability::VulnerabilityScanning]
+⋮----
+async fn check_dependencies(&self) -> Result<bool> {
+Ok(crate::utils::check_tool_availability("searchsploit").await)
+⋮----
+async fn scan(&self, target: &TargetHost) -> Result<Vec<Finding>> {
+⋮----
+// Searchsploit identifies exploits based on service versions found in other findings
+// We iterate through existing findings to find software versions
+for finding in target.findings.iter() {
+⋮----
+// Try to extract software name from description or evidence
+// This is a simplified heuristic
+⋮----
+.as_ref()
+.and_then(|e| e.data.get("product"))
+⋮----
+product.as_str().unwrap_or("").to_string()
+⋮----
+finding.core.description.clone()
+⋮----
+if query.len() > 3 {
+info!("SearchsploitScanner: searching exploits for '{}'", query);
+⋮----
+.arg("--json")
+.arg(&query)
+.stdin(Stdio::null())
+.stdout(Stdio::piped())
+.stderr(Stdio::null())
+.spawn();
+⋮----
+let output = c.wait_with_output().await.context("Failed to wait for searchsploit")?;
+⋮----
+if let Some(results) = json_data.get("RESULTS_EXPLOIT") {
+if results.as_array().is_some_and(|a| !a.is_empty()) {
+findings.push(Finding::new(
+⋮----
+&format!("Public exploits found for '{}'", query),
+⋮----
+.with_mitre_attack(vec!["T1588.006".to_string()])
+.with_tactical_path("Investigate identified exploits and patch the affected software."));
+⋮----
+Ok(findings)
+</file>
+
 <file path="redteam_rust_core/src/plugins/lateral_movement/bloodhound.rs">
 use std::sync::Arc;
 ⋮----
@@ -12614,184 +12647,12 @@ mermaid.push_str(&format!("  Targets --> {}\n", host_id));
 ⋮----
 for (i, f) in t.findings.iter().enumerate() {
 let finding_id = format!("{}_f{}", host_id, i);
-mermaid.push_str(&format!("  {} --> {}[\"{:?}\"]\n", host_id, finding_id, f.category));
+mermaid.push_str(&format!("  {} --> {}[\"{:?}\"]\n", host_id, finding_id, f.core.category));
 ⋮----
 let rendered = reg.render_template(HTML_TEMPLATE, &vm)?;
 ⋮----
 if let Some(parent) = out_path.parent() {
 if !parent.as_os_str().is_empty() && !parent.exists() {
-</file>
-
-<file path="redteam_rust_core/src/core/mcp/server.rs">
-use axum::async_trait;
-⋮----
-use futures::stream::Stream;
-⋮----
-use tokio::sync::mpsc;
-use tokio_stream::wrappers::ReceiverStream;
-use tokio_stream::StreamExt;
-⋮----
-use serde_json::json;
-⋮----
-use hex::ToHex;
-⋮----
-use crate::plugins::GlobalConfig;
-use crate::core::mcp::sanitizer::DataSanitizer;
-use crate::core::ai::compressor::ContextCompressor;
-use crate::core::ai::types::RouteLevel;
-⋮----
-use crate::core::ai::token_optimizer::PromptOptimizer;
-⋮----
-use crate::core::sink::SqliteSink;
-⋮----
-use std::path::PathBuf;
-use moka::future::Cache;
-use dashmap::DashMap;
-⋮----
-pub struct McpServer {
-⋮----
-pub fn new(config: GlobalConfig) -> Self {
-⋮----
-.max_capacity(100)
-.time_to_live(Duration::from_secs(1800))
-.build();
-⋮----
-pub async fn with_sqlite(mut self, path: PathBuf) -> Self {
-⋮----
-if let Ok(stats) = db.get_mcp_stats().await {
-if let Some(v) = stats.get("total_calls") { self.total_calls.store(*v as u32, Ordering::SeqCst); }
-if let Some(v) = stats.get("cache_hits") { self.cache_hits.store(*v as u32, Ordering::SeqCst); }
-if let Some(v) = stats.get("tokens_saved") { self.tokens_saved.store(*v as u64, Ordering::SeqCst); }
-if let Some(v) = stats.get("bytes_processed") { self.bytes_processed.store(*v as u64, Ordering::SeqCst); }
-⋮----
-self.db = Some(Arc::new(db));
-⋮----
-if self.config.mcp_token.is_none() || self.config.mcp_token.as_ref().unwrap().is_empty() {
-⋮----
-let origin_str = origin.to_str().unwrap_or("");
-// Sprint 2: Exact matching including port to prevent subdomain hijacking/rebinding
-⋮----
-info!("🛡️ [MCP-Server] Escuchando en http://{} (SSE Enabled + AUTH + CORS Hardened)", addr);
-⋮----
-// 1. Validacion de Path (Sprint 2)
-⋮----
-// Loop detection — detecta alucinaciones en cadena antes de ejecutar
-</file>
-
-<file path="redteam_rust_core/src/infrastructure/digital_ocean.rs">
-use tracing::info;
-⋮----
-use std::sync::Arc;
-use crate::utils::proxy::ProxyManager;
-use std::time::Duration;
-use tokio::time::sleep;
-⋮----
-pub struct Droplet {
-⋮----
-pub struct Networks {
-⋮----
-pub struct Network {
-⋮----
-impl Droplet {
-pub fn public_ip(&self) -> Option<String> {
-self.networks.v4.iter()
-.find(|n| n.r#type == "public")
-.map(|n| n.ip_address.clone())
-⋮----
-struct CreateDropletRequest {
-⋮----
-use crate::utils::config::ProxyMode;
-⋮----
-fn generate_proxy_user_data(mode: ProxyMode, user: &str, pass: &str) -> String {
-⋮----
-ProxyMode::Dante => format!(r#"#cloud-config
-⋮----
-ProxyMode::Shadowsocks => format!(r#"#cloud-config
-⋮----
-ProxyMode::Hysteria => format!(r#"#cloud-config
-⋮----
-pub struct DigitalOceanClient {
-⋮----
-impl DigitalOceanClient {
-pub fn new(token: String, pm: Arc<ProxyManager>) -> Self {
-⋮----
-fn get_client(&self) -> Result<reqwest::Client> {
-let (_, client) = self.proxy_manager.get_client_fail_closed("api.digitalocean.com")?;
-Ok(client)
-⋮----
-fn headers(&self) -> Result<HeaderMap> {
-⋮----
-let auth_val = HeaderValue::from_str(&format!("Bearer {}", self.token))
-.context("Invalid DigitalOcean token format for AUTHORIZATION header")?;
-⋮----
-headers.insert(AUTHORIZATION, auth_val);
-headers.insert(CONTENT_TYPE, HeaderValue::from_static("application/json"));
-Ok(headers)
-⋮----
-pub async fn create_droplet(&self, name: &str, region: &str, mode: ProxyMode) -> Result<Droplet> {
-⋮----
-let socks_pass = uuid::Uuid::new_v4().to_string()[..12].to_string();
-⋮----
-name: name.to_string(),
-region: region.to_string(),
-size: "s-1vcpu-512mb".to_string(),
-image: "ubuntu-22-04-x64".to_string(),
-ssh_keys: vec![],
-⋮----
-tags: vec!["osint-ultimate".to_string(), "ephemeral".to_string()],
-user_data: Some(generate_proxy_user_data(mode, socks_user, &socks_pass)),
-⋮----
-let response = self.get_client()?
-.post("https://api.digitalocean.com/v2/droplets")
-.headers(self.headers()?)
-.json(&request)
-.send()
-⋮----
-.error_for_status()?;
-⋮----
-struct DropletWrapper {
-⋮----
-let mut wrapper: DropletWrapper = response.json().await?;
-wrapper.droplet.socks_user = Some(socks_user.to_string());
-wrapper.droplet.socks_pass = Some(socks_pass);
-⋮----
-Ok(wrapper.droplet)
-⋮----
-pub async fn get_droplet(&self, id: u64) -> Result<Droplet> {
-⋮----
-.get(format!("https://api.digitalocean.com/v2/droplets/{}", id))
-⋮----
-let wrapper: DropletWrapper = response.json().await?;
-⋮----
-pub async fn wait_for_ip(&self, id: u64) -> Result<String> {
-⋮----
-let droplet = self.get_droplet(id).await?;
-⋮----
-if let Some(ip) = droplet.public_ip() {
-return Ok(ip);
-⋮----
-sleep(Duration::from_secs(10)).await;
-⋮----
-pub async fn destroy_droplet(&self, id: u64) -> Result<()> {
-self.get_client()?
-.delete(format!("https://api.digitalocean.com/v2/droplets/{}", id))
-⋮----
-Ok(())
-⋮----
-pub async fn list_droplets(&self) -> Result<Vec<Droplet>> {
-⋮----
-.get("https://api.digitalocean.com/v2/droplets?tag_name=osint-ultimate")
-⋮----
-struct DropletsWrapper {
-⋮----
-let wrapper: DropletsWrapper = response.json().await?;
-Ok(wrapper.droplets)
-⋮----
-pub async fn destroy_all_ephemeral_droplets(&self) -> Result<()> {
-let droplets = self.list_droplets().await?;
-⋮----
-info!("🛡️ KILL-SWITCH: Destroying ephemeral droplet {} (ID: {})...", d.name, d.id);
-let _ = self.destroy_droplet(d.id).await;
 </file>
 
 <file path="redteam_rust_core/src/menu.rs">
@@ -12869,6 +12730,182 @@ Ok(Some(args))
 ⋮----
 println!("🛑 Operativo cancelado.");
 Ok(None)
+</file>
+
+<file path="redteam_rust_core/src/core/mcp/server.rs">
+use axum::async_trait;
+⋮----
+use futures::stream::Stream;
+⋮----
+use tokio::sync::mpsc;
+use tokio_stream::wrappers::ReceiverStream;
+use tokio_stream::StreamExt;
+⋮----
+use serde_json::json;
+⋮----
+use hex::ToHex;
+⋮----
+use crate::plugins::GlobalConfig;
+use crate::core::mcp::sanitizer::DataSanitizer;
+use crate::core::ai::compressor::ContextCompressor;
+use crate::core::ai::types::RouteLevel;
+⋮----
+use crate::core::ai::token_optimizer::PromptOptimizer;
+⋮----
+use crate::core::sink::PostgresSink;
+⋮----
+use std::path::PathBuf;
+use moka::future::Cache;
+use dashmap::DashMap;
+⋮----
+pub struct McpServer {
+⋮----
+pub fn new(config: GlobalConfig) -> Self {
+⋮----
+.max_capacity(100)
+.time_to_live(Duration::from_secs(1800))
+.build();
+⋮----
+pub async fn with_postgres(mut self, path: PathBuf) -> Self {
+⋮----
+let stats_res: anyhow::Result<std::collections::HashMap<String, i64>> = db.get_mcp_stats().await;
+⋮----
+if let Some(v) = stats.get("total_calls") { self.total_calls.store(*v as u32, Ordering::SeqCst); }
+if let Some(v) = stats.get("cache_hits") { self.cache_hits.store(*v as u32, Ordering::SeqCst); }
+if let Some(v) = stats.get("tokens_saved") { self.tokens_saved.store(*v as u64, Ordering::SeqCst); }
+if let Some(v) = stats.get("bytes_processed") { self.bytes_processed.store(*v as u64, Ordering::SeqCst); }
+⋮----
+self.db = Some(Arc::new(db));
+⋮----
+if self.config.mcp_token.is_none() || self.config.mcp_token.as_ref().unwrap().is_empty() {
+⋮----
+let origin_str = origin.to_str().unwrap_or("");
+// Sprint 2: Exact matching including port to prevent subdomain hijacking/rebinding
+⋮----
+info!("🛡️ [MCP-Server] Escuchando en http://{} (SSE Enabled + AUTH + CORS Hardened)", addr);
+⋮----
+// 1. Validacion de Path (Sprint 2)
+⋮----
+// Loop detection — detecta alucinaciones en cadena antes de ejecutar
+</file>
+
+<file path="redteam_rust_core/src/infrastructure/digital_ocean.rs">
+use tracing::info;
+⋮----
+use std::sync::Arc;
+use crate::utils::proxy::ProxyManager;
+use std::time::Duration;
+use tokio::time::sleep;
+⋮----
+pub struct Droplet {
+⋮----
+pub struct Networks {
+⋮----
+pub struct Network {
+⋮----
+impl Droplet {
+pub fn public_ip(&self) -> Option<String> {
+self.networks.v4.iter()
+.find(|n| n.r#type == "public")
+.map(|n| n.ip_address.clone())
+⋮----
+struct CreateDropletRequest {
+⋮----
+use crate::utils::config::ProxyMode;
+⋮----
+fn generate_proxy_user_data(mode: ProxyMode, user: &str, pass: &str) -> String {
+⋮----
+ProxyMode::Dante => format!(r#"#cloud-config
+⋮----
+ProxyMode::Shadowsocks => format!(r#"#cloud-config
+⋮----
+ProxyMode::Hysteria => format!(r#"#cloud-config
+⋮----
+pub struct DigitalOceanClient {
+⋮----
+impl DigitalOceanClient {
+pub fn new(token: String, pm: Arc<ProxyManager>) -> Self {
+⋮----
+fn get_client(&self) -> Result<reqwest::Client> {
+let (_, client) = self.proxy_manager.get_client_fail_closed("api.digitalocean.com")?;
+Ok(client)
+⋮----
+fn headers(&self) -> Result<HeaderMap> {
+⋮----
+let auth_val = HeaderValue::from_str(&format!("Bearer {}", self.token))
+.context("Invalid DigitalOcean token format for AUTHORIZATION header")?;
+⋮----
+headers.insert(AUTHORIZATION, auth_val);
+headers.insert(CONTENT_TYPE, HeaderValue::from_static("application/json"));
+Ok(headers)
+⋮----
+pub async fn create_droplet(&self, name: &str, region: &str, mode: ProxyMode) -> Result<Droplet> {
+⋮----
+let socks_pass = uuid::Uuid::new_v4().to_string()[..12].to_string();
+⋮----
+let mut ssh_keys = vec![];
+⋮----
+ssh_keys.push(key);
+⋮----
+name: name.to_string(),
+region: region.to_string(),
+size: "s-1vcpu-512mb".to_string(),
+image: "ubuntu-22-04-x64".to_string(),
+⋮----
+tags: vec!["osint-ultimate".to_string(), "ephemeral".to_string()],
+user_data: Some(generate_proxy_user_data(mode, socks_user, &socks_pass)),
+⋮----
+let response = self.get_client()?
+.post("https://api.digitalocean.com/v2/droplets")
+.headers(self.headers()?)
+.json(&request)
+.send()
+⋮----
+.error_for_status()?;
+⋮----
+struct DropletWrapper {
+⋮----
+let mut wrapper: DropletWrapper = response.json().await?;
+wrapper.droplet.socks_user = Some(socks_user.to_string());
+wrapper.droplet.socks_pass = Some(socks_pass);
+⋮----
+Ok(wrapper.droplet)
+⋮----
+pub async fn get_droplet(&self, id: u64) -> Result<Droplet> {
+⋮----
+.get(format!("https://api.digitalocean.com/v2/droplets/{}", id))
+⋮----
+let wrapper: DropletWrapper = response.json().await?;
+⋮----
+pub async fn wait_for_ip(&self, id: u64) -> Result<String> {
+⋮----
+let droplet = self.get_droplet(id).await?;
+⋮----
+if let Some(ip) = droplet.public_ip() {
+return Ok(ip);
+⋮----
+sleep(Duration::from_secs(10)).await;
+⋮----
+pub async fn destroy_droplet(&self, id: u64) -> Result<()> {
+self.get_client()?
+.delete(format!("https://api.digitalocean.com/v2/droplets/{}", id))
+⋮----
+Ok(())
+⋮----
+pub async fn list_droplets(&self) -> Result<Vec<Droplet>> {
+⋮----
+.get("https://api.digitalocean.com/v2/droplets?tag_name=osint-ultimate")
+⋮----
+struct DropletsWrapper {
+⋮----
+let wrapper: DropletsWrapper = response.json().await?;
+Ok(wrapper.droplets)
+⋮----
+pub async fn destroy_all_ephemeral_droplets(&self) -> Result<()> {
+let droplets = self.list_droplets().await?;
+⋮----
+info!("🛡️ KILL-SWITCH: Destroying ephemeral droplet {} (ID: {})...", d.name, d.id);
+let _ = self.destroy_droplet(d.id).await;
 </file>
 
 <file path="redteam_rust_core/src/plugins/lateral_movement/sliver.rs">
@@ -13158,154 +13195,6 @@ fn as_c2_operator(&self) -> Option<&dyn C2Operator> {
 Some(self)
 </file>
 
-<file path="redteam_rust_core/src/models/findings.rs">
-use std::fmt;
-⋮----
-pub enum Severity {
-⋮----
-fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-write!(f, "{:?}", self)
-⋮----
-pub enum Category {
-⋮----
-pub enum ConsolidationUrgency {
-⋮----
-pub enum ValidationStatus {
-⋮----
-pub struct ValidationMetadata {
-⋮----
-pub struct EvidenceFile {
-⋮----
-pub struct Evidence {
-⋮----
-fn default_confidence() -> f32 { 0.5 }
-⋮----
-pub enum PocStrategy {
-⋮----
-pub enum ValidatedPoc {
-⋮----
-pub struct PocDefinition {
-⋮----
-pub struct TokenUsage {
-⋮----
-pub struct AIAnalysis {
-⋮----
-pub struct Finding {
-⋮----
-impl Finding {
-pub fn new(
-⋮----
-id: id.to_string(),
-⋮----
-severity: severity.clone(),
-title: description.to_string(),
-description: description.to_string(),
-⋮----
-cvss_score: Some(crate::utils::cvss::Cvss40::calculate(&severity, 0.5)),
-⋮----
-cvss_version: "4.0".to_string(),
-⋮----
-pub fn with_tactical_path(mut self, tactical_path: &str) -> Self {
-self.tactical_path = Some(tactical_path.to_string());
-⋮----
-pub fn with_parent(mut self, parent_id: &str) -> Self {
-self.parent_id = Some(parent_id.to_string());
-⋮----
-pub fn with_ai_analysis(mut self, analysis: AIAnalysis) -> Self {
-self.ai_analysis = Some(analysis);
-⋮----
-pub fn with_mitre_attack(mut self, tags: Vec<String>) -> Self {
-self.mitre_attack = Some(tags);
-⋮----
-pub fn with_cvss(mut self, score: f32) -> Self {
-self.cvss_score = Some(score);
-⋮----
-pub fn with_references(mut self, refs: Vec<String>) -> Self {
-⋮----
-pub fn with_blackarch_category(mut self, category: &str) -> Self {
-self.blackarch_category = Some(category.to_string());
-⋮----
-pub fn with_cvss_vector(mut self, vector: &str) -> Self {
-self.cvss_vector = Some(vector.to_string());
-⋮----
-pub fn with_cwe(mut self, cwe: Vec<String>) -> Self {
-⋮----
-pub fn with_detection_status(mut self, detected: bool, notes: &str) -> Self {
-self.detected = Some(detected);
-self.detection_notes = notes.to_string();
-⋮----
-pub fn with_consolidation_urgency(mut self, urgency: ConsolidationUrgency) -> Self {
-self.consolidation_urgency = Some(urgency);
-⋮----
-pub fn with_evidence_file(mut self, file: EvidenceFile) -> Self {
-self.evidence_files.push(file);
-⋮----
-pub fn with_execution_context(mut self, objective_id: &str, agent: &str, iteration: u32) -> Self {
-self.objective_id = objective_id.to_string();
-self.agent = agent.to_string();
-⋮----
-pub fn to_markdown(&self) -> String {
-⋮----
-md.push_str(&format!("# Finding: {}\n\n", self.title));
-md.push_str(&format!("**ID**: `{}`  \n", self.id));
-md.push_str(&format!("**Severity**: **{:?}**  \n", self.severity));
-md.push_str(&format!("**Category**: `{:?}`  \n", self.category));
-⋮----
-md.push_str(&format!("**CVSS Score**: `{}`  \n", score));
-⋮----
-md.push_str(&format!("**CVSS Vector**: `{}` (`{}`)  \n", vector, self.cvss_version));
-⋮----
-md.push_str(&format!("**Status**: {}  \n", if det { "🔴 Detected" } else { "🟢 Not Detected" }));
-⋮----
-md.push_str(&format!("**Consolidation Urgency**: {}  \n", prio_str));
-⋮----
-md.push_str("\n## Description\n\n");
-md.push_str(&self.description);
-md.push_str("\n\n");
-⋮----
-if !self.cwe.is_empty() {
-md.push_str("## CWE\n\n");
-⋮----
-md.push_str(&format!("- [{0}](https://cwe.mitre.org/data/definitions/{1}.html)\n", cwe, cwe.replace("CWE-", "")));
-⋮----
-md.push('\n');
-⋮----
-md.push_str("## MITRE ATT&CK\n\n");
-⋮----
-md.push_str(&format!("- `{}`\n", tag));
-⋮----
-md.push_str("## Evidence\n\n");
-md.push_str("```json\n");
-md.push_str(&serde_json::to_string_pretty(&self.evidence.data).unwrap_or_default());
-md.push_str("\n```\n\n");
-⋮----
-if !self.evidence_files.is_empty() {
-md.push_str("### Evidence Files\n\n");
-md.push_str("| File Type | Path | SHA-256 | Collected At |\n");
-md.push_str("|---|---|---|---|\n");
-⋮----
-let sha_short = if file.sha256.len() > 8 { &file.sha256[..8] } else { &file.sha256 };
-md.push_str(&format!("| {} | `{}` | `{}` | {} |\n",
-⋮----
-md.push_str("## Tactical Path\n\n");
-md.push_str(tactical);
-⋮----
-if !self.detection_notes.is_empty() {
-md.push_str("## Detection Notes\n\n");
-md.push_str(&self.detection_notes);
-⋮----
-md.push_str("## Context\n\n");
-if !self.objective_id.is_empty() {
-md.push_str(&format!("- **Objective**: `{}`\n", self.objective_id));
-⋮----
-if !self.agent.is_empty() {
-md.push_str(&format!("- **Agent**: `{}`\n", self.agent));
-⋮----
-md.push_str(&format!("- **Iteration**: `{}`\n", self.iteration));
-⋮----
-md.push_str(&format!("- **Timestamp**: `{}`\n", self.timestamps));
-</file>
-
 <file path="redteam_rust_core/src/plugins/enumeration/network/net.rs">
 pub struct NmapScanner<M: ExecutorMode> {
 ⋮----
@@ -13398,44 +13287,152 @@ assert!(TARGET_HOST_RE.is_match("google.com"));
 assert!(!TARGET_HOST_RE.is_match("google.com; rm -rf /"));
 </file>
 
-<file path="redteam_rust_core/src/core/mod.rs">
-pub mod agent;
-pub mod skills;
-pub mod pipeline;
-pub mod sink;
-pub mod plugin_loader;
-pub mod capability_layer;
-pub mod approval_gate;
-pub mod blackarch;
-pub mod ai;
-pub mod waf;
-pub mod correlation;
-pub mod web;
-pub mod filter;
-pub mod lock_free_sink;
-pub mod native_scanner;
-pub mod validation;
-pub mod swarm;
-pub mod resource_manager;
-pub mod sandbox;
-pub mod mcp;
-pub mod source_analyzer;
-pub mod factory;
-pub mod engine;
-pub mod c2;
-pub mod policy;
-pub mod middleware;
-pub mod persistence;
-pub mod orchestrator;
-pub mod verification;
-pub mod notifications;
+<file path="redteam_rust_core/src/models/findings.rs">
+use std::fmt;
+use std::ops::Deref;
 ⋮----
-pub mod tests;
+pub enum Severity {
 ⋮----
-pub use orchestrator::Orchestrator;
+fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+write!(f, "{:?}", self)
 ⋮----
-pub use filter::FalsePositiveFilter;
-pub use validation::PocValidator;
+pub enum Category {
+⋮----
+pub enum ConsolidationUrgency {
+⋮----
+pub enum ValidationStatus {
+⋮----
+pub struct ValidationMetadata {
+⋮----
+pub struct EvidenceFile {
+⋮----
+pub struct Evidence {
+⋮----
+fn default_confidence() -> f32 { 0.5 }
+⋮----
+pub enum PocStrategy {
+⋮----
+pub enum ValidatedPoc {
+⋮----
+pub struct PocDefinition {
+⋮----
+pub struct TokenUsage {
+⋮----
+pub struct AIAnalysis {
+⋮----
+pub struct CoreFinding {
+⋮----
+pub struct FindingEvidence {
+⋮----
+pub struct FindingEnrichment {
+⋮----
+pub struct ExecutionContext {
+⋮----
+pub struct Finding {
+⋮----
+impl Deref for Finding {
+type Target = CoreFinding;
+fn deref(&self) -> &Self::Target {
+⋮----
+impl Finding {
+pub fn builder(id: &str, category: Category, severity: Severity, description: &str) -> FindingBuilder {
+⋮----
+pub fn new(id: &str, category: Category, severity: Severity, description: &str, evidence: serde_json::Value) -> Self {
+⋮----
+.with_evidence(evidence)
+.build()
+⋮----
+pub fn with_ai_analysis(mut self, analysis: AIAnalysis) -> Self {
+self.enrichment.ai_analysis = Some(analysis);
+⋮----
+pub fn with_mitre_attack(mut self, tags: Vec<String>) -> Self {
+self.enrichment.mitre_attack = Some(tags);
+⋮----
+pub fn with_tactical_path(mut self, path: &str) -> Self {
+self.core.tactical_path = Some(path.to_string());
+⋮----
+pub fn with_parent(mut self, id: &str) -> Self {
+self.core.parent_id = Some(id.to_string());
+⋮----
+pub fn with_cvss(mut self, score: f32) -> Self {
+self.enrichment.cvss_score = Some(score);
+⋮----
+pub fn with_references(mut self, refs: Vec<String>) -> Self {
+⋮----
+pub fn with_blackarch_category(mut self, category: &str) -> Self {
+self.enrichment.blackarch_category = Some(category.to_string());
+⋮----
+pub fn with_execution_context(mut self, objective_id: &str, agent: &str, iteration: u32) -> Self {
+self.context.objective_id = objective_id.to_string();
+self.context.agent = agent.to_string();
+⋮----
+pub fn to_markdown(&self) -> String {
+⋮----
+md.push_str(&format!("# Finding: {}\n\n", self.core.title));
+md.push_str(&format!("**ID**: `{}`  \n", self.core.id));
+md.push_str(&format!("**Severity**: **{:?}**  \n", self.core.severity));
+md.push_str(&format!("**Category**: `{:?}`  \n", self.core.category));
+⋮----
+md.push_str(&format!("**CVSS Score**: `{}`  \n", score));
+⋮----
+md.push_str(&format!("**CVSS Vector**: `{}` (`{}`)  \n", vector, self.enrichment.cvss_version));
+⋮----
+md.push_str(&format!("**Status**: {}  \n", if det { "🔴 Detected" } else { "🟢 Not Detected" }));
+⋮----
+md.push_str("\n## Description\n\n");
+md.push_str(&self.core.description);
+md.push_str("\n\n");
+⋮----
+if !self.enrichment.cwe.is_empty() {
+md.push_str("## CWE\n\n");
+⋮----
+md.push_str(&format!("- [{0}](https://cwe.mitre.org/data/definitions/{1}.html)\n", cwe, cwe.replace("CWE-", "")));
+⋮----
+md.push('\n');
+⋮----
+md.push_str("## MITRE ATT&CK\n\n");
+⋮----
+md.push_str(&format!("- `{}`\n", tag));
+⋮----
+md.push_str("## Evidence\n\n");
+md.push_str("```json\n");
+md.push_str(&serde_json::to_string_pretty(&ev.data).unwrap_or_default());
+md.push_str("\n```\n\n");
+⋮----
+if !self.evidence.files.is_empty() {
+md.push_str("### Evidence Files\n\n");
+md.push_str("| File Type | Path | SHA-256 | Collected At |\n");
+md.push_str("|---|---|---|---|\n");
+⋮----
+let sha_short = if file.sha256.len() > 8 { &file.sha256[..8] } else { &file.sha256 };
+md.push_str(&format!("| {} | `{}` | `{}` | {} |\n",
+⋮----
+md.push_str("## Context\n\n");
+if !self.context.objective_id.is_empty() {
+md.push_str(&format!("- **Objective**: `{}`\n", self.context.objective_id));
+⋮----
+if !self.context.agent.is_empty() {
+md.push_str(&format!("- **Agent**: `{}`\n", self.context.agent));
+⋮----
+md.push_str(&format!("- **Timestamp**: `{}`\n", self.core.timestamps));
+⋮----
+pub struct FindingBuilder {
+⋮----
+impl FindingBuilder {
+pub fn new(id: &str, category: Category, severity: Severity, description: &str) -> Self {
+⋮----
+id: id.to_string(),
+⋮----
+severity: severity.clone(),
+title: description.to_string(),
+description: description.to_string(),
+⋮----
+cvss_version: "4.0".to_string(),
+⋮----
+pub fn with_evidence(mut self, data: serde_json::Value) -> Self {
+self.evidence.evidence = Some(Evidence {
+⋮----
+pub fn build(self) -> Finding {
 </file>
 
 <file path="redteam_rust_core/src/plugins/mod.rs">
@@ -13593,89 +13590,44 @@ for discovery in get_all_discovery(config) {
 registry.add_discovery(discovery);
 </file>
 
-<file path="redteam_rust_core/src/core/agent.rs">
-use crate::models::TargetHost;
-use crate::core::pipeline::Pipeline;
-use crate::core::ai::AdaptiveContext;
-use anyhow::Result;
-use std::sync::Arc;
-use tokio::sync::mpsc;
-use tracing::info;
+<file path="redteam_rust_core/src/core/mod.rs">
+pub mod agent;
+pub mod skills;
+pub mod pipeline;
+pub mod sink;
+pub mod plugin_loader;
+pub mod capability_layer;
+pub mod approval_gate;
+pub mod blackarch;
+pub mod ai;
+pub mod waf;
+pub mod correlation;
+pub mod web;
+pub mod filter;
+pub mod lock_free_sink;
+pub mod native_scanner;
+pub mod validation;
+pub mod swarm;
+pub mod resource_manager;
+pub mod sandbox;
+pub mod mcp;
+pub mod source_analyzer;
+pub mod factory;
+pub mod engine;
+pub mod c2;
+pub mod policy;
+pub mod middleware;
+pub mod persistence;
+pub mod orchestrator;
+pub mod verification;
+pub mod notifications;
 ⋮----
-pub struct AutonomousAgent<M: ExecutorMode = crate::utils::executor::GhostMode> {
+pub mod tests;
 ⋮----
-pub fn new(
+pub use orchestrator::Orchestrator;
 ⋮----
-id: "sentinel-agent".to_string(),
-name: "Sentinel-AI".to_string(),
-⋮----
-router.clone(),
-approval_gate.clone(),
-operator.clone(),
-executor.clone(),
-policy.clone(),
-proxy_manager.clone(),
-⋮----
-pub fn with_activity_log(mut self, log: Arc<crate::utils::activity_log::ActivityLog>) -> Self {
-self.activity_log = Some(log);
-⋮----
-pub async fn run_autopilot(&self, initial_target: TargetHost, sink_tx: mpsc::Sender<TargetHost>) -> Result<()> {
-⋮----
-let _ = log.log(crate::utils::activity_log::EventKind::Note, crate::utils::activity_log::Actor::Sentinel, "Autonomous mission started.", Some(&initial_target.host), serde_json::json!({})).await;
-⋮----
-info!("🤖 SENTINEL: Iniciando ciclo autónomo adaptativo para {}", initial_target.host);
-⋮----
-let target = initial_target.clone();
-let tx_discovery = tx.clone();
-tokio::spawn(async move { let _ = pipeline.run_discovery(&target, tx_discovery).await; });
-⋮----
-while let Some(finding) = rx.recv().await {
-if seen_finding_ids.contains(&finding.id) { continue; }
-seen_finding_ids.insert(finding.id.clone());
-⋮----
-let _ = log.log(crate::utils::activity_log::EventKind::AgentStep, crate::utils::activity_log::Actor::Sentinel, &format!("Processing finding: {}", finding.title), Some(&initial_target.host), serde_json::json!({"finding_id": finding.id})).await;
-⋮----
-correlation_engine.add_finding(finding.clone());
-let attack_context = correlation_engine.get_context_summary(&finding.id);
-⋮----
-let analysis = self.router.analyze(&finding, &initial_target, attack_context.as_deref()).await?;
-let mut final_finding = finding.with_ai_analysis(analysis.clone());
-if let Some(tags) = analysis.mitre_attack { final_finding = final_finding.with_mitre_attack(tags); }
-⋮----
-info!("🧪 SENTINEL: Detectado hallazgo crítico/alto. Iniciando pipeline de validación de PoC...");
-let _ = self.poc_validator.validate(&mut final_finding, &initial_target, attack_context.as_deref()).await;
-⋮----
-let mut sink_target = initial_target.clone();
-sink_target.findings = Arc::new(vec![final_finding.clone()]);
-let paths = correlation_engine.get_attack_paths();
-if !paths.is_empty() {
-⋮----
-let _ = sink_tx.send(sink_target).await;
-⋮----
-let metadata = self.pipeline.get_plugin_metadata();
-let attack_context = correlation_engine.get_context_summary(&final_finding.id);
-if let Ok(Some((action, tactical))) = self.router.decide_action(&final_finding, &initial_target, &metadata, attack_context.as_deref(), Some(&adaptive_context)).await {
-⋮----
-let _ = log.log(crate::utils::activity_log::EventKind::ToolCall, crate::utils::activity_log::Actor::Sentinel, &format!("AI decided action: {}", action), Some(&initial_target.host), tactical.clone()).await;
-⋮----
-if self.request_operator_approval(&action).await {
-let mut task_target = initial_target.clone();
-task_target.tactical_context = Arc::new(tactical.clone());
-adaptive_context.previous_actions.push(action.clone());
-let results = self.pipeline.run_specific_plugin(&action, &task_target).await?;
-if results.is_empty() {
-⋮----
-for nf in results { let _ = tx.send(nf).await; }
-⋮----
-if adaptive_context.previous_actions.len() > 50 { break; }
-⋮----
-let _ = log.log(crate::utils::activity_log::EventKind::Note, crate::utils::activity_log::Actor::Sentinel, "Autonomous mission finished.", Some(&initial_target.host), serde_json::json!({})).await;
-⋮----
-Ok(())
-⋮----
-async fn request_operator_approval(&self, action: &str) -> bool {
-if self.approval_gate.is_approved(action).await { return true; }
-match self.approval_gate.request_approval(action, 85, &self.operator, "Autonomous Adaptive Loop").await {
+pub use filter::FalsePositiveFilter;
+pub use validation::PocValidator;
 </file>
 
 <file path="redteam_rust_core/src/core/plugin_loader.rs">
@@ -13848,6 +13800,91 @@ public_key.verify(plugin_bytes, &signature)
 error!("🛑 UNTRUSTED PLUGIN DETECTED: Signature verification FAILED for {:?}. Possible tampering or MITM.", path);
 </file>
 
+<file path="redteam_rust_core/src/core/agent.rs">
+use crate::models::TargetHost;
+use crate::core::pipeline::Pipeline;
+use crate::core::ai::AdaptiveContext;
+use anyhow::Result;
+use std::sync::Arc;
+use tokio::sync::mpsc;
+use tracing::info;
+⋮----
+pub struct AutonomousAgent<M: ExecutorMode = crate::utils::executor::GhostMode> {
+⋮----
+pub fn new(
+⋮----
+id: "sentinel-agent".to_string(),
+name: "Sentinel-AI".to_string(),
+⋮----
+router.clone(),
+approval_gate.clone(),
+operator.clone(),
+executor.clone(),
+policy.clone(),
+proxy_manager.clone(),
+⋮----
+pub fn with_activity_log(mut self, log: Arc<crate::utils::activity_log::ActivityLog>) -> Self {
+self.activity_log = Some(log);
+⋮----
+pub async fn run_autopilot(&self, initial_target: TargetHost, sink_tx: mpsc::Sender<TargetHost>) -> Result<()> {
+⋮----
+let _ = log.log(crate::utils::activity_log::EventKind::Note, crate::utils::activity_log::Actor::Sentinel, "Autonomous mission started.", Some(&initial_target.host), serde_json::json!({})).await;
+⋮----
+info!("🤖 SENTINEL: Iniciando ciclo autónomo adaptativo para {}", initial_target.host);
+⋮----
+let target = initial_target.clone();
+let tx_discovery = tx.clone();
+tokio::spawn(async move { let _ = pipeline.run_discovery(&target, tx_discovery).await; });
+⋮----
+while let Some(finding) = rx.recv().await {
+if seen_finding_ids.contains(&finding.core.id) { continue; }
+seen_finding_ids.insert(finding.core.id.clone());
+⋮----
+let _ = log.log(crate::utils::activity_log::EventKind::AgentStep, crate::utils::activity_log::Actor::Sentinel, &format!("Processing finding: {}", finding.core.title), Some(&initial_target.host), serde_json::json!({"finding_id": finding.core.id})).await;
+⋮----
+correlation_engine.add_finding(finding.clone());
+let attack_context = correlation_engine.get_context_summary(&finding.core.id);
+⋮----
+let analysis = self.router.analyze(&finding, &initial_target, attack_context.as_deref()).await?;
+let mut final_finding = finding.with_ai_analysis(analysis.clone());
+if let Some(tags) = analysis.mitre_attack { final_finding = final_finding.with_mitre_attack(tags); }
+⋮----
+info!("🧪 SENTINEL: Detectado hallazgo crítico/alto. Iniciando pipeline de validación de PoC...");
+let _ = self.poc_validator.validate(&mut final_finding, &initial_target, attack_context.as_deref()).await;
+⋮----
+let mut sink_target = initial_target.clone();
+sink_target.findings = Arc::new(vec![final_finding.clone()]);
+let paths = correlation_engine.get_attack_paths();
+if !paths.is_empty() {
+⋮----
+let _ = sink_tx.send(sink_target).await;
+⋮----
+let metadata = self.pipeline.get_plugin_metadata();
+let attack_context = correlation_engine.get_context_summary(&final_finding.core.id);
+if let Ok(Some((action, tactical))) = self.router.decide_action(&final_finding, &initial_target, &metadata, attack_context.as_deref(), Some(&adaptive_context)).await {
+⋮----
+let _ = log.log(crate::utils::activity_log::EventKind::ToolCall, crate::utils::activity_log::Actor::Sentinel, &format!("AI decided action: {}", action), Some(&initial_target.host), tactical.clone()).await;
+⋮----
+if self.request_operator_approval(&action).await {
+let mut task_target = initial_target.clone();
+task_target.tactical_context = Arc::new(tactical.clone());
+adaptive_context.previous_actions.push(action.clone());
+let results = self.pipeline.run_specific_plugin(&action, &task_target).await?;
+if results.is_empty() {
+⋮----
+for nf in results { let _ = tx.send(nf).await; }
+⋮----
+if adaptive_context.previous_actions.len() > 50 { break; }
+⋮----
+let _ = log.log(crate::utils::activity_log::EventKind::Note, crate::utils::activity_log::Actor::Sentinel, "Autonomous mission finished.", Some(&initial_target.host), serde_json::json!({})).await;
+⋮----
+Ok(())
+⋮----
+async fn request_operator_approval(&self, action: &str) -> bool {
+if self.approval_gate.is_approved(action).await { return true; }
+match self.approval_gate.request_approval(action, 85, &self.operator, "Autonomous Adaptive Loop").await {
+</file>
+
 <file path="redteam_rust_core/src/plugins/ffi.rs">
 use tokio::sync::Mutex;
 use std::os::raw::c_char;
@@ -14007,284 +14044,6 @@ pub mod hardware_detection;
 
 <file path="redteam_rust_core/src/utils/proxy.rs">
 
-</file>
-
-<file path="redteam_rust_core/src/core/sink.rs">
-use async_trait::async_trait;
-use tokio::io::AsyncWriteExt;
-use std::path::PathBuf;
-⋮----
-use std::str::FromStr;
-use flate2::write::GzEncoder;
-use flate2::Compression;
-use std::sync::Arc;
-use std::io::Write;
-⋮----
-pub trait DataSink: Send + Sync {
-⋮----
-pub struct MultiSink {
-⋮----
-impl Default for MultiSink {
-fn default() -> Self {
-⋮----
-impl MultiSink {
-pub fn new() -> Self {
-⋮----
-pub fn add(&mut self, sink: Box<dyn DataSink>) {
-self.sinks.push(sink);
-⋮----
-impl DataSink for MultiSink {
-async fn write(&mut self, target: &TargetHost) -> Result<()> {
-⋮----
-sink.write(target).await?;
-⋮----
-Ok(())
-⋮----
-async fn write_metadata(&mut self, metadata: &ScanMetadata) -> Result<()> {
-⋮----
-sink.write_metadata(metadata).await?;
-⋮----
-async fn close(&mut self) -> Result<()> {
-⋮----
-sink.close().await?;
-⋮----
-pub struct TacticalWebhookSink {
-⋮----
-impl TacticalWebhookSink {
-pub fn new(url: String, auth_token: Option<String>, pm: Arc<crate::utils::proxy::ProxyManager>) -> Result<Self> {
-let token = auth_token.context("Security Violation: C2 Webhook integration requires C2_TOKEN for authorization. Cannot send findings without authentication.")?;
-Ok(Self {
-⋮----
-async fn flush(&mut self) -> Result<()> {
-if self.buffer.is_empty() {
-return Ok(());
-⋮----
-.context("TacticalWebhookSink: Failed to serialize batch to JSON")?;
-⋮----
-encoder.write_all(&json)?;
-let compressed_data = encoder.finish()?;
-⋮----
-let host = url::Url::parse(&self.url)?.host_str().unwrap_or("c2-server").to_string();
-let (_, client) = self.proxy_manager.get_client_fail_closed(&host)?;
-⋮----
-let mut request = client.post(&self.url)
-.header(reqwest::header::CONTENT_TYPE, "application/json")
-.header(reqwest::header::CONTENT_ENCODING, "gzip")
-.body(compressed_data);
-⋮----
-request = request.header("Authorization", format!("Bearer {}", self.auth_token));
-⋮----
-request.send().await.context("TacticalWebhookSink: Failed to send batched result to C2")?;
-⋮----
-self.buffer.clear();
-⋮----
-impl DataSink for TacticalWebhookSink {
-⋮----
-self.buffer.push(target.clone());
-if self.buffer.len() >= self.batch_size {
-self.flush().await?;
-⋮----
-let mut request = client.post(format!("{}/metadata", self.url))
-.json(metadata);
-⋮----
-request.send().await.context("TacticalWebhookSink: Failed to send metadata to C2")?;
-⋮----
-pub struct JsonlSink {
-⋮----
-impl JsonlSink {
-⋮----
-pub async fn new(path: impl Into<PathBuf>) -> Result<Self> {
-let path = path.into();
-⋮----
-.create(true)
-.write(true)
-.truncate(true)
-.open(&path)
-⋮----
-.context("JsonlSink: Failed to open output file")?;
-⋮----
-Ok(Self { file, path })
-⋮----
-pub fn path(&self) -> &std::path::Path {
-⋮----
-impl DataSink for JsonlSink {
-⋮----
-.context("JsonlSink: Failed to serialize TargetHost to JSON")?;
-⋮----
-json.push('\n');
-⋮----
-self.file.write_all(json.as_bytes())
-⋮----
-.context("JsonlSink: Failed to write bytes to JSONL file")?;
-⋮----
-self.file.flush().await.context("JsonlSink: Failed to flush to disk")?;
-⋮----
-.context("JsonlSink: Failed to serialize ScanMetadata to JSON")?;
-⋮----
-self.file.write_all(json.as_bytes()).await?;
-self.file.flush().await?;
-⋮----
-self.file.flush().await.context("JsonlSink: Failed to flush file content to disk")?;
-⋮----
-pub struct SqliteSink {
-⋮----
-impl SqliteSink {
-⋮----
-let connection_str = format!("sqlite://{}", path.display());
-⋮----
-.create_if_missing(true)
-.journal_mode(sqlx::sqlite::SqliteJournalMode::Wal);
-⋮----
-).execute(&pool).await?;
-⋮----
-crate::utils::deduplication::DeduplicationEngine::init(pool.clone()).await?;
-⋮----
-crate::utils::cve_cache::CveCacheManager::init(pool.clone());
-⋮----
-pub async fn save_plugin_cache(&self, cache_key: &str, output: &str) -> Result<()> {
-⋮----
-.bind(cache_key)
-.bind(output)
-.execute(&self.pool)
-⋮----
-pub async fn load_plugin_cache(&self, cache_key: &str) -> Result<Option<String>> {
-⋮----
-.fetch_optional(&self.pool)
-⋮----
-Ok(row.map(|r| r.0))
-⋮----
-pub async fn get_mcp_stats(&self) -> Result<std::collections::HashMap<String, i64>> {
-⋮----
-.fetch_all(&self.pool)
-⋮----
-Ok(rows.into_iter().collect())
-⋮----
-pub async fn update_mcp_stats(&self, stats: std::collections::HashMap<String, i64>) -> Result<()> {
-⋮----
-.bind(key)
-.bind(value)
-⋮----
-pub async fn save_checkpoint(&self, trigger: &str, manifest: &str, content: &str) -> Result<()> {
-⋮----
-hasher.update(content.as_bytes());
-let digest: String = hex::encode(hasher.finalize());
-⋮----
-.bind(trigger)
-.bind(digest)
-.bind(manifest)
-.bind(content)
-⋮----
-pub async fn load_checkpoint(&self, trigger: &str, digest: &str) -> Result<Option<String>> {
-⋮----
-pub async fn save_agent_session(&self, session: &AgentSession) -> Result<()> {
-⋮----
-.bind(&session.id)
-.bind(&session.agent_role)
-.bind(session.target_id)
-.bind(&session.posture)
-.bind(&session.memory_json)
-⋮----
-pub async fn load_agent_session(&self, session_id: &str) -> Result<Option<AgentSession>> {
-⋮----
-.bind(session_id)
-⋮----
-Ok(res)
-⋮----
-pub async fn save_objective(&self, objective: &crate::models::Objective) -> Result<()> {
-⋮----
-.bind(&objective.id)
-.bind(&objective.title)
-.bind(&objective.description)
-.bind(format!("{:?}", objective.status))
-.bind(serde_json::to_string(&objective.depends_on).unwrap_or_default())
-.bind(objective.priority as i64)
-.bind(&objective.agent_assigned)
-⋮----
-pub struct AgentSession {
-⋮----
-impl DataSink for SqliteSink {
-⋮----
-let scan_id = self.scan_id.context("SqliteSink: scan_id not initialized (write_metadata must be called first)")?;
-⋮----
-.bind(scan_id)
-.bind(&target.host)
-.bind(&target.ip)
-.bind(format!("{:?}", target.status))
-.fetch_one(&self.pool)
-⋮----
-for finding in target.findings.iter() {
-⋮----
-let mitre = finding.mitre_attack.as_ref().map(|m| serde_json::to_string(m).unwrap_or_default());
-let ai = finding.ai_analysis.as_ref().map(|a| serde_json::to_string(a).unwrap_or_default());
-⋮----
-.bind(&finding.id)
-.bind(target_id)
-.bind(format!("{:?}", finding.category))
-.bind(format!("{:?}", finding.severity))
-.bind(&finding.description)
-.bind(evidence)
-.bind(&finding.tactical_path)
-.bind(mitre)
-.bind(ai)
-.bind(&finding.cvss_vector)
-.bind(&finding.objective_id)
-.bind(&finding.agent)
-.bind(finding.iteration as i64)
-⋮----
-self.command_line = metadata.command_line.clone();
-⋮----
-.bind(&metadata.command_line)
-⋮----
-self.scan_id = Some(row.0);
-⋮----
-self.pool.close().await;
-⋮----
-pub struct MarkdownSink {
-⋮----
-impl MarkdownSink {
-⋮----
-.open(path.into())
-⋮----
-Ok(Self { file, findings_count: 0 })
-⋮----
-impl DataSink for MarkdownSink {
-⋮----
-let mut report = format!("\n## Target: {} (IP: {})\n", target.host, target.ip.as_deref().unwrap_or("Unknown"));
-report.push_str("| ID | Severity | Category | Description |\n");
-report.push_str("|----|----------|----------|-------------|\n");
-⋮----
-for f in target.findings.iter() {
-⋮----
-report.push_str(&format!("| {} | **{:?}** | {:?} | {} |\n", f.id, f.severity, f.category, f.description));
-⋮----
-report.push_str(&format!("\n> ### AI Analysis (Model: {})\n", ai.model));
-report.push_str(&format!("> **Summary:** {}\n", ai.summary));
-report.push_str(&format!("> **Impact:** {}\n", ai.impact));
-report.push_str(&format!("> **Exploit Path:** {}\n", ai.exploit_path));
-⋮----
-let mitre_tags: Vec<String> = mitre.iter().map(|s| s.to_string()).collect();
-report.push_str(&format!("> **MITRE ATT&CK:** {}\n", mitre_tags.join(", ")));
-⋮----
-self.file.write_all(report.as_bytes()).await?;
-⋮----
-let header = format!("# OSINT ULTIMATE - Professional Pentest Report\n\n- **Date:** {}\n- **Command:** `{}`\n\n---\n",
-⋮----
-self.file.write_all(header.as_bytes()).await?;
-⋮----
-let footer = format!("\n---\n**Total Findings:** {}\n*Generated by OsintUltimate Sentinel Agent*", self.findings_count);
-self.file.write_all(footer.as_bytes()).await?;
-⋮----
-pub struct TimelineSink {
-⋮----
-impl TimelineSink {
-pub fn new(logger: Arc<crate::utils::activity_log::ActivityLog>) -> Self {
-⋮----
-impl DataSink for TimelineSink {
-async fn write(&mut self, target: &crate::models::TargetHost) -> Result<()> {
-⋮----
-let _ = self.logger.log_finding(finding, crate::utils::activity_log::Actor::Sentinel, Some(&target.host)).await;
-⋮----
-async fn write_metadata(&mut self, _metadata: &crate::models::ScanMetadata) -> Result<()> {
 </file>
 
 <file path="redteam_rust_core/src/core/orchestrator.rs">
@@ -14627,13 +14386,13 @@ Some(cap[0].to_uppercase())
 } else { re.captures(&finding.title).map(|cap| cap[0].to_uppercase()) };
 ⋮----
 if let Ok(Some(meta)) = manager.get_or_fetch_cve(&id).await {
-info!("✨ V14.2 ENRICH: Enriched finding {} with cached metadata for {}", finding.id, id);
-if finding.tactical_path.is_none() {
+info!("✨ V14.2 ENRICH: Enriched finding {} with cached metadata for {}", finding.core.id, id);
+if finding.core.tactical_path.is_none() {
 ⋮----
-finding.cvss_score = Some(score);
+finding.enrichment.cvss_score = Some(score);
 ⋮----
-if !finding.references.contains(&r) {
-finding.references.push(r);
+if !finding.enrichment.references.contains(&r) {
+finding.enrichment.references.push(r);
 ⋮----
 pub async fn run_discovery(&self, target: &TargetHost, tx: mpsc::Sender<Finding>) -> Result<()> {
 info!("Pipeline: Running discovery for {}", target.host);
@@ -14813,7 +14572,7 @@ error!("❌ [KILL-SWITCH] Failed to clean up DigitalOcean droplets: {}", e);
 ⋮----
 info!("🛡️ [KILL-SWITCH] Cleanup complete. Sovereign egress terminated safely.");
 ⋮----
-multi_sink.add(Box::new(SqliteSink::new(db_path).await?));
+multi_sink.add(Box::new(PostgresSink::new(db_path).await?));
 ⋮----
 multi_sink.add(Box::new(JsonlSink::new(&args.jsonl_output).await?));
 ⋮----

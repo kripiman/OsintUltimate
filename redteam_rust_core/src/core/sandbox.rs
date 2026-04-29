@@ -17,6 +17,7 @@ pub struct SandboxDispatcher {
     pub(crate) res_mgr: SysResourceManager,
     pub(crate) middleware: crate::core::middleware::MiddlewareRegistry,
     pub(crate) policy: Option<std::sync::Arc<dyn crate::core::policy::PolicyProvider>>,
+    pub(crate) proxy_manager: Option<std::sync::Arc<crate::utils::proxy::ProxyManager>>,
 }
 
 impl SandboxDispatcher {
@@ -25,11 +26,17 @@ impl SandboxDispatcher {
             res_mgr,
             middleware: crate::core::middleware::MiddlewareRegistry::default(),
             policy: None,
+            proxy_manager: None,
         }
     }
 
     pub fn with_policy(mut self, policy: std::sync::Arc<dyn crate::core::policy::PolicyProvider>) -> Self {
         self.policy = Some(policy);
+        self
+    }
+
+    pub fn with_proxy_manager(mut self, proxy_manager: std::sync::Arc<crate::utils::proxy::ProxyManager>) -> Self {
+        self.proxy_manager = Some(proxy_manager);
         self
     }
 
@@ -239,6 +246,16 @@ impl SandboxDispatcher {
                     },
                     _ => {
                         cmd.arg("--network=none"); // Isolated by default
+                    }
+                }
+
+                // F2-001 FIX: Inject ALL_PROXY if ProxyManager is active
+                if let Some(ref pm) = self.proxy_manager {
+                    if let Some(proxy_url) = pm.get_best_socks_url() {
+                        cmd.arg(format!("--env=ALL_PROXY={}", proxy_url));
+                        cmd.arg(format!("--env=all_proxy={}", proxy_url));
+                        cmd.arg(format!("--env=HTTP_PROXY={}", proxy_url));
+                        cmd.arg(format!("--env=HTTPS_PROXY={}", proxy_url));
                     }
                 }
 

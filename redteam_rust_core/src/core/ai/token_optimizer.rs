@@ -1,7 +1,8 @@
 /// Token optimization pipeline ported from MCP-OSINTULT.
 /// Integrates PromptOptimizer (10-stage) and ContextRanker (MMR) into the core AI layer.
-use std::collections::{HashMap, HashSet};
 use std::sync::Mutex;
+use std::collections::{HashMap, HashSet};
+use moka::sync::Cache;
 use regex::Regex;
 use once_cell::sync::Lazy;
 
@@ -240,8 +241,10 @@ impl OptimizationStrategy for SuffixLemmatizer {
         if level == OptimizationLevel::Lite { return input.to_string(); }
         // Apply suffix stripping only on prose lines, not code lines
         input.lines().map(|line| {
-            let is_code = line.contains("fn ") || line.contains("let ") ||
-                          line.contains("pub ") || line.contains("::")||  line.contains("{");
+            let trimmed = line.trim_start();
+            let is_code = trimmed.starts_with("fn ") || trimmed.starts_with("let ") ||
+                          trimmed.starts_with("pub ") || trimmed.starts_with("impl ") || 
+                          trimmed.starts_with("struct ") || line.contains("::");
             if is_code { return line.to_string(); }
             let s = RE_SUFFIX_ING.replace_all(line, "$1");
             let s = RE_SUFFIX_ED.replace_all(&s, "$1");
@@ -381,7 +384,7 @@ pub static PROMPT_OPTIMIZER: Lazy<PromptOptimizer> = Lazy::new(PromptOptimizer::
 /// MMR-based context ranker. Selects the most relevant AND diverse set of files
 /// for a given query within a token budget.
 pub struct ContextRanker {
-    cache: Mutex<HashMap<String, Vec<(String, f64)>>>,
+    cache: Cache<String, Vec<(String, f64)>>,
 }
 
 impl Default for ContextRanker {
@@ -392,7 +395,12 @@ impl Default for ContextRanker {
 
 impl ContextRanker {
     pub fn new() -> Self {
-        Self { cache: Mutex::new(HashMap::new()) }
+        Self { 
+            cache: Cache::builder()
+                .max_capacity(50)
+                .time_to_idle(std::time::Duration::from_secs(3600))
+                .build() 
+        }
     }
 
     /// Returns ranked file paths by relevance to `query`.
@@ -408,10 +416,8 @@ impl ContextRanker {
         let lambda = lambda.unwrap_or(0.65);
         let cache_key = format!("{}:{}:{:?}:{:.2}", query, files.len(), token_budget, lambda);
 
-        if let Ok(cache) = self.cache.lock() {
-            if let Some(hits) = cache.get(&cache_key) {
-                return hits.clone();
-            }
+        if let Some(hits) = self.cache.get(&cache_key) {
+            return hits.clone();
         }
 
         let query_terms: Vec<String> = query.to_lowercase()
@@ -483,10 +489,7 @@ impl ContextRanker {
 
         let result: Vec<(String, f64)> = selected.into_iter().map(|(p, _, s)| (p, s)).collect();
 
-        if let Ok(mut cache) = self.cache.lock() {
-            if cache.len() > 50 { cache.clear(); }
-            cache.insert(cache_key, result.clone());
-        }
+        self.cache.insert(cache_key, result.clone());
 
         result
     }
