@@ -1,5 +1,5 @@
 use crate::models::{Finding, Category};
-use crate::models::constants::{FINDING_GRAPHQL_INTROSPECTION, FINDING_PROTOTYPE_POLLUTION, FINDING_CORS_MISCONFIG, FINDING_WEB_CACHE_DECEPTION, FINDING_SSTI};
+use crate::models::constants::{FINDING_GRAPHQL_INTROSPECTION, FINDING_PROTOTYPE_POLLUTION, FINDING_CORS_MISCONFIG, FINDING_WEB_CACHE_DECEPTION, FINDING_SSTI, FINDING_OPEN_REDIRECT, FINDING_WAYMORE_URL};
 use std::collections::{HashMap, HashSet};
 use serde::{Deserialize, Serialize};
 use tracing::info;
@@ -283,5 +283,6 @@ fn is_api_chain_finding(f: &Finding) -> bool {
             | FINDING_WEB_CACHE_DECEPTION
             | FINDING_SSTI
             | FINDING_OPEN_REDIRECT
+            | FINDING_WAYMORE_URL
     )
 }

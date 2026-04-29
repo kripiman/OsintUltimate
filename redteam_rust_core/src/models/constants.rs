@@ -31,6 +31,7 @@ pub const FINDING_CERTSTREAM_DISCOVERY: &str = "CERTSTREAM-DISCOVERY";
 pub const FINDING_SSRF: &str = "SSRF-VULNERABILITY";
 pub const FINDING_SSTI: &str = "SSTI_VULNERABILITY";
 pub const FINDING_OPEN_REDIRECT: &str = "OPEN_REDIRECT";
+pub const FINDING_WAYMORE_URL: &str = "WAYMORE-URL";
 
 // Plugin Names
 pub const PLUGIN_OSINT: &str = "OsintScanner";
@@ -96,6 +97,7 @@ pub const PLUGIN_SSRF_KING: &str = "SsrfKingScanner";
 pub const PLUGIN_COMMIX: &str = "CommixScanner";
 pub const PLUGIN_TPLMAP: &str = "TplmapScanner";
 pub const PLUGIN_OPEN_REDIRECT: &str = "OpenRedirexScanner";
+pub const PLUGIN_WAYMORE: &str = "WaymoreScanner";
 
 // OOB Verification Defaults
 pub const OOB_DEFAULT_POLL_INTERVAL_MS: u64 = 5000;

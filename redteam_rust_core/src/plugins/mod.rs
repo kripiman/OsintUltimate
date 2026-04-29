@@ -303,6 +303,7 @@ pub fn get_all_scanners<M: ExecutorMode>(config: GlobalConfig<M>) -> Vec<Box<dyn
     use crate::plugins::enumeration::web::wpsec::WPScanner;
     use crate::plugins::enumeration::web::snallygaster::SnallygasterScanner;
     use crate::plugins::reconnaissance::passive::wayback::WaybackScanner;
+    use crate::plugins::reconnaissance::passive::waymore::WaymoreScanner;
     use crate::plugins::intelligence::jaeles::JaelesScanner;
     use crate::plugins::enumeration::cloud::prowler::ProwlerScanner;
     use crate::plugins::enumeration::cloud::kubebench::KubeBenchScanner;
@@ -382,6 +383,7 @@ pub fn get_all_scanners<M: ExecutorMode>(config: GlobalConfig<M>) -> Vec<Box<dyn
         Box::new(WPScanner::new()), 
         Box::new(SnallygasterScanner::new()), 
         Box::new(WaybackScanner::new()), 
+        Box::new(WaymoreScanner::new()),
         Box::new(JaelesScanner::new()), 
         Box::new(ProwlerScanner::new()), 
         Box::new(KubeBenchScanner::new()), 
