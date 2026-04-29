@@ -113,6 +113,72 @@ fn build_report(target: &TargetHost, finding: &Finding) -> BugBountyReport {
     BugBountyReport { filename, content: md }
 }
 
+/// Generates a consolidated report for a group of related findings (Attack Chain).
+pub fn generate_attack_chain_report(target: &TargetHost, findings: &[Finding]) -> Option<BugBountyReport> {
+    if findings.is_empty() { return None; }
+    
+    let filename = format!("{}_attack_chain_consolidated.md", target.host.replace('.', "_"));
+    let mut md = String::new();
+
+    let _ = writeln!(md, "# 🔗 Consolidated Attack Chain Report: {}", target.host);
+    let _ = writeln!(md);
+
+    let _ = writeln!(md, "## 0. Executive Summary");
+    let _ = writeln!(md, "This report documents a correlated sequence of vulnerabilities discovered on `{}`. ", target.host);
+    let _ = writeln!(md, "By chaining these findings, an attacker can achieve a significantly higher impact than through isolated exploitation.");
+    let _ = writeln!(md);
+
+    let _ = writeln!(md, "## 1. Attack Chain Visualization");
+    let _ = writeln!(md, "```mermaid");
+    let _ = writeln!(md, "graph TD");
+    for (i, f) in findings.iter().enumerate() {
+        let _ = writeln!(md, "    F{}[{}]", i, f.core.title);
+        if i > 0 {
+            let _ = writeln!(md, "    F{} --> F{}", i-1, i);
+        }
+    }
+    let _ = writeln!(md, "```");
+    let _ = writeln!(md);
+
+    let _ = writeln!(md, "## 2. Findings Summary");
+    let _ = writeln!(md, "| Step | Finding | Severity | Category |");
+    let _ = writeln!(md, "|---|---|---|---|");
+    for (i, f) in findings.iter().enumerate() {
+        let _ = writeln!(md, "| {} | **{}** | {} | {:?} |", i+1, f.core.title, severity_label(&f.core.severity), f.core.category);
+    }
+    let _ = writeln!(md);
+
+    let _ = writeln!(md, "## 3. Combined Impact");
+    // If AI analysis is present in any finding, use it to bolster the impact
+    let mut combined_impact = String::new();
+    for f in findings {
+        if let Some(ai) = &f.enrichment.ai_analysis {
+            combined_impact.push_str(&format!("- **{}**: {}\n", f.core.title, ai.impact));
+        }
+    }
+    if combined_impact.is_empty() {
+        let _ = writeln!(md, "The aggregation of these findings allows for full control or significant data exposure on the target asset.");
+    } else {
+        let _ = writeln!(md, "{}", combined_impact);
+    }
+    let _ = writeln!(md);
+
+    let _ = writeln!(md, "## 4. Full Chain Walkthrough");
+    for (i, f) in findings.iter().enumerate() {
+        let _ = writeln!(md, "### Phase {}: {}", i+1, f.core.title);
+        let _ = writeln!(md, "{}", f.core.description);
+        if let Some(ai) = &f.enrichment.ai_analysis {
+            let _ = writeln!(md, "\n**Tactical Path**: {}", ai.exploit_path);
+        }
+        let _ = writeln!(md);
+    }
+
+    let _ = writeln!(md, "## 5. Remediation");
+    let _ = writeln!(md, "It is recommended to address all findings in this chain, starting with the root cause (Phase 1), as fixing downstream vulnerabilities may not prevent the initial access or information leak.");
+
+    Some(BugBountyReport { filename, content: md })
+}
+
 fn severity_label(s: &Severity) -> &'static str {
     match s {
         Severity::Critical => "Critical (P1)",

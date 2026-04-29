@@ -29,6 +29,10 @@ pub struct Config {
     pub caido_api_url: String,
     pub mcp_token: Option<String>,
     pub discord_webhook_url: Option<String>,
+    pub certstream_keywords: Vec<String>,
+    pub nuclei_tags: Option<String>,
+    pub nuclei_severity: Option<String>,
+    pub nuclei_custom_templates: Option<String>,
 }
 
 impl Config {
@@ -79,6 +83,16 @@ impl Config {
             caido_api_url: env::var("CAIDO_API_URL").unwrap_or_else(|_| "http://localhost:8080/graphql".to_string()),
             mcp_token: env::var("MCP_TOKEN").ok(),
             discord_webhook_url: env::var("DISCORD_WEBHOOK_URL").ok(),
+            certstream_keywords: env::var("CERTSTREAM_KEYWORDS")
+                .unwrap_or_default()
+                .split(',')
+                .map(str::trim)
+                .filter(|s| !s.is_empty())
+                .map(str::to_lowercase)
+                .collect(),
+            nuclei_tags: env::var("NUCLEI_TAGS").ok(),
+            nuclei_severity: env::var("NUCLEI_SEVERITY").ok(),
+            nuclei_custom_templates: env::var("NUCLEI_CUSTOM_TEMPLATES").ok(),
         }
     }
 

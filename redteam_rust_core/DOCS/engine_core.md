@@ -37,6 +37,7 @@ El motor de asalto donde reside la inteligencia y se expande la superficie:
 - **Recursión Táctica**: Los activos descubiertos se re-inyectan en la Etapa 1 para una exploración profunda.
 - **Memory Backpressure**: Un semáforo monitoriza el uso de memoria; si se detecta presión crítica, se pausa el despacho de nuevos agentes.
 - **Enriquecimiento (Intel)**: Los hallazgos se mapean automáticamente a CVEs mediante un `CveCacheManager` global.
+- **Correlación de Cadenas de Ataque**: Un motor de grafos tácticos vincula hallazgos aislados (ej. filtración de JS -> bypass 403) para generar reportes consolidados de alto impacto.
 
 ### Etapa 3: Sovereign Persistence (Out)
 Persistencia de alta velocidad basada en **Lock-Free Concurrency**:

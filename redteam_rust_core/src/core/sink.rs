@@ -4,8 +4,6 @@ use async_trait::async_trait;
 use tokio::io::AsyncWriteExt;
 use std::path::PathBuf;
 use sqlx::PgPool;
-use sqlx::postgres::PgPoolOptions;
-use std::str::FromStr;
 use flate2::write::GzEncoder;
 use flate2::Compression;
 use std::sync::Arc;
@@ -223,7 +221,7 @@ pub struct PostgresSink {
 
 impl PostgresSink {
     pub async fn new(path: impl Into<PathBuf>) -> Result<Self> {
-        let path = path.into();
+        let _path = path.into();
         let connection_str = std::env::var("DATABASE_URL").unwrap_or_else(|_| "postgres://osintuser:WENYANULTRA_SECURE_PASS@localhost:5432/osintdb".to_string());
         
         let pool = sqlx::postgres::PgPoolOptions::new()

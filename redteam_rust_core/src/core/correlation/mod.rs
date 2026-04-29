@@ -1,4 +1,5 @@
 use crate::models::{Finding, Category};
+use crate::models::constants::{FINDING_GRAPHQL_INTROSPECTION, FINDING_PROTOTYPE_POLLUTION, FINDING_CORS_MISCONFIG, FINDING_WEB_CACHE_DECEPTION, FINDING_SSTI};
 use std::collections::{HashMap, HashSet};
 use serde::{Deserialize, Serialize};
 use tracing::info;
@@ -96,7 +97,26 @@ impl CorrelationEngine {
                         }
                     }
                 },
-                _ => {}
+                (Category::CredentialLeak, Category::Vulnerability) => {
+                    self.graph.add_edge(&existing.core.id, &new_finding.core.id);
+                },
+                _ => {
+                    // Rule 5: API Attack Chain (InQL -> Ppmap -> Corsy -> WCD)
+                    let is_api_vuln_a = is_api_chain_finding(&existing);
+                    let is_api_vuln_b = is_api_chain_finding(new_finding);
+
+                    if is_api_vuln_a && is_api_vuln_b {
+                        let url_a = existing.evidence.evidence.as_ref().and_then(|e| e.data.get("url")).and_then(|v| v.as_str());
+                        let url_b = new_finding.evidence.evidence.as_ref().and_then(|e| e.data.get("url")).and_then(|v| v.as_str());
+                        
+                        if let (Some(ua), Some(ub)) = (url_a, url_b) {
+                            if extract_domain(ua) == extract_domain(ub) {
+                                self.graph.add_edge(&existing.core.id, &new_finding.core.id);
+                                info!("🔱 V14.1 SOVEREIGN: API Attack Chain link detected: {} <-> {}", existing.core.id, new_finding.core.id);
+                            }
+                        }
+                    }
+                }
             }
 
             // Rule 4: SAST Endpoint -> DAST Finding (Source-Aware Correlation)
@@ -115,6 +135,36 @@ impl CorrelationEngine {
                 }
             }
             
+            // Rule 6: SSTI -> RCE Chain (Tplmap -> Commix)
+            let is_ssti = existing.core.id == FINDING_SSTI;
+            let is_rce = new_finding.core.id.starts_with("COMMIX-RCE");
+            if is_ssti && is_rce {
+                let url_a = existing.evidence.evidence.as_ref().and_then(|e| e.data.get("url")).and_then(|v| v.as_str());
+                let url_b = new_finding.evidence.evidence.as_ref().and_then(|e| e.data.get("url")).and_then(|v| v.as_str());
+                
+                if let (Some(ua), Some(ub)) = (url_a, url_b) {
+                    if extract_domain(ua) == extract_domain(ub) {
+                        self.graph.add_edge(&existing.core.id, &new_finding.core.id);
+                        info!("🔱 V14.3 SOVEREIGN: SSTI -> RCE chain link detected: {} -> {}", existing.core.id, new_finding.core.id);
+                    }
+                }
+            }
+            
+            // Reverse Rule 6
+            let is_ssti_new = new_finding.core.id == FINDING_SSTI;
+            let is_rce_old = existing.core.id.starts_with("COMMIX-RCE");
+            if is_ssti_new && is_rce_old {
+                let url_a = existing.evidence.evidence.as_ref().and_then(|e| e.data.get("url")).and_then(|v| v.as_str());
+                let url_b = new_finding.evidence.evidence.as_ref().and_then(|e| e.data.get("url")).and_then(|v| v.as_str());
+                
+                if let (Some(ua), Some(ub)) = (url_a, url_b) {
+                    if extract_domain(ua) == extract_domain(ub) {
+                        self.graph.add_edge(&new_finding.core.id, &existing.core.id);
+                        info!("🔱 V14.3 SOVEREIGN: SSTI -> RCE chain link detected: {} -> {}", new_finding.core.id, existing.core.id);
+                    }
+                }
+            }
+            
             // Reverse rules
             match (&new_finding.core.category, &existing.core.category) {
                 (Category::NetworkPort, Category::TechnologyStack) => {
@@ -127,6 +177,9 @@ impl CorrelationEngine {
                     self.graph.add_edge(&new_finding.core.id, &existing.core.id);
                 },
                 (Category::Windows, Category::Vulnerability) | (Category::Windows, Category::CredentialLeak) => {
+                    self.graph.add_edge(&new_finding.core.id, &existing.core.id);
+                },
+                (Category::CredentialLeak, Category::Vulnerability) => {
                     self.graph.add_edge(&new_finding.core.id, &existing.core.id);
                 },
                 _ => {}
@@ -211,4 +264,24 @@ impl CorrelationEngine {
         visited.remove(current);
         current_path.pop();
     }
+}
+
+fn extract_domain(url_str: &str) -> String {
+    if let Ok(parsed) = url::Url::parse(url_str) {
+        parsed.host_str().unwrap_or("").to_string()
+    } else {
+        url_str.to_string()
+    }
+}
+
+fn is_api_chain_finding(f: &Finding) -> bool {
+    matches!(
+        f.core.id.as_str(),
+        FINDING_GRAPHQL_INTROSPECTION
+            | FINDING_PROTOTYPE_POLLUTION
+            | FINDING_CORS_MISCONFIG
+            | FINDING_WEB_CACHE_DECEPTION
+            | FINDING_SSTI
+            | FINDING_OPEN_REDIRECT
+    )
 }

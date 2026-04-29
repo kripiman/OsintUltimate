@@ -26,14 +26,20 @@ struct NucleiInfo {
 pub struct NucleiScanner<M: ExecutorMode> {
     binary_path: String,
     executor: std::sync::Arc<StealthExecutor<M>>,
+    tags: Option<String>,
+    severity: Option<String>,
+    custom_templates: Option<String>,
 }
 
-impl<M: ExecutorMode> NucleiScanner<M> {
-    pub fn new(executor: std::sync::Arc<StealthExecutor<M>>) -> Self {
+impl<M: ExecutorMode> NucleiScanner<M> where M: Clone {
+    pub fn new(config: crate::plugins::GlobalConfig<M>) -> Self {
         let path = detect_tool("nuclei");
         Self {
             binary_path: path,
-            executor,
+            executor: config.executor,
+            tags: config.nuclei_tags,
+            severity: config.nuclei_severity,
+            custom_templates: config.nuclei_custom_templates,
         }
     }
 }
@@ -97,6 +103,22 @@ impl<M: ExecutorMode> ScannerPlugin for NucleiScanner<M> {
             "-o".to_string(), temp_path.clone(),
             "-silent".to_string(),
         ];
+
+        // V14.2 NUCLEI EXPANSION: Inject custom filters and templates
+        if let Some(ref t) = self.tags {
+            args.push("-tags".to_string());
+            args.push(t.clone());
+        }
+
+        if let Some(ref s) = self.severity {
+            args.push("-severity".to_string());
+            args.push(s.clone());
+        }
+
+        if let Some(ref ct) = self.custom_templates {
+            args.push("-t".to_string());
+            args.push(ct.clone());
+        }
 
         // V14.2: Use optimized config if available — resolve relative to binary, then CWD.
         let config_path = std::env::current_exe()

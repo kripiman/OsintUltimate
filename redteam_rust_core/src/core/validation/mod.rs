@@ -10,6 +10,7 @@ use tracing::{info, warn, error};
 
 mod executor;
 mod generator;
+#[cfg(feature = "sovereign")]
 mod sovereign;
 pub mod remote;
 
@@ -55,8 +56,18 @@ impl<M: ExecutorMode> PocValidator<M> {
         info!("🧪 SENTINEL: Iniciando validación de PoC para '{}' (Estrategia: {:?})", finding.core.title, poc.strategy);
 
         // V14.1: Sovereign Mode Bifurcation
-        if poc.complexity_score >= 70 {
-            return self.sovereign_handover(finding, target, &poc).await;
+        #[cfg(feature = "sovereign")]
+        {
+            if poc.complexity_score >= 70 {
+                return self.sovereign_handover(finding, target, &poc).await;
+            }
+        }
+        #[cfg(not(feature = "sovereign"))]
+        {
+            if poc.complexity_score >= 70 {
+                warn!("🚫 SENTINEL: PoC con complejidad {} requiere sovereign mode. Skipping en modo Bug Bounty.", poc.complexity_score);
+                return Ok(false);
+            }
         }
 
         // 2. Gestionar aprobaciones para PoCs intrusivos
@@ -104,8 +115,11 @@ impl<M: ExecutorMode> PocValidator<M> {
                     if let Some(ref mut ev) = finding.evidence.evidence {
                         ev.verified = true;
                     }
-                    if finding.core.severity >= crate::models::Severity::High {
-                        let _ = self.deploy_c2(target).await;
+                    #[cfg(feature = "sovereign")]
+                    {
+                        if finding.core.severity >= crate::models::Severity::High {
+                            let _ = self.deploy_c2(target).await;
+                        }
                     }
                 } else {
                     warn!("❌ SENTINEL: PoC fallido. El patrón esperado '{}' no se encontró o no se detectaron severidades críticas/altas.", poc.expected_pattern);

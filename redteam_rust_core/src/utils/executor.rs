@@ -50,7 +50,7 @@ impl<M: ExecutorMode> StealthExecutor<M> {
     }
 }
 
-#[cfg(feature = "breach-exploit-executor")]
+#[cfg(feature = "sovereign")]
 impl StealthExecutor<BreachMode> {
     pub fn new_breach(
         policy: Arc<dyn PolicyProvider>,

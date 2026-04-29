@@ -334,6 +334,9 @@ impl<M: ExecutorMode> RedTeamEngine<M> {
             executor: self.executor.clone(),
             correlation_engine: self.correlation_engine.clone(),
             mcp_token: self.config.mcp_token.clone(),
+            nuclei_tags: crate::utils::config::Config::from_env().nuclei_tags,
+            nuclei_severity: crate::utils::config::Config::from_env().nuclei_severity,
+            nuclei_custom_templates: crate::utils::config::Config::from_env().nuclei_custom_templates,
         };
 
         let mut builder = Pipeline::builder()

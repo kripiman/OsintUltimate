@@ -43,6 +43,9 @@ Estas herramientas se ejecutan en la Etapa 2 (Discovery) para mapear la superfic
 | **Gitleaks** | Passive | Detección de secretos expuestos en repositorios git. |
 | **Trufflehog** | Passive | Escaneo de credenciales en repositorios y buckets S3. |
 | **Wayback / Gau**| Passive | Recuperación de URLs y endpoints históricos desde Wayback Machine. |
+| **Subzy** | Active | Detección agresiva y validación de Subdomain Takeover. |
+| **JSluice** | Active | Extracción de secretos y endpoints desde JS (AST parsing). |
+| **CertStream** | Real-Time | Descubrimiento en vivo de certificados CT (Caza de subdominios). |
 
 ---
 
@@ -56,9 +59,13 @@ Identificación de rutas ocultas, tecnologías, configuraciones inseguras y clou
 
 ### Enumeración Web (HTTP/S)
 *   **Fuzzing & Rutas:** FFuf, Feroxbuster, Kiterunner (APIs), Katana, Dirsearch.
-*   **CGI / Parámetros:** Arjun (parámetros ocultos), CRLFuzz.
+*   **CGI / Parámetros:** x8 (descubrimiento de parámetros de alto rendimiento), Arjun.
+*   **GraphQL Hunt:** **InQL** (introspección y esquema), GraphQL Cop.
+*   **Prototype Pollution:** **Ppmap** (detección y payloads de contaminación).
+*   **CORS Audit:** **Corsy** (análisis de orígenes y cabeceras de credenciales).
+*   **Cache Deception:** **WcdScanner** (sondeo de caché vía extensiones estáticas).
 *   **Scanners de Config:** Nikto, Snallygaster, WPSec (WordPress), WhatWeb, Tsunami (GCP Scanner).
-*   **Patrones y Endpoints:** GF (Grep Patterns), Interactsh (OOB Engine).
+*   **Patrones y Endpoints:** GF (Grep Patterns), Interactsh (OOB Engine), JSluice (Endpoints en JS).
 
 ### Enumeración Cloud (AWS, Azure, GCP)
 *   **Pacu / Prowler:** Auditoría de seguridad y enumeración en AWS.
@@ -75,6 +82,7 @@ Plugins que cruzan firmas de vulnerabilidades contra los activos.
 | **Nuclei** | Escáner masivo basado en templates YAML (Vulnerabilidades conocidas). |
 | **Jaeles** | Escáner similar a Nuclei, especializado en payloads Web/API. |
 | **Searchsploit**| Búsqueda automatizada de exploits públicos (Exploit-DB) según versión. |
+| **GreyNoise** | Inteligencia de red para identificar ruido de fondo y escáneres masivos. |
 | **Trivy / OSV** | Escaneo de vulnerabilidades en contenedores e infraestructuras. |
 | **Checkov** | Auditoría de infraestructura como código (IaC). |
 
@@ -89,7 +97,10 @@ Ataques dirigidos ejecutados bajo confirmación o en modo autónomo si la polít
 *   **Dalfox:** Escaneo y validación de Cross-Site Scripting (XSS).
 *   **JWT_Tool:** Auditoría de tokens JSON (Firma nula, KIDs, bypass).
 *   **GraphQL Cop:** Ataques a endpoints de GraphQL (Introspection, Batching).
+*   **NoMore403:** Bypass avanzado de restricciones 403/401 (Headers/Paths).
+*   **Smuggler:** Detección de HTTP Request Smuggling (CL.TE/TE.CL).
 *   **Wapiti:** Inyección automática de payloads y black-box testing.
+*   **SSRF-King:** Detección de Blind SSRF mediante interacción OOB (Interactsh).
 
 ### Explotación de Red y Active Directory
 *   **Impacket:** Navaja suiza para ataques a protocolos Microsoft (SMB, WMI).

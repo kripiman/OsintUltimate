@@ -292,6 +292,13 @@ async fn main() -> Result<()> {
     }
 
     // --- TARGETS ---
+    let certstream_rx = if !utils_config.certstream_keywords.is_empty() {
+        info!("🔱 V14.2 SOVEREIGN: Activating CertStream Daemon for keywords: {:?}", utils_config.certstream_keywords);
+        Some(redteam_rust_core::infrastructure::certstream::CertStreamDaemon::spawn(utils_config.certstream_keywords.clone()))
+    } else {
+        None
+    };
+
     let target_stream: futures::stream::BoxStream<'static, String> = if let Some(input_path) = args.input.clone() {
         let file = tokio::fs::File::open(&input_path).await?;
         let reader = tokio::io::BufReader::new(file);
@@ -302,8 +309,19 @@ async fn main() -> Result<()> {
             .boxed()
     } else if let Some(target) = args.target.clone() {
         Box::pin(futures::stream::iter(vec![target]))
+    } else if certstream_rx.is_some() {
+        info!("📡 Waiting for real-time targets from CertStream...");
+        futures::stream::empty().boxed()
     } else {
-        anyhow::bail!("Either --target or --input must be provided.");
+        anyhow::bail!("Either --target, --input, or CERTSTREAM_KEYWORDS must be provided.");
+    };
+
+    // Merge CertStream if active
+    let target_stream = if let Some(rx) = certstream_rx {
+        let cs_stream = tokio_stream::wrappers::ReceiverStream::new(rx);
+        futures::stream::select(target_stream, cs_stream).boxed()
+    } else {
+        target_stream
     };
 
     let target_hosts: futures::stream::BoxStream<'static, TargetHost> = target_stream

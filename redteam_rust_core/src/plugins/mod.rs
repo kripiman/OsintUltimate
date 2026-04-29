@@ -1,9 +1,13 @@
 pub mod reconnaissance;
 pub mod enumeration;
 pub mod exploitation;
+#[cfg(feature = "sovereign")]
 pub mod lateral_movement;
+#[cfg(feature = "sovereign")]
 pub mod persistence;
+#[cfg(feature = "sovereign")]
 pub mod privilege_escalation;
+#[cfg(feature = "sovereign")]
 pub mod detection_evasion;
 pub mod intelligence;
 pub mod verification;
@@ -46,6 +50,8 @@ pub enum Capability {
     XssScanning,         // NUEVO
     SqlInjection,        // NUEVO
     DirectoryBruteForce, // NUEVO
+    InformationGathering,
+    HTTPRequestSmuggling,
 }
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, PartialOrd, Ord)]
@@ -175,6 +181,9 @@ pub struct GlobalConfig<M: ExecutorMode = crate::utils::executor::GhostMode> whe
     pub executor: std::sync::Arc<StealthExecutor<M>>,
     pub correlation_engine: std::sync::Arc<tokio::sync::Mutex<crate::core::correlation::CorrelationEngine>>,
     pub mcp_token: Option<String>,
+    pub nuclei_tags: Option<String>,
+    pub nuclei_severity: Option<String>,
+    pub nuclei_custom_templates: Option<String>,
 }
 
 impl<M: ExecutorMode> Default for GlobalConfig<M>
@@ -221,6 +230,9 @@ impl<M: ExecutorMode> GlobalConfig<M> where M: Clone {
             executor,
             correlation_engine: std::sync::Arc::new(tokio::sync::Mutex::new(crate::core::correlation::CorrelationEngine::new())),
             mcp_token: None,
+            nuclei_tags: None,
+            nuclei_severity: None,
+            nuclei_custom_templates: None,
         }
     }
 }
@@ -255,18 +267,23 @@ pub fn get_all_scanners<M: ExecutorMode>(config: GlobalConfig<M>) -> Vec<Box<dyn
     use crate::plugins::reconnaissance::passive::trufflehog::TruffleHogScanner;
     use crate::plugins::exploitation::web::dalfox::DalfoxScanner;
     use crate::plugins::enumeration::web::katana::KatanaScanner;
+    #[cfg(feature = "sovereign")]
     use crate::plugins::lateral_movement::bloodhound::BloodHoundScanner;
     use crate::plugins::exploitation::network::responder::ResponderScanner;
     use crate::plugins::exploitation::network::impacket::ImpacketScanner;
+    #[cfg(feature = "sovereign")]
     use crate::plugins::privilege_escalation::certipy::CertipyScanner;
     use crate::plugins::exploitation::network::petitpotam::PetitPotamScanner;
+    #[cfg(feature = "sovereign")]
     use crate::plugins::lateral_movement::sliver::SliverScanner;
+    #[cfg(feature = "sovereign")]
     use crate::plugins::lateral_movement::ligolo::LigoloScanner;
     use crate::plugins::enumeration::cloud::pacu::PacuScanner;
     use crate::plugins::enumeration::cloud::cloudenum::CloudEnumScanner;
     use crate::plugins::reconnaissance::active::httpx::HttpxScanner;
     use crate::plugins::reconnaissance::active::naabu::NaabuScanner;
     use crate::plugins::enumeration::web::interactsh::InteractshScanner;
+    #[cfg(feature = "sovereign")]
     use crate::plugins::persistence::havoc::HavocScanner;
     use crate::plugins::enumeration::cloud::cloudfox::CloudFoxScanner;
     use crate::plugins::enumeration::web::kiterunner::KiterunnerScanner;
@@ -293,21 +310,35 @@ pub fn get_all_scanners<M: ExecutorMode>(config: GlobalConfig<M>) -> Vec<Box<dyn
     use crate::plugins::enumeration::web::crlfuzz::CRLFScanner;
     use crate::plugins::enumeration::web::gf::GfScanner;
     use crate::plugins::exploitation::web::commix::CommixScanner;
+    #[cfg(feature = "sovereign")]
     use crate::plugins::privilege_escalation::privesc_hunter::{PrivescHunterScanner, PrivescCheckLevel};
     use crate::plugins::exploitation::web::graphql_cop::GraphQLCopScanner; // NUEVO
     use crate::plugins::exploitation::network::coercer::CoercerScanner; // NUEVO
+    use crate::plugins::enumeration::web::jsluice::JsluiceScanner; // NUEVO
+    use crate::plugins::reconnaissance::active::subzy::SubzyScanner; // NUEVO
+    use crate::plugins::exploitation::web::nomore403::NoMore403Scanner; // NUEVO
+    use crate::plugins::exploitation::web::smuggler::SmugglerScanner; // NUEVO
+    use crate::plugins::intelligence::greynoise::GreyNoiseScanner; // NUEVO
+    use crate::plugins::enumeration::web::x8::X8Scanner; // NUEVO
+    use crate::plugins::enumeration::web::inql::InQLScanner; // NUEVO
+    use crate::plugins::enumeration::web::ppmap::PpmapScanner; // NUEVO
+    use crate::plugins::enumeration::web::corsy::CorsyScanner; // NUEVO
+    use crate::plugins::enumeration::web::wcd::WcdScanner; // NUEVO
+    use crate::plugins::exploitation::web::ssrf_king::SsrfKingScanner;
+    use crate::plugins::exploitation::web::tplmap::TplmapScanner;
+    use crate::plugins::exploitation::web::openredirex::OpenRedirexScanner;
 
     vec![
         Box::new(WebFuzzer::new(config.insecure, config.jitter.clone(), Some(config.proxy_manager.clone()))), 
         Box::new(NmapScanner::new(
-            config.nmap_options.scripts, config.nmap_options.stealth, config.nmap_options.service_detection, config.nmap_options.scan_type, config.nmap_options.fragment, config.nmap_options.decoy, config.nmap_options.ports, config.nmap_options.vuln_scan, config.executor.clone())), 
+            config.nmap_options.scripts.clone(), config.nmap_options.stealth, config.nmap_options.service_detection, config.nmap_options.scan_type.clone(), config.nmap_options.fragment, config.nmap_options.decoy.clone(), config.nmap_options.ports.clone(), config.nmap_options.vuln_scan, config.executor.clone())), 
         Box::new(WhatWebScanner::new(config.executor.clone())), 
         Box::new(SqlMapScanner::new()), 
         Box::new(HydraScanner::new(None, None, None)), 
         Box::new(WapitiScanner::new()), 
         Box::new(ZapScanner::new(None, None, None)), 
         Box::new(BurpScanner::new(None, None)), 
-        Box::new(NucleiScanner::new(config.executor.clone())), 
+        Box::new(NucleiScanner::new(config.clone())), 
         Box::new(FfufScanner::new(None)), 
         Box::new(ArjunScanner::new()), 
         Box::new(RustScanScanner::new()), 
@@ -315,18 +346,23 @@ pub fn get_all_scanners<M: ExecutorMode>(config: GlobalConfig<M>) -> Vec<Box<dyn
         Box::new(TruffleHogScanner::new()), 
         Box::new(DalfoxScanner::new()), 
         Box::new(KatanaScanner::new()), 
+        #[cfg(feature = "sovereign")]
         Box::new(BloodHoundScanner::new(config.executor.clone(), config.correlation_engine.clone())), 
         Box::new(ResponderScanner::new()), 
         Box::new(ImpacketScanner::new()), 
+        #[cfg(feature = "sovereign")]
         Box::new(CertipyScanner::new()), 
         Box::new(PetitPotamScanner::new()), 
+        #[cfg(feature = "sovereign")]
         Box::new(SliverScanner::new(config.executor.clone())), 
+        #[cfg(feature = "sovereign")]
         Box::new(LigoloScanner::new(config.executor.clone())), 
         Box::new(PacuScanner::new()), 
         Box::new(CloudEnumScanner::new()), 
         Box::new(HttpxScanner::new(config.proxy_manager.clone())), 
         Box::new(NaabuScanner::new()), 
         Box::new(InteractshScanner::new()), 
+        #[cfg(feature = "sovereign")]
         Box::new(HavocScanner::new(config.executor.clone())), 
         Box::new(CloudFoxScanner::new()), 
         Box::new(KiterunnerScanner::new()), 
@@ -353,10 +389,24 @@ pub fn get_all_scanners<M: ExecutorMode>(config: GlobalConfig<M>) -> Vec<Box<dyn
         Box::new(CRLFScanner::new()), 
         Box::new(GfScanner::new()), 
         Box::new(CommixScanner::new()), 
+        #[cfg(feature = "sovereign")]
         Box::new(PrivescHunterScanner::new(PrivescCheckLevel::Moderate)), 
         Box::new(GraphQLCopScanner::new()), 
         Box::new(CoercerScanner::new()), 
         Box::new(CaidoScanner::new(&crate::utils::config::Config::from_env(), config.proxy_manager.clone())), 
+        Box::new(JsluiceScanner::new()),
+        Box::new(SubzyScanner::new()),
+        Box::new(NoMore403Scanner::new()),
+        Box::new(SmugglerScanner::new()),
+        Box::new(GreyNoiseScanner::new()),
+        Box::new(X8Scanner::new()),
+        Box::new(InQLScanner::new()),
+        Box::new(PpmapScanner::new()),
+        Box::new(CorsyScanner::new()),
+        Box::new(WcdScanner::new()),
+        Box::new(SsrfKingScanner::new(config.proxy_manager.clone())),
+        Box::new(TplmapScanner::new()),
+        Box::new(OpenRedirexScanner::new()),
     ]
 }
 

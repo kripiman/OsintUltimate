@@ -60,6 +60,7 @@ Seguridad en la carga de código externo y estabilidad de la interfaz binaria.
 - **Anti-TOCTOU**: La carga de librerías dinámicas vía `/proc/self/fd` (en Linux) previene que el binario de un plugin sea reemplazado después de su firma.
 - **Signature Mandatory**: El cargador rechaza cualquier plugin que no cuente con una firma Ed25519 válida contra la clave maestra del operador.
 - **ABI Stability**: El contrato `#[repr(C)]` en `ffi.rs` garantiza que no existan desalineaciones de memoria al transferir estructuras complejas entre el motor y los plugins.
+- **Arsenal Hardening**: Los plugins de Bug Bounty (`subzy`, `nomore403`, `smuggler`, etc.) han sido endurecidos con `tokio::time::timeout` y validación de esquemas de salida para prevenir fugas de tiempo y falsos negativos.
 
 ---
 

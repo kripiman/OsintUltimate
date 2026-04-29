@@ -81,6 +81,9 @@ mime_guess = "2.0"
 
 
 
+# WebSocket (CertStream daemon)
+tokio-tungstenite = { version = "0.21", features = ["rustls-tls-webpki-roots"] }
+
 # Networking & High Performance
 io-uring = "0.7"
 smoltcp = { version = "0.11", features = ["socket-tcp", "socket-raw", "socket-udp"] }
@@ -94,7 +97,9 @@ zip = "8.5.1"
 # RocksDB and Chitchat removed as they were not used in the final v4.0 architecture and caused build failures.
 
 [features]
-breach-exploit-executor = []
+default = ["bug-bounty"]
+bug-bounty = []
+sovereign = ["bug-bounty"]
 
 [profile.release]
 opt-level = 3

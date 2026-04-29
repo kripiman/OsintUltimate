@@ -1,4 +1,5 @@
-use crate::models::{TargetHost, Finding, Severity, Category, TargetStatus, FINDING_PLUGIN_ERROR, FINDING_PLUGIN_PANIC};
+use crate::models::{TargetHost, Finding, Severity, Category, TargetStatus, FINDING_PLUGIN_ERROR, FINDING_PLUGIN_PANIC, FINDING_SSTI};
+use crate::models::constants::PLUGIN_COMMIX;
 use crate::plugins::ScannerPlugin;
 use std::sync::Arc;
 use futures::stream::StreamExt;
@@ -307,6 +308,48 @@ impl<M: ExecutorMode> Orchestrator<M> {
                     .unwrap_or_else(|arc| (*arc).clone());
                 
                 if !all_findings.is_empty() {
+                    // --- REACTIVE TRIGGER: SSTI -> COMMIX ---
+                    let ssti_hit = all_findings.iter().find(|f| f.core.id == FINDING_SSTI);
+                    if let Some(ssti_f) = ssti_hit {
+                        if let Some(commix) = plugins.iter().find(|p| p.name() == PLUGIN_COMMIX) {
+                            if approval_gate.is_approved(commix.name()).await {
+                                info!("🔱 V14.3 SOVEREIGN: SSTI detected! Triggering reactive Commix chain for {}", target.host);
+                                
+                                // Pass vulnerable URL into snapshot extra_data
+                                let vuln_url = ssti_f.evidence.evidence.as_ref()
+                                    .and_then(|e| e.data.get("url"))
+                                    .cloned();
+                                
+                                let mut reactive_snapshot = TargetHost {
+                                    host: target.host.clone(),
+                                    ip: target.ip.clone(),
+                                    resolved_ip: target.resolved_ip.clone(),
+                                    target_type: target.target_type,
+                                    user: None,
+                                    status: TargetStatus::Scanning,
+                                    findings: Arc::new(Vec::new()),
+                                    tool_suggestions: Arc::new(Vec::new()),
+                                    tactical_context: Arc::clone(&target.tactical_context),
+                                    extra_data: Arc::clone(&target.extra_data),
+                                };
+
+                                if let Some(url) = vuln_url {
+                                    Arc::make_mut(&mut reactive_snapshot.extra_data)
+                                        .as_object_mut()
+                                        .and_then(|obj| obj.insert("discovered_urls".into(), serde_json::json!([url])));
+                                }
+
+                                if let Ok(mut rce_findings) = commix.scan(&reactive_snapshot).await {
+                                    if !rce_findings.is_empty() {
+                                        info!("🔥 V14.3 SOVEREIGN: Commix confirmed RCE from SSTI on {}", target.host);
+                                        all_findings.append(&mut rce_findings);
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    // --- END REACTIVE TRIGGER ---
+
                     Arc::make_mut(&mut target.findings).append(&mut all_findings);
                 }
                 // --- NEW: BlackArch Dynamic Tool Suggestion ---

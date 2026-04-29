@@ -17,6 +17,20 @@ pub const FINDING_JWT_VULN: &str = "JWT-VULN";
 pub const FINDING_CRLF_INJECTION: &str = "CRLF-INJECTION";
 pub const FINDING_SCA_VULN: &str = "SCA-VULN";
 pub const FINDING_GF_PATTERN: &str = "GF-PATTERN";
+pub const FINDING_JS_SECRET: &str = "JS-SECRET";
+pub const FINDING_JS_ENDPOINT: &str = "JS-ENDPOINT";
+pub const FINDING_SUBDOMAIN_TAKEOVER: &str = "SUBDOMAIN-TAKEOVER";
+pub const FINDING_SMUGGLING: &str = "HTTP-SMUGGLING";
+pub const FINDING_BYPASS_SUCCESS: &str = "BYPASS-SUCCESS";
+pub const FINDING_HIDDEN_PARAMS: &str = "HIDDEN-PARAMS";
+pub const FINDING_GRAPHQL_INTROSPECTION: &str = "GRAPHQL-INTROSPECTION";
+pub const FINDING_PROTOTYPE_POLLUTION: &str = "PROTOTYPE-POLLUTION";
+pub const FINDING_CORS_MISCONFIG: &str = "CORS-MISCONFIG";
+pub const FINDING_WEB_CACHE_DECEPTION: &str = "WEB-CACHE-DECEPTION";
+pub const FINDING_CERTSTREAM_DISCOVERY: &str = "CERTSTREAM-DISCOVERY";
+pub const FINDING_SSRF: &str = "SSRF-VULNERABILITY";
+pub const FINDING_SSTI: &str = "SSTI_VULNERABILITY";
+pub const FINDING_OPEN_REDIRECT: &str = "OPEN_REDIRECT";
 
 // Plugin Names
 pub const PLUGIN_OSINT: &str = "OsintScanner";
@@ -68,6 +82,20 @@ pub const PLUGIN_CRLF: &str = "CRLFuzz";
 pub const PLUGIN_GF: &str = "GfScanner";
 pub const PLUGIN_CAIDO: &str = "CaidoScanner";
 pub const PLUGIN_SOVEREIGN_RECON: &str = "SovereignReconScanner";
+pub const PLUGIN_JSLUICE: &str = "JsluiceScanner";
+pub const PLUGIN_SUBZY: &str = "SubzyScanner";
+pub const PLUGIN_X8: &str = "X8Scanner";
+pub const PLUGIN_NOMORE403: &str = "NoMore403Scanner";
+pub const PLUGIN_SMUGGLER: &str = "SmugglerScanner";
+pub const PLUGIN_GREYNOISE: &str = "GreyNoiseScanner";
+pub const PLUGIN_INQL: &str = "InQLScanner";
+pub const PLUGIN_PPMAP: &str = "PpmapScanner";
+pub const PLUGIN_CORSY: &str = "CorsyScanner";
+pub const PLUGIN_WCD: &str = "WcdScanner";
+pub const PLUGIN_SSRF_KING: &str = "SsrfKingScanner";
+pub const PLUGIN_COMMIX: &str = "CommixScanner";
+pub const PLUGIN_TPLMAP: &str = "TplmapScanner";
+pub const PLUGIN_OPEN_REDIRECT: &str = "OpenRedirexScanner";
 
 // OOB Verification Defaults
 pub const OOB_DEFAULT_POLL_INTERVAL_MS: u64 = 5000;
