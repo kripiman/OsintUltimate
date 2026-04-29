@@ -1,4 +1,4 @@
-# 🧰 Arsenal de Herramientas y Plugins
+# 🧰 Arsenal de Herramientas y Plugins (Listado Completo)
 
 OsintUltimate no reinventa la rueda; orquesta las mejores herramientas de la industria y de la distribución **BlackArch Linux** mediante wrappers nativos en Rust que garantizan el sigilo y el procesamiento de datos por IA.
 
@@ -28,89 +28,91 @@ graph TD
 
 ---
 
-## 1. Fase de Reconocimiento (Passive & OSINT)
-Estas herramientas se ejecutan en la Etapa 2 (Discovery) para mapear la superficie sin interacción directa.
+## 1. Fase de Reconocimiento (OSINT, Active & Passive)
+Estas herramientas se ejecutan en la Etapa 2 (Discovery) para mapear la superficie de ataque.
 
-| Herramienta | Función Principal | Modo OPSEC |
+| Herramienta | Categoría | Función Principal |
 | :--- | :--- | :--- |
-| **Subfinder** | Descubrimiento de subdominios de alta velocidad. | Pasivo (API) |
-| **Amass** | Mapeo de DNS y enumeración de infraestructura. | Pasivo/Activo |
-| **Uncover** | Búsqueda en motores de búsqueda de internet (Shodan, Censys). | Pasivo (API) |
-| **SovereignRecon** | Plugin interno para correlación de activos descubiertos. | Interno |
-
-### Jerarquía Interna de Reconocimiento
-No todas las herramientas de recon se lanzan al mismo tiempo. El motor sigue este orden lógico:
-
-1.  **Tier 1: Pasivo Instantáneo (Subfinder/Uncover)**: Consulta de APIs externas. Cero interacción con el objetivo.
-2.  **Tier 2: Transparencia de Certificados (CRT.sh)**: Búsqueda en logs de SSL/TLS.
-3.  **Tier 3: Correlación (SovereignRecon)**: Fusión de datos y eliminación de ruido en memoria.
-4.  **Tier 4: Resolución Activa (Amass Active)**: Solo si es necesario, se realizan consultas DNS directas al objetivo.
-
-```mermaid
-graph TD
-    Start[Objetivo Raíz] --> P1[Tier 1: APIs Pasivas]
-    P1 --> P2[Tier 2: CT Logs]
-    P2 --> P3[Tier 3: Correlación]
-    P3 -->|Nuevo Subdominio| Loop[Re-inyección en Pipeline]
-    Loop --> Start
-    P3 -->|Host Validado| P4[Tier 4: Active DNS/Enum]
-```
+| **Subfinder** | OSINT | Descubrimiento pasivo de subdominios de alta velocidad. |
+| **Amass** | OSINT | Mapeo de DNS y enumeración de infraestructura de red. |
+| **Uncover** | OSINT | Búsqueda en motores de internet (Shodan, Censys, FOFA). |
+| **SovereignRecon**| OSINT | Plugin interno (Rust) para correlación de activos. |
+| **DNSx** | Active | Resolución concurrente masiva y validación de Liveness. |
+| **HTTPx** | Active | Probing de servicios HTTP/HTTPS y recolección de banners. |
+| **Naabu** | Active | Escaneo rápido y sigiloso de puertos basado en SYN. |
+| **Gitleaks** | Passive | Detección de secretos expuestos en repositorios git. |
+| **Trufflehog** | Passive | Escaneo de credenciales en repositorios y buckets S3. |
+| **Wayback / Gau**| Passive | Recuperación de URLs y endpoints históricos desde Wayback Machine. |
 
 ---
 
-## 2. Fase de Enumeración (Network & Web)
-Identificación de servicios y vulnerabilidades de configuración.
+## 2. Fase de Enumeración (Network, Web & Cloud)
+Identificación de rutas ocultas, tecnologías, configuraciones inseguras y cloud assets.
 
-| Herramienta | Función Principal | Aislamiento |
-| :--- | :--- | :--- |
-| **Nmap** | Escaneo de puertos y detección de versiones (Service ID). | Docker Sandbox |
-| **Rustscan** | Escaneo de puertos ultra-rápido basado en Rust. | Nativo |
-| **Snallygaster** | Búsqueda de archivos sensibles en servidores web. | Docker Sandbox |
-| **FFuf / Dirsearch** | Fuzzing de directorios y descubrimiento de rutas. | Docker Sandbox |
-| **ZMap** | Escaneo de redes a nivel de internet (Port 80/443). | Nativo |
+### Enumeración de Red
+*   **Nmap:** Escaneo profundo de puertos y detección de versiones (Service ID, OS Enum).
+*   **Rustscan:** Escaneo ultra-rápido como puente hacia Nmap.
+*   **Net Engine:** Implementación nativa para validaciones a nivel de socket.
 
----
+### Enumeración Web (HTTP/S)
+*   **Fuzzing & Rutas:** FFuf, Feroxbuster, Kiterunner (APIs), Katana, Dirsearch.
+*   **CGI / Parámetros:** Arjun (parámetros ocultos), CRLFuzz.
+*   **Scanners de Config:** Nikto, Snallygaster, WPSec (WordPress), WhatWeb, Tsunami (GCP Scanner).
+*   **Patrones y Endpoints:** GF (Grep Patterns), Interactsh (OOB Engine).
 
-## 3. Fase de Explotación y Validación (Strike)
-Plugins que ejecutan ataques tácticos autorizados.
-
-| Herramienta | Vector de Ataque | Prioridad AI |
-| :--- | :--- | :--- |
-| **SQLMap** | Explotación de Inyección SQL. | Crítica |
-| **Commix** | Explotación de Inyección de Comandos (OS Command Injection). | Crítica |
-| **Dalfox** | Escaneo y validación de Cross-Site Scripting (XSS). | Alta |
-| **JWT_Tool** | Auditoría y manipulación de tokens JSON Web Tokens. | Media |
-| **GraphQL Cop** | Auditoría de seguridad para endpoints GraphQL. | Media |
+### Enumeración Cloud (AWS, Azure, GCP)
+*   **Pacu / Prowler:** Auditoría de seguridad y enumeración en AWS.
+*   **CloudFox / CloudEnum:** Detección de activos y permisos en entornos multicloud.
+*   **CloudBrute / KubeBench:** Fuerza bruta de buckets y validación CIS de Kubernetes.
 
 ---
 
-## 4. Fase de Persistencia y C2 (Breach)
-Consolidación de acceso y movimiento lateral.
+## 3. Inteligencia y Auditoría (Vulnerability Scanners)
+Plugins que cruzan firmas de vulnerabilidades contra los activos.
 
-| Herramienta | Función | Protocolo |
-| :--- | :--- | :--- |
-| **Havoc C2** | Framework de comando y control avanzado. | HTTPS/mTLS |
-| **Ligolo-ng** | Túneles tácticos para movimiento lateral y pivoting. | TCP/TLS |
-| **Bloodhound** | Análisis de caminos de ataque en Active Directory. | Interno |
-| **SovereignC2** | Orquestador de sesiones internas de OsintUltimate. | mTLS |
-
----
-
-## 5. Infraestructura de Verificación (OOB)
-Para detectar vulnerabilidades ciegas (Out-of-Band).
-
-*   **Interactsh**: Cliente para interacción OOB (DNS, HTTP, SMTP).
-*   **Burp Collaborator**: Integración mediante puente para verificación OOB premium.
-*   **Interactsh (Self-Hosted)**: Servidor dedicado en Azure Africa para máximo sigilo.
+| Herramienta | Función Principal |
+| :--- | :--- |
+| **Nuclei** | Escáner masivo basado en templates YAML (Vulnerabilidades conocidas). |
+| **Jaeles** | Escáner similar a Nuclei, especializado en payloads Web/API. |
+| **Searchsploit**| Búsqueda automatizada de exploits públicos (Exploit-DB) según versión. |
+| **Trivy / OSV** | Escaneo de vulnerabilidades en contenedores e infraestructuras. |
+| **Checkov** | Auditoría de infraestructura como código (IaC). |
 
 ---
 
-## ⚙️ ¿Cómo se cargan estas herramientas?
+## 4. Fase de Explotación y Escalada (Strike Mode)
+Ataques dirigidos ejecutados bajo confirmación o en modo autónomo si la política lo permite.
 
-Cada herramienta listada arriba tiene un **Wrapper de Rust** en `src/plugins/` que hereda el trait `Plugin`. Este wrapper se encarga de:
-1.  **Formatear argumentos**: Traduce la intención de la IA a flags de comando (e.g., `nmap -sV`).
-2.  **Envolver en Proxy**: Inyecta automáticamente el uso de `proxychains4` si el sigilo está activo.
-3.  **Parsers Estrictos**: Convierte el output (JSON/Texto) en objetos `Finding` estructurados para el motor.
+### Explotación Web
+*   **SQLMap:** Inyecciones SQL (Blind, Time-based, Error-based).
+*   **Commix:** Explotación de Inyección de Comandos (RCE).
+*   **Dalfox:** Escaneo y validación de Cross-Site Scripting (XSS).
+*   **JWT_Tool:** Auditoría de tokens JSON (Firma nula, KIDs, bypass).
+*   **GraphQL Cop:** Ataques a endpoints de GraphQL (Introspection, Batching).
+*   **Wapiti:** Inyección automática de payloads y black-box testing.
+
+### Explotación de Red y Active Directory
+*   **Impacket:** Navaja suiza para ataques a protocolos Microsoft (SMB, WMI).
+*   **NetExec:** (Anteriormente CrackMapExec) Pivoting y fuerza bruta en redes corporativas.
+*   **Responder / PetitPotam:** Envenenamiento LLMNR/NBT-NS y relay de NTLM.
+*   **Coercer:** Coerción forzada de autenticación (RPC) en Active Directory.
+*   **Hydra:** Ataques de fuerza bruta y diccionario contra servicios de login (SSH, FTP).
+
+### Escalada de Privilegios (PrivEsc)
+*   **Certipy:** Abuso de servicios de certificados en Active Directory (ADCS).
+*   **Privesc Hunter:** Automatización de rutas de escalada local (LinPEAS/WinPEAS wrappers).
+
+---
+
+## 5. Movimiento Lateral, Persistencia y C2 (Breach)
+Consolidación de acceso una vez que se compromete una máquina objetivo.
+
+| Herramienta | Protocolo / Enfoque |
+| :--- | :--- |
+| **Bloodhound** | Recolección e ingestión de datos LDAP para trazar rutas al Domain Admin. |
+| **Ligolo-ng** | Túneles tácticos inversos (TUN/TAP) para movimiento lateral sin proxychains. |
+| **Sliver / Havoc**| Frameworks C2 integrados para comando y control avanzado. |
+| **Burp / ZAP / Caido**| Puentes de verificación y proxificado de tráfico web para análisis manual. |
 
 ---
 
@@ -132,7 +134,7 @@ flowchart TD
     
     Strike --> ToolSelection{Selección de Herramienta}
     ToolSelection -->|Web| Sqlmap[SQLMap / Commix]
-    ToolSelection -->|Infra| NmapScripts[Nmap NSE / Metasploit]
+    ToolSelection -->|Infra| NmapScripts[Nmap / NetExec]
     
     Sqlmap --> Report[Sovereign Persistence]
 ```
@@ -140,4 +142,4 @@ flowchart TD
 ---
 
 > [!IMPORTANT]
-> **Prioridad de Herramientas Críticas:** `Nmap` y `Nuclei` se consideran herramientas de "Anclaje". El motor siempre intentará ejecutarlas primero en cualquier host vivo para establecer la línea base de la superficie táctica.
+> **Prioridad de Herramientas Críticas:** `Nmap` y `Nuclei` se consideran herramientas de "Anclaje". El motor siempre intentará ejecutarlas primero en cualquier host vivo para establecer la línea base de la superficie táctica. Todas las herramientas arriba descritas están mapeadas a archivos nativos `.rs` dentro del árbol `src/plugins/` y controladas mediante el `Orchestrator` de OsintUltimate.
