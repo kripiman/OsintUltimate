@@ -32,6 +32,39 @@ pub const FINDING_SSRF: &str = "SSRF-VULNERABILITY";
 pub const FINDING_SSTI: &str = "SSTI_VULNERABILITY";
 pub const FINDING_OPEN_REDIRECT: &str = "OPEN_REDIRECT";
 pub const FINDING_WAYMORE_URL: &str = "WAYMORE-URL";
+pub const FINDING_MOBILE_HARDCODED_SECRET: &str = "MOBILE-HARDCODED-SECRET";
+pub const FINDING_MOBILE_INSECURE_PERM: &str = "MOBILE-INSECURE-PERMISSION";
+pub const FINDING_MOBILE_EXPORTED_COMP: &str = "MOBILE-EXPORTED-COMPONENT";
+pub const FINDING_MOBILE_WEAK_CRYPTO: &str = "MOBILE-WEAK-CRYPTO";
+pub const FINDING_MOBILE_INSECURE_CONFIG: &str = "MOBILE-INSECURE-CONFIG";
+pub const FINDING_SUPPLY_CHAIN_VULN: &str = "SUPPLY-CHAIN-VULN";
+pub const FINDING_UNSIGNED_IMAGE: &str = "UNSIGNED-IMAGE";
+pub const FINDING_SBOM_INVENTORY: &str = "SBOM-INVENTORY";
+pub const FINDING_KATANA_ENDPOINT: &str = "KATANA-ENDPOINT";
+pub const FINDING_APK_DISCOVERED: &str = "APK-DISCOVERED";
+pub const FINDING_CLOUD_METADATA: &str = "CLOUD-METADATA";
+
+// API/GraphQL Security
+pub const FINDING_GRAPHQL_SUGGESTIONS: &str = "GRAPHQL-SUGGESTIONS";
+pub const FINDING_GRAPHQL_FINGERPRINT: &str = "GRAPHQL-FINGERPRINT";
+pub const FINDING_API_SCHEMA_VULN: &str = "API-SCHEMA-VULN";
+pub const FINDING_GRAPHQL_DOS: &str = "GRAPHQL-DOS";
+pub const FINDING_API_SCAN_FAILED: &str = "API-SCAN-FAILED";
+pub const FINDING_GRAPHQL_BRUTE_FAILED: &str = "GRAPHQL-BRUTE-FAILED";
+pub const FINDING_API_SCAN_INHIBITED: &str = "API-SCAN-INHIBITED";
+
+// AI/LLM Security
+pub const FINDING_AI_PROMPT_INJECTION: &str = "AI-PROMPT-INJECTION";
+pub const FINDING_AI_JAILBREAK: &str = "AI-JAILBREAK";
+pub const FINDING_AI_DATA_LEAK: &str = "AI-DATA-LEAK";
+pub const FINDING_AI_EVAL_FAILURE: &str = "AI-EVAL-FAILURE";
+
+pub const PLUGIN_GARAK: &str = "GarakScanner";
+pub const PLUGIN_PROMPTMAP: &str = "PromptmapScanner";
+pub const PLUGIN_LLMFUZZER: &str = "LLMFuzzerScanner";
+pub const PLUGIN_PYRIT: &str = "PyRITScanner";
+pub const PLUGIN_PROMPTFOO: &str = "PromptfooScanner";
+pub const PLUGIN_PROMPT_INJECT: &str = "PromptInjectScanner";
 
 // Plugin Names
 pub const PLUGIN_OSINT: &str = "OsintScanner";
@@ -98,9 +131,37 @@ pub const PLUGIN_COMMIX: &str = "CommixScanner";
 pub const PLUGIN_TPLMAP: &str = "TplmapScanner";
 pub const PLUGIN_OPEN_REDIRECT: &str = "OpenRedirexScanner";
 pub const PLUGIN_WAYMORE: &str = "WaymoreScanner";
+pub const PLUGIN_ALTERX: &str = "AlterXScanner";
+pub const PLUGIN_LINKFINDER: &str = "LinkFinderScanner";
+pub const PLUGIN_SECRETFINDER: &str = "SecretFinderScanner";
+pub const PLUGIN_MOBSF: &str = "MobSFScanner";
+pub const PLUGIN_APKLEAKS: &str = "APKLeaksScanner";
+pub const PLUGIN_APKTOOL: &str = "ApktoolScanner";
+pub const PLUGIN_JADX: &str = "JadxScanner";
+pub const PLUGIN_DROZER: &str = "DrozerScanner";
+pub const PLUGIN_SYFT: &str = "SyftScanner";
+pub const PLUGIN_GRYPE: &str = "GrypeScanner";
+pub const PLUGIN_COSIGN: &str = "CosignScanner";
+pub const PLUGIN_GRAPHW00F: &str = "GraphW00fScanner";
+pub const PLUGIN_SCHEMATHESIS: &str = "SchemathesisScanner";
+pub const PLUGIN_CRACKQL: &str = "CrackqlScanner";
+pub const PLUGIN_MARIANA_TRENCH: &str = "MarianaTrenchScanner";
+pub const PLUGIN_SCOUTSUITE: &str = "ScoutSuiteScanner";
 
 // OOB Verification Defaults
 pub const OOB_DEFAULT_POLL_INTERVAL_MS: u64 = 5000;
 pub const OOB_DEFAULT_TOTAL_WAIT_SECONDS: u64 = 60;
 pub const OOB_DEFAULT_SERVER: &str = "interact.sh";
+
+// Mobile Scanner Timeouts (seconds)
+pub const MOBILE_TIMEOUT_APKTOOL_SECS: u64 = 300;
+pub const MOBILE_TIMEOUT_JADX_SECS: u64 = 600;
+pub const MOBILE_TIMEOUT_APKLEAKS_SECS: u64 = 600;
+pub const MOBILE_TIMEOUT_DROZER_SECS: u64 = 180;
+pub const MOBILE_TIMEOUT_MOBSF_TOTAL_SECS: u64 = 1200;
+
+// Supply Chain Scanner Timeouts (seconds)
+pub const SUPPLY_TIMEOUT_SYFT_SECS: u64 = 300;
+pub const SUPPLY_TIMEOUT_GRYPE_SECS: u64 = 600;
+pub const SUPPLY_TIMEOUT_COSIGN_SECS: u64 = 120;
 

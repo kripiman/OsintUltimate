@@ -138,6 +138,11 @@ impl<M: ExecutorMode> Pipeline<M> {
         tokio::spawn(async move {
             while let Some(mut target) = rx.recv().await {
                 if discovery_token.is_cancelled() { break; }
+
+                if target.target_type == crate::models::TargetType::Mobile || target.target_type == crate::models::TargetType::Container {
+                    let _ = liveness_tx.send(target).await;
+                    continue;
+                }
                 
                 if let Some(ref j) = jitter {
                     j.apply().await;
@@ -145,6 +150,9 @@ impl<M: ExecutorMode> Pipeline<M> {
 
                 if seen_domains.check(&target.host) { continue; }
                 seen_domains.set(&target.host);
+
+                // Forward original target to liveness check
+                let _ = liveness_tx.send(target.clone()).await;
 
                 let mut join_set = tokio::task::JoinSet::new();
                 for i in 0..discovery_plugins.len() {
@@ -170,6 +178,7 @@ impl<M: ExecutorMode> Pipeline<M> {
                                     resolved_ip: None,
                                     status: TargetStatus::Pending, 
                                     target_type: crate::models::TargetType::Web,
+            file_path: None,
                                     user: None,
                                     findings: Arc::new(Vec::new()),
                                     tool_suggestions: Arc::new(Vec::new()),
@@ -202,6 +211,11 @@ impl<M: ExecutorMode> Pipeline<M> {
                 let sink_tx = sink_tx.clone(); 
                 let token = liveness_token.clone();
                 async move {
+                    if target.target_type == crate::models::TargetType::Mobile || target.target_type == crate::models::TargetType::Container {
+                        let _ = scan_tx.send(target).await;
+                        return;
+                    }
+
                     if let Some(ip) = tokio::select! { res = checker.is_live(&target.host) => res, _ = token.cancelled() => return } {
                         if !is_safe_ip(&ip) { 
                             warn!("🛡️ V13: Blocked unsafe IP {} for host {}", ip, target.host);
@@ -465,6 +479,16 @@ impl<M: ExecutorMode> PipelineBuilder<M> {
             policy: None,
             executor: None,
         }
+    }
+
+    pub fn with_policy(mut self, policy: Arc<dyn crate::core::policy::PolicyProvider>) -> Self {
+        self.policy = Some(policy);
+        self
+    }
+
+    pub fn with_executor(mut self, executor: Arc<crate::utils::executor::StealthExecutor<M>>) -> Self {
+        self.executor = Some(executor);
+        self
     }
 
     pub fn with_swarm(mut self, enabled: bool, max_tokens: u32, router: Arc<crate::core::ai::TieredAIRouter>, proxy_manager: Option<Arc<crate::utils::proxy::ProxyManager>>, executor: Arc<crate::utils::executor::StealthExecutor<M>>, policy: Arc<dyn crate::core::policy::PolicyProvider>) -> Self {

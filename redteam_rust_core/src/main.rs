@@ -21,6 +21,10 @@ use futures::StreamExt;
 #[command(author, version, about, long_about = None)]
 pub struct Args {
     pub target: Option<String>,
+    #[arg(long, help = "Path to local APK/IPA for mobile scanning")]
+    pub apk: Option<String>,
+    #[arg(long, help = "Container image reference (e.g. alpine:latest)")]
+    pub image: Option<String>,
     #[arg(short, long)]
     pub input: Option<String>,
     #[arg(short, long, default_value = "scan_result.jsonl")]
@@ -166,6 +170,9 @@ async fn main() -> Result<()> {
         proxy_mode: utils_config.proxy_mode,
         proxy_pool_size: utils_config.proxy_pool_size,
         mcp_token: utils_config.mcp_token.clone(),
+        mobsf_url: utils_config.mobsf_url.clone(),
+        mobsf_api_key: utils_config.mobsf_api_key.clone(),
+        mobsf_timeout_secs: utils_config.mobsf_timeout_secs,
     };
 
     let engine = RedTeamEngine::from_config(engine_config, &utils_config);
@@ -274,7 +281,7 @@ async fn main() -> Result<()> {
 
         tokio::spawn(async move {
             while let Some(mission) = mission_rx.recv().await {
-                info!("📡 [MISSION-QUEUE] Target={} Profile={} Program={}", mission.target, mission.profile, mission.program_name);
+                info!("📡 [MISSION-QUEUE] Target={:?} APK={:?} Profile={} Program={}", mission.target, mission.apk, mission.profile, mission.program_name);
             }
         });
 
@@ -299,50 +306,126 @@ async fn main() -> Result<()> {
         None
     };
 
-    let target_stream: futures::stream::BoxStream<'static, String> = if let Some(input_path) = args.input.clone() {
+    let target_stream: futures::stream::BoxStream<'static, TargetHost> = if let Some(apk_path) = args.apk.clone() {
+        let package_name = apk_path.split('/').last().unwrap_or("mobile_app").to_string();
+        Box::pin(futures::stream::iter(vec![TargetHost {
+            host: package_name,
+            ip: None,
+            resolved_ip: None,
+            status: TargetStatus::Pending,
+            target_type: redteam_rust_core::models::TargetType::Mobile,
+            file_path: Some(apk_path),
+            user: None,
+            findings: Arc::new(Vec::new()),
+            tool_suggestions: Arc::new(Vec::new()),
+            tactical_context: Arc::new(serde_json::json!({})),
+            extra_data: Arc::new(serde_json::json!({})),
+        }]))
+    } else if let Some(image_ref) = args.image.clone() {
+        Box::pin(futures::stream::iter(vec![TargetHost {
+            host: image_ref,
+            ip: None,
+            resolved_ip: None,
+            status: TargetStatus::Pending,
+            target_type: redteam_rust_core::models::TargetType::Container,
+            file_path: None,
+            user: None,
+            findings: Arc::new(Vec::new()),
+            tool_suggestions: Arc::new(Vec::new()),
+            tactical_context: Arc::new(serde_json::json!({})),
+            extra_data: Arc::new(serde_json::json!({})),
+        }]))
+    } else if let Some(input_path) = args.input.clone() {
         let file = tokio::fs::File::open(&input_path).await?;
         let reader = tokio::io::BufReader::new(file);
         tokio_stream::wrappers::LinesStream::new(tokio::io::AsyncBufReadExt::lines(reader))
             .filter_map(|res| async move { 
                 res.ok().map(|l| l.trim().to_string()).filter(|l| !l.is_empty()) 
             })
+            .filter(|t: &String| { 
+                let t_clone = t.clone();
+                let valid = validate_target(&t_clone); 
+                if !valid { error!("❌ Skipping invalid target: {}", t_clone); } 
+                async move { valid } 
+            })
+            .map(|t: String| {
+                let target_type = if t.contains("://") || t.contains('.') { redteam_rust_core::models::TargetType::Web }
+                else if t.contains(':') { redteam_rust_core::models::TargetType::Network }
+                else { redteam_rust_core::models::TargetType::Host };
+
+                TargetHost {
+                    host: t, ip: None, resolved_ip: None, status: TargetStatus::Pending, target_type,
+                    file_path: None,
+                    user: None,
+                    findings: Arc::new(Vec::new()), tool_suggestions: Arc::new(Vec::new()),
+                    tactical_context: Arc::new(serde_json::json!({})), extra_data: Arc::new(serde_json::json!({})),
+                }
+            })
             .boxed()
     } else if let Some(target) = args.target.clone() {
-        Box::pin(futures::stream::iter(vec![target]))
+        let valid = validate_target(&target);
+        if !valid {
+            anyhow::bail!("Invalid target provided: {}", target);
+        }
+        let target_type = if args.image.is_some() {
+            redteam_rust_core::models::TargetType::Container
+        } else if target.contains("://") || target.contains('.') {
+            redteam_rust_core::models::TargetType::Web
+        } else if target.contains(':') && target.matches(':').count() == 1 && !target.starts_with('[') && !target.contains('.') {
+            // Heuristic: name:tag (one colon, no dots, not IPv6)
+            redteam_rust_core::models::TargetType::Container
+        } else if target.contains(':') {
+            redteam_rust_core::models::TargetType::Network
+        } else {
+            redteam_rust_core::models::TargetType::Host
+        };
+
+        Box::pin(futures::stream::iter(vec![TargetHost {
+            host: target,
+            ip: None,
+            resolved_ip: None,
+            status: TargetStatus::Pending,
+            target_type,
+            file_path: None,
+            user: None,
+            findings: Arc::new(Vec::new()),
+            tool_suggestions: Arc::new(Vec::new()),
+            tactical_context: Arc::new(serde_json::json!({})),
+            extra_data: Arc::new(serde_json::json!({})),
+        }]))
     } else if certstream_rx.is_some() {
         info!("📡 Waiting for real-time targets from CertStream...");
         futures::stream::empty().boxed()
     } else {
-        anyhow::bail!("Either --target, --input, or CERTSTREAM_KEYWORDS must be provided.");
+        anyhow::bail!("Either --target, --input, --apk, or CERTSTREAM_KEYWORDS must be provided.");
     };
 
     // Merge CertStream if active
-    let target_stream = if let Some(rx) = certstream_rx {
-        let cs_stream = tokio_stream::wrappers::ReceiverStream::new(rx);
+    let target_hosts = if let Some(rx) = certstream_rx {
+        let cs_stream = tokio_stream::wrappers::ReceiverStream::new(rx)
+            .filter(|t: &String| { 
+                let t_clone = t.clone();
+                let valid = validate_target(&t_clone); 
+                if !valid { error!("❌ Skipping invalid target: {}", t_clone); } 
+                async move { valid } 
+            })
+            .map(|t: String| {
+                let target_type = if t.contains("://") || t.contains('.') { redteam_rust_core::models::TargetType::Web }
+                else if t.contains(':') { redteam_rust_core::models::TargetType::Network }
+                else { redteam_rust_core::models::TargetType::Host };
+
+                TargetHost {
+                    host: t, ip: None, resolved_ip: None, status: TargetStatus::Pending, target_type,
+                    file_path: None,
+                    user: None,
+                    findings: Arc::new(Vec::new()), tool_suggestions: Arc::new(Vec::new()),
+                    tactical_context: Arc::new(serde_json::json!({})), extra_data: Arc::new(serde_json::json!({})),
+                }
+            });
         futures::stream::select(target_stream, cs_stream).boxed()
     } else {
         target_stream
     };
-
-    let target_hosts: futures::stream::BoxStream<'static, TargetHost> = target_stream
-        .filter(|t: &String| { 
-            let t_clone = t.clone();
-            let valid = validate_target(&t_clone); 
-            if !valid { error!("❌ Skipping invalid target: {}", t_clone); } 
-            async move { valid } 
-        })
-        .map(|t: String| {
-            let target_type = if t.contains("://") || t.contains('.') { redteam_rust_core::models::TargetType::Web }
-            else if t.contains(':') { redteam_rust_core::models::TargetType::Network }
-            else { redteam_rust_core::models::TargetType::Host };
-
-            TargetHost {
-                host: t, ip: None, resolved_ip: None, status: TargetStatus::Pending, target_type,
-                user: None,
-                findings: Arc::new(Vec::new()), tool_suggestions: Arc::new(Vec::new()),
-                tactical_context: Arc::new(serde_json::json!({})), extra_data: Arc::new(serde_json::json!({})),
-            }
-        }).boxed();
 
     // --- EXECUTION ---
     let sink: Box<dyn DataSink> = Box::new(multi_sink);

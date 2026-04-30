@@ -7,11 +7,10 @@ pub mod lateral_movement;
 pub mod persistence;
 #[cfg(feature = "sovereign")]
 pub mod privilege_escalation;
-#[cfg(feature = "sovereign")]
+pub mod compliance;
 pub mod detection_evasion;
 pub mod intelligence;
 pub mod verification;
-pub mod compliance;
 pub mod reporting;
 
 pub mod ffi;
@@ -52,6 +51,7 @@ pub enum Capability {
     DirectoryBruteForce, // NUEVO
     InformationGathering,
     HTTPRequestSmuggling,
+    JsAnalysis,
 }
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, PartialOrd, Ord)]
@@ -179,11 +179,15 @@ pub struct GlobalConfig<M: ExecutorMode = crate::utils::executor::GhostMode> whe
     pub sandbox: std::sync::Arc<crate::core::sandbox::SandboxDispatcher>,
     pub policy: std::sync::Arc<dyn crate::core::policy::PolicyProvider>,
     pub executor: std::sync::Arc<StealthExecutor<M>>,
+    pub budget: std::sync::Arc<crate::core::swarm::budget::TokenBudget>,
     pub correlation_engine: std::sync::Arc<tokio::sync::Mutex<crate::core::correlation::CorrelationEngine>>,
     pub mcp_token: Option<String>,
     pub nuclei_tags: Option<String>,
     pub nuclei_severity: Option<String>,
     pub nuclei_custom_templates: Option<String>,
+    pub mobsf_url: Option<String>,
+    pub mobsf_api_key: Option<String>,
+    pub mobsf_timeout_secs: u64,
 }
 
 impl<M: ExecutorMode> Default for GlobalConfig<M>
@@ -226,13 +230,17 @@ impl<M: ExecutorMode> GlobalConfig<M> where M: Clone {
                 vuln_scan: false,
             },
             sandbox,
-            policy,
+            policy: policy.clone(),
             executor,
+            budget: std::sync::Arc::new(crate::core::swarm::budget::TokenBudget::new(50000)),
             correlation_engine: std::sync::Arc::new(tokio::sync::Mutex::new(crate::core::correlation::CorrelationEngine::new())),
             mcp_token: None,
             nuclei_tags: None,
             nuclei_severity: None,
             nuclei_custom_templates: None,
+            mobsf_url: None,
+            mobsf_api_key: None,
+            mobsf_timeout_secs: 600,
         }
     }
 }
@@ -277,6 +285,7 @@ pub fn get_all_scanners<M: ExecutorMode>(config: GlobalConfig<M>) -> Vec<Box<dyn
     #[cfg(feature = "sovereign")]
     use crate::plugins::lateral_movement::sliver::SliverScanner;
     #[cfg(feature = "sovereign")]
+    use crate::plugins::enumeration::cloud::scoutsuite::ScoutSuiteScanner;
     use crate::plugins::lateral_movement::ligolo::LigoloScanner;
     use crate::plugins::enumeration::cloud::pacu::PacuScanner;
     use crate::plugins::enumeration::cloud::cloudenum::CloudEnumScanner;
@@ -328,8 +337,36 @@ pub fn get_all_scanners<M: ExecutorMode>(config: GlobalConfig<M>) -> Vec<Box<dyn
     use crate::plugins::exploitation::web::ssrf_king::SsrfKingScanner;
     use crate::plugins::exploitation::web::tplmap::TplmapScanner;
     use crate::plugins::exploitation::web::openredirex::OpenRedirexScanner;
+    use crate::plugins::enumeration::web::linkfinder::LinkFinderScanner;
+    use crate::plugins::enumeration::web::secretfinder::SecretFinderScanner;
+    use crate::plugins::enumeration::web::js_deep::{SubJSScanner, RetireScanner, SourceMapperScanner};
 
-    vec![
+    #[cfg(feature = "ai-redteam")]
+    use crate::plugins::exploitation::ai_llm::garak::GarakScanner;
+    #[cfg(feature = "ai-redteam")]
+    use crate::plugins::exploitation::ai_llm::promptmap::PromptmapScanner;
+    #[cfg(feature = "ai-redteam")]
+    use crate::plugins::exploitation::ai_llm::llmfuzzer::LLMFuzzerScanner;
+    #[cfg(feature = "ai-redteam")]
+    use crate::plugins::exploitation::ai_llm::pyrit::PyRITScanner;
+    #[cfg(feature = "ai-redteam")]
+    use crate::plugins::exploitation::ai_llm::promptfoo::PromptfooScanner;
+    #[cfg(feature = "ai-redteam")]
+    use crate::plugins::exploitation::ai_llm::promptinject::PromptInjectScanner;
+    
+    #[cfg(feature = "mobile")]
+    use crate::plugins::exploitation::mobile::mobsf::MobSFScanner;
+    #[cfg(feature = "mobile")]
+    use crate::plugins::exploitation::mobile::apkleaks::APKLeaksScanner;
+    #[cfg(feature = "mobile")]
+    use crate::plugins::exploitation::mobile::apktool::ApktoolScanner;
+    #[cfg(feature = "mobile")]
+    use crate::plugins::exploitation::mobile::jadx::JadxScanner;
+    #[cfg(feature = "mobile")]
+    use crate::plugins::exploitation::mobile::drozer::DrozerScanner;
+
+    #[cfg_attr(not(any(feature = "ai-redteam", feature = "mobile")), allow(unused_mut))]
+    let mut scanners: Vec<Box<dyn ScannerPlugin>> = vec![
         Box::new(WebFuzzer::new(config.insecure, config.jitter.clone(), Some(config.proxy_manager.clone()))), 
         Box::new(NmapScanner::new(
             config.nmap_options.scripts.clone(), config.nmap_options.stealth, config.nmap_options.service_detection, config.nmap_options.scan_type.clone(), config.nmap_options.fragment, config.nmap_options.decoy.clone(), config.nmap_options.ports.clone(), config.nmap_options.vuln_scan, config.executor.clone())), 
@@ -357,6 +394,7 @@ pub fn get_all_scanners<M: ExecutorMode>(config: GlobalConfig<M>) -> Vec<Box<dyn
         #[cfg(feature = "sovereign")]
         Box::new(SliverScanner::new(config.executor.clone())), 
         #[cfg(feature = "sovereign")]
+        Box::new(ScoutSuiteScanner::new()),
         Box::new(LigoloScanner::new(config.executor.clone())), 
         Box::new(PacuScanner::new()), 
         Box::new(CloudEnumScanner::new()), 
@@ -403,13 +441,55 @@ pub fn get_all_scanners<M: ExecutorMode>(config: GlobalConfig<M>) -> Vec<Box<dyn
         Box::new(GreyNoiseScanner::new()),
         Box::new(X8Scanner::new()),
         Box::new(InQLScanner::new()),
+        Box::new(compliance::syft::SyftScanner::new()),
+        Box::new(compliance::grype::GrypeScanner::new()),
+        Box::new(compliance::cosign::CosignScanner::new()),
         Box::new(PpmapScanner::new()),
         Box::new(CorsyScanner::new()),
         Box::new(WcdScanner::new()),
         Box::new(SsrfKingScanner::new(config.proxy_manager.clone())),
         Box::new(TplmapScanner::new()),
         Box::new(OpenRedirexScanner::new()),
-    ]
+        Box::new(LinkFinderScanner::new(&config)),
+        Box::new(enumeration::web::api::graphw00f::GraphW00fScanner::new()),
+        Box::new(enumeration::web::api::schemathesis::SchemathesisScanner::new()),
+        Box::new(enumeration::web::api::crackql::CrackqlScanner::new()),
+        Box::new(SecretFinderScanner::new(&config)),
+        Box::new(SubJSScanner::new()),
+        Box::new(RetireScanner::new()),
+        Box::new(SourceMapperScanner::new()),
+    ];
+
+    #[cfg(feature = "ai-redteam")]
+    {
+        scanners.push(Box::new(GarakScanner::new(config.clone())));
+        scanners.push(Box::new(PromptmapScanner::new(config.clone())));
+        scanners.push(Box::new(LLMFuzzerScanner::new(config.clone())));
+        scanners.push(Box::new(PyRITScanner::new(&config)));
+        scanners.push(Box::new(PromptfooScanner::new(&config)));
+        scanners.push(Box::new(PromptInjectScanner::new(&config)));
+    }
+
+    #[cfg(feature = "mobile")]
+    {
+        scanners.push(Box::new(compliance::syft::SyftScanner::new()));
+        scanners.push(Box::new(compliance::grype::GrypeScanner::new()));
+        scanners.push(Box::new(compliance::cosign::CosignScanner::new()));
+        scanners.push(Box::new(APKLeaksScanner::new(&config)));
+        scanners.push(Box::new(ApktoolScanner::new()));
+        scanners.push(Box::new(JadxScanner::new()));
+        scanners.push(Box::new(DrozerScanner::new()));
+        if let (Some(url), Some(key)) = (&config.mobsf_url, &config.mobsf_api_key) {
+            // Hardening: Skip placeholder or invalid keys
+            if !key.is_empty() && !key.starts_with("YOUR_") && key.len() > 10 {
+                scanners.push(Box::new(MobSFScanner::<M>::new(url.clone(), key.clone(), config.mobsf_timeout_secs)));
+            } else {
+                tracing::warn!("MobSF API Key is missing, empty or using placeholder. Skipping MobSFScanner.");
+            }
+        }
+    }
+
+    scanners
 }
 
 pub fn get_all_discovery<M: ExecutorMode>(config: GlobalConfig<M>) -> Vec<Box<dyn DiscoveryPlugin>> {
@@ -418,13 +498,15 @@ pub fn get_all_discovery<M: ExecutorMode>(config: GlobalConfig<M>) -> Vec<Box<dy
     use crate::plugins::reconnaissance::osint::amass::AmassScanner;
     use crate::plugins::reconnaissance::osint::uncover::UncoverScanner;
     use crate::plugins::reconnaissance::osint::sovereign_recon::SovereignReconScanner;
+    use crate::plugins::reconnaissance::osint::alterx::AlterXScanner;
 
     vec![
         Box::new(SovereignReconScanner::new(&crate::utils::config::Config::from_env(), config.proxy_manager.clone())),
         Box::new(OsintScanner::new(config.proxy_manager.clone())), 
         Box::new(SubfinderScanner::new(config.proxy_manager.clone())), 
-        Box::new(AmassScanner::new()), 
+        Box::new(AmassScanner::new()),
         Box::new(UncoverScanner::new()), 
+        Box::new(AlterXScanner::new()),
     ]
 }
 

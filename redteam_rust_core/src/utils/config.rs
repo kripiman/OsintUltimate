@@ -33,6 +33,14 @@ pub struct Config {
     pub nuclei_tags: Option<String>,
     pub nuclei_severity: Option<String>,
     pub nuclei_custom_templates: Option<String>,
+    pub mobsf_url: Option<String>,
+    pub mobsf_api_key: Option<String>,
+    pub mobsf_timeout_secs: u64,
+    pub cosign_public_key: Option<String>,
+    pub cosign_oidc_issuer: Option<String>,
+    pub supply_timeout_syft_secs: u64,
+    pub supply_timeout_grype_secs: u64,
+    pub supply_timeout_cosign_secs: u64,
 }
 
 impl Config {
@@ -93,6 +101,26 @@ impl Config {
             nuclei_tags: env::var("NUCLEI_TAGS").ok(),
             nuclei_severity: env::var("NUCLEI_SEVERITY").ok(),
             nuclei_custom_templates: env::var("NUCLEI_CUSTOM_TEMPLATES").ok(),
+            mobsf_url: env::var("MOBSF_URL").ok(),
+            mobsf_api_key: env::var("MOBSF_API_KEY").ok(),
+            mobsf_timeout_secs: env::var("MOBSF_TIMEOUT_SECS")
+                .ok()
+                .and_then(|s| s.parse().ok())
+                .unwrap_or(1200),
+            cosign_public_key: env::var("COSIGN_PUBLIC_KEY_PATH").ok(),
+            cosign_oidc_issuer: env::var("COSIGN_OIDC_ISSUER").ok(),
+            supply_timeout_syft_secs: env::var("SUPPLY_TIMEOUT_SYFT_SECS")
+                .ok()
+                .and_then(|s| s.parse().ok())
+                .unwrap_or(300),
+            supply_timeout_grype_secs: env::var("SUPPLY_TIMEOUT_GRYPE_SECS")
+                .ok()
+                .and_then(|s| s.parse().ok())
+                .unwrap_or(600),
+            supply_timeout_cosign_secs: env::var("SUPPLY_TIMEOUT_COSIGN_SECS")
+                .ok()
+                .and_then(|s| s.parse().ok())
+                .unwrap_or(120),
         }
     }
 
