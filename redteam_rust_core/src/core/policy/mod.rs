@@ -87,8 +87,15 @@ impl Default for StaticPolicy {
 impl StaticPolicy {
     pub fn new() -> Self {
 
-        let allowed_binaries = vec!["curl", "nmap", "ping", "dig", "nc", "ssh"]
-            .into_iter().map(String::from).collect();
+        let allowed_binaries = vec![
+            "curl", "nmap", "ping", "dig", "nc", "ssh", "which",
+            "apktool", "jadx", "apkleaks", "drozer",
+            "syft", "grype", "cosign",
+            "whatweb", "ffuf", "inql", "graphw00f", "crackql", "schemathesis",
+            "katana", "nuclei", "interactsh-client", "amass", "subfinder",
+            "httpx", "ppmap", "corsy", "linkfinder", "secretfinder", "jsluice",
+            "snallygaster", "wpsec", "tsunami", "crlfuzz", "arjun", "x8",
+        ].into_iter().map(String::from).collect();
             
         let allowed_nmap_flags = vec![
             "-sV", "-Pn", "-n", "--open", "--version-light", 
@@ -164,8 +171,13 @@ static PATH_SAFE_RE: Lazy<Regex> = Lazy::new(|| Regex::new(r"^[a-zA-Z0-9\-\._/~%
 
 impl PolicyProvider for StaticPolicy {
     fn validate_command(&self, binary: &str, args: &[String]) -> Result<()> {
-        if !self.allowed_binaries.contains(binary) {
-            anyhow::bail!("V14.1 Policy Violation: Binary '{}' is not in the authorized whitelist.", binary);
+        let binary_name = Path::new(binary)
+            .file_name()
+            .and_then(|n| n.to_str())
+            .unwrap_or(binary);
+
+        if !self.allowed_binaries.contains(binary_name) {
+            anyhow::bail!("V14.1 Policy Violation: Binary '{}' (name: '{}') is not in the authorized whitelist.", binary, binary_name);
         }
 
         if binary == "nmap" {
