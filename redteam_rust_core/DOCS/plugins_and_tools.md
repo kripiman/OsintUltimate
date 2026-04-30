@@ -46,6 +46,8 @@ Estas herramientas se ejecutan en la Etapa 2 (Discovery) para mapear la superfic
 | **Subzy** | Active | Detección agresiva y validación de Subdomain Takeover. |
 | **JSluice** | Active | Extracción de secretos y endpoints desde JS (AST parsing). |
 | **CertStream** | Real-Time | Descubrimiento en vivo de certificados CT (Caza de subdominios). |
+| **Waymore** | Passive | Descubrimiento masivo de URLs históricas y parámetros. |
+| **AlterX** | Active | Generación inteligente de permutaciones de subdominios. |
 
 ---
 
@@ -101,6 +103,8 @@ Ataques dirigidos ejecutados bajo confirmación o en modo autónomo si la polít
 *   **Smuggler:** Detección de HTTP Request Smuggling (CL.TE/TE.CL).
 *   **Wapiti:** Inyección automática de payloads y black-box testing.
 *   **SSRF-King:** Detección de Blind SSRF mediante interacción OOB (Interactsh).
+*   **Tplmap:** Detección y explotación de SSTI (Server-Side Template Injection).
+*   **OpenRedirex:** Fuzzer avanzado para vulnerabilidades de Open Redirect.
 
 ### Explotación de Red y Active Directory
 *   **Impacket:** Navaja suiza para ataques a protocolos Microsoft (SMB, WMI).

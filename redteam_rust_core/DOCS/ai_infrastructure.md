@@ -86,3 +86,161 @@ Antes de que cualquier dato llegue a proveedores de IA externos (Azure/OpenAI/An
 
 > [!IMPORTANT]
 > El modo **Wenyan Ultra** está diseñado exclusivamente para interacción máquina-máquina. Los operadores que deseen leer los logs de IA en lenguaje natural deben configurar el nivel de optimización en `Lite` o `Off`.
+
+---
+
+## 5. External AI Tool Token Strategy (Garak / PyRIT / Promptfoo / etc)
+
+Plugins ofensivos AI/LLM (`exploitation/ai_llm/*`) ejecutan binarios externos que generan **adversarial prompts** contra targets LLM. Estos prompts NO deben optimizarse — wording exacto = sagrado para test integrity.
+
+### 5.1 Decisión arquitectónica: NO Bridge Optimizer
+
+**Rechazado:** local OpenAI-compat proxy interceptando outbound calls + applying `PromptOptimizer`.
+
+**Razón:**
+- Adversarial prompts (jailbreaks, injections, DAN-style) calibrados contra **token sequences específicas**.
+- Lemmatize/article-strip/filler-remove → destruye attack semantics.
+- "Ignore all previous instructions" → "ignore previous instruction" → jailbreak no triggers.
+- Reproducibility broken → CVE/bounty reports inválidos.
+- Optimizer domain = chat compression, NOT adversarial vector mutation.
+
+**Conclusión:** prompts de ataque pasan through unchanged. Optimization happens en **scan configuration**, no en payload content.
+
+---
+
+### 5.2 Strategy A+B+C — Smart Scan Profiles
+
+Tres palancas de ahorro real **sin tocar payloads**:
+
+| Lever | Mechanism | Typical Saving |
+|---|---|---|
+| **A. Probe selection** | `--probes <subset>` vs `--probes all` | 5-50× |
+| **B. Model tier** | `gpt-4o-mini` vs `gpt-4` (target side) | 10-200× |
+| **C. Generation cap** | `--generations 3` vs default 10 | 3× |
+
+Combinados → **150-30000× cost reduction** vs full default scan, sin perder coverage crítico.
+
+---
+
+### 5.3 Scan Profiles (Default Tiers)
+
+Tres profiles built-in. Plugin AI selecciona según `TokenBudget` state.
+
+#### Economy (default si budget < 50%)
+```
+probes:       critical-only (HijackHateHumans, DAN, jailbreak basics)
+generations:  3
+target_model: cheapest available (gpt-4o-mini, claude-haiku, llama3.2:1b)
+timeout:      300s
+parallelism:  1
+```
+Cost target: < 1k tokens / scan.
+
+#### Standard (default si budget 50-80%)
+```
+probes:       OWASP LLM Top 10 subset (~15 probes)
+generations:  5
+target_model: mid-tier (gpt-4o, claude-sonnet)
+timeout:      900s
+parallelism:  3
+```
+Cost target: ~10k tokens / scan.
+
+#### Thorough (only si budget > 80% AND posture = Strike)
+```
+probes:       all
+generations:  10
+target_model: as-configured (no override)
+timeout:      3600s
+parallelism:  5
+```
+Cost target: ~100k+ tokens / scan.
+
+---
+
+### 5.4 Per-Tool Configuration Matrix
+
+| Tool | Probe-equivalent flag | Generation flag | Profile target |
+|---|---|---|---|
+| **Garak** | `--probes promptinject.HijackHateHumans` | `--generations N` | `garak.profile: economy` |
+| **PyRIT** | Orchestrator selection (`Crescendo`, `RedTeaming`, `PAIR`) | `max_turns N` | `pyrit.profile: economy` |
+| **Promptfoo** | `--filter-tests <name>` (assertion subset) | `--repeat N` | `promptfoo.profile: economy` |
+| **Promptmap** | `--rules <subset>` | (single-shot) | `promptmap.profile: economy` |
+| **PromptInject** | corpus subset (`base64`, `ignore_prev`, `dan`) | iteration cap | `promptinject.profile: economy` |
+| **LLMFuzzer** | mutation strategy (`grammar`, `random`, `corpus`) | budget (max attempts) | `llmfuzzer.profile: economy` |
+
+**Each plugin exposes:**
+```rust
+pub struct AiScanProfile {
+    pub probes: ProbeSelection,        // All | Critical | Custom(Vec<String>)
+    pub generations: u32,              // attempts per probe
+    pub target_model: Option<String>,  // override target side model
+    pub max_runtime_secs: u64,
+    pub parallelism: u32,
+}
+```
+
+---
+
+### 5.5 Auto-Profile Selection Logic
+
+Plugin `scan()` reads `GlobalConfig.budget` BEFORE execution:
+
+```rust
+let pct_remaining = (budget.max_tokens - budget.current_effective_total()) * 100 
+                   / budget.max_tokens.max(1);
+
+let profile = match pct_remaining {
+    p if p < 20 => return Ok(vec![]),  // Economy abort
+    p if p < 50 => AiScanProfile::economy(),
+    p if p < 80 => AiScanProfile::standard(),
+    _           => self.config_profile.unwrap_or(AiScanProfile::standard()),
+};
+```
+
+Override via CLI flag: `--ai-profile thorough` (forces, ignores budget) — guarded by Sovereign feature gate.
+
+---
+
+### 5.6 Response Cache Layer
+
+Compatible con strategy (no payload mutation). Key = `hash(target_url + prompt + model)`. TTL = 24h. Stored vía existing `moka` LRU cache (sección 4 Tactical Cache pattern).
+
+**Saves on rerun scenarios:**
+- Re-running same probe against same target during dev/debug.
+- Multi-plugin overlap (Garak + PromptInject ambos usan `ignore_previous_instructions` corpus).
+
+```rust
+if let Some(cached) = ai_response_cache.get(&key) {
+    return Ok(cached.findings);  // skip subprocess entirely
+}
+```
+
+Cache invalidation: target endpoint version change → bust by including target's response to a probe canary in key.
+
+---
+
+### 5.7 Cost Telemetry
+
+Plugin emits token-cost estimate to `TokenBudget` POST scan:
+
+```rust
+budget.add_usage(&TokenUsage {
+    prompt_tokens: estimated_input_tokens(probes_run, generations),
+    completion_tokens: parsed_response_tokens,
+    total_tokens: prompt + completion,
+});
+```
+
+Estimation formula per tool documented en plugin source. Source-of-truth for budget enforcement → next scan reads updated budget → escalates to lower profile.
+
+---
+
+### 5.8 Veredicto Operacional
+
+**Default behavior:** Economy profile, all AI plugins, all scans.
+**Escalation:** explicit user flag OR confirmed high-value target (CVSS-projected ≥ 8.5).
+**Never:** mutate adversarial prompts mid-flight. Test integrity > token savings.
+
+> [!IMPORTANT]
+> AI/LLM scanning costs scale **multiplicatively**: probes × generations × target_model_price. A `Thorough` scan against GPT-4 = ~$50-200 USD per target. Always confirm budget tier before launching `--ai-profile thorough`.
