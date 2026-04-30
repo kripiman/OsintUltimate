@@ -61,13 +61,13 @@ impl<M: ExecutorMode> ScannerPlugin for WhatWebScanner<M> {
 
 
     async fn scan(&self, target: &TargetHost) -> Result<Vec<Finding>> {
-        let target_addr = target.pinned_addr()?;
+        let _target_addr = target.pinned_addr()?;
         info!("🔱 V14.1 SOVEREIGN: Launching WhatWeb scan against {} via StealthExecutor...", target.host);
 
-        let url = if target_addr.starts_with("http") {
-            target_addr.to_string()
+        let url = if target.host.starts_with("http") {
+            target.host.to_string()
         } else {
-            format!("http://{}", target_addr)
+            format!("http://{}", target.host)
         };
 
         // We use a temporary file because some versions of WhatWeb don't support --log-json=- 

@@ -15,6 +15,7 @@ pub struct NmapScanner<M: ExecutorMode> {
 }
 
 impl<M: ExecutorMode> NmapScanner<M> {
+    #[allow(clippy::too_many_arguments)]
     pub fn new(
         scripts: Option<String>, 
         stealth: bool, 

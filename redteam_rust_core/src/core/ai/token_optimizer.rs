@@ -1,6 +1,6 @@
 /// Token optimization pipeline ported from MCP-OSINTULT.
 /// Integrates PromptOptimizer (10-stage) and ContextRanker (MMR) into the core AI layer.
-use std::sync::Mutex;
+// Removed unused Mutex
 use std::collections::{HashMap, HashSet};
 use moka::sync::Cache;
 use regex::Regex;

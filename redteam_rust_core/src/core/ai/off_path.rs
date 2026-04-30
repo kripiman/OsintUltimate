@@ -37,9 +37,9 @@ impl LshPayloadCache {
             let mut hasher = std::collections::hash_map::DefaultHasher::new();
             ngram.hash(&mut hasher);
             let hash = hasher.finish();
-            for i in 0..64 {
-                if (hash >> i) & 1 == 1 { v[i] += 1; }
-                else { v[i] -= 1; }
+            for (i, v_val) in v.iter_mut().enumerate() {
+                if (hash >> i) & 1 == 1 { *v_val += 1; }
+                else { *v_val -= 1; }
             }
         }
         v.iter().enumerate().fold(0u64, |acc, (i, &val)| {

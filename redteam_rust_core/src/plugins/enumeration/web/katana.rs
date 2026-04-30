@@ -1,5 +1,5 @@
 use crate::plugins::{ScannerPlugin, Capability};
-use crate::models::{TargetHost, Finding, Severity, Category};
+use crate::models::{TargetHost, Finding, Severity, Category, FINDING_KATANA_ENDPOINT};
 use crate::utils::tool_detection::detect_tool;
 use async_trait::async_trait;
 use anyhow::{Result, Context};
@@ -106,7 +106,7 @@ impl ScannerPlugin for KatanaScanner {
             for line in stdout.lines() {
                 if let Ok(res) = serde_json::from_str::<KatanaResult>(line) {
                     findings.push(Finding::new(
-                        "KATANA-ENDPOINT",
+                        FINDING_KATANA_ENDPOINT,
                         Category::Recon,
                         Severity::Info,
                         &format!("Discovered endpoint: {} [{}]", res.request.endpoint, res.request.method),

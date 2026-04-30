@@ -63,6 +63,7 @@ pub async fn start_dashboard(state: Arc<state::DashboardState>, port: u16) {
         .route("/api/v1/approvals", get(handlers::get_approvals))
         .route("/api/v1/approvals/:id/decision", post(handlers::post_approval_decision))
         .route("/api/v2/missions", post(handlers::submit_mission))
+        .route("/api/v2/scans/mobile", post(handlers::submit_mobile_scan))
         .route("/api/v2/export", post(handlers::export_report))
         .layer(cors)
         .with_state(state);

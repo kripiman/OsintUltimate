@@ -4,7 +4,7 @@ use tokio_socks::tcp::Socks5Stream;
 use std::sync::Arc;
 use dashmap::DashMap;
 use moka::sync::Cache;
-use std::time::{SystemTime, UNIX_EPOCH, Duration};
+use std::time::{SystemTime, Duration};
 use tracing::{warn, error, info};
 use anyhow::{Result, Context};
 use std::collections::VecDeque;
@@ -13,7 +13,7 @@ use std::sync::Mutex;
 use crate::utils::config::ProxyMode;
 
 const MAX_LATENCY_SAMPLES: usize = 10;
-const DEFAULT_BLACKLIST_DURATION: u64 = 300;
+const _DEFAULT_BLACKLIST_DURATION: u64 = 300;
 
 #[derive(Debug, Clone)]
 pub struct ProxyConfig {
@@ -340,7 +340,7 @@ impl ProxyManager {
                     // Professional Mode: Use proxychains-ng for everything else
                     info!("🛡️ ProxyManager: Wrapping '{}' with proxychains-ng via {}", tool, proxy_url);
                     let clean_proxy = proxy_url.strip_prefix("socks5h://").unwrap_or(&proxy_url).strip_prefix("socks5://").unwrap_or(&proxy_url);
-                    let addr_part = clean_proxy.split('@').last().unwrap_or(clean_proxy);
+                    let addr_part = clean_proxy.split('@').next_back().unwrap_or(clean_proxy);
                     let parts: Vec<&str> = addr_part.split(':').collect();
                     
                     if parts.len() == 2 {

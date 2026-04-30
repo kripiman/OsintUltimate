@@ -22,7 +22,16 @@ use std::borrow::Cow;
 pub fn detect_tool_system(tool_name: &str) -> Result<Option<PathBuf>> {
     debug!("Attempting to detect tool: {}", tool_name);
     
-    // First try: system `which` command (supports BlackArch and other distros)
+    // First try: local ./bin directory (useful for portable/temp tool installs)
+    let local_bin = PathBuf::from("./bin").join(tool_name);
+    if local_bin.exists() {
+        if let Ok(abs_path) = std::fs::canonicalize(&local_bin) {
+            info!("Tool '{}' detected in local ./bin: {}", tool_name, abs_path.display());
+            return Ok(Some(abs_path));
+        }
+    }
+
+    // Second try: system `which` command (supports BlackArch and other distros)
     match Command::new("which")
         .arg(tool_name)
         .output()

@@ -1,6 +1,7 @@
 pub mod engine;
 pub mod ffuf;
 pub mod feroxbuster;
+pub mod api;
 pub mod arjun;
 pub mod katana;
 pub mod crlfuzz;
@@ -20,3 +21,6 @@ pub mod inql;
 pub mod ppmap;
 pub mod corsy;
 pub mod wcd;
+pub mod linkfinder;
+pub mod secretfinder;
+pub mod js_deep;

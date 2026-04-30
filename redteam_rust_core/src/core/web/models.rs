@@ -45,7 +45,8 @@ pub struct ExportRequest {
 
 #[derive(Debug, Clone, serde::Deserialize)]
 pub struct MissionRequest {
-    pub target: String,
+    pub target: Option<String>,
+    pub apk: Option<String>,
     pub program_name: String,
     pub in_scope: Vec<String>,
     pub out_of_scope: Vec<String>,

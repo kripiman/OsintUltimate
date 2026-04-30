@@ -129,6 +129,17 @@ impl<M: ExecutorMode> StealthExecutor<M> {
            .stdout(Stdio::piped())
            .stderr(Stdio::piped());
 
+        // V14.1 OPSEC: Inject proxy environment variables for tools that support them (e.g., Python/Garak)
+        if let Some(ref pm) = self.proxy_manager {
+            if let Some(proxy_url) = pm.get_best_socks_url() {
+                // Many tools (Python, Go) respect these
+                cmd.env("HTTP_PROXY", &proxy_url)
+                   .env("HTTPS_PROXY", &proxy_url)
+                   .env("ALL_PROXY", &proxy_url);
+                info!("🛡️ EXECUTOR: Injected proxy environment into subprocess.");
+            }
+        }
+
         cmd.args(&args);
 
         // V15 OPSEC: Sanitize log arguments before printing

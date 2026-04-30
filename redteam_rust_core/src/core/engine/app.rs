@@ -41,6 +41,9 @@ pub struct EngineConfig {
     pub proxy_mode: crate::utils::config::ProxyMode,
     pub proxy_pool_size: u32,
     pub mcp_token: Option<String>,
+    pub mobsf_url: Option<String>,
+    pub mobsf_api_key: Option<String>,
+    pub mobsf_timeout_secs: u64,
 }
 
 use crate::utils::executor::{StealthExecutor, ExecutorMode};
@@ -332,11 +335,15 @@ impl<M: ExecutorMode> RedTeamEngine<M> {
             sandbox: self.sandbox.clone(),
             policy: self.policy.clone(),
             executor: self.executor.clone(),
+            budget: Arc::new(crate::core::swarm::budget::TokenBudget::new(self.config.max_tokens)),
             correlation_engine: self.correlation_engine.clone(),
             mcp_token: self.config.mcp_token.clone(),
             nuclei_tags: crate::utils::config::Config::from_env().nuclei_tags,
             nuclei_severity: crate::utils::config::Config::from_env().nuclei_severity,
             nuclei_custom_templates: crate::utils::config::Config::from_env().nuclei_custom_templates,
+            mobsf_url: self.config.mobsf_url.clone(),
+            mobsf_api_key: self.config.mobsf_api_key.clone(),
+            mobsf_timeout_secs: self.config.mobsf_timeout_secs,
         };
 
         let mut builder = Pipeline::builder()
@@ -348,7 +355,9 @@ impl<M: ExecutorMode> RedTeamEngine<M> {
             .memory_monitor(self.memory_monitor.clone())
             .sandbox(self.sandbox.clone())
             .layer_policy(policy)
-            .approval_gate(self.approval_gate.clone());
+            .approval_gate(self.approval_gate.clone())
+            .with_policy(self.policy.clone())
+            .with_executor(self.executor.clone());
 
         // Add discovery plugins
         for p in crate::plugins::get_all_discovery(global_config.clone()) {

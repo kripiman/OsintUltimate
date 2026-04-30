@@ -78,11 +78,11 @@ pub fn init_telemetry(endpoint: Option<String>, json_logs: bool, pm: Option<Arc<
                     let pm = pm_inner.clone();
                     let url = endpoint_url_clone.clone();
                     async move {
-                        let parsed = url::Url::parse(&url).map_err(|e| std::io::Error::other(e))?;
+                        let parsed = url::Url::parse(&url).map_err(std::io::Error::other)?;
                         let host = parsed.host_str().unwrap_or("localhost");
                         let port = parsed.port_or_known_default().unwrap_or(4317);
                         pm.tcp_connect_proxied(host, port).await
-                            .map_err(|e| std::io::Error::other(e))
+                            .map_err(std::io::Error::other)
                     }
                 }));
 

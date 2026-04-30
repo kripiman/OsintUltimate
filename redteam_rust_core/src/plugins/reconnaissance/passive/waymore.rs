@@ -6,7 +6,7 @@ use crate::plugins::{ScannerPlugin, Capability, PluginMetadata, TargetType, Risk
 use crate::models::{TargetHost, Finding, Severity, Category, PLUGIN_WAYMORE, FINDING_WAYMORE_URL};
 use crate::utils::tool_detection::detect_tool;
 use async_trait::async_trait;
-use anyhow::{Result, Context};
+use anyhow::Result;
 use tracing::{info, warn};
 use std::process::Stdio;
 use tokio::process::Command;

@@ -98,7 +98,7 @@ impl BountyExporter {
         if !f.enrichment.cwe.is_empty() {
             out.push_str(&format!("- **CWE:** {}\n", f.enrichment.cwe.join(", ")));
         }
-        out.push_str("\n");
+        out.push('\n');
 
         out.push_str("## Steps to Reproduce\n");
         out.push_str(&Self::poc_steps(f));
@@ -130,7 +130,7 @@ impl BountyExporter {
             for c in &f.enrichment.cwe {
                 out.push_str(&format!("- https://cwe.mitre.org/data/definitions/{}.html\n", c.replace("CWE-", "")));
             }
-            out.push_str("\n");
+            out.push('\n');
         }
 
         out

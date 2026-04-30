@@ -34,6 +34,7 @@ pub enum Category {
     PostureAudit,
     Windows,
     Linux,
+    Compliance,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]

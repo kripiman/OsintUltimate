@@ -44,6 +44,7 @@ pub enum TargetType {
     ActiveDirectory,
     Windows,
     Linux,
+    Mobile,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -55,6 +56,8 @@ pub struct TargetHost {
     pub resolved_ip: Option<String>,
     pub status: TargetStatus,
     pub target_type: TargetType,
+    #[serde(default)]
+    pub file_path: Option<String>,
     #[serde(default)]
     pub user: Option<String>,
     pub findings: Arc<Vec<Finding>>,
@@ -84,10 +87,20 @@ impl TargetHost {
     /// V13: Force retrieval of a pinned IP or error out. 
     /// MANDATORY for all sensitive operations (PoC, Exploits, Scanning) to prevent DNS Rebinding.
     pub fn pinned_addr(&self) -> Result<&str, anyhow::Error> {
+        debug_assert!(self.target_type != TargetType::Mobile, "pinned_addr() called on Mobile target");
         self.resolved_ip.as_deref()
             .ok_or_else(|| {
                 anyhow::anyhow!("V13 Security Violation: Operation requires a pinned IP (resolved_ip) to prevent DNS Rebinding. Check Liveness stage.")
             })
+    }
+
+    pub fn is_artifact_target(&self) -> bool {
+        self.file_path.is_some()
+    }
+
+    pub fn artifact_path(&self) -> Result<&str, anyhow::Error> {
+        self.file_path.as_deref()
+            .ok_or_else(|| anyhow::anyhow!("Target has no artifact path (Mobile/static scan required file_path)"))
     }
 }
 

@@ -124,9 +124,6 @@ impl<M: ExecutorMode> AutonomousAgent<M> {
 
     async fn request_operator_approval(&self, action: &str) -> bool {
         if self.approval_gate.is_approved(action).await { return true; }
-        match self.approval_gate.request_approval(action, 85, &self.operator, "Autonomous Adaptive Loop").await {
-            Ok(None) => true,
-            _ => false,
-        }
+        matches!(self.approval_gate.request_approval(action, 85, &self.operator, "Autonomous Adaptive Loop").await, Ok(None))
     }
 }

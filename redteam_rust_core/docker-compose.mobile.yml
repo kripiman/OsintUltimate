@@ -1,0 +1,42 @@
+# =============================================================================
+# docker-compose.mobile.yml — OsintUltimate Mobile Arsenal
+# =============================================================================
+# Services:
+#   - mobsf : Mobile Security Framework (Static/Dynamic Analysis)
+#   - drozer: Drozer console for IPC assessment
+#
+# Usage:
+#   docker compose -f docker-compose.mobile.yml up -d
+# =============================================================================
+
+services:
+  mobsf:
+    image: opensecurity/mobile-security-framework-mobsf:latest
+    container_name: mobsf
+    ports:
+      - "8000:8000"
+    environment:
+      - MOBSF_API_KEY=${MOBSF_API_KEY:-status_ga_secret_key}
+    volumes:
+      - mobsf_data:/home/mobsf/.MobSF
+    restart: always
+    deploy:
+      resources:
+        limits:
+          memory: 4G
+          cpus: "2.0"
+
+  drozer:
+    image: mwrlabs/drozer
+    container_name: drozer
+    stdin_open: true
+    tty: true
+    # Drozer console needs to connect to an agent on a device/emulator. 
+    # Use: adb forward tcp:31415 tcp:31415 && docker exec -it drozer console connect --server host.docker.internal
+    command: ["tail", "-f", "/dev/null"] 
+    depends_on:
+      - mobsf
+
+volumes:
+  mobsf_data:
+    driver: local

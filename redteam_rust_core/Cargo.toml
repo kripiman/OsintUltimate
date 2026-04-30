@@ -33,7 +33,7 @@ dirs = "5.0.1"
 addr = "0.15"
 
 # Network
-reqwest = { version = "0.11", features = ["json", "rustls-tls", "gzip", "stream", "socks"] }
+reqwest = { version = "0.11", features = ["json", "rustls-tls", "gzip", "stream", "socks", "multipart"] }
 
 # CLI & Interface
 clap = { version = "4.3", features = ["derive"] }
@@ -61,6 +61,7 @@ base64 = "0.21"
 
 # Files & Templating
 tempfile = "3.8"
+walkdir = "2.3"
 handlebars = "4.3"
 tokio-util = { version = "0.7.18", features = ["io", "io-util"] }
 once_cell = "1.21.3"
@@ -72,7 +73,7 @@ libloading = "0.9.0"
 sqlx = { version = "0.7", features = ["runtime-tokio-rustls", "postgres", "chrono", "macros", "json"] }
 sysinfo = "0.30.5"
 flate2 = "1.0.28"
-axum = { version = "0.7", features = ["macros"] }
+axum = { version = "0.7", features = ["macros", "multipart"] }
 tower-http = { version = "0.5", features = ["fs", "cors", "trace"] }
 tower_governor = { version = "0.8.0", features = ["axum"] }
 rust-embed = "8.4"
@@ -99,7 +100,9 @@ zip = "8.5.1"
 [features]
 default = ["bug-bounty"]
 bug-bounty = []
-sovereign = ["bug-bounty"]
+ai-redteam = ["bug-bounty"]
+mobile = ["bug-bounty"]
+sovereign = ["bug-bounty", "mobile", "ai-redteam"]
 
 [profile.release]
 opt-level = 3

@@ -14,10 +14,16 @@ pub fn show_menu() -> Result<Option<Args>> {
         println!("❌ El objetivo no puede estar vacío.");
         return Ok(None);
     }
+
+    let is_mobile = Confirm::new("📱 ¿Es una auditoría de aplicación móvil (APK/IPA)?")
+        .with_default(false)
+        .prompt()?;
     
     // Default struct parameters
     let mut args = Args {
         target: None,
+        apk: None,
+        image: None,
         input: None,
         jsonl_output: "scan_result.jsonl".to_string(),
         html_output: "scan_report.html".to_string(),
@@ -50,10 +56,12 @@ pub fn show_menu() -> Result<Option<Args>> {
         consolidate: false,
     };
 
-    if std::path::Path::new(&target).exists() {
-        args.input = Some(target.clone());
+    if is_mobile {
+        args.apk = Some(target);
+    } else if std::path::Path::new(&target).exists() {
+        args.input = Some(target);
     } else {
-        args.target = Some(target.clone());
+        args.target = Some(target);
     }
     
     let features = vec![
@@ -140,10 +148,13 @@ pub fn show_menu() -> Result<Option<Args>> {
         }
     }
 
-    let summary = format!(
-        "\n✅ Misión configurada:\n - Objetivo: {}\n - Capas: {}\n - Concurrencia: {}\n - IA Autónoma: {}\n - Sigilo: {}\n",
-        target, args.max_layer, args.concurrency, args.autonomous, args.stealth
+    let mut summary = format!(
+        "\n✅ Misión configurada:\n - Objetivo: {}\n",
+        if is_mobile { args.apk.as_ref().unwrap() } else { args.target.as_ref().unwrap() }
     );
+    summary.push_str(&format!(" - Capas: {}\n - Concurrencia: {}\n - IA Autónoma: {}\n - Sigilo: {}\n",
+        args.max_layer, args.concurrency, args.autonomous, args.stealth));
+
     println!("{}", summary);
 
     if Confirm::new("🚀 ¿Iniciar operativo ahora?").with_default(true).prompt()? {

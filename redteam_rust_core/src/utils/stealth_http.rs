@@ -73,6 +73,7 @@ mod tests {
             resolved_ip: None,
             status: TargetStatus::Pending,
             target_type: TargetType::Web,
+            file_path: None,
             user: None,
             findings: Arc::new(Vec::new()),
             tool_suggestions: Arc::new(Vec::new()),

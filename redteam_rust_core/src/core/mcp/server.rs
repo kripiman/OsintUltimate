@@ -696,6 +696,7 @@ async fn handle_execute_plugin(state: &Arc<McpServer>, args: serde_json::Value) 
             resolved_ip: None,
             status: crate::models::TargetStatus::Scanning,
             target_type: crate::models::TargetType::Network,
+            file_path: None,
             user: None, // Auto-detect later or assume net
             findings: Arc::new(Vec::new()),
             tool_suggestions: Arc::new(Vec::new()),
