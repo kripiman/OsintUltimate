@@ -4,10 +4,11 @@ use crate::core::capability_layer::ScanLayer;
 use crate::utils::tool_detection::detect_tool;
 use async_trait::async_trait;
 use anyhow::Result;
-use tracing::{info, warn, error};
+use tracing::{info, warn};
 use tokio::process::Command;
 use std::process::Stdio;
 use crate::models::constants::*;
+use std::collections::HashSet;
 
 pub struct InQLScanner {
     binary_path: String,
@@ -101,6 +102,19 @@ impl ScannerPlugin for InQLScanner {
 
         endpoints.sort();
         endpoints.dedup();
+        
+        // Final sanity check: remove duplicate paths if they differ only by protocol/slashes
+        let mut final_endpoints = Vec::new();
+        let mut seen_paths = HashSet::new();
+        for e in endpoints {
+            let path = e.trim_start_matches("http://")
+                        .trim_start_matches("https://")
+                        .trim_end_matches('/');
+            if seen_paths.insert(path.to_string()) {
+                final_endpoints.push(e);
+            }
+        }
+        let endpoints = final_endpoints;
 
         let base_url = if target.host.starts_with("http") {
             target.host.clone()
@@ -133,7 +147,8 @@ impl ScannerPlugin for InQLScanner {
                     let stdout = String::from_utf8_lossy(&output.stdout);
                     
                     // InQL successful introspection indicators (v4/v5 precise check)
-                    if output.status.success() && (stdout.contains("Introspection Query Successful") || stdout.contains("Writing GraphQL queries to") || stdout.contains("schema")) {
+                    let stdout_lower = stdout.to_lowercase();
+                    if output.status.success() && (stdout_lower.contains("introspection") || stdout_lower.contains("schema") || stdout_lower.contains("writing")) {
                          findings.push(Finding::new(
                             FINDING_GRAPHQL_INTROSPECTION,
                             Category::Recon,
