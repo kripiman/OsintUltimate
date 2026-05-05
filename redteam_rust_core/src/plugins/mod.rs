@@ -188,6 +188,8 @@ pub struct GlobalConfig<M: ExecutorMode = crate::utils::executor::GhostMode> whe
     pub mobsf_url: Option<String>,
     pub mobsf_api_key: Option<String>,
     pub mobsf_timeout_secs: u64,
+    pub vigil_url: Option<String>,
+    pub vigil_api_key: Option<String>,
 }
 
 impl<M: ExecutorMode> Default for GlobalConfig<M>
@@ -241,6 +243,8 @@ impl<M: ExecutorMode> GlobalConfig<M> where M: Clone {
             mobsf_url: None,
             mobsf_api_key: None,
             mobsf_timeout_secs: 600,
+            vigil_url: None,
+            vigil_api_key: None,
         }
     }
 }
@@ -353,6 +357,10 @@ pub fn get_all_scanners<M: ExecutorMode>(config: GlobalConfig<M>) -> Vec<Box<dyn
     use crate::plugins::exploitation::ai_llm::promptfoo::PromptfooScanner;
     #[cfg(feature = "ai-redteam")]
     use crate::plugins::exploitation::ai_llm::promptinject::PromptInjectScanner;
+    #[cfg(feature = "ai-redteam")]
+    use crate::plugins::exploitation::ai_llm::vigil::VigilScanner;
+    #[cfg(feature = "ai-redteam")]
+    use crate::plugins::exploitation::ai_llm::modelscan::ModelScanScanner;
     
     #[cfg(feature = "mobile")]
     use crate::plugins::exploitation::mobile::mobsf::MobSFScanner;
@@ -364,6 +372,12 @@ pub fn get_all_scanners<M: ExecutorMode>(config: GlobalConfig<M>) -> Vec<Box<dyn
     use crate::plugins::exploitation::mobile::jadx::JadxScanner;
     #[cfg(feature = "mobile")]
     use crate::plugins::exploitation::mobile::drozer::DrozerScanner;
+    #[cfg(feature = "mobile")]
+    use crate::plugins::exploitation::mobile::frida::FridaScanner;
+    #[cfg(feature = "mobile")]
+    use crate::plugins::exploitation::mobile::objection::ObjectionScanner;
+    #[cfg(feature = "mobile")]
+    use crate::plugins::exploitation::mobile::mariana_trench::MarianaTrenchScanner;
 
     #[cfg_attr(not(any(feature = "ai-redteam", feature = "mobile")), allow(unused_mut))]
     let mut scanners: Vec<Box<dyn ScannerPlugin>> = vec![
@@ -468,6 +482,11 @@ pub fn get_all_scanners<M: ExecutorMode>(config: GlobalConfig<M>) -> Vec<Box<dyn
         scanners.push(Box::new(PyRITScanner::new(&config)));
         scanners.push(Box::new(PromptfooScanner::new(&config)));
         scanners.push(Box::new(PromptInjectScanner::new(&config)));
+        scanners.push(Box::new(VigilScanner::<M>::new(
+            config.vigil_url.clone().unwrap_or_else(|| "http://localhost:5000".to_string()),
+            config.vigil_api_key.clone().unwrap_or_default()
+        )));
+        scanners.push(Box::new(ModelScanScanner::<M>::new(&config)));
     }
 
     #[cfg(feature = "mobile")]
@@ -479,6 +498,9 @@ pub fn get_all_scanners<M: ExecutorMode>(config: GlobalConfig<M>) -> Vec<Box<dyn
         scanners.push(Box::new(ApktoolScanner::new()));
         scanners.push(Box::new(JadxScanner::new()));
         scanners.push(Box::new(DrozerScanner::new()));
+        scanners.push(Box::new(FridaScanner::new()));
+        scanners.push(Box::new(ObjectionScanner::new()));
+        scanners.push(Box::new(MarianaTrenchScanner::new()));
         if let (Some(url), Some(key)) = (&config.mobsf_url, &config.mobsf_api_key) {
             // Hardening: Skip placeholder or invalid keys
             if !key.is_empty() && !key.starts_with("YOUR_") && key.len() > 10 {

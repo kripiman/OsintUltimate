@@ -435,9 +435,9 @@ impl<M: ExecutorMode> Orchestrator<M> {
                         let apk_regex = regex::Regex::new(r"\.apk($|\?)").unwrap();
                         let mut mobile_artifact_found = false;
                         
-                        for f in all_findings.iter() {
-                            if f.core.id == FINDING_KATANA_ENDPOINT || f.core.id == FINDING_WAYMORE_URL || f.core.id == FINDING_JS_ENDPOINT {
-                                if let Some(evidence) = f.evidence.evidence.as_ref() {
+                        for finding in all_findings.iter() {
+                            if finding.core.id == FINDING_KATANA_ENDPOINT || finding.core.id == FINDING_WAYMORE_URL || finding.core.id == FINDING_JS_ENDPOINT {
+                                if let Some(evidence) = finding.evidence.evidence.as_ref() {
                                     let content = evidence.data.to_string();
                                     if apk_regex.is_match(&content) {
                                         mobile_artifact_found = true;
@@ -449,7 +449,7 @@ impl<M: ExecutorMode> Orchestrator<M> {
 
                         if mobile_artifact_found {
                             let mut mobile_findings = Vec::new();
-                            for chain_plugin_name in &[PLUGIN_MOBSF, PLUGIN_APKLEAKS, PLUGIN_APKTOOL, PLUGIN_JADX, PLUGIN_DROZER] {
+                            for chain_plugin_name in &[PLUGIN_MOBSF, PLUGIN_APKLEAKS, PLUGIN_APKTOOL, PLUGIN_JADX, PLUGIN_DROZER, PLUGIN_FRIDA, PLUGIN_OBJECTION, PLUGIN_MARIANA_TRENCH] {
                                 if let Some(plugin) = plugins.iter().find(|p| p.name() == *chain_plugin_name) {
                                     if !self.layer_policy.needs_approval(plugin.metadata().layer) || approval_gate.is_approved(plugin.name()).await {
                                         info!("🔱 V14.8 SOVEREIGN: Mobile artifact detected! Triggering reactive {} for {}", plugin.name(), target.host);

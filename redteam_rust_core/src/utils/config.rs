@@ -41,6 +41,8 @@ pub struct Config {
     pub supply_timeout_syft_secs: u64,
     pub supply_timeout_grype_secs: u64,
     pub supply_timeout_cosign_secs: u64,
+    pub vigil_url: Option<String>,
+    pub vigil_api_key: Option<String>,
 }
 
 impl Config {
@@ -121,6 +123,8 @@ impl Config {
                 .ok()
                 .and_then(|s| s.parse().ok())
                 .unwrap_or(120),
+            vigil_url: env::var("VIGIL_URL").ok(),
+            vigil_api_key: env::var("VIGIL_API_KEY").ok(),
         }
     }
 

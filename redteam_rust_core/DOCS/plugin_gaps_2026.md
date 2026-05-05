@@ -4,7 +4,7 @@
 
 ## 0. 現狀 (Status)
 
-106 plugin .rs. Tier 1-3 完成. 然 modern BB 2026 → 缺 LLM/AI sec ✅, modern JS recon ✅, mobile (5/7 ✅), web3, supply-chain深度 ✅, AD後階. 補之.
+106 plugin .rs. Tier 1-3 完成. 然 modern BB 2026 → 缺 LLM/AI sec ✅, modern JS recon ✅, mobile (8/8 ✅), web3, supply-chain深度 ✅, AD後階. 補之.
 
 ---
 
@@ -18,7 +18,7 @@
 | WebSocket/gRPC/SOAP | nil | wsrepl, grpcurl, grpcox, wsdler | P1 |
 | Web exploit 2026 | sqlmap/dalfox/commix/tplmap/ssrf-king/openredirex/smuggler/jwt/nomore403 | XSStrike, SSRFmap, h2csmuggler, race-the-web, param-miner-bridge, ysoserial(.net), GadgetProbe, XXEinjector, lfimap, liffy, ssimap | P0 |
 | AI/LLM sec | nil | Garak, PyRIT, promptmap, Vigil, Rebuff, Promptfoo, LLMFuzzer, modelscan, PromptInject | **P0** |
-| Mobile | MobSF/apktool/jadx/drozer/APKLeaks (5/7) | frida-automate, objection, mariana-trench | P0 |
+| Mobile | MobSF/apktool/jadx/drozer/APKLeaks/Frida/Objection/Mariana-Trench (8/8) | nil ✅ | P0 |
 | Web3 | nil | Slither, Mythril, Echidna, Manticore, Aderyn | P2 |
 | Cloud深度 | Pacu/Prowler/CloudFox/CloudEnum/CloudBrute/KubeBench | ScoutSuite, cloudsplaining, S3Scanner, GCPBucketBrute, cloudgrappler, endgame, Stratus-Red-Team, Leonidas, peirates, kubehound, kubeletctl, kdigger | P0 |
 | Supply chain | Trivy/OSV/Checkov/Kubescape, Syft ✅, Grype ✅, Cosign ✅ | dive, dependency-check, semgrep | P0 |
@@ -109,16 +109,16 @@ race-the-web  → race condition (Turbo-Intruder類)
 
 → `exploitation/web/{xsstrike.rs,ssrfmap.rs,h2csmuggler.rs,ysoserial.rs,xxeinjector.rs,lfimap.rs,race.rs}`
 
-### 2.6 Mobile (現zero)
+### 2.6 Mobile (8/8 ✅)
 
 ```
 MobSF        → static+dynamic Android/iOS ✅
 apktool/jadx → APK decompile ✅
-Frida-auto   → instrumentation harness
-objection    → frida wrapper
+Frida-auto   → instrumentation harness ✅
+objection    → frida wrapper ✅
 drozer       → Android attack surface ✅
 APKLeaks     → secrets in APK ✅
-mariana-trench→ FB taint analysis
+mariana-trench→ FB taint analysis ✅
 ```
 
 → `exploitation/mobile/{mobsf.rs,apktool.rs,jadx.rs,frida.rs,objection.rs,drozer.rs,apkleaks.rs}`
@@ -217,7 +217,7 @@ TOTAL → 74 new plugin → arsenal 180
 
 ## 7. 結論 (Conclusion)
 
-現 V14 → BB tradicional 完備. 缺 → AI/LLM(熱), Mobile(高payout), Cloud-深(K8s/IAM), Supply(SBOM/sig), JS-深, API-stateful-fuzz.
+現 V14 → BB tradicional 完備。缺 → AI/LLM(熱), Mobile(高payout), Cloud-深(K8s/IAM), Supply(SBOM/sig), JS-深, API-stateful-fuzz.
 
 ✅ **V14.8 SOVEREIGN PIPELINE**: Integrated reactive chains for Mobile (.apk detection), Cloud (K8s/S3 detection), and AI (Endpoint fingerprinting).
 
@@ -225,4 +225,4 @@ TOTAL → 74 new plugin → arsenal 180
 加 P0+P1 → 業界領先.
 加 P0+P1+P2 (74) → 唯一級 (sovereign-grade).
 
-> 兵者，凡七十四. 補之則無雙.
+> 兵者，凡七十四. 補之則無雙。

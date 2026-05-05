@@ -173,6 +173,8 @@ async fn main() -> Result<()> {
         mobsf_url: utils_config.mobsf_url.clone(),
         mobsf_api_key: utils_config.mobsf_api_key.clone(),
         mobsf_timeout_secs: utils_config.mobsf_timeout_secs,
+        vigil_url: utils_config.vigil_url.clone(),
+        vigil_api_key: utils_config.vigil_api_key.clone(),
     };
 
     let engine = RedTeamEngine::from_config(engine_config, &utils_config);

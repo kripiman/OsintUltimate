@@ -42,6 +42,8 @@ pub const FINDING_UNSIGNED_IMAGE: &str = "UNSIGNED-IMAGE";
 pub const FINDING_SBOM_INVENTORY: &str = "SBOM-INVENTORY";
 pub const FINDING_KATANA_ENDPOINT: &str = "KATANA-ENDPOINT";
 pub const FINDING_APK_DISCOVERED: &str = "APK-DISCOVERED";
+pub const FINDING_MOBILE_TAINT_FLOW: &str = "MOBILE-TAINT-FLOW";
+pub const FINDING_MOBILE_RUNTIME_VULN: &str = "MOBILE-RUNTIME-VULN";
 pub const FINDING_CLOUD_METADATA: &str = "CLOUD-METADATA";
 
 // API/GraphQL Security
@@ -57,6 +59,7 @@ pub const FINDING_API_SCAN_INHIBITED: &str = "API-SCAN-INHIBITED";
 pub const FINDING_AI_PROMPT_INJECTION: &str = "AI-PROMPT-INJECTION";
 pub const FINDING_AI_JAILBREAK: &str = "AI-JAILBREAK";
 pub const FINDING_AI_DATA_LEAK: &str = "AI-DATA-LEAK";
+pub const FINDING_AI_UNSAFE_MODEL: &str = "AI-UNSAFE-MODEL";
 pub const FINDING_AI_EVAL_FAILURE: &str = "AI-EVAL-FAILURE";
 
 pub const PLUGIN_GARAK: &str = "GarakScanner";
@@ -139,6 +142,8 @@ pub const PLUGIN_APKLEAKS: &str = "APKLeaksScanner";
 pub const PLUGIN_APKTOOL: &str = "ApktoolScanner";
 pub const PLUGIN_JADX: &str = "JadxScanner";
 pub const PLUGIN_DROZER: &str = "DrozerScanner";
+pub const PLUGIN_FRIDA: &str = "FridaScanner";
+pub const PLUGIN_OBJECTION: &str = "ObjectionScanner";
 pub const PLUGIN_SYFT: &str = "SyftScanner";
 pub const PLUGIN_GRYPE: &str = "GrypeScanner";
 pub const PLUGIN_COSIGN: &str = "CosignScanner";
@@ -146,7 +151,10 @@ pub const PLUGIN_GRAPHW00F: &str = "GraphW00fScanner";
 pub const PLUGIN_SCHEMATHESIS: &str = "SchemathesisScanner";
 pub const PLUGIN_CRACKQL: &str = "CrackqlScanner";
 pub const PLUGIN_MARIANA_TRENCH: &str = "MarianaTrenchScanner";
+pub const PLUGIN_REBUFF: &str = "RebuffScanner";
 pub const PLUGIN_SCOUTSUITE: &str = "ScoutSuiteScanner";
+pub const PLUGIN_MODELSCAN: &str = "ModelScanScanner";
+pub const PLUGIN_VIGIL: &str = "VigilScanner";
 
 // OOB Verification Defaults
 pub const OOB_DEFAULT_POLL_INTERVAL_MS: u64 = 5000;
@@ -159,6 +167,9 @@ pub const MOBILE_TIMEOUT_JADX_SECS: u64 = 600;
 pub const MOBILE_TIMEOUT_APKLEAKS_SECS: u64 = 600;
 pub const MOBILE_TIMEOUT_DROZER_SECS: u64 = 180;
 pub const MOBILE_TIMEOUT_MOBSF_TOTAL_SECS: u64 = 1200;
+pub const MOBILE_TIMEOUT_FRIDA_SECS: u64 = 300;
+pub const MOBILE_TIMEOUT_OBJECTION_SECS: u64 = 300;
+pub const MOBILE_TIMEOUT_MARIANA_SECS: u64 = 900;
 
 // Supply Chain Scanner Timeouts (seconds)
 pub const SUPPLY_TIMEOUT_SYFT_SECS: u64 = 300;
