@@ -46,6 +46,8 @@ pub struct EngineConfig {
     pub mobsf_timeout_secs: u64,
     pub vigil_url: Option<String>,
     pub vigil_api_key: Option<String>,
+    pub rebuff_url: Option<String>,
+    pub rebuff_api_token: Option<String>,
 }
 
 use crate::utils::executor::{StealthExecutor, ExecutorMode};
@@ -348,6 +350,8 @@ impl<M: ExecutorMode> RedTeamEngine<M> {
             mobsf_timeout_secs: self.config.mobsf_timeout_secs,
             vigil_url: self.config.vigil_url.clone(),
             vigil_api_key: self.config.vigil_api_key.clone(),
+            rebuff_url: self.config.rebuff_url.clone(),
+            rebuff_api_token: self.config.rebuff_api_token.clone(),
         };
 
         let mut builder = Pipeline::builder()

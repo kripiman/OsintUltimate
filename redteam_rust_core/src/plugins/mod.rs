@@ -190,6 +190,8 @@ pub struct GlobalConfig<M: ExecutorMode = crate::utils::executor::GhostMode> whe
     pub mobsf_timeout_secs: u64,
     pub vigil_url: Option<String>,
     pub vigil_api_key: Option<String>,
+    pub rebuff_url: Option<String>,
+    pub rebuff_api_token: Option<String>,
 }
 
 impl<M: ExecutorMode> Default for GlobalConfig<M>
@@ -245,6 +247,8 @@ impl<M: ExecutorMode> GlobalConfig<M> where M: Clone {
             mobsf_timeout_secs: 600,
             vigil_url: None,
             vigil_api_key: None,
+            rebuff_url: None,
+            rebuff_api_token: None,
         }
     }
 }
@@ -361,6 +365,8 @@ pub fn get_all_scanners<M: ExecutorMode>(config: GlobalConfig<M>) -> Vec<Box<dyn
     use crate::plugins::exploitation::ai_llm::vigil::VigilScanner;
     #[cfg(feature = "ai-redteam")]
     use crate::plugins::exploitation::ai_llm::modelscan::ModelScanScanner;
+    #[cfg(feature = "ai-redteam")]
+    use crate::plugins::exploitation::ai_llm::rebuff::RebuffScanner;
     
     #[cfg(feature = "mobile")]
     use crate::plugins::exploitation::mobile::mobsf::MobSFScanner;
@@ -487,6 +493,10 @@ pub fn get_all_scanners<M: ExecutorMode>(config: GlobalConfig<M>) -> Vec<Box<dyn
             config.vigil_api_key.clone().unwrap_or_default()
         )));
         scanners.push(Box::new(ModelScanScanner::<M>::new(&config)));
+        scanners.push(Box::new(RebuffScanner::<M>::new(
+            config.rebuff_url.clone().unwrap_or_else(|| "http://localhost:3000".to_string()),
+            config.rebuff_api_token.clone().unwrap_or_default()
+        )));
     }
 
     #[cfg(feature = "mobile")]

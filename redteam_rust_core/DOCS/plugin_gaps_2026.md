@@ -17,7 +17,7 @@
 | API modern | InQL ✅, GraphQL-Cop ✅, GraphW00f ✅, Crackql ✅, schemathesis ✅ | restler-fuzzer, Mantra, postman2burp, autoswagger | P0 |
 | WebSocket/gRPC/SOAP | nil | wsrepl, grpcurl, grpcox, wsdler | P1 |
 | Web exploit 2026 | sqlmap/dalfox/commix/tplmap/ssrf-king/openredirex/smuggler/jwt/nomore403 | XSStrike, SSRFmap, h2csmuggler, race-the-web, param-miner-bridge, ysoserial(.net), GadgetProbe, XXEinjector, lfimap, liffy, ssimap | P0 |
-| AI/LLM sec | nil | Garak, PyRIT, promptmap, Vigil, Rebuff, Promptfoo, LLMFuzzer, modelscan, PromptInject | **P0** |
+| AI/LLM sec | Garak/PyRIT/promptmap/Vigil/Rebuff/Promptfoo/LLMFuzzer/modelscan/PromptInject (9/9) | nil ✅ | **P0** |
 | Mobile | MobSF/apktool/jadx/drozer/APKLeaks/Frida/Objection/Mariana-Trench (8/8) | nil ✅ | P0 |
 | Web3 | nil | Slither, Mythril, Echidna, Manticore, Aderyn | P2 |
 | Cloud深度 | Pacu/Prowler/CloudFox/CloudEnum/CloudBrute/KubeBench | ScoutSuite, cloudsplaining, S3Scanner, GCPBucketBrute, cloudgrappler, endgame, Stratus-Red-Team, Leonidas, peirates, kubehound, kubeletctl, kdigger | P0 |
@@ -40,11 +40,11 @@
 Garak       → LLM vuln scanner ✅
 PyRIT       → MS Red Team automation framework ✅
 promptmap   → prompt injection mapping ✅
-Vigil       → LLM input/output filter audit
-Rebuff      → prompt injection detection
+Vigil       → LLM input/output filter audit ✅
+Rebuff      → prompt injection detection ✅
 Promptfoo   → eval harness, regression for LLM apps ✅
 LLMFuzzer   → black-box LLM fuzzer ✅
-modelscan   → ML model file (pkl/h5/onnx) malware scan
+modelscan   → ML model file (pkl/h5/onnx) malware scan ✅
 PromptInject→ classic injection corpus ✅
 ```
 
