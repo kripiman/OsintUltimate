@@ -131,7 +131,47 @@ Consolidación de acceso una vez que se compromete una máquina objetivo.
 
 ---
 
-## 6. Lógica de Priorización de la IA (Swarm Intelligence)
+## 6. Seguridad Móvil (Mobile Security)
+Análisis de artefactos (.apk, .ipa) y auditoría de runtime en dispositivos móviles.
+
+| Herramienta | Función Principal |
+| :--- | :--- |
+| **MobSF** | Framework de análisis estático y dinámico para Android/iOS. |
+| **Frida** | Inyección de scripts para instrumentación dinámica en tiempo de ejecución. |
+| **Objection** | Toolkit de exploración de runtime para aplicaciones móviles (vía Frida). |
+| **Mariana Trench**| Escáner de flujo de datos (Taint Analysis) para detectar brechas de privacidad en Android. |
+| **APKLeaks** | Búsqueda de secretos, APIs y endpoints ocultos en archivos APK. |
+| **Drozer** | Evaluación de la superficie de ataque y exposición de componentes en Android. |
+| **Apktool / Jadx** | Descompilación y análisis de código fuente Java/Smali. |
+
+---
+
+## 7. Seguridad de IA/LLM (AI & LLM Red Teaming)
+Arsenal especializado en la auditoría de modelos de lenguaje y aplicaciones basadas en IA.
+
+| Herramienta | Función Principal |
+| :--- | :--- |
+| **Garak** | Escáner de vulnerabilidades de LLM (hallucinations, bias, jailbreak). |
+| **PyRIT** | Framework de automatización para Red Teaming de sistemas de IA (Microsoft). |
+| **Promptmap** | Mapeo y prueba de vectores de inyección de prompts (Prompt Injection). |
+| **Vigil** | Auditoría de filtros de entrada/salida en aplicaciones LLM. |
+| **Rebuff** | Detección y protección contra ataques de inyección de prompts. |
+| **Promptfoo** | Harness de pruebas de regresión y evaluación de prompts para LLM. |
+| **LLMFuzzer** | Fuzzing de caja negra para descubrir fallos en endpoints de IA. |
+| **ModelScan** | Escaneo de artefactos de modelos ML (pkl, h5, onnx) en busca de malware. |
+| **PromptInject**| Corpus de inyecciones clásicas para validación de robustez en prompts. |
+| **JWT_Tool Pro**| Auditoría de tokens con parsing JSON estructurado para `alg:none` y `confusion`. |
+
+---
+
+## 8. Configuración por Programa (ProgramConfig)
+Para operaciones profesionales de Bug Bounty, el sistema permite cargar archivos `program.toml` o `program.json` que sobrescriben el comportamiento global:
+- **Límites de Velocidad (RPS)**: Control granular para evitar bloqueos por WAF.
+- **Nuclei Custom Templates**: Ruta a plantillas privadas para el programa.
+- **Endpoints Excluidos**: Lista negra de rutas (ej. `/logout`, `/delete`) para evitar acciones destructivas.
+- **Cabeceras Personalizadas**: Inserción de cabeceras de identificación (ej. `X-Bug-Bounty: user`).
+
+## 9. Lógica de Priorización de la IA (Swarm Intelligence)
 
 Cuando el modo **Swarm** está activo, la IA toma decisiones de ejecución basadas en los siguientes pesos de prioridad:
 
@@ -157,4 +197,4 @@ flowchart TD
 ---
 
 > [!IMPORTANT]
-> **Prioridad de Herramientas Críticas:** `Nmap` y `Nuclei` se consideran herramientas de "Anclaje". El motor siempre intentará ejecutarlas primero en cualquier host vivo para establecer la línea base de la superficie táctica. Todas las herramientas arriba descritas están mapeadas a archivos nativos `.rs` dentro del árbol `src/plugins/` y controladas mediante el `Orchestrator` de OsintUltimate.
+> **Prioridad de Herramientas Críticas:** `Nmap`, `Nuclei` y ahora `MobSF`/`Garak` (en sus respectivos dominios) se consideran herramientas de "Anclaje". El motor siempre intentará ejecutarlas primero en cualquier host o artefacto vivo para establecer la línea base de la superficie táctica. Todas las herramientas arriba descritas están mapeadas a archivos nativos `.rs` dentro del árbol `src/plugins/` y controladas mediante el `Orchestrator` de OsintUltimate.

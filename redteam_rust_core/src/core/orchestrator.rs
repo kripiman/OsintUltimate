@@ -25,6 +25,7 @@ pub struct Orchestrator<M: ExecutorMode> {
     proxy_manager: Option<Arc<crate::utils::proxy::ProxyManager>>,
     policy: Arc<dyn crate::core::policy::PolicyProvider>,
     executor: Arc<StealthExecutor<M>>,
+    strict_scope: bool,
 }
 
 pub struct OrchestratorConfig<M: ExecutorMode> {
@@ -37,6 +38,7 @@ pub struct OrchestratorConfig<M: ExecutorMode> {
     pub sandbox: Arc<crate::core::sandbox::SandboxDispatcher>,
     pub policy: Arc<dyn crate::core::policy::PolicyProvider>,
     pub executor: Arc<StealthExecutor<M>>,
+    pub strict_scope: bool,
 }
 
 impl<M: ExecutorMode> Orchestrator<M> {
@@ -61,6 +63,7 @@ impl<M: ExecutorMode> Orchestrator<M> {
             proxy_manager: None,
             policy: config.policy,
             executor: config.executor,
+            strict_scope: config.strict_scope,
         }
     }
 
@@ -121,7 +124,7 @@ impl<M: ExecutorMode> Orchestrator<M> {
 
         // Process concurrently up to `concurrency` limit
         let lp = self.layer_policy;
-        let _policy = self.policy.clone();
+        let policy = self.policy.clone();
         let approval_gate = self.approval_gate.clone();
         let blackarch_bridge = self.blackarch_bridge.clone();
         let memory_semaphore = self.memory_semaphore.clone();
@@ -162,6 +165,8 @@ impl<M: ExecutorMode> Orchestrator<M> {
                     let mut target = target; 
                     let plugins = plugins.clone();
                     let lp = lp;
+                    let policy = policy.clone();
+                    let strict_scope = self.strict_scope; // Assuming strict_scope is available in self or we pass it
                     let approval_gate = approval_gate.clone();
                     let blackarch_bridge = blackarch_bridge.clone();
                     let memory_semaphore = memory_semaphore.clone();
@@ -170,6 +175,26 @@ impl<M: ExecutorMode> Orchestrator<M> {
                     let dashboard_targets = dashboard_targets.clone();
                     
                     async move {
+                // V14.2 SCOPE ENFORCEMENT: Fail-Closed Check
+                if !policy.is_target_allowed(&target.host) {
+                    if strict_scope {
+                        warn!("🛡️ V14.2 SCOPE: Target '{}' is OUT OF SCOPE. Rejecting (Fail-Closed).", target.host);
+                        target.status = TargetStatus::Dead;
+                        let mut findings = (*target.findings).clone();
+                        findings.push(Finding::new(
+                            "SCOPE_VIOLATION",
+                            Category::Misconfiguration,
+                            Severity::Critical,
+                            &format!("Target '{}' is out of authorized scope!", target.host),
+                            serde_json::json!({"host": target.host})
+                        ));
+                        target.findings = Arc::new(findings);
+                        return target;
+                    } else {
+                        info!("🛡️ V14.2 SCOPE: Target '{}' is out of scope but strict_scope is DISABLED. Proceeding with caution.", target.host);
+                    }
+                }
+
                 // MEMORY-BACKPRESSURE: Wait if memory is critical 
                 if memory_monitor.is_critical() {
                     warn!("MEMORY CRITICAL [{}MB]: Throttling scan for {}", memory_monitor.current_mb(), target.host);

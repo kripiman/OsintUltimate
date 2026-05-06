@@ -52,6 +52,11 @@ pub enum Capability {
     InformationGathering,
     HTTPRequestSmuggling,
     JsAnalysis,
+    IdorDetection,
+    RaceConditionTesting,
+    MassAssignmentTesting,
+    UploadTesting,
+    Evasion,
 }
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, PartialOrd, Ord)]
@@ -181,6 +186,7 @@ pub struct GlobalConfig<M: ExecutorMode = crate::utils::executor::GhostMode> whe
     pub executor: std::sync::Arc<StealthExecutor<M>>,
     pub budget: std::sync::Arc<crate::core::swarm::budget::TokenBudget>,
     pub correlation_engine: std::sync::Arc<tokio::sync::Mutex<crate::core::correlation::CorrelationEngine>>,
+    pub stealth_policy: crate::plugins::detection_evasion::stealth_policy::StealthPolicy,
     pub mcp_token: Option<String>,
     pub nuclei_tags: Option<String>,
     pub nuclei_severity: Option<String>,
@@ -192,6 +198,14 @@ pub struct GlobalConfig<M: ExecutorMode = crate::utils::executor::GhostMode> whe
     pub vigil_api_key: Option<String>,
     pub rebuff_url: Option<String>,
     pub rebuff_api_token: Option<String>,
+    pub policy_file: Option<String>,
+    pub strict_scope: bool,
+    pub nuclei_auto_update: bool,
+    pub h1_username: Option<String>,
+    pub h1_api_key: Option<String>,
+    pub bugcrowd_api_key: Option<String>,
+    pub intigriti_token: Option<String>,
+    pub bb_program_handle: Option<String>,
 }
 
 impl<M: ExecutorMode> Default for GlobalConfig<M>
@@ -238,6 +252,7 @@ impl<M: ExecutorMode> GlobalConfig<M> where M: Clone {
             executor,
             budget: std::sync::Arc::new(crate::core::swarm::budget::TokenBudget::new(50000)),
             correlation_engine: std::sync::Arc::new(tokio::sync::Mutex::new(crate::core::correlation::CorrelationEngine::new())),
+            stealth_policy: crate::plugins::detection_evasion::stealth_policy::StealthPolicy::default(),
             mcp_token: None,
             nuclei_tags: None,
             nuclei_severity: None,
@@ -249,6 +264,14 @@ impl<M: ExecutorMode> GlobalConfig<M> where M: Clone {
             vigil_api_key: None,
             rebuff_url: None,
             rebuff_api_token: None,
+            policy_file: None,
+            strict_scope: false,
+            nuclei_auto_update: false,
+            h1_username: None,
+            h1_api_key: None,
+            bugcrowd_api_key: None,
+            intigriti_token: None,
+            bb_program_handle: None,
         }
     }
 }
@@ -348,6 +371,8 @@ pub fn get_all_scanners<M: ExecutorMode>(config: GlobalConfig<M>) -> Vec<Box<dyn
     use crate::plugins::enumeration::web::linkfinder::LinkFinderScanner;
     use crate::plugins::enumeration::web::secretfinder::SecretFinderScanner;
     use crate::plugins::enumeration::web::js_deep::{SubJSScanner, RetireScanner, SourceMapperScanner};
+    use crate::plugins::exploitation::web::upload_strike::UploadStrikeScanner;
+    use crate::plugins::exploitation::web::business_logic::BusinessLogicScanner;
 
     #[cfg(feature = "ai-redteam")]
     use crate::plugins::exploitation::ai_llm::garak::GarakScanner;
@@ -478,6 +503,8 @@ pub fn get_all_scanners<M: ExecutorMode>(config: GlobalConfig<M>) -> Vec<Box<dyn
         Box::new(SubJSScanner::new()),
         Box::new(RetireScanner::new()),
         Box::new(SourceMapperScanner::new()),
+        Box::new(UploadStrikeScanner::new(Some(config.proxy_manager.clone()))),
+        Box::new(BusinessLogicScanner::new(Some(config.proxy_manager.clone()))),
     ];
 
     #[cfg(feature = "ai-redteam")]

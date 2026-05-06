@@ -92,8 +92,10 @@ sudo apt install -y ufw
 sudo ufw default deny incoming
 sudo ufw default allow outgoing
 
-# SSH — solo desde tu IP pública (cámbiala por la tuya)
-sudo ufw allow 22/tcp comment "SSH"
+# SSH — solo desde tu IP pública (RECOMENDADO)
+sudo ufw allow from TU_IP_PUBLICA to any port 22 proto tcp comment "SSH"
+# O alternativamente, permitir solo via Tailscale (MÁXIMA SEGURIDAD):
+# sudo ufw allow in on tailscale0 to any port 22 proto tcp comment "SSH Tailscale only"
 
 # HTTP público — solo para ACME challenge (Let's Encrypt cert del dominio)
 sudo ufw allow 80/tcp comment "HTTP ACME challenge"
@@ -142,8 +144,7 @@ sudo sysctl -p /etc/sysctl.d/99-osint-hardening.conf
 
 ```bash
 sudo apt install -y fail2ban
-
-sudo tee /etc/fail2ban/jail.d/99-osint.conf << 'EOF'
+sudo tee /etc/fail2ban/jail.local << 'EOF'
 [sshd]
 enabled = true
 port = ssh
@@ -536,6 +537,9 @@ docker run --rm -it --network host \
     blackarchlinux/blackarch "$TOOL" "$@"
 EOF
 sudo chmod +x /usr/local/bin/barch
+
+> [!WARNING]
+> El flag `--network host` permite que el contenedor BlackArch vea todas las interfaces del host (incluyendo Tailscale). Úsalo solo para herramientas que requieran captura directa de paquetes (ej: nmap/responder).
 ```
 
 ### 6.2 Herramientas nativas ARM64
@@ -710,6 +714,22 @@ Consola Oracle → **Networking → VCN → Security Lists → Default → Ingre
 | TCP       | 80     | `0.0.0.0/0`        | HTTP ACME challenge (certbot dominio público) |
 | UDP       | 41641  | `0.0.0.0/0`        | **Tailscale WireGuard** — NAT traversal |
 
+### 9.2 Configuración de Tailscale ACL (Crucial para Multi-VPS)
+Para que el VPS 1 pueda hablar con el VPS 2 (Fase 1: Ollama), debes actualizar la política en el [Panel de Control de Tailscale](https://login.tailscale.com/admin/acls/file):
+
+```json
+{
+  "acls": [
+    {"action":"accept","src":["autogroup:owner"],"dst":["tag:server:*"]},
+    {"action":"accept","src":["tag:server"],"dst":["tag:server:11434","tag:server:5432"]}
+  ],
+  "tagOwners": {
+    "tag:server": ["autogroup:owner"]
+  }
+}
+```
+*Sin esta regla, el VPS 1 no podrá alcanzar el puerto 11434 del VPS 2.*
+
 > [!NOTE]
 > Si Tailscale logra conectar por DERP relay sin el UDP directo (lo hace en la mayoría de casos), el 41641 tampoco es estrictamente necesario. Pero abrirlo mejora la latencia del túnel WireGuard.
 
@@ -833,22 +853,20 @@ echo "IP Tailscale: $TAILSCALE_IP"
 echo "Hostname:     $TS_HOSTNAME"
 ```
 
-### 12.2 Instalar Tailscale en tu laptop de operaciones
-
+### 12.2 Instalación de Tailscale en tu laptop
 ```bash
-# Linux
+# Instalar binario oficial
 curl -fsSL https://tailscale.com/install.sh | sh
-sudo tailscale up
 
-# macOS
-brew install tailscale
-sudo tailscale up
+# Autenticar y etiquetar como servidor
+sudo tailscale up --advertise-tags=tag:server
+```
+*Nota: Requiere actualizar ACLs en VPS 1 (§9.2 del Runbook principal).*
 
 # Windows
 # Descargar desde: https://tailscale.com/download/windows
 # Luego: tailscale up
 
-# Verificar conexión con el servidor
 tailscale ping oracle-c2
 # → pong from oracle-c2 (100.x.x.x) via DERP[xxx] in XXms
 ```

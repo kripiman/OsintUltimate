@@ -43,6 +43,16 @@ pub struct Config {
     pub supply_timeout_cosign_secs: u64,
     pub vigil_url: Option<String>,
     pub vigil_api_key: Option<String>,
+    pub rebuff_url: Option<String>,
+    pub rebuff_api_token: Option<String>,
+    pub policy_file: Option<String>,
+    pub strict_scope: bool,
+    pub nuclei_auto_update: bool,
+    pub h1_username: Option<String>,
+    pub h1_api_key: Option<String>,
+    pub bugcrowd_api_key: Option<String>,
+    pub intigriti_token: Option<String>,
+    pub bb_program_handle: Option<String>,
 }
 
 impl Config {
@@ -125,6 +135,16 @@ impl Config {
                 .unwrap_or(120),
             vigil_url: env::var("VIGIL_URL").ok(),
             vigil_api_key: env::var("VIGIL_API_KEY").ok(),
+            rebuff_url: env::var("REBUFF_URL").ok(),
+            rebuff_api_token: env::var("REBUFF_API_TOKEN").ok(),
+            policy_file: env::var("POLICY_FILE").ok(),
+            strict_scope: env::var("STRICT_SCOPE").ok().and_then(|s| s.parse().ok()).unwrap_or(false),
+            nuclei_auto_update: env::var("NUCLEI_AUTO_UPDATE").ok().and_then(|s| s.parse().ok()).unwrap_or(false),
+            h1_username: env::var("H1_USERNAME").ok(),
+            h1_api_key: env::var("H1_API_KEY").ok(),
+            bugcrowd_api_key: env::var("BUGCROWD_API_KEY").ok(),
+            intigriti_token: env::var("INTIGRITI_TOKEN").ok(),
+            bb_program_handle: env::var("BB_PROGRAM_HANDLE").ok(),
         }
     }
 

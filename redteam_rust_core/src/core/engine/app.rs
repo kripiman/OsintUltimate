@@ -48,6 +48,14 @@ pub struct EngineConfig {
     pub vigil_api_key: Option<String>,
     pub rebuff_url: Option<String>,
     pub rebuff_api_token: Option<String>,
+    pub policy_file: Option<String>,
+    pub strict_scope: bool,
+    pub nuclei_auto_update: bool,
+    pub h1_username: Option<String>,
+    pub h1_api_key: Option<String>,
+    pub bugcrowd_api_key: Option<String>,
+    pub intigriti_token: Option<String>,
+    pub bb_program_handle: Option<String>,
 }
 
 use crate::utils::executor::{StealthExecutor, ExecutorMode};
@@ -109,7 +117,7 @@ impl RedTeamEngine<crate::utils::executor::GhostMode> {
             utils_config.hard_memory_limit_mb as u32
         ));
         let res_mgr = SysResourceManager::new();
-        let policy = Arc::new(crate::core::policy::StaticPolicy::new());
+        let policy = Arc::new(crate::core::policy::StaticPolicy::from_file(utils_config.policy_file.as_deref()));
         let approval_gate = Arc::new(ApprovalGate::for_red_team());
         let proxy_manager = Arc::new(crate::utils::proxy::ProxyManager::new(
             config.proxies.clone().unwrap_or_default(),
@@ -352,6 +360,15 @@ impl<M: ExecutorMode> RedTeamEngine<M> {
             vigil_api_key: self.config.vigil_api_key.clone(),
             rebuff_url: self.config.rebuff_url.clone(),
             rebuff_api_token: self.config.rebuff_api_token.clone(),
+            policy_file: self.config.policy_file.clone(),
+            strict_scope: self.config.strict_scope,
+            nuclei_auto_update: self.config.nuclei_auto_update,
+            h1_username: self.config.h1_username.clone(),
+            h1_api_key: self.config.h1_api_key.clone(),
+            bugcrowd_api_key: self.config.bugcrowd_api_key.clone(),
+            intigriti_token: self.config.intigriti_token.clone(),
+            bb_program_handle: self.config.bb_program_handle.clone(),
+            stealth_policy: crate::plugins::detection_evasion::stealth_policy::StealthPolicy::default(),
         };
 
         let mut builder = Pipeline::builder()
@@ -365,7 +382,8 @@ impl<M: ExecutorMode> RedTeamEngine<M> {
             .layer_policy(policy)
             .approval_gate(self.approval_gate.clone())
             .with_policy(self.policy.clone())
-            .with_executor(self.executor.clone());
+            .with_executor(self.executor.clone())
+            .strict_scope(self.config.strict_scope);
 
         // Add discovery plugins
         for p in crate::plugins::get_all_discovery(global_config.clone()) {

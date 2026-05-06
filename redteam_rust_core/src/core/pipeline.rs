@@ -40,6 +40,7 @@ pub struct Pipeline<M: ExecutorMode = crate::utils::executor::GhostMode> {
     proxy_manager: Option<Arc<crate::utils::proxy::ProxyManager>>,
     policy: Arc<dyn crate::core::policy::PolicyProvider>,
     executor: Arc<StealthExecutor<M>>,
+    strict_scope: bool,
 }
 
 impl<M: ExecutorMode> Pipeline<M> {
@@ -86,6 +87,7 @@ impl<M: ExecutorMode> Pipeline<M> {
                 None, 
                 false,
             )),
+            strict_scope: false,
         }
     }
 
@@ -253,6 +255,7 @@ impl<M: ExecutorMode> Pipeline<M> {
         let ai_router = self.ai_router.clone();
         let max_tokens = self.max_tokens;
         let proxy_manager = self.proxy_manager.clone();
+        let strict_scope = self.strict_scope;
 
         tokio::spawn(async move {
             let mut orchestrator = Orchestrator::new(crate::core::orchestrator::OrchestratorConfig {
@@ -265,6 +268,7 @@ impl<M: ExecutorMode> Pipeline<M> {
                 sandbox,
                 policy,
                 executor,
+                strict_scope,
             });
             if let (Some(tx), Some(targets)) = (dashboard_tx, dashboard_targets) {
                 orchestrator.with_dashboard_preconfigured(tx, targets);
@@ -386,6 +390,7 @@ impl<M: ExecutorMode> Pipeline<M> {
             sandbox: self.sandbox.clone(),
             policy: self.policy.clone(),
             executor: self.executor.clone(),
+            strict_scope: self.strict_scope,
         });
         let token = self.shutdown_token.clone();
         
@@ -450,6 +455,7 @@ pub struct PipelineBuilder<M: ExecutorMode = crate::utils::executor::GhostMode> 
     proxy_manager: Option<Arc<crate::utils::proxy::ProxyManager>>,
     policy: Option<Arc<dyn crate::core::policy::PolicyProvider>>,
     executor: Option<Arc<crate::utils::executor::StealthExecutor<M>>>,
+    strict_scope: bool,
 }
 
 impl<M: ExecutorMode> Default for PipelineBuilder<M> { fn default() -> Self { Self::new() } }
@@ -478,6 +484,7 @@ impl<M: ExecutorMode> PipelineBuilder<M> {
             proxy_manager: None,
             policy: None,
             executor: None,
+            strict_scope: false,
         }
     }
 
@@ -527,6 +534,7 @@ impl<M: ExecutorMode> PipelineBuilder<M> {
     pub fn shutdown_token(mut self, token: CancellationToken) -> Self { self.shutdown_token = token; self }
     pub fn command_line(mut self, cmd: String) -> Self { self.command_line = cmd; self }
     pub fn sandbox(mut self, s: Arc<crate::core::sandbox::SandboxDispatcher>) -> Self { self.sandbox = Some(s); self }
+    pub fn strict_scope(mut self, s: bool) -> Self { self.strict_scope = s; self }
 
     pub fn build(self) -> Result<Pipeline<M>> {
         let sink = self.sink.context("Pipeline requires a configured sink")?;
@@ -560,6 +568,7 @@ impl<M: ExecutorMode> PipelineBuilder<M> {
             proxy_manager: self.proxy_manager,
             policy: self.policy.context("Pipeline requires a policy provider")?,
             executor: self.executor.context("Pipeline requires an executor")?,
+            strict_scope: self.strict_scope,
         })
     }
 }

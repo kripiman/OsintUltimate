@@ -8,6 +8,9 @@ use flate2::write::GzEncoder;
 use flate2::Compression;
 use std::sync::Arc;
 use std::io::Write;
+use crate::models::{Finding, Severity, ReportPlatform};
+use crate::plugins::reporting::platform_client::PlatformClient;
+use crate::utils::bounty_exporter::BountyExporter;
 
 /// Trait for defining where scan results should be written.
 #[async_trait]
@@ -548,6 +551,103 @@ impl DataSink for TimelineSink {
     }
 
     async fn close(&mut self) -> Result<()> {
+        Ok(())
+    }
+}
+
+/// V14.2: Bug Bounty Automated Submission Sink.
+/// Buffers High/Critical findings and submits them to H1/Bugcrowd/Intigriti upon scan completion.
+pub struct BountySink {
+    findings: Vec<Finding>,
+    h1_username: Option<String>,
+    h1_api_key: Option<String>,
+    bugcrowd_api_key: Option<String>,
+    intigriti_token: Option<String>,
+    program_handle: Option<String>,
+}
+
+impl BountySink {
+    pub fn new(
+        h1_username: Option<String>,
+        h1_api_key: Option<String>,
+        bugcrowd_api_key: Option<String>,
+        intigriti_token: Option<String>,
+        program_handle: Option<String>,
+    ) -> Self {
+        Self {
+            findings: Vec::new(),
+            h1_username,
+            h1_api_key,
+            bugcrowd_api_key,
+            intigriti_token,
+            program_handle,
+        }
+    }
+
+    async fn submit_to_platform(&self, platform: ReportPlatform, api_key: &str, username: Option<String>) -> Result<()> {
+        let handle = self.program_handle.as_deref().unwrap_or("default");
+        let client = PlatformClient::new(platform.clone(), api_key.to_string(), username);
+        
+        let eligible_refs: Vec<&Finding> = self.findings.iter().collect();
+        if eligible_refs.is_empty() { return Ok(()); }
+
+        let report_md = BountyExporter::generate(&eligible_refs, &platform);
+        let title = format!("Automated Findings Report - {} items", eligible_refs.len());
+        
+        // Use highest severity found
+        let max_severity = self.findings.iter()
+            .map(|f| f.core.severity)
+            .max_by_key(|s| match s {
+                Severity::Critical => 4,
+                Severity::High => 3,
+                Severity::Medium => 2,
+                Severity::Low => 1,
+                Severity::Info => 0,
+            })
+            .unwrap_or(Severity::High);
+
+        match client.submit(&report_md, &title, &max_severity, handle).await {
+            Ok(url) => info!("🚀 [BountySink] Successfully submitted to {}: {}", platform.display_name(), url),
+            Err(e) => error!("❌ [BountySink] Failed to submit to {}: {}", platform.display_name(), e),
+        }
+        Ok(())
+    }
+}
+
+#[async_trait]
+impl DataSink for BountySink {
+    async fn write(&mut self, target: &TargetHost) -> Result<()> {
+        for finding in target.findings.iter() {
+            if matches!(finding.core.severity, Severity::High | Severity::Critical) {
+                self.findings.push(finding.clone());
+            }
+        }
+        Ok(())
+    }
+
+    async fn write_metadata(&mut self, _metadata: &ScanMetadata) -> Result<()> {
+        Ok(())
+    }
+
+    async fn close(&mut self) -> Result<()> {
+        if self.findings.is_empty() {
+            return Ok(());
+        }
+
+        info!("🛡️ [BountySink] Finalizing scan. Attempting automated submissions for {} High/Critical findings...", self.findings.len());
+
+        if let Some(ref key) = self.h1_api_key {
+            self.submit_to_platform(ReportPlatform::HackerOne, key, self.h1_username.clone()).await?;
+        }
+
+        if let Some(ref key) = self.bugcrowd_api_key {
+            self.submit_to_platform(ReportPlatform::BugCrowd, key, None).await?;
+        }
+
+        if let Some(ref key) = self.intigriti_token {
+            self.submit_to_platform(ReportPlatform::Intigriti, key, None).await?;
+        }
+
         Ok(())
     }
 }

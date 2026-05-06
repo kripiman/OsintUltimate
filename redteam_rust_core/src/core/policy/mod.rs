@@ -86,7 +86,10 @@ impl Default for StaticPolicy {
 
 impl StaticPolicy {
     pub fn new() -> Self {
+        Self::from_file(None)
+    }
 
+    pub fn from_file(path: Option<&str>) -> Self {
         let allowed_binaries = vec![
             "curl", "nmap", "ping", "dig", "nc", "ssh", "which",
             "apktool", "jadx", "apkleaks", "drozer",
@@ -106,14 +109,19 @@ impl StaticPolicy {
         let mut in_scope_patterns = Vec::new();
         let mut allowed_roots = HashSet::new();
 
-        // V14.2: Load scope from policy.json
-        let policy_path = std::env::current_exe()
-            .ok()
-            .and_then(|p| p.parent().map(|d| d.join("policy.json")))
-            .filter(|p| p.exists())
-            .unwrap_or_else(|| Path::new("policy.json").to_path_buf());
+        // V14.2: Load scope from policy.json or provided path
+        let policy_path = if let Some(p) = path {
+            Path::new(p).to_path_buf()
+        } else {
+            std::env::current_exe()
+                .ok()
+                .and_then(|p| p.parent().map(|d| d.join("policy.json")))
+                .filter(|p| p.exists())
+                .unwrap_or_else(|| Path::new("policy.json").to_path_buf())
+        };
 
         if policy_path.exists() {
+            tracing::info!("🛡️ V14.2 SCOPE: Loading policy from {:?}", policy_path);
             if let Ok(content) = std::fs::read_to_string(&policy_path) {
                 if let Ok(policy) = serde_json::from_str::<PolicyJson>(&content) {
                     for entry in policy.in_scope {
@@ -138,6 +146,8 @@ impl StaticPolicy {
                     }
                 }
             }
+        } else if path.is_some() {
+            tracing::error!("❌ V14.2 SCOPE: Specified policy file {:?} NOT FOUND!", policy_path);
         }
 
         // V14.5: Load RoE from workspace/plan/roe.json

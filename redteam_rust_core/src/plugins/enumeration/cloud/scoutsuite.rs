@@ -1,6 +1,6 @@
 use async_trait::async_trait;
-use tracing::{info, warn};
-use crate::models::{Finding, Severity, Category, TargetHost, TargetType};
+use tracing::info;
+use crate::models::{Finding, TargetHost, TargetType};
 use crate::models::constants::*;
 use crate::plugins::{ScannerPlugin, PluginMetadata, Capability};
 use crate::utils::tool_detection::detect_tool;

@@ -93,6 +93,8 @@ aya = "0.13"
 socket2 = "0.5"
 tokio-socks = "0.5.2"
 zip = "8.5.1"
+cvss = "2.2.0"
+toml = "1.1.2"
 
 # Persistence & Swarm
 # RocksDB and Chitchat removed as they were not used in the final v4.0 architecture and caused build failures.

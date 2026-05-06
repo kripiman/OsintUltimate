@@ -6,6 +6,7 @@ pub mod liveness;
 pub mod telemetry;
 pub mod proxy; // Redirection to infrastructure/proxy.rs
 pub mod cvss;
+pub mod program_config;
 pub mod tool_detection;
 pub mod memory_monitor;
 pub mod jitter;

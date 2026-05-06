@@ -29,6 +29,7 @@ pub struct NucleiScanner<M: ExecutorMode> {
     tags: Option<String>,
     severity: Option<String>,
     custom_templates: Option<String>,
+    auto_update: bool,
 }
 
 impl<M: ExecutorMode> NucleiScanner<M> where M: Clone {
@@ -40,6 +41,7 @@ impl<M: ExecutorMode> NucleiScanner<M> where M: Clone {
             tags: config.nuclei_tags,
             severity: config.nuclei_severity,
             custom_templates: config.nuclei_custom_templates,
+            auto_update: config.nuclei_auto_update,
         }
     }
 }
@@ -73,7 +75,24 @@ impl<M: ExecutorMode> ScannerPlugin for NucleiScanner<M> {
     }
 
     async fn check_dependencies(&self) -> Result<bool> {
-        Ok(crate::utils::check_tool_availability("nuclei").await)
+        let available = crate::utils::check_tool_availability("nuclei").await;
+        if available {
+            // V14.2: Auto-update templates if enabled
+            // We use a simple atomic or check a global state to avoid multiple updates in the same run
+            static UPDATED: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+            
+            // Check if auto-update is enabled in the config (passed via GlobalConfig if we add it there)
+            // For now, we'll check a flag if we can access it, or just use a placeholder.
+            // Since check_dependencies doesn't have access to the full config easily without modifying the trait,
+            // we'll assume it's controlled by an environment variable for now or we update the struct.
+            if self.auto_update {
+                if !UPDATED.swap(true, std::sync::atomic::Ordering::SeqCst) {
+                    info!("🔄 NUCLEI: Updating templates...");
+                    let _ = self.executor.execute_and_wait(&self.binary_path, vec!["-update-templates".to_string()]).await;
+                }
+            }
+        }
+        Ok(available)
     }
 
 

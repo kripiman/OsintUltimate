@@ -35,6 +35,10 @@ pub enum Category {
     Windows,
     Linux,
     Compliance,
+    BusinessLogicFlaw,
+    Idor,
+    RaceCondition,
+    FileUploadVulnerability,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
