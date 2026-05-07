@@ -702,6 +702,7 @@ async fn handle_execute_plugin(state: &Arc<McpServer>, args: serde_json::Value) 
             tool_suggestions: Arc::new(Vec::new()),
             tactical_context: Arc::new(json!({})),
             extra_data: Arc::new(json!({})),
+            version: 0,
         };
 
         // 2.1 MOTOR DE RESILIENCIA (Fase 6 Roadmap)

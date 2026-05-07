@@ -266,7 +266,7 @@ impl<M: ExecutorMode> GlobalConfig<M> where M: Clone {
             rebuff_api_token: None,
             policy_file: None,
             strict_scope: false,
-            nuclei_auto_update: false,
+            nuclei_auto_update: true,
             h1_username: None,
             h1_api_key: None,
             bugcrowd_api_key: None,
@@ -373,6 +373,12 @@ pub fn get_all_scanners<M: ExecutorMode>(config: GlobalConfig<M>) -> Vec<Box<dyn
     use crate::plugins::enumeration::web::js_deep::{SubJSScanner, RetireScanner, SourceMapperScanner};
     use crate::plugins::exploitation::web::upload_strike::UploadStrikeScanner;
     use crate::plugins::exploitation::web::business_logic::BusinessLogicScanner;
+    use crate::plugins::compliance::semgrep::SemgrepScanner;
+    use crate::plugins::enumeration::web::oauth_security::OAuthScanner;
+    use crate::plugins::enumeration::web::wcvs::WcvsScanner;
+    use crate::plugins::exploitation::web::deserialization::DeserializationScanner;
+    use crate::plugins::reconnaissance::passive::github_dorks::GitHubDorksScanner;
+    use crate::plugins::exploitation::web::h2csmuggler::H2CSmugglerScanner;
 
     #[cfg(feature = "ai-redteam")]
     use crate::plugins::exploitation::ai_llm::garak::GarakScanner;
@@ -505,6 +511,12 @@ pub fn get_all_scanners<M: ExecutorMode>(config: GlobalConfig<M>) -> Vec<Box<dyn
         Box::new(SourceMapperScanner::new()),
         Box::new(UploadStrikeScanner::new(Some(config.proxy_manager.clone()))),
         Box::new(BusinessLogicScanner::new(Some(config.proxy_manager.clone()))),
+        Box::new(SemgrepScanner::new()),
+        Box::new(OAuthScanner::new()),
+        Box::new(WcvsScanner::new()),
+        Box::new(DeserializationScanner::new()),
+        Box::new(GitHubDorksScanner::new(config.clone())),
+        Box::new(H2CSmugglerScanner::new(config.clone())),
     ];
 
     #[cfg(feature = "ai-redteam")]
@@ -558,6 +570,7 @@ pub fn get_all_discovery<M: ExecutorMode>(config: GlobalConfig<M>) -> Vec<Box<dy
     use crate::plugins::reconnaissance::osint::uncover::UncoverScanner;
     use crate::plugins::reconnaissance::osint::sovereign_recon::SovereignReconScanner;
     use crate::plugins::reconnaissance::osint::alterx::AlterXScanner;
+    use crate::plugins::reconnaissance::osint::puredns::PurednsScanner;
 
     vec![
         Box::new(SovereignReconScanner::new(&crate::utils::config::Config::from_env(), config.proxy_manager.clone())),
@@ -566,6 +579,7 @@ pub fn get_all_discovery<M: ExecutorMode>(config: GlobalConfig<M>) -> Vec<Box<dy
         Box::new(AmassScanner::new()),
         Box::new(UncoverScanner::new()), 
         Box::new(AlterXScanner::new()),
+        Box::new(PurednsScanner::new(config.proxy_manager.clone())),
     ]
 }
 

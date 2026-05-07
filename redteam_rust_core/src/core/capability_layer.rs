@@ -39,6 +39,22 @@ pub enum ScanLayer {
     PostExploitation = 5,
 }
 
+impl std::str::FromStr for ScanLayer {
+    type Err = String;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s.to_lowercase().as_str() {
+            "passive" => Ok(Self::Passive),
+            "discovery" => Ok(Self::Discovery),
+            "scanning" => Ok(Self::Scanning),
+            "verification" => Ok(Self::Verification),
+            "exploitation" => Ok(Self::Exploitation),
+            "post-exploitation" | "postexploitation" => Ok(Self::PostExploitation),
+            _ => Err(format!("Invalid scan layer: {}", s)),
+        }
+    }
+}
+
 impl ScanLayer {
     pub fn description(&self) -> &'static str {
         match self {

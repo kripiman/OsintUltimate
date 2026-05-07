@@ -19,18 +19,19 @@ impl ContextCompressor {
 
         // 2. Reduce size for tokens
         if let Some(obj) = ev.as_object_mut() {
-            Self::minify_evidence_object(obj, 512, false);
+            Self::minify_evidence_object(obj, 300, false); // Reduced from 512 to 300
         }
 
         let verified = finding.evidence.evidence.as_ref().map(|e| e.verified).unwrap_or(false);
 
+        // Dense Encoding: Use single-letter keys and values where possible
         serde_json::json!({
             "id": finding.core.id,
-            "sev": finding.core.severity,
+            "s": finding.core.severity.as_char(),
             "cat": finding.core.category,
             "cvss": finding.enrichment.cvss_score,
-            "conf": if verified { "VERIFIED" } else { "POTENTIAL" },
-            "desc": finding.core.description.chars().take(200).collect::<String>(),
+            "cf": if verified { "V" } else { "P" }, // V=Verified, P=Potential
+            "d": finding.core.description.chars().take(150).collect::<String>(), // Reduced from 200 to 150
             "ev": ev,
         })
     }
@@ -40,12 +41,12 @@ impl ContextCompressor {
             serde_json::json!({
                 "n": p.name,
                 "caps": p.capabilities,
-                "lyr": p.layer,
+                "l": p.layer, // Shortened lyr to l
             })
         }).collect()
     }
 
-    /// NEW V10: Compress target host info including tech stack for AI context.
+    /// Compress target host info including tech stack for AI context.
     pub fn compress_target(target: &TargetHost) -> serde_json::value::Value {
         let tech_stack: Vec<String> = target.findings.iter()
             .filter(|f| f.core.category == Category::TechnologyStack)
@@ -55,31 +56,31 @@ impl ContextCompressor {
 
         serde_json::json!({
             "h": target.host,
-            "ip": target.ip.as_deref().unwrap_or("unknown"),
-            "type": format!("{:?}", target.target_type),
+            "ip": target.ip.as_deref().unwrap_or("?"),
+            "t": format!("{:?}", target.target_type),
             "tech": tech_stack,
         })
     }
 
-    /// NEW V4: Ultra-aggressive compression for Swarm Planner
+    /// Ultra-aggressive compression for Swarm Planner
     pub fn compress_swarm_context(finding: &Finding, _target: &TargetHost) -> serde_json::Value {
         let mut base = Self::compress_finding(finding, RouteLevel::Local);
         
         if let Some(ev) = base.get_mut("ev").and_then(|e| e.as_object_mut()) {
             ev.remove("body");
             ev.remove("raw_response");
-            Self::minify_headers(ev, &["server", "x-powered-by"]);
+            Self::minify_headers(ev, &["server"]); // Only keep server in swarm context
         }
         base
     }
 
-    /// NEW V11: Specialized compression for source code findings to save tokens.
+    /// Specialized compression for source code findings to save tokens.
     pub fn compress_source_aware_finding(finding: &Finding) -> serde_json::Value {
         let mut base = serde_json::json!({
             "id": finding.core.id,
             "cat": finding.core.category,
-            "sev": finding.core.severity,
-            "desc": finding.core.description,
+            "s": finding.core.severity.as_char(),
+            "d": finding.core.description,
         });
 
         if let Some(ref evidence) = finding.evidence.evidence {
@@ -87,8 +88,8 @@ impl ContextCompressor {
                 let mut compressed_ev = ev.clone();
                 if let Some(val) = compressed_ev.get_mut("snippet") {
                     if let Some(s) = val.as_str() {
-                        if s.len() > 300 {
-                            *val = serde_json::json!(format!("{}... [TRUNCATED]", &s[..300]));
+                        if s.len() > 200 { // Reduced from 300 to 200
+                            *val = serde_json::json!(format!("{}...", &s[..200]));
                         }
                     }
                 }
@@ -105,18 +106,17 @@ impl ContextCompressor {
         if let Some(val) = obj.get_mut("body") {
             if let Some(s) = val.as_str() {
                 if s.len() > body_limit {
-                    *val = serde_json::json!(format!("{}... [TRUNCATED]", &s[..body_limit]));
+                    *val = serde_json::json!(format!("{}...", &s[..body_limit]));
                 }
             }
         }
 
+        // Hardening: Stripping noisy headers to save tokens
         let whitelist = if planner_only {
-            vec!["server", "x-powered-by"]
+            vec![]
         } else {
             vec![
-                "server", "x-powered-by", "content-security-policy", 
-                "x-frame-options", "strict-transport-security", "location",
-                "www-authenticate", "x-content-type-options"
+                "location", "www-authenticate", "x-content-type-options"
             ]
         };
 
@@ -125,7 +125,14 @@ impl ContextCompressor {
 
     fn minify_headers(obj: &mut serde_json::Map<String, serde_json::Value>, whitelist: &[&str]) {
         if let Some(h_obj) = obj.get_mut("headers").and_then(|h| h.as_object_mut()) {
-            h_obj.retain(|k, _| whitelist.contains(&k.to_lowercase().as_str()));
+            h_obj.retain(|k, _| {
+                let key = k.to_lowercase();
+                // Explicitly strip sensitive or noisy headers if they somehow bypass whitelist logic
+                if key.contains("cookie") || key.contains("auth") || key == "user-agent" || key == "server" || key == "x-powered-by" {
+                    return false;
+                }
+                whitelist.contains(&key.as_str())
+            });
         }
     }
 

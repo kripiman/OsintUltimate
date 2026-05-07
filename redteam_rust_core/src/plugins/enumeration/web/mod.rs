@@ -21,6 +21,8 @@ pub mod inql;
 pub mod ppmap;
 pub mod corsy;
 pub mod wcd;
+pub mod oauth_security;
+pub mod wcvs;
 pub mod linkfinder;
 pub mod secretfinder;
 pub mod js_deep;

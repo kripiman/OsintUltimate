@@ -5,6 +5,7 @@ pub mod menu;
 use clap::Parser;
 use std::sync::Arc;
 use std::time::Duration;
+use std::str::FromStr;
 use redteam_rust_core::models::{TargetHost, TargetStatus};
 use redteam_rust_core::core::factory::EngineFactory;
 use redteam_rust_core::core::engine::{RedTeamEngine, app::EngineConfig};
@@ -89,6 +90,8 @@ pub struct Args {
     pub worker: bool,
     #[arg(long, help = "Unique ID for this worker node")]
     pub node_id: Option<String>,
+    #[arg(long, help = "NATS server URL for decentralized mesh")]
+    pub nats_url: Option<String>,
 }
 
 // End of file cleanup
@@ -155,6 +158,9 @@ async fn main() -> Result<()> {
         _ => ScanLayer::Scanning,
     };
 
+    let (dashboard_findings_tx, _) = tokio::sync::broadcast::channel::<redteam_rust_core::models::Finding>(1024);
+    let dashboard_targets = std::sync::Arc::new(dashmap::DashMap::<String, TargetHost>::new());
+
     let engine_config = EngineConfig {
         concurrency,
         ollama_url,
@@ -193,9 +199,11 @@ async fn main() -> Result<()> {
         bugcrowd_api_key: utils_config.bugcrowd_api_key.clone(),
         intigriti_token: utils_config.intigriti_token.clone(),
         bb_program_handle: utils_config.bb_program_handle.clone(),
+        dashboard_tx: Some(dashboard_findings_tx.clone()),
+        dashboard_targets: Some(dashboard_targets.clone()),
     };
 
-    let engine = RedTeamEngine::from_config(engine_config, &utils_config);
+    let engine = RedTeamEngine::from_config(engine_config.clone(), &utils_config);
 
     // --- STEALTH INFRASTRUCTURE SETUP (V14.1) ---
     if let Ok(token) = utils_config.require_do_token() {
@@ -203,11 +211,17 @@ async fn main() -> Result<()> {
 
         // Global Kill-Switch Integration
         let token_clean = token.clone();
+        if let Some(ref nats_url) = args.nats_url {
+            let node_id = args.node_id.clone().unwrap_or_else(|| "local".to_string());
+            let _ = engine.proxy_manager().listen_for_kill_switch(nats_url, &node_id).await;
+        }
+
         let pm_clean = engine.proxy_manager();
         let shutdown_signal = engine.shutdown_token();
         tokio::spawn(async move {
             tokio::signal::ctrl_c().await.ok();
             warn!("⚠️ [KILL-SWITCH] Interrupt detected. Commencing autonomous cleanup of all ephemeral egress nodes...");
+            pm_clean.kill_egress();
             shutdown_signal.cancel();
             let do_client = redteam_rust_core::infrastructure::digital_ocean::DigitalOceanClient::new(token_clean, pm_clean);
             if let Err(e) = do_client.destroy_all_ephemeral_droplets().await {
@@ -234,6 +248,14 @@ async fn main() -> Result<()> {
             engine_config.bb_program_handle.clone(),
         )));
         info!("🚀 [BountySink] Automated platform submission routing attached.");
+    }
+
+    // V14.8: NATS Mesh Sink
+    if let Some(ref nats_url) = args.nats_url {
+        if let Ok(nats_sink) = redteam_rust_core::core::sink::nats_sink::NatsSink::new(nats_url, "mimikri").await {
+            multi_sink.add(Box::new(nats_sink));
+            info!("🔱 [NatsSink] Decentralized mesh routing attached.");
+        }
     }
 
     if let Some(ref db_url) = args.postgres_url {
@@ -272,12 +294,15 @@ async fn main() -> Result<()> {
     }
 
     // --- DASHBOARD ---
+    // V14.2 Injection Channel (for Dashboard and dynamic sources)
+    let (injection_tx, injection_rx) = tokio::sync::mpsc::channel::<TargetHost>(100);
+
     if let Some(port) = args.dashboard {
         use redteam_rust_core::core::web::{DashboardState, DashboardAuth, MissionRequest, generate_dashboard_token};
         use ed25519_dalek::SigningKey;
         use rand::RngCore;
 
-        let (tx, targets) = (tokio::sync::broadcast::channel(1024).0, std::sync::Arc::new(dashmap::DashMap::new()));
+        let (tx, targets) = (dashboard_findings_tx.clone(), dashboard_targets.clone());
 
         let signing_key = SigningKey::generate(&mut rand::rngs::OsRng);
         let mut session_id = [0u8; 16];
@@ -311,10 +336,50 @@ async fn main() -> Result<()> {
         }
 
         let (mission_tx, mut mission_rx) = tokio::sync::mpsc::channel::<MissionRequest>(32);
+        let injection_tx_for_dashboard = injection_tx.clone();
 
         tokio::spawn(async move {
             while let Some(mission) = mission_rx.recv().await {
-                info!("📡 [MISSION-QUEUE] Target={:?} APK={:?} Profile={} Program={}", mission.target, mission.apk, mission.profile, mission.program_name);
+                let target = match mission.target {
+                    Some(t) if !t.is_empty() => t,
+                    _ => {
+                        warn!("⚠️ [MISSION-QUEUE] Received mission without target. Skipping.");
+                        continue;
+                    }
+                };
+
+                info!("📡 [MISSION-QUEUE] Received mission for: {}. Injecting into pipeline...", target);
+                
+                let target_type = if target.contains("://") || target.contains('.') { redteam_rust_core::models::TargetType::Web }
+                else if target.contains(':') { redteam_rust_core::models::TargetType::Network }
+                else { redteam_rust_core::models::TargetType::Host };
+
+                let host = TargetHost {
+                    host: target,
+                    ip: None,
+                    resolved_ip: None,
+                    status: TargetStatus::Pending,
+                    target_type,
+                    file_path: mission.apk,
+                    user: None,
+                    findings: Arc::new(Vec::new()),
+                    tool_suggestions: Arc::new(Vec::new()),
+                    tactical_context: Arc::new(serde_json::json!({
+                        "program_name": mission.program_name,
+                        "in_scope": mission.in_scope,
+                        "out_of_scope": mission.out_of_scope,
+                        "profile": mission.profile,
+                        "stealth": mission.stealth,
+                        "vuln_scan": mission.vuln_scan,
+                        "oob_enabled": mission.oob_enabled,
+                    })),
+                    extra_data: Arc::new(serde_json::json!({})),
+                    version: 0,
+                };
+
+                if let Err(e) = injection_tx_for_dashboard.send(host).await {
+                    error!("❌ [MISSION-QUEUE] Failed to inject target into pipeline: {}", e);
+                }
             }
         });
 
@@ -353,6 +418,7 @@ async fn main() -> Result<()> {
             tool_suggestions: Arc::new(Vec::new()),
             tactical_context: Arc::new(serde_json::json!({})),
             extra_data: Arc::new(serde_json::json!({})),
+            version: 0,
         }]))
     } else if let Some(image_ref) = args.image.clone() {
         Box::pin(futures::stream::iter(vec![TargetHost {
@@ -367,6 +433,7 @@ async fn main() -> Result<()> {
             tool_suggestions: Arc::new(Vec::new()),
             tactical_context: Arc::new(serde_json::json!({})),
             extra_data: Arc::new(serde_json::json!({})),
+            version: 0,
         }]))
     } else if let Some(input_path) = args.input.clone() {
         let file = tokio::fs::File::open(&input_path).await?;
@@ -392,6 +459,7 @@ async fn main() -> Result<()> {
                     user: None,
                     findings: Arc::new(Vec::new()), tool_suggestions: Arc::new(Vec::new()),
                     tactical_context: Arc::new(serde_json::json!({})), extra_data: Arc::new(serde_json::json!({})),
+                    version: 0,
                 }
             })
             .boxed()
@@ -425,16 +493,25 @@ async fn main() -> Result<()> {
             tool_suggestions: Arc::new(Vec::new()),
             tactical_context: Arc::new(serde_json::json!({})),
             extra_data: Arc::new(serde_json::json!({})),
+            version: 0,
         }]))
-    } else if certstream_rx.is_some() {
-        info!("📡 Waiting for real-time targets from CertStream...");
+    } else if certstream_rx.is_some() || args.dashboard.is_some() {
+        info!("📡 Waiting for targets from CertStream or Dashboard...");
         futures::stream::empty().boxed()
     } else {
-        anyhow::bail!("Either --target, --input, --apk, or CERTSTREAM_KEYWORDS must be provided.");
+        anyhow::bail!("Either --target, --input, --apk, --dashboard or CERTSTREAM_KEYWORDS must be provided.");
     };
 
+    // Base stream
+    let mut target_hosts = target_stream;
+
+    // Merge Injection Stream (Dashboard/Internal)
+    let injection_stream = tokio_stream::wrappers::ReceiverStream::new(injection_rx);
+    target_hosts = futures::stream::select(target_hosts, injection_stream).boxed();
+
     // Merge CertStream if active
-    let target_hosts = if let Some(rx) = certstream_rx {
+    if let Some(rx) = certstream_rx {
+        info!("📡 CertStream integration active. Real-time targets will be merged.");
         let cs_stream = tokio_stream::wrappers::ReceiverStream::new(rx)
             .filter(|t: &String| { 
                 let t_clone = t.clone();
@@ -453,12 +530,11 @@ async fn main() -> Result<()> {
                     user: None,
                     findings: Arc::new(Vec::new()), tool_suggestions: Arc::new(Vec::new()),
                     tactical_context: Arc::new(serde_json::json!({})), extra_data: Arc::new(serde_json::json!({})),
+                    version: 0,
                 }
             });
-        futures::stream::select(target_stream, cs_stream).boxed()
-    } else {
-        target_stream
-    };
+        target_hosts = futures::stream::select(target_hosts, cs_stream).boxed();
+    }
 
     // --- EXECUTION ---
     let sink: Box<dyn DataSink> = Box::new(multi_sink);
@@ -511,7 +587,7 @@ async fn run_worker_mode(args: &Args) -> Result<()> {
             info!("📦 [Worker] Claimed job {}: {} ({})", id, host, target_type);
             
             // Re-use engine setup logic from main
-            let mut engine_config = EngineConfig {
+            let engine_config = EngineConfig {
                 concurrency: args.concurrency,
                 insecure: args.insecure,
                 stealth: args.stealth,
@@ -531,6 +607,26 @@ async fn run_worker_mode(args: &Args) -> Result<()> {
                 bugcrowd_api_key: utils_config.bugcrowd_api_key.clone(),
                 intigriti_token: utils_config.intigriti_token.clone(),
                 bb_program_handle: utils_config.bb_program_handle.clone(),
+                scripts: args.scripts.clone(),
+                dns_servers: args.dns_servers.as_ref().map(|s| s.split(',').map(|i| i.trim().to_string()).collect()),
+                doh: args.doh,
+                proxies: args.proxies.as_ref().map(|s| s.split(',').map(|i| i.trim().to_string()).collect()),
+                plugins_dir: args.plugins_dir.clone(),
+                max_layer: ScanLayer::from_str(&args.max_layer).unwrap_or(ScanLayer::Scanning),
+                dashboard_port: args.dashboard,
+                readiness_timeout: std::time::Duration::from_secs(60),
+                proxy_mode: utils_config.proxy_mode,
+                proxy_pool_size: utils_config.proxy_pool_size,
+                mcp_token: utils_config.mcp_token.clone(),
+                mobsf_url: utils_config.mobsf_url.clone(),
+                mobsf_api_key: utils_config.mobsf_api_key.clone(),
+                mobsf_timeout_secs: utils_config.mobsf_timeout_secs,
+                vigil_url: utils_config.vigil_url.clone(),
+                vigil_api_key: utils_config.vigil_api_key.clone(),
+                rebuff_url: utils_config.rebuff_url.clone(),
+                rebuff_api_token: utils_config.rebuff_api_token.clone(),
+                dashboard_tx: None,
+                dashboard_targets: None,
             };
 
             let engine = RedTeamEngine::from_config(engine_config, &utils_config);
@@ -547,6 +643,7 @@ async fn run_worker_mode(args: &Args) -> Result<()> {
                 tool_suggestions: Arc::new(Vec::new()),
                 tactical_context: Arc::new(tactical_context),
                 extra_data: Arc::new(serde_json::json!({})),
+                version: 0,
             };
 
             let mut multi_sink = MultiSink::new();
@@ -563,7 +660,8 @@ async fn run_worker_mode(args: &Args) -> Result<()> {
                 )));
             }
 
-            match engine.run_autopilot(target, Box::new(multi_sink)).await {
+            let target_stream = Box::pin(futures::stream::once(async move { target }));
+            match engine.run_autopilot(target_stream, Box::new(multi_sink)).await {
                 Ok(_) => {
                     info!("✅ [Worker] Completed job {}", id);
                     sqlx::query("UPDATE scan_queue SET status = 'completed', updated_at = NOW() WHERE id = $1")

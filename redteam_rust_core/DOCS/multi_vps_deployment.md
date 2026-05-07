@@ -101,6 +101,23 @@ sudo ufw deny 5432
 
 ---
 
+## 🔱 Fase 4: Descentralización via NATS (Mesh Operativo)
+**Objetivo:** Sincronización en tiempo real de hallazgos y Kill-Switch distribuido.
+
+### Configuración del Bus NATS:
+1. **Desplegar Servidor NATS:** En el VPS 1 (Maestro).
+2. **Conexión de Nodos:**
+   ```bash
+   # En VPS 2 (Worker)
+   ./mimikri --nats-url nats://<IP_TAILSCALE_VPS1>:4222 --node-id node-2 --target targets.txt
+   ```
+
+### Capacidades Distribuidas:
+- **NatsSink:** Los hallazgos se publican instantáneamente en el canal `mimikri.findings.<host>`, permitiendo que cualquier nodo suscrito vea los resultados sin esperar a que termine el escaneo.
+- **Global Kill-Switch:** Si se detecta compromiso en cualquier nodo, la señal de bloqueo de egreso se propaga por NATS, cerrando las comunicaciones de salida en TODA la malla de forma coordinada.
+
+---
+
 ## 📊 Beneficios Esperados
 - **RAM Disponible en VPS 1:** Incremento de ~50%.
 - **Concurrencia:** Aumento de 10 a 25 hilos de escaneo simultáneos.

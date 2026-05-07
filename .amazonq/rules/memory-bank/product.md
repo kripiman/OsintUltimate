@@ -1,39 +1,46 @@
-# OsintUltimate — Product Overview
+# Product Overview
 
 ## Purpose
-OsintUltimate (V14.1 "Sovereign Stealth Protocol") is a production-grade autonomous red team orchestration platform built in Rust. It automates the full offensive security lifecycle — from passive OSINT through active exploitation, post-exploitation, and C2 persistence — under a strict "No-Proxy, No-Traffic" fail-closed egress policy.
+OsintUltimate (v0.1.0 Sovereign) is an autonomous Red Team orchestration platform designed for offensive security operations. It operates as a multi-agent swarm system that performs reconnaissance, vulnerability assessment, and exploitation through a cognitive feedback loop with integrated AI decision-making.
 
 ## Value Proposition
-- **Autonomous Operation**: Multi-agent swarm (Scout, Exploiter, C2-Operator, Planner, GhostReporter) that self-directs through the attack lifecycle without constant human input.
-- **Sovereign OPSEC**: Every network packet is routed through a managed SOCKS5/Shadowsocks/Hysteria egress layer; direct IP exposure is architecturally impossible in stealth mode.
-- **AI-Augmented Decision Making**: Tiered LLM routing (Ollama local → Gemini Flash/GPT-4o-mini → Gemini Pro/Claude 3.5) with token-budget admission control and Wenyan-Ultra compression.
-- **Plugin Ecosystem**: 60+ scanner plugins covering recon, enumeration, exploitation, lateral movement, persistence, compliance, and verification.
+- **Autonomous Operations**: Self-directed multi-agent swarm that decomposes targets into atomic tasks based on tactical cascade priority
+- **AI-Powered Intelligence**: Tiered AI routing (Ollama/Phi for noise filtering, Claude/GPT-4/Kimi for tactical decisions) with CVSS-based exploit planning
+- **Production-Grade Stealth**: Fail-closed egress policies, Docker proxy injection, ephemeral proxychains, and DNS-rebinding protection
+- **Sovereign Data Control**: Lock-free PostgreSQL persistence with asynchronous enrichment to prevent I/O blocking during active operations
+- **Zero Technical Debt**: Hardened through GHOST/STRIKE/BREACH audit cycles with memory bottlenecks and task leaks eradicated
 
 ## Key Features
-| Feature | Description |
-|---|---|
-| Adaptive Posture Management | State-machine: GHOST → STRIKE → BREACH based on detection feedback |
-| Fail-Closed Egress | `ProxyManager::get_client_fail_closed()` — aborts if no healthy proxy |
-| AttackGraph Correlation | DFS-based pathfinding; auto-identifies AD Path-to-DA |
-| Token Budget Admission | Priority-aware `TokenBudget` prevents AI cost runaway |
-| io-uring Native Scanner | Zero-copy SYN packet dispatch for high-throughput port scanning |
-| Lock-Free Sink | `SegQueue`-backed result pipeline; SQLite WAL + JSONL streaming |
-| Dynamic Plugin Loading | Ed25519-signed `.so`/`.dylib` plugins with ABI version enforcement |
-| MCP Server | Model Context Protocol SSE server for IDE/agent integration |
-| Dashboard | Real-time web UI with Ed25519-signed JWT auth |
-| DigitalOcean Autonomous Egress | JIT droplet provisioning with auto-destruction kill-switch |
+
+### 4-Stage Sovereign Engine
+1. **Liveness & Ingestion**: Strict DNS-rebinding protection filtering (is_safe_ip) - no private/local IPs scanned
+2. **Planning (Swarm Orchestrator)**: Task decomposition via Tactical Cascade Priority (Passive Recon → Service Discovery → Active Enum → Exploitation)
+3. **Cognition (AI Router)**: Multi-tier AI processing with Moka caching and Wenyan token optimization
+4. **Execution (Isolated Pipeline)**: Docker-containerized execution of 60+ integrated security tools
+
+### Arsenal Integration
+- **Reconnaissance**: Subfinder, Amass, DNSx, Httpx, Nmap, Masscan
+- **Web Security**: Nuclei, SQLmap, XSStrike, Nikto, Wappalyzer, GraphW00F
+- **Cloud & Infrastructure**: ScoutSuite, Prowler, CloudMapper, Grype, Syft
+- **Exploitation**: Metasploit, Ligolo, CrackQL, Schemathesis
+- **Mobile**: APKTool, JADX, MobSF
+- **Supply Chain**: Retire.js, Cosign verification
+
+### Safety & Control
+- **ApprovalGate**: Integrated approval mechanism for controlled offensive operations
+- **Graceful Kill-Switch**: Ctrl+C triggers graceful shutdown with safe data flush to PostgreSQL
+- **Sandbox Isolation**: All third-party tools execute in isolated Docker containers
 
 ## Target Users
-- **Red Team Operators**: Authorized penetration testers running full-lifecycle engagements.
-- **Bug Bounty Hunters**: Automated recon and vulnerability discovery pipelines.
-- **Security Researchers**: Extensible platform for custom scanner plugin development.
+- Red Team operators conducting authorized penetration testing
+- Security researchers performing vulnerability assessments
+- Bug bounty hunters requiring automated reconnaissance and exploitation workflows
+- Enterprise security teams validating defensive posture
 
 ## Use Cases
-1. **Autonomous Engagement**: `--autonomous` flag activates Sentinel agent; runs discovery → scanning → PoC validation → C2 deployment without intervention.
-2. **Swarm Mode**: `--swarm` distributes work across specialized AI agents with token budgeting.
-3. **Passive OSINT Only**: `--max-layer passive` restricts to zero-traffic certificate transparency, Wayback, Chaos, Netlas, Shodan queries.
-4. **Compliance Audit**: Trivy, Kubescape, Checkov, OSV Scanner plugins for infrastructure hardening.
-5. **AD Enumeration**: BloodHound + AdIngestor + CorrelationEngine for automated Path-to-DA discovery.
-
-## Governance
-All Layer 4+ (Exploitation) and Layer 5 (Post-Exploitation) operations require explicit approval via `ApprovalGate`. Risk score ≥ 70 triggers a mandatory human-in-the-loop halt ("Sovereign Handover").
+- Autonomous reconnaissance and attack surface mapping
+- Vulnerability discovery and exploitation with AI-guided prioritization
+- Multi-target swarm operations with distributed task execution
+- Continuous security monitoring via CertStream integration
+- Supply chain security analysis and SBOM generation
+- Cloud infrastructure security assessment (AWS, Azure, GCP)

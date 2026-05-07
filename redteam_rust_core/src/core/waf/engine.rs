@@ -193,6 +193,7 @@ impl WafEvasionEngine {
             tool_suggestions: Arc::new(Vec::new()),
             tactical_context: Arc::new(serde_json::json!({})),
             extra_data: Arc::new(serde_json::json!({})),
+            version: 0,
         };
 
         let payload = original.body.as_deref().unwrap_or("");

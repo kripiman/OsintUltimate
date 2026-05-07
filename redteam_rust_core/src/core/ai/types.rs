@@ -40,6 +40,7 @@ pub struct CapabilityGap {
     pub recommended_capabilities: Vec<crate::plugins::Capability>,
 }
 
+#[derive(Clone)]
 pub struct ProviderEntry {
     pub kind: LlmProviderKind,
     pub priority: u8, // 0 is highest

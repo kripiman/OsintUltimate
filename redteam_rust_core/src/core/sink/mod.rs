@@ -8,9 +8,11 @@ use flate2::write::GzEncoder;
 use flate2::Compression;
 use std::sync::Arc;
 use std::io::Write;
+use tracing::{info, error};
 use crate::models::{Finding, Severity, ReportPlatform};
 use crate::plugins::reporting::platform_client::PlatformClient;
 use crate::utils::bounty_exporter::BountyExporter;
+pub mod nats_sink;
 
 /// Trait for defining where scan results should be written.
 #[async_trait]
@@ -596,7 +598,7 @@ impl BountySink {
         
         // Use highest severity found
         let max_severity = self.findings.iter()
-            .map(|f| f.core.severity)
+            .map(|f| f.core.severity.clone())
             .max_by_key(|s| match s {
                 Severity::Critical => 4,
                 Severity::High => 3,

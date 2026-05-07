@@ -1,192 +1,385 @@
-# OsintUltimate — Development Guidelines
+# Development Guidelines
 
 ## Code Quality Standards
 
-### Error Handling
-- Use `anyhow::Result` for fallible public functions; `thiserror` for typed domain errors
-- Prefer `context()`/`with_context()` over bare `?` to add call-site information
-- Return `Ok(Vec::new())` from plugins when nothing found; only `Err` on fatal execution failure
-- Use `anyhow::bail!()` for early-exit validation failures
+### Rust Code Formatting
+- **Edition**: Rust 2021 edition exclusively
+- **Linting**: Clippy warnings enabled at crate level (`#![warn(clippy::all)]`)
+- **Async-First**: All I/O operations use async/await with Tokio runtime
+- **Error Handling**: Prefer `anyhow::Result` for application errors, `thiserror` for library errors
+- **Imports**: Group imports logically (std → external crates → internal modules)
 
+### Structural Conventions
+- **Module Organization**: Clear separation between core/, infrastructure/, models/, plugins/, utils/
+- **Trait-Based Design**: Use `#[async_trait]` for async trait methods
+- **Type Safety**: Leverage strong typing with custom types (TargetHost, Finding, etc.)
+- **Visibility**: Default to private, expose only necessary public APIs
+
+### Naming Standards
+- **Variables**: snake_case for all variables and functions
+- **Types**: PascalCase for structs, enums, and traits
+- **Constants**: SCREAMING_SNAKE_CASE for constants
+- **Modules**: snake_case for module names
+- **Descriptive Names**: Use full descriptive names (proxy_manager, not pm; target_host, not th)
+
+### Documentation
+- **Module-Level Docs**: Document purpose and key components at module level
+- **Function Docs**: Document public APIs with examples where appropriate
+- **Inline Comments**: Use sparingly, prefer self-documenting code
+- **Version Tags**: Mark significant changes with version tags (V13, V14, V15)
+
+## Semantic Patterns
+
+### Async Concurrency Patterns
 ```rust
-// Correct pattern
-let path = std::fs::canonicalize(path)
-    .with_context(|| format!("Failed to canonicalize path: {:?}", path))?;
+// Pattern: Concurrent task execution with bounded parallelism
+use futures::stream::{StreamExt, FuturesUnordered};
 
-// Plugin scan: no findings ≠ error
-async fn scan(&self, target: &TargetHost) -> Result<Vec<Finding>> {
-    if !self.check_dependencies().await? { return Ok(vec![]); }
-    // ...
+let tasks: FuturesUnordered<_> = targets
+    .map(|target| async move { process_target(target).await })
+    .collect();
+
+tasks.buffer_unordered(concurrency).collect::<Vec<_>>().await;
+```
+
+### Error Handling Pattern
+```rust
+// Pattern: Context-aware error propagation
+use anyhow::{Context, Result};
+
+async fn operation() -> Result<()> {
+    some_fallible_operation()
+        .await
+        .context("Failed to perform operation")?;
+    Ok(())
 }
 ```
 
-### Async Patterns
-- All I/O must be async (`tokio::fs`, `tokio::process::Command`, `reqwest`)
-- Never use `std::thread::sleep` — always `tokio::time::sleep`
-- Use `tokio::task::spawn_blocking` for CPU-bound or FFI calls
-- Wrap FFI calls with `tokio::time::timeout` + `catch_unwind(AssertUnwindSafe(...))`
-- Use `JoinSet` for parallel plugin execution with panic isolation
-
+### Proxy Management Pattern
 ```rust
-// FFI panic isolation pattern
-let result = tokio::time::timeout(timeout_duration, tokio::task::spawn_blocking(move || {
-    catch_unwind(AssertUnwindSafe(move || { (ffi.scan)(ptr, &target_ffi) }))
-})).await;
+// Pattern: Fail-closed proxy acquisition
+let (proxy_url, client) = proxy_manager
+    .get_client_fail_closed(&host)
+    .context("OPSEC Violation: No proxy available")?;
 ```
 
-### Concurrency & Shared State
-- Use `Arc<DashMap<K, V>>` for concurrent shared maps (never `Mutex<HashMap>` in hot paths)
-- Use `Arc<std::sync::atomic::AtomicU64>` for counters (not `Mutex<u64>`)
-- `crossbeam::queue::ArrayQueue` for bounded lock-free queues
-- `moka::future::Cache` for async TTL caches with capacity limits
-- `once_cell::sync::Lazy` for static initialization of regexes and global singletons
-
+### Lock-Free Concurrency
 ```rust
-// Static regex — compiled once, never in hot path
-static RE_ARTICLES: Lazy<Regex> = Lazy::new(|| Regex::new(r"(?i)\b(the|a|an)\b").unwrap());
+// Pattern: Use DashMap for concurrent access without explicit locking
+use dashmap::DashMap;
 
-// Atomic counter pattern
-pub total_calls: AtomicU32,
-self.total_calls.fetch_add(1, Ordering::Relaxed);
+let cache: Arc<DashMap<String, Value>> = Arc::new(DashMap::new());
+cache.insert(key, value);
+let result = cache.get(&key);
 ```
 
-### Security-First Patterns
-- **Path validation**: Always `canonicalize()` + `starts_with(workspace_root)` before file access
-- **Fail-closed networking**: Use `proxy_manager.get_client_fail_closed(host)?` — never fall back to direct connections
-- **Secret scrubbing**: Pass all data through `SCRUBBER.scrub()` before sending to remote LLMs
-- **Command injection prevention**: Validate all args against forbidden prefixes and shell metacharacters before execution
-- **DNS pinning**: Use `target.pinned_addr()?` (returns `Err` if not resolved) for all network ops
-
+### Caching with Moka
 ```rust
-// Fail-closed client — aborts if no proxy
-let (_, client) = self.proxy_manager.get_client_fail_closed(api_host)
-    .context("OPSEC: No proxy available")?;
+// Pattern: TTL-based caching for expensive operations
+use moka::sync::Cache;
 
-// Path traversal prevention
-if !target_path.starts_with(&workspace_root) {
-    return Err("PATH VIOLATION: outside workspace".into());
+let cache = Cache::builder()
+    .max_capacity(1000)
+    .time_to_idle(Duration::from_secs(3600))
+    .build();
+
+if let Some(cached) = cache.get(&key) {
+    return cached;
 }
+let result = expensive_operation().await?;
+cache.insert(key, result.clone());
 ```
 
-## Structural Conventions
-
-### Plugin Implementation
-Every scanner plugin must implement `ScannerPlugin` trait:
+### Sink Pattern for Data Output
 ```rust
+// Pattern: Trait-based sink abstraction for flexible output
 #[async_trait]
-impl ScannerPlugin for MyScanner {
-    fn name(&self) -> &'static str { "MyScanner" }
-    fn metadata(&self) -> PluginMetadata { /* layer, risk_level, capabilities */ }
-    fn capabilities(&self) -> Vec<Capability> { vec![Capability::VulnerabilityScanning] }
-    async fn check_dependencies(&self) -> Result<bool> { Ok(check_tool_availability("tool").await) }
-    async fn scan(&self, target: &TargetHost) -> Result<Vec<Finding>> { /* ... */ }
+pub trait DataSink: Send + Sync {
+    async fn write(&mut self, target: &TargetHost) -> Result<()>;
+    async fn write_metadata(&mut self, metadata: &ScanMetadata) -> Result<()>;
+    async fn close(&mut self) -> Result<()>;
 }
+
+// Multi-sink composition
+let mut multi_sink = MultiSink::new();
+multi_sink.add(Box::new(JsonlSink::new(path).await?));
+multi_sink.add(Box::new(PostgresSink::new(db_url).await?));
 ```
 
-### Finding Construction
-Always use `Finding::new()` constructor; chain builder methods for optional fields:
+### Stream Processing
 ```rust
-let finding = Finding::new("FINDING-ID", Category::Vulnerability, Severity::High, "description", 
-    serde_json::json!({"key": "value"}))
-    .with_cvss_vector("CVSS:4.0/...")
-    .with_mitre_attack(vec!["T1190".to_string()])
-    .with_execution_context("OBJ-001", "Scout", 1);
+// Pattern: Async stream transformation and filtering
+use futures::stream::{StreamExt, BoxStream};
+
+let stream: BoxStream<'static, TargetHost> = source_stream
+    .filter(|t| async move { validate_target(&t.host) })
+    .map(|t| transform_target(t))
+    .boxed();
 ```
 
-### Named Constructor Pattern
-Provide semantic constructors for configuration types:
+### Graceful Shutdown
 ```rust
-impl ApprovalGate {
-    pub fn for_red_team() -> Self { Self::new(80) }
-    pub fn for_authorized_testing() -> Self { Self::new(100) }
-    pub fn for_compliance() -> Self { Self::new(50) }
-}
-```
+// Pattern: Cancellation token for coordinated shutdown
+use tokio_util::sync::CancellationToken;
 
-### Builder Pattern
-Complex structs use builder pattern with method chaining:
-```rust
-let pipeline = Pipeline::builder()
-    .concurrency(10)
-    .with_sink(sink)
-    .layer_policy(policy)
-    .sandbox(sandbox)
-    .build()?;
-```
+let shutdown_token = CancellationToken::new();
+let token_clone = shutdown_token.clone();
 
-### FFI Safety
-- All FFI structs must be `#[repr(C)]`
-- ABI version check on load: `if version != PLUGIN_ABI_VERSION { bail!(...) }`
-- Use `Box::leak()` to satisfy `&'static str` for plugin names
-- Always call plugin-provided `free_data_fn` and `free_findings_struct` — never `Box::from_raw` on plugin memory
-- Wrap `unsafe` blocks with explicit SAFETY comments
+tokio::spawn(async move {
+    tokio::signal::ctrl_c().await.ok();
+    token_clone.cancel();
+});
 
-## Naming Conventions
-- Types: `PascalCase` — `ProxyManager`, `SwarmOrchestrator`, `TieredAIRouter`
-- Functions/methods: `snake_case` — `get_client_fail_closed`, `run_autopilot`
-- Constants: `SCREAMING_SNAKE_CASE` — `PLUGIN_ABI_VERSION`, `FINDING_TECH_STACK`
-- Modules: `snake_case` — `approval_gate`, `lock_free_sink`
-- Versioning comments: `// V14.1 HARDENING:`, `// V13:`, `// ARCH-10:` prefix for change tracking
-
-## Logging Standards
-Use `tracing` macros with emoji prefixes for visual scanning:
-```rust
-info!("🚀 EXECUTOR: Spawning process: {} {}", binary, args);
-warn!("⚠️ V13: Resolution failed for host {}.", target.host);
-error!("❌ [MCP-RESILIENCIA] Plugin {} failed: {}", plugin_name, e);
-info!("🛡️ [MCP-OPSEC] Interpolating '{}' -> Real: '{}'", masked, real);
-```
-
-Log levels:
-- `info!` — normal operational events, cache hits, plugin execution
-- `warn!` — degraded operation, blacklisted proxies, loop detection
-- `error!` — plugin failures, security violations, kill-switch events
-
-## Testing Patterns
-- Unit tests in `#[cfg(test)] mod tests` at bottom of each file
-- Use `#[tokio::test]` for async tests
-- Use `tempfile::tempdir()` for filesystem tests
-- Test both happy path and error/boundary conditions
-- Assert specific error messages with `.to_string().contains(...)`
-
-```rust
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[tokio::test]
-    async fn test_auto_approval_low_risk() {
-        let gate = ApprovalGate::for_red_team();
-        let result = gate.request_approval("action", 30, &user, "reason").await;
-        assert!(result.is_ok());
-        assert!(result.unwrap().is_none()); // auto-approved
+tokio::select! {
+    _ = shutdown_token.cancelled() => {
+        // Cleanup logic
+    }
+    result = main_task => {
+        // Normal completion
     }
 }
 ```
 
-## Token Optimization Patterns
-The codebase has a pervasive token-efficiency concern for LLM interactions:
-- Use `ContextCompressor::compress_finding(f, route_level)` before sending to AI
-- Apply `PROMPT_OPTIMIZER.optimize(text, OptimizationLevel::Full)` to prose output
-- Use `SCRUBBER.scrub(text)` before any remote LLM call
-- Prefer TONL V1.1 > TONE V1 > JSON for multi-finding output
-- Track savings with `PromptOptimizer::savings_tokens(original, optimized)`
-
-## Strategy Pattern (Optimization Pipeline)
-Internal processing pipelines use the Strategy pattern with a `Vec<Box<dyn Trait>>`:
+### Proxy Wrapping for External Tools
 ```rust
-trait OptimizationStrategy: Send + Sync {
-    fn optimize(&self, input: &str, level: OptimizationLevel) -> String;
-}
-
-pub struct PromptOptimizer {
-    strategies: Vec<Box<dyn OptimizationStrategy>>,
-}
-// Stage order is significant — document it with numbered comments
+// Pattern: Inject proxy configuration into external commands
+let mut args = vec!["--target", target];
+proxy_manager.wrap_command("nmap", &mut args)?;
+// args now includes proxy configuration
 ```
 
-## Versioning & Change Tracking
-- Prefix significant changes with version tags in comments: `// V14.1`, `// ARCH-10`, `// AUDIT-002`
-- Document safety contracts explicitly: `// SAFETY: CStrings kept alive until scan returns`
-- Document OPSEC implications: `// V13 OPSEC Violation: ...`
-- Use `#[non_exhaustive]` on enums that may gain variants (e.g., `PocStrategy`)
+### Database Persistence Pattern
+```rust
+// Pattern: Async database operations with sqlx
+let pool = sqlx::PgPool::connect(&db_url).await?;
+
+let row: (i32,) = sqlx::query_as(
+    "INSERT INTO targets (host, ip) VALUES ($1, $2) RETURNING id"
+)
+.bind(&host)
+.bind(&ip)
+.fetch_one(&pool)
+.await?;
+```
+
+### Health Checking Pattern
+```rust
+// Pattern: Background health checker with abort handle
+let handle = tokio::spawn(async move {
+    loop {
+        tokio::time::sleep(Duration::from_secs(30)).await;
+        perform_health_check().await;
+    }
+});
+self.health_checker_handle = Some(handle.abort_handle());
+
+// Cleanup in Drop
+impl Drop for Manager {
+    fn drop(&mut self) {
+        if let Some(handle) = self.health_checker_handle.take() {
+            handle.abort();
+        }
+    }
+}
+```
+
+## Architectural Approaches
+
+### Tiered AI Routing
+- Tier 0 (Ollama/Phi): High-volume noise filtering and basic analysis
+- Tier 1/2 (Claude/GPT-4/Kimi): Complex tactical decisions and exploit planning
+- Use Moka cache to deduplicate prompts and reduce API costs
+- Token budgeting to prevent runaway costs
+
+### Fail-Closed Security
+- Never allow direct connections when stealth mode is active
+- All external requests must go through proxy_manager
+- Use `get_client_fail_closed()` to enforce proxy requirement
+- DNS-rebinding protection via `is_safe_ip()` checks
+
+### Plugin Isolation
+- Execute third-party tools in Docker containers
+- Use `tokio::process::Command` with `kill_on_drop(true)`
+- Capture stdout/stderr for parsing
+- Timeout enforcement for all plugin executions
+
+### Lock-Free Data Structures
+- Prefer DashMap over Mutex<HashMap> for concurrent access
+- Use Arc for shared ownership without locks
+- Moka cache for TTL-based expiration
+- Atomic operations where possible
+
+### Async Stream Composition
+- Use `futures::stream::select` to merge multiple streams
+- `BoxStream` for type erasure and flexibility
+- `buffer_unordered` for concurrent processing with backpressure
+- `filter_map` for transformation and filtering in one pass
+
+### Modular Sink Architecture
+- Implement DataSink trait for all output destinations
+- MultiSink for broadcasting to multiple outputs
+- Specialized sinks: JsonlSink, PostgresSink, TacticalWebhookSink, BountySink
+- Async flush patterns for batching
+
+## Common Code Idioms
+
+### Mutex Poisoning Recovery
+```rust
+fn lock_proxies(&self) -> std::sync::MutexGuard<'_, Vec<String>> {
+    match self.proxies.lock() {
+        Ok(guard) => guard,
+        Err(poisoned) => {
+            warn!("Mutex poisoned, recovering");
+            poisoned.into_inner()
+        }
+    }
+}
+```
+
+### Environment Variable with Fallback
+```rust
+let ollama_url = std::env::var("OLLAMA_URL")
+    .unwrap_or_else(|_| "http://localhost:11434".to_string());
+```
+
+### Conditional Compilation Features
+```rust
+#[cfg(feature = "sovereign")]
+fn advanced_feature() {
+    // Only compiled when sovereign feature is enabled
+}
+```
+
+### Structured Logging
+```rust
+use tracing::{info, warn, error};
+
+info!("🚀 Starting operation for target: {}", target);
+warn!("⚠️ Proxy pool exhausted, waiting...");
+error!("❌ Failed to connect: {}", e);
+```
+
+### JSON Serialization with Context
+```rust
+let json = serde_json::to_string(&data)
+    .context("Failed to serialize data")?;
+```
+
+### Path Traversal Protection
+```rust
+let path = std::path::Path::new(user_input);
+if path.components().any(|c| matches!(c, std::path::Component::ParentDir)) {
+    anyhow::bail!("Path traversal detected");
+}
+```
+
+### HTML Escaping for Reports
+```rust
+use html_escape::encode_safe;
+
+let safe_host = encode_safe(&target.host).to_string();
+```
+
+### Compression for Network Efficiency
+```rust
+use flate2::write::GzEncoder;
+use flate2::Compression;
+
+let mut encoder = GzEncoder::new(Vec::new(), Compression::default());
+encoder.write_all(&json)?;
+let compressed = encoder.finish()?;
+```
+
+## Testing Practices
+
+### Unit Tests
+- Place tests in `#[cfg(test)]` modules at bottom of files
+- Use `#[tokio::test]` for async tests
+- Test both success and error paths
+- Mock external dependencies where possible
+
+### Integration Tests
+- Separate integration tests in `tests/` directory
+- Test end-to-end workflows
+- Use test fixtures for reproducibility
+
+## Security Practices
+
+### Input Validation
+- Validate all user inputs before processing
+- Use `validate_target()` for target validation
+- Check for path traversal in file operations
+- Sanitize data before database insertion
+
+### Credential Management
+- Never hardcode credentials
+- Load from environment variables via `.env` files
+- Use secure file permissions (0o600) for sensitive files
+- Mask credentials in logs
+
+### SSRF Protection
+```rust
+use crate::utils::security::is_ssrf_safe_host_async;
+
+if !is_ssrf_safe_host_async(&host).await {
+    anyhow::bail!("SSRF protection: Host is not safe");
+}
+```
+
+### Rate Limiting
+- Use adaptive delays based on proxy latency
+- Implement jitter for human-like behavior
+- Respect rate limits from external APIs
+
+## Performance Optimization
+
+### Memory Management
+- Use streaming for large files (avoid loading entire file in memory)
+- Implement bounded channels to prevent unbounded growth
+- Monitor memory usage with sysinfo crate
+- Set capacity hints for collections when size is known
+
+### Database Optimization
+- Use connection pooling (sqlx::PgPool)
+- Batch inserts where possible
+- Use ON CONFLICT for upserts
+- Index frequently queried columns
+
+### Caching Strategy
+- Cache expensive operations (AI inference, CVE lookups)
+- Use TTL to prevent stale data
+- Implement cache warming for predictable access patterns
+- Monitor cache hit rates
+
+## Version Control Practices
+
+### Commit Messages
+- Use conventional commit format
+- Reference issue numbers where applicable
+- Include version tags for major changes (V13, V14, V15)
+
+### Code Review
+- All changes require review before merge
+- Run `cargo clippy` and `cargo test` before submitting
+- Document breaking changes clearly
+- Update relevant documentation
+
+## Deployment Considerations
+
+### Configuration Management
+- Use `.env.oracle` for production configuration
+- Validate all required environment variables at startup
+- Provide sensible defaults where appropriate
+- Document all configuration options
+
+### Logging and Monitoring
+- Use structured logging with tracing
+- Configure log levels via environment variables
+- Integrate OpenTelemetry for distributed tracing
+- Monitor resource usage (CPU, memory, network)
+
+### Error Recovery
+- Implement graceful degradation
+- Retry transient failures with exponential backoff
+- Log errors with sufficient context for debugging
+- Provide clear error messages to users

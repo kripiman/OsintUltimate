@@ -22,17 +22,24 @@ impl<M: ExecutorMode> HavocScanner<M> {
         }
     }
 
-    async fn get_rest_client(&self) -> Result<reqwest::Client> {
-        let server_addr = std::env::var("HAVOC_SERVER").unwrap_or_else(|_| "127.0.0.1".to_string());
+    async fn get_rest_client(&self) -> Result<(String, reqwest::Client)> {
+        let server_hostname = std::env::var("HAVOC_SERVER").unwrap_or_else(|_| "127.0.0.1".to_string());
+        
+        // --- V14.2 HARDENING: DNS Resolve & Pinning ---
+        let addr = tokio::net::lookup_host(format!("{}:8080", server_hostname)).await?
+            .next()
+            .ok_or_else(|| anyhow::anyhow!("C2 DNS resolution failed for {}", server_hostname))?;
+            
         let pm = self.executor.get_proxy_manager()
             .context("Havoc requires a ProxyManager for REST API access")?;
             
-        let (_, client) = if server_addr == "127.0.0.1" || server_addr == "localhost" {
-            pm.get_localhost_client(&server_addr)?
-        } else {
-            pm.get_client_fail_closed(&server_addr)?
-        };
-        Ok(client)
+        let client = crate::utils::stealth_http::StealthClientBuilder::build_pinned_infra(
+            &pm, 
+            &server_hostname, 
+            addr
+        )?;
+        
+        Ok((server_hostname, client))
     }
 }
 
@@ -100,20 +107,39 @@ impl<M: ExecutorMode> C2Operator for HavocScanner<M> {
     }
 
     async fn verify_session(&self, target: &TargetHost) -> Result<SessionState> {
+        info!("🔱 V14.2 SOVEREIGN: Verifying Havoc session for {} with mTLS check...", target.host);
         let sessions = self.list_sessions().await?;
         for sess in sessions {
-            if sess.target.contains(&target.host) || (target.ip.is_some() && sess.target.contains(target.ip.as_ref().unwrap())) {
-                return Ok(SessionState::Sovereign);
+            let external_ip = sess.target.clone();
+            let matches_target = external_ip.contains(&target.host) || (target.ip.is_some() && external_ip.contains(target.ip.as_ref().unwrap()));
+            
+            if matches_target {
+                // --- V14.2 mTLS Fingerprint Verification ---
+                if let Some(expected_fp) = target.tactical_context.get("c2_fingerprint").and_then(|v| v.as_str()) {
+                    let actual_fp = sess.fingerprint.as_deref().unwrap_or("");
+                    
+                    let op = crate::core::c2::typestate::HavocOperator::<crate::core::c2::typestate::Established>::new()
+                        .with_fingerprint(expected_fp.to_string());
+                    
+                    if op.promote(actual_fp).is_ok() {
+                        info!("✅ V14.2 SOVEREIGN: Havoc mTLS fingerprint verified for {}", target.host);
+                        return Ok(SessionState::Sovereign);
+                    } else {
+                        warn!("❌ V14.2 SOVEREIGN: Havoc mTLS Fingerprint MISMATCH for {}.", target.host);
+                        return Ok(SessionState::Established);
+                    }
+                }
+                
+                return Ok(SessionState::Established);
             }
         }
         Ok(SessionState::Staged)
     }
 
     async fn list_sessions(&self) -> Result<Vec<C2Session>> {
-        let client = self.get_rest_client().await?;
+        let (server_hostname, client) = self.get_rest_client().await?;
         
-        let server_url = std::env::var("HAVOC_API_URL").unwrap_or_else(|_| "http://127.0.0.1:8080".to_string());
-        let response = client.get(format!("{}/api/sessions", server_url))
+        let response = client.get(format!("http://{}:8080/api/sessions", server_hostname))
             .send()
             .await;
 
@@ -123,11 +149,15 @@ impl<M: ExecutorMode> C2Operator for HavocScanner<M> {
                 let mut sessions = Vec::new();
                 if let Some(sess_list) = json.as_array() {
                     for s in sess_list {
+                        let id = s.get("AgentID").or_else(|| s.get("ID")).and_then(|v| v.as_str()).unwrap_or("unknown").to_string();
+                        let fp = s.get("CertificateFingerprint").and_then(|v| v.as_str()).map(|s| s.to_string());
+                        
                         sessions.push(C2Session {
-                            id: s.get("AgentID").or_else(|| s.get("ID")).and_then(|v| v.as_str()).unwrap_or("unknown").to_string(),
+                            id,
                             target: s.get("ExternalIP").and_then(|v| v.as_str()).unwrap_or("unknown").to_string(),
                             state: SessionState::Established,
                             last_checkin: chrono::Utc::now(),
+                            fingerprint: fp,
                         });
                     }
                 }
@@ -144,6 +174,7 @@ impl<M: ExecutorMode> C2Operator for HavocScanner<M> {
                         target: l.to_string(),
                         state: SessionState::Established,
                         last_checkin: chrono::Utc::now(),
+                        fingerprint: None,
                     });
                 }
                 Ok(sessions)

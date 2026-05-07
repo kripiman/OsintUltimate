@@ -1,83 +1,133 @@
-# OsintUltimate — Project Structure
+# Project Structure
 
-## Repository Layout
+## Directory Organization
+
+### Root Level
 ```
 OsintUltimate/
-├── redteam_rust_core/       # Main Rust crate (binary + library)
-│   ├── src/
-│   │   ├── main.rs          # CLI entry point, Args parsing, engine bootstrap
-│   │   ├── menu.rs          # Interactive TUI wizard (inquire)
-│   │   ├── lib.rs           # Crate root, re-exports
-│   │   ├── core/            # Engine internals
-│   │   ├── infrastructure/  # External service clients
-│   │   ├── models/          # Data types (Finding, TargetHost, etc.)
-│   │   ├── plugins/         # Scanner plugin implementations
-│   │   └── utils/           # Cross-cutting utilities
-│   ├── Cargo.toml
-│   ├── Dockerfile           # Alpine multi-stage build
-│   ├── docker-compose.yml   # base / privileged / full profiles
-│   └── docs/                # Architecture documentation
-├── skills/                  # MITRE ATT&CK skill JSON files (T1190.json, etc.)
-├── docs/                    # Project-level docs
-├── prompts/                 # Audit/remediation prompt templates
-└── repo_readmes/            # Reference READMEs from similar tools
+├── redteam_rust_core/          # Main Rust application
+├── assets/                      # Visual assets (logos, images)
+├── prompts/                     # AI audit and documentation prompts
+├── repo_readmes/                # Reference documentation from similar projects
+├── scripts/                     # Deployment and utility scripts
+├── skills/                      # MITRE ATT&CK technique definitions
+├── .env.oracle                  # Production environment configuration
+└── README.md                    # Project documentation
 ```
 
-## Core Module Breakdown (`src/core/`)
-| Module | Responsibility |
-|---|---|
-| `engine/app.rs` | `RedTeamEngine` — top-level orchestration, pipeline/autopilot dispatch |
-| `pipeline.rs` | 4-stage pipeline: Discovery → Liveness → Scanning → Sink |
-| `orchestrator.rs` | Concurrent plugin execution via `JoinSet`, memory backpressure |
-| `swarm/` | `SwarmOrchestrator` — multi-agent token-budgeted execution |
-| `agent.rs` | `AutonomousAgent` — adaptive loop, PoC validation, AI decisions |
-| `ai/` | Tiered LLM router, providers, compressor, token optimizer, scrubber |
-| `correlation/` | `CorrelationEngine` + `AttackGraph` DFS, `AdIngestor` |
-| `approval_gate.rs` | Risk-gated human-in-the-loop approval with audit log |
-| `capability_layer.rs` | `ScanLayer` enum (Passive→PostExploitation), `ScanLayerPolicy` |
-| `sandbox.rs` | `SandboxDispatcher` — Docker vs. FluidLocal tier selection |
-| `sink.rs` | `DataSink` trait, `JsonlSink`, `SqliteSink`, `MultiSink`, `TimelineSink` |
-| `lock_free_sink.rs` | `LockFreeResultSink` — `ArrayQueue`-backed batcher |
-| `native_scanner.rs` | `IoUringScanner` — raw SYN packets via io-uring |
-| `mcp/` | Model Context Protocol SSE server |
-| `validation/` | `PocValidator` — AI-driven PoC generation and execution |
-| `policy/` | `PolicyProvider` trait, `StaticPolicy`, RoE enforcement |
-| `middleware.rs` | Command validation chain (TargetScope, FlagSafety, SafeCommand) |
-| `factory.rs` | `EngineFactory` — hardware detection, AI router construction |
-| `persistence.rs` | `PersistenceOrchestrator` — tactical plan generation |
-| `waf/` | WAF detection and evasion strategies |
-| `web/` | Real-time dashboard (axum) |
+### Core Application (`redteam_rust_core/`)
+```
+redteam_rust_core/
+├── src/                         # Source code
+│   ├── core/                    # Core engine components
+│   ├── infrastructure/          # Cloud and proxy infrastructure
+│   ├── models/                  # Data models and types
+│   ├── plugins/                 # Security tool plugins
+│   ├── utils/                   # Utility modules
+│   ├── main.rs                  # Application entry point
+│   ├── lib.rs                   # Library exports
+│   └── menu.rs                  # Interactive CLI menu
+├── DOCS/                        # Technical documentation
+├── tools/                       # Embedded security tools (graphw00f, crackql)
+├── bin/                         # Binary executables and tools
+├── docker/                      # Docker configurations
+├── migrations/                  # PostgreSQL schema migrations
+├── workspace/                   # Runtime workspace (logs, outputs)
+├── Cargo.toml                   # Rust dependencies
+├── package.json                 # Node.js dependencies (retire.js)
+└── docker-compose.yml           # Container orchestration
+```
 
-## Infrastructure (`src/infrastructure/`)
-| Module | Responsibility |
-|---|---|
-| `proxy.rs` | `ProxyManager` — RT-Identity, fail-closed egress, managed exits |
-| `digital_ocean.rs` | `DigitalOceanClient` — JIT droplet provisioning/destruction |
-| `decoy/` | Decoy IP generation for nmap |
+## Core Components
 
-## Plugin Architecture (`src/plugins/`)
-All plugins implement `ScannerPlugin` or `DiscoveryPlugin` traits. Organized by phase:
-- `reconnaissance/` — osint, active (httpx, naabu, dnsx), passive (wayback, trufflehog, gitleaks)
-- `enumeration/` — web (ffuf, nuclei, katana, nikto…), network (nmap, rustscan), cloud (pacu, cloudfox…)
-- `exploitation/` — web (sqlmap, dalfox, commix, jwt_tool), network (hydra, netexec, responder, impacket)
-- `lateral_movement/` — bloodhound, sliver, ligolo
-- `persistence/` — havoc
-- `privilege_escalation/` — certipy, privesc_hunter
-- `intelligence/` — nuclei, jaeles, searchsploit
-- `verification/` — zap, burp, caido
-- `compliance/` — trivy, kubescape, checkov, osv_scanner
-- `ffi.rs` — Ed25519-verified dynamic `.so` plugin loader
+### `src/core/` - Engine Architecture
+- **agent.rs**: Agent behavior and task execution
+- **orchestrator.rs**: Multi-agent swarm coordination
+- **pipeline.rs**: 4-stage processing pipeline
+- **sink.rs / lock_free_sink.rs**: Lock-free data persistence
+- **sandbox.rs**: Docker container isolation
+- **approval_gate.rs**: Safety approval mechanism
+- **resource_manager.rs**: Memory and CPU management
+- **ai/**: AI routing and prompt engineering
+- **swarm/**: Multi-agent coordination logic
+- **engine/**: Core execution engine
+- **policy/**: Security policies and rules
+- **validation/**: Input validation and safety checks
+- **web/**: Web interface and API
 
-## Models (`src/models/`)
-- `findings.rs` — `Finding`, `Severity`, `Category`, `Evidence`, `AIAnalysis`, `PocDefinition`
-- `scan_result.rs` — `TargetHost`, `TargetStatus`, `TargetType`, `ScanMetadata`
-- `objectives.rs` — `Objective`, `OPPLAN` with DFS cycle detection
-- `engagement.rs` — `EngagementState` for mission persistence
-- `constants.rs` — All `FINDING_*` and `PLUGIN_*` string constants
+### `src/infrastructure/` - Cloud & Networking
+- **proxy.rs**: Proxy rotation and management
+- **digital_ocean.rs**: VPS provisioning and rotation
+- **certstream.rs**: Certificate transparency monitoring
+- **decoy/**: Decoy infrastructure for stealth
 
-## Key Architectural Patterns
-1. **Typestate pattern** — `StealthExecutor<GhostMode>` vs `StealthExecutor<BreachMode>` enforced at compile time
-2. **RAII token guards** — `TokenGuard` auto-refunds on panic/drop
-3. **Fail-closed networking** — `get_client_fail_closed()` returns `Err` if no proxy available
-4. **Lock-free concurrency** — `crossbeam::ArrayQueue` for result ingestion, `DashMap` for shared state
-5. **4-stage pipeline** — each stage communicates via bounded `mpsc` channels
+### `src/models/` - Data Structures
+- **findings.rs**: Security finding models
+- **scan_result.rs**: Scan result aggregation
+- **engagement.rs**: Engagement tracking
+- **objectives.rs**: Mission objectives and goals
+- **constants.rs**: System-wide constants
+
+### `src/plugins/` - Security Modules
+- **reconnaissance/**: Passive and active recon
+- **enumeration/**: Service and endpoint enumeration
+- **exploitation/**: Vulnerability exploitation
+- **intelligence/**: Threat intelligence gathering
+- **lateral_movement/**: Network traversal
+- **privilege_escalation/**: Privilege escalation techniques
+- **persistence/**: Persistence mechanisms
+- **detection_evasion/**: Evasion techniques
+- **compliance/**: Compliance checking
+- **verification/**: Result verification
+- **reporting/**: Report generation
+
+### `src/utils/` - Utilities
+- **executor.rs**: Command execution wrapper
+- **liveness.rs**: Target liveness checking
+- **security.rs**: Security utilities (is_safe_ip)
+- **stealth_http.rs**: Stealth HTTP client
+- **cve_cache.rs**: CVE database caching
+- **cvss.rs**: CVSS scoring
+- **telemetry.rs**: OpenTelemetry integration
+- **report_gen.rs**: Report generation
+- **deduplication.rs**: Finding deduplication
+
+## Architectural Patterns
+
+### Multi-Agent Swarm
+- Orchestrator coordinates multiple specialized agents (Scout, Planner, Exploiter)
+- Task decomposition based on Tactical Cascade Priority
+- Token budgeting for AI operations
+- Distributed task queue with PostgreSQL backing
+
+### Async-First Design
+- Tokio runtime for all I/O operations
+- Lock-free data structures (DashMap, lock_free_sink)
+- Async streams for real-time processing
+- Non-blocking persistence layer
+
+### Plugin Architecture
+- Modular plugin system for security tools
+- Docker-based isolation for third-party tools
+- FFI support for native integrations
+- Dynamic plugin loading
+
+### Tiered AI Routing
+- Tier 0: Ollama/Phi for high-volume filtering
+- Tier 1/2: Claude/GPT-4/Kimi for tactical decisions
+- Moka cache for prompt deduplication
+- Wenyan token optimization
+
+### Fail-Closed Security
+- DNS-rebinding protection (is_safe_ip)
+- Approval gates for destructive operations
+- Graceful shutdown with data preservation
+- Audit logging for all operations
+
+## Data Flow
+1. Target ingestion → Liveness validation → Safe IP check
+2. Orchestrator → Task decomposition → Priority assignment
+3. Agent selection → Docker sandbox → Tool execution
+4. Output capture → AI analysis → Finding enrichment
+5. CVE correlation → CVSS scoring → PostgreSQL persistence
+6. Report generation → Export (JSON/HTML/PDF)

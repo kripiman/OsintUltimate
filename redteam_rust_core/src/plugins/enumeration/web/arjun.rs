@@ -98,7 +98,7 @@ impl ScannerPlugin for ArjunScanner {
                     let param_list: Vec<String> = params.iter().filter_map(|p| p.as_str().map(|s| s.to_string())).collect();
                     if !param_list.is_empty() {
                         findings.push(Finding::new(
-                            crate::models::FINDING_TECH_STACK,
+                            crate::models::FINDING_HIDDEN_PARAMS,
                             Category::TechnologyStack,
                             Severity::Info,
                             &format!("Hidden HTTP parameters discovered for {}: {}", url, param_list.join(", ")),

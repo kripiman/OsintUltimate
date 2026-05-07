@@ -18,3 +18,10 @@ impl Default for StealthPolicy {
         }
     }
 }
+impl StealthPolicy {
+    pub fn check_and_kill(&self, pm: &crate::infrastructure::proxy::ProxyManager, violation: bool) {
+        if violation {
+            pm.kill_egress();
+        }
+    }
+}

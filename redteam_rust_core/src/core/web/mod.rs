@@ -55,6 +55,7 @@ pub async fn start_dashboard(state: Arc<state::DashboardState>, port: u16) {
         .route("/login", get(assets::serve_login))
         .route("/:path", get(assets::serve_asset))
         .route("/api/v1/targets", get(handlers::get_targets))
+        .route("/api/v1/targets/:host/findings", get(handlers::get_target_findings))
         .route("/api/v1/stats", get(handlers::get_stats_handler))
         .route("/api/v1/swarm/status", get(handlers::get_swarm_status))
         .route("/api/v1/attack-graph", get(handlers::get_attack_graph))

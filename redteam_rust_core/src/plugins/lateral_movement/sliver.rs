@@ -24,16 +24,23 @@ impl<M: ExecutorMode> SliverScanner<M> {
     }
 
     async fn get_rest_client(&self) -> Result<(String, reqwest::Client)> {
-        let server_addr = std::env::var("SLIVER_SERVER").unwrap_or_else(|_| "127.0.0.1".to_string());
+        let server_hostname = std::env::var("SLIVER_SERVER").unwrap_or_else(|_| "127.0.0.1".to_string());
+        
+        // --- V14.2 HARDENING: DNS Resolve & Pinning ---
+        let addr = tokio::net::lookup_host(format!("{}:31337", server_hostname)).await?
+            .next()
+            .ok_or_else(|| anyhow::anyhow!("C2 DNS resolution failed for {}", server_hostname))?;
+            
         let pm = self.executor.get_proxy_manager()
             .context("Sliver requires a ProxyManager for REST API access")?;
         
-        let (_, client) = if server_addr == "127.0.0.1" || server_addr == "localhost" {
-            pm.get_localhost_client(&server_addr)?
-        } else {
-            pm.get_client_fail_closed(&server_addr)?
-        };
-        Ok((server_addr, client))
+        let client = crate::utils::stealth_http::StealthClientBuilder::build_pinned_infra(
+            &pm, 
+            &server_hostname, 
+            addr
+        )?;
+        
+        Ok((server_hostname, client))
     }
 }
 
@@ -112,7 +119,7 @@ impl<M: ExecutorMode> C2Operator for SliverScanner<M> {
     }
 
     async fn verify_session(&self, target: &TargetHost) -> Result<SessionState> {
-        info!("🔱 V14.1 SOVEREIGN: Verifying session state for {} via HTTP API...", target.host);
+        info!("🔱 V14.2 SOVEREIGN: Verifying session state for {} with mTLS check...", target.host);
         
         let (server_addr, client) = self.get_rest_client().await?;
         
@@ -126,20 +133,39 @@ impl<M: ExecutorMode> C2Operator for SliverScanner<M> {
                 if let Some(sess_list) = sessions.as_array() {
                     for sess in sess_list {
                         let remote_addr = sess.get("remote_address").and_then(|v| v.as_str()).unwrap_or("");
-                        if remote_addr.contains(&target.host) || (target.ip.is_some() && remote_addr.contains(target.ip.as_ref().unwrap())) {
-                            return Ok(SessionState::Sovereign);
+                        let matches_target = remote_addr.contains(&target.host) || (target.ip.is_some() && remote_addr.contains(target.ip.as_ref().unwrap()));
+                        
+                        if matches_target {
+                            // --- V14.2 mTLS Fingerprint Verification ---
+                            if let Some(expected_fp) = target.tactical_context.get("c2_fingerprint").and_then(|v| v.as_str()) {
+                                let actual_fp = sess.get("certificate_fingerprint").and_then(|v| v.as_str()).unwrap_or("");
+                                
+                                // Typestate-style point operation for verification
+                                let op = crate::core::c2::typestate::SliverOperator::<crate::core::c2::typestate::Established>::new()
+                                    .with_fingerprint(expected_fp.to_string());
+                                
+                                if let Ok(_) = op.promote(actual_fp) {
+                                    info!("✅ V14.2 SOVEREIGN: mTLS fingerprint verified for {}", target.host);
+                                    return Ok(SessionState::Sovereign);
+                                } else {
+                                    warn!("❌ V14.2 SOVEREIGN: mTLS Fingerprint MISMATCH for {}. Session is NOT sovereign.", target.host);
+                                    return Ok(SessionState::Established);
+                                }
+                            }
+                            
+                            return Ok(SessionState::Established);
                         }
                     }
                 }
                 Ok(SessionState::Staged)
             }
             _ => {
-                warn!("⚠️ V14.1 SOVEREIGN: REST API unreachable. Falling back to CLI session audit.");
+                warn!("⚠️ V14.2 SOVEREIGN: REST API unreachable. Falling back to CLI session audit (UNVERIFIED).");
                 let output = self.executor.execute_and_wait(&self.binary_path, vec!["sessions".to_string()]).await?;
                 let stdout = String::from_utf8_lossy(&output.stdout);
                 
                 if stdout.contains(&target.host) || (target.ip.is_some() && stdout.contains(target.ip.as_ref().unwrap())) {
-                    Ok(SessionState::Sovereign)
+                    Ok(SessionState::Established) // CLI cannot verify mTLS safely
                 } else {
                     Ok(SessionState::Staged)
                 }
@@ -156,9 +182,10 @@ impl<M: ExecutorMode> C2Operator for SliverScanner<M> {
                     if let Some(list) = sessions_json.as_array() {
                         return Ok(list.iter().map(|s| C2Session {
                             id: s.get("ID").and_then(|v| v.as_str()).unwrap_or("unknown").to_string(),
-                            target: s.get("remote_address").and_then(|v| v.as_str()).unwrap_or("unknown").to_string(),
+                            target: s.get("RemoteAddress").and_then(|v| v.as_str()).unwrap_or("unknown").to_string(),
                             state: SessionState::Established,
                             last_checkin: chrono::Utc::now(),
+                            fingerprint: s.get("CertificateFingerprint").and_then(|v| v.as_str()).map(|s| s.to_string()),
                         }).collect());
                     }
                 }
@@ -177,6 +204,7 @@ impl<M: ExecutorMode> C2Operator for SliverScanner<M> {
                 target: "unknown".to_string(),
                 state: SessionState::Established,
                 last_checkin: chrono::Utc::now(),
+                fingerprint: None,
             });
         }
         Ok(sessions)

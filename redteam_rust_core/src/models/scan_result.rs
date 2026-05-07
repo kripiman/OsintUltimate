@@ -51,7 +51,7 @@ pub enum TargetType {
 pub struct TargetHost {
     pub host: String,
     pub ip: Option<String>,
-    /// V12 HARDENING: Permanent IP pinning for security tools (DNS Rebinding Mitigation).
+    /// HARDENING: Permanent IP pinning for security tools (DNS Rebinding Mitigation).
     #[serde(default)]
     pub resolved_ip: Option<String>,
     pub status: TargetStatus,
@@ -66,31 +66,34 @@ pub struct TargetHost {
     pub tactical_context: Arc<serde_json::Value>,
     #[serde(default = "default_arc_json")]
     pub extra_data: Arc<serde_json::Value>,
+    /// Target version for differential dashboard updates
+    #[serde(default)]
+    pub version: u64,
 }
 
 impl TargetHost {
-    /// V12: Returns the most secure address for network operations (Priority: pinned IP).
-    /// V13: Hardened to force use of resolved_ip for ALL critical operations.
-    /// FALLBACK REMOVED: In V13, we no longer fallback to hostnames to prevent DNS Rebinding.
+    /// Returns the most secure address for network operations (Priority: pinned IP).
+    /// Hardened to force use of resolved_ip for ALL critical operations.
+    /// In this version, we no longer fallback to hostnames to prevent DNS Rebinding.
     pub fn target_addr(&self) -> &str {
         match &self.resolved_ip {
             Some(ip) => ip,
             None => {
                 // Professional Security: Fail-Closed. If not resolved, return the hostname but warn it is unsafe.
                 // In a future version, this will return a Result or panic.
-                warn!("⚠️ V13 SECURITY WARNING: Using UNPINNED address for {}. Possible DNS Rebinding risk.", self.host);
+                warn!("⚠️ SECURITY WARNING: Using UNPINNED address for {}. Possible DNS Rebinding risk.", self.host);
                 self.ip.as_deref().unwrap_or(&self.host)
             }
         }
     }
 
-    /// V13: Force retrieval of a pinned IP or error out. 
+    /// Force retrieval of a pinned IP or error out. 
     /// MANDATORY for all sensitive operations (PoC, Exploits, Scanning) to prevent DNS Rebinding.
     pub fn pinned_addr(&self) -> Result<&str, anyhow::Error> {
         debug_assert!(self.target_type != TargetType::Mobile, "pinned_addr() called on Mobile target");
         self.resolved_ip.as_deref()
             .ok_or_else(|| {
-                anyhow::anyhow!("V13 Security Violation: Operation requires a pinned IP (resolved_ip) to prevent DNS Rebinding. Check Liveness stage.")
+                anyhow::anyhow!("Security Violation: Operation requires a pinned IP (resolved_ip) to prevent DNS Rebinding. Check Liveness stage.")
             })
     }
 
@@ -101,6 +104,13 @@ impl TargetHost {
     pub fn artifact_path(&self) -> Result<&str, anyhow::Error> {
         self.file_path.as_deref()
             .ok_or_else(|| anyhow::anyhow!("Target has no artifact path (Mobile/static scan required file_path)"))
+    }
+
+    pub fn findings_since(&self, version: u64) -> Vec<Finding> {
+        self.findings.iter()
+            .filter(|f| f.version > version)
+            .cloned()
+            .collect()
     }
 }
 

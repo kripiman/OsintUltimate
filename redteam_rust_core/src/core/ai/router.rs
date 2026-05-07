@@ -42,11 +42,14 @@ impl RouterError {
     }
 }
 
+use arc_swap::ArcSwap;
+
 /// Orchestrates multiple LLM clients based on task complexity/severity.
 pub struct TieredAIRouter {
-    pub providers: std::collections::HashMap<RouteLevel, Vec<ProviderEntry>>,
+    pub providers: ArcSwap<std::collections::HashMap<RouteLevel, Vec<ProviderEntry>>>,
     pub skill_manager: Option<Arc<crate::core::skills::SkillManager>>,
     analysis_cache: Cache<String, AIAnalysis>, // TACTICAL CACHE: Prevents Azure credit bleed
+    injection_cache: Cache<String, String>,    // V14.8: Caches skill-injection prompts
     metrics: Arc<CacheMetrics>,
 }
 
@@ -59,11 +62,15 @@ impl Default for TieredAIRouter {
 impl TieredAIRouter {
     pub fn new() -> Self {
         Self {
-            providers: std::collections::HashMap::new(),
+            providers: ArcSwap::from_pointee(std::collections::HashMap::new()),
             skill_manager: None,
             analysis_cache: Cache::builder()
                 .max_capacity(5000)
                 .time_to_live(Duration::from_secs(7200)) // 2h TTL
+                .build(),
+            injection_cache: Cache::builder()
+                .max_capacity(1000)
+                .time_to_live(Duration::from_secs(1800)) // 30m TTL for ephemeral skills
                 .build(),
             metrics: Arc::new(CacheMetrics::default()),
         }
@@ -74,12 +81,15 @@ impl TieredAIRouter {
         self
     }
 
-    pub fn add_provider(&mut self, level: RouteLevel, kind: LlmProviderKind, priority: u8, client: Arc<dyn LlmClient>) {
-        let entry = ProviderEntry { kind, priority, client };
-        let level_providers = self.providers.entry(level).or_default();
-        level_providers.push(entry);
-        // Sort by priority (0 = highest)
-        level_providers.sort_by_key(|p| p.priority);
+    pub fn add_provider(&self, level: RouteLevel, kind: LlmProviderKind, priority: u8, client: Arc<dyn LlmClient>) {
+        self.providers.rcu(|old| {
+            let mut map = old.as_ref().clone();
+            let entry = ProviderEntry { kind, priority, client: client.clone() };
+            let level_providers = map.entry(level).or_default();
+            level_providers.push(entry);
+            level_providers.sort_by_key(|p| p.priority);
+            Arc::new(map)
+        });
     }
 
     fn calculate_finding_cache_key(finding: &Finding, target: &TargetHost) -> String {
@@ -163,8 +173,8 @@ impl TieredAIRouter {
                 2 => RouteLevel::Premium,
                 _ => break,
             };
-
-            if let Some(providers) = self.providers.get(&current_level) {
+            let providers_map = self.providers.load();
+            if let Some(providers) = providers_map.get(&current_level) {
                 // V15: SKILL INJECTION BRIDGE (ENRICHED)
                 let effective_ctx = self.enrich_context_v15(finding, attack_context, current_level, Posture::Ghost, caveman).await;
 
@@ -216,8 +226,8 @@ impl TieredAIRouter {
                 2 => RouteLevel::Premium,
                 _ => break,
             };
-
-            if let Some(providers) = self.providers.get(&current_level) {
+            let providers_map = self.providers.load();
+            if let Some(providers) = providers_map.get(&current_level) {
                 let caveman = adaptive_context.map(|c| c.current_caveman).unwrap_or_default();
                 let posture = adaptive_context.map(|c| c.posture).unwrap_or(Posture::Ghost);
                 
@@ -270,25 +280,38 @@ impl TieredAIRouter {
                 RouteLevel::Premium => 1500,
             };
 
-            let skills = sm.match_for_context(finding, posture, level, budget).await;
-            if !skills.is_empty() {
-                if let Some(injection) = sm.build_injection(&skills, caveman).await {
-                    info!("🧠 [Router] Inyectando {} skills técnicos (Budget: {} tokens, Tier: {:?}).", skills.len(), budget, level);
-                    
-                    let optimized_injection = if caveman >= CavemanLevel::Ultra {
-                        PROMPT_OPTIMIZER.optimize(&injection, OptimizationLevel::Ultra)
-                    } else if caveman == CavemanLevel::Lite {
-                        PROMPT_OPTIMIZER.optimize(&injection, OptimizationLevel::Lite)
+            // V14.8 Hardening: Cache skill-injection to prevent redundant heavy optimization
+            let cache_key = format!("inj:{:?}:{:?}:{:?}:{}", level, posture, caveman, finding.core.id);
+            
+            let optimized_injection = if let Some(cached) = self.injection_cache.get(&cache_key) {
+                cached
+            } else {
+                let skills = sm.match_for_context(finding, posture, level, budget).await;
+                if !skills.is_empty() {
+                    if let Some(injection) = sm.build_injection(&skills, caveman).await {
+                        let optimized = if caveman >= CavemanLevel::Ultra {
+                            PROMPT_OPTIMIZER.optimize(&injection, OptimizationLevel::Ultra)
+                        } else if caveman == CavemanLevel::Lite {
+                            PROMPT_OPTIMIZER.optimize(&injection, OptimizationLevel::Lite)
+                        } else {
+                            PROMPT_OPTIMIZER.optimize(&injection, OptimizationLevel::Full)
+                        };
+                        self.injection_cache.insert(cache_key.clone(), optimized.clone()).await;
+                        optimized
                     } else {
-                        PROMPT_OPTIMIZER.optimize(&injection, OptimizationLevel::Full)
-                    };
-
-                    effective_ctx = Some(match effective_ctx {
-                        Some(ctx) => format!("{}\n{}", optimized_injection, ctx),
-                        None => optimized_injection,
-                    });
+                        return effective_ctx;
+                    }
+                } else {
+                    return effective_ctx;
                 }
-            }
+            };
+
+            info!("🧠 [Router] Inyectando skills técnicos (Tier: {:?}, Cached: {}).", level, self.injection_cache.get(&cache_key).is_some());
+            
+            effective_ctx = Some(match effective_ctx {
+                Some(ctx) => format!("{}\n{}", optimized_injection, ctx),
+                None => optimized_injection,
+            });
         }
         
         effective_ctx

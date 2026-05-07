@@ -186,6 +186,7 @@ impl<M: ExecutorMode> Pipeline<M> {
                                     tool_suggestions: Arc::new(Vec::new()),
                                     tactical_context: Arc::new(serde_json::json!({})),
                                     extra_data: Arc::new(serde_json::json!({})),
+                                    version: 0,
                                 }).await;
                             }
                         }

@@ -54,6 +54,9 @@ pub fn show_menu() -> Result<Option<Args>> {
         mcp_port: 3001,
         persist: false,
         consolidate: false,
+        worker: false,
+        node_id: None,
+        nats_url: None,
     };
 
     if is_mobile {

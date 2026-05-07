@@ -1,5 +1,5 @@
 use axum::{
-    extract::{State, Path},
+    extract::{State, Path, Query},
     response::sse::{Event, KeepAlive, Sse},
     response::Response,
     body::Body,
@@ -17,21 +17,52 @@ use super::state::{DashboardState, ValidatedOperator};
 use super::models::{DashboardStats, ExportRequest, MissionRequest, SwarmAgentStatus, SwarmStatusResponse};
 use crate::utils::bounty_exporter::BountyExporter;
 
+#[derive(serde::Deserialize)]
+pub struct TargetsQuery {
+    pub since: Option<u64>,
+}
+
 pub async fn get_targets(
     _auth: ValidatedOperator,
+    Query(query): Query<TargetsQuery>,
     State(state): State<Arc<DashboardState>>
 ) -> Json<Vec<serde_json::Value>> {
-    let targets: Vec<serde_json::Value> = state.targets.iter().map(|kv| {
-        let t = kv.value();
-        serde_json::json!({
-            "host": t.host,
-            "ip": t.ip,
-            "status": format!("{:?}", t.status),
-            "findings_count": t.findings.len(),
-            "target_type": format!("{:?}", t.target_type),
-        })
-    }).collect();
+    let since = query.since.unwrap_or(0);
+    let targets: Vec<serde_json::Value> = state.targets.iter()
+        .filter(|kv| kv.value().version > since)
+        .map(|kv| {
+            let t = kv.value();
+            serde_json::json!({
+                "host": t.host,
+                "ip": t.ip,
+                "status": format!("{:?}", t.status),
+                "findings_count": t.findings.len(),
+                "target_type": format!("{:?}", t.target_type),
+                "version": t.version,
+                "new_findings": t.findings_since(since),
+            })
+        }).collect();
     Json(targets)
+}
+
+pub async fn get_target_findings(
+    _auth: ValidatedOperator,
+    Path(host): Path<String>,
+    Query(query): Query<TargetsQuery>,
+    State(state): State<Arc<DashboardState>>
+) -> impl IntoResponse {
+    let since = query.since.unwrap_or(0);
+    let target = match state.targets.get(&host) {
+        Some(t) => t,
+        None => return (StatusCode::NOT_FOUND, "Target not found").into_response(),
+    };
+    
+    let findings: Vec<crate::models::Finding> = target.findings.iter()
+        .filter(|f| f.version > since)
+        .cloned()
+        .collect();
+        
+    Json(findings).into_response()
 }
 
 pub async fn findings_stream(

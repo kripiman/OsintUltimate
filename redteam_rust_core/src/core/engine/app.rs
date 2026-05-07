@@ -56,6 +56,8 @@ pub struct EngineConfig {
     pub bugcrowd_api_key: Option<String>,
     pub intigriti_token: Option<String>,
     pub bb_program_handle: Option<String>,
+    pub dashboard_tx: Option<tokio::sync::broadcast::Sender<crate::models::Finding>>,
+    pub dashboard_targets: Option<Arc<dashmap::DashMap<String, TargetHost>>>,
 }
 
 use crate::utils::executor::{StealthExecutor, ExecutorMode};
@@ -403,6 +405,10 @@ impl<M: ExecutorMode> RedTeamEngine<M> {
                     builder = builder.with_plugin(plugin);
                 }
             }
+        }
+
+        if let (Some(tx), Some(targets)) = (&self.config.dashboard_tx, &self.config.dashboard_targets) {
+            builder = builder.with_dashboard(tx.clone(), targets.clone());
         }
 
         builder

@@ -23,6 +23,33 @@ impl StealthClientBuilder {
             .context("Failed to build Pinned Stealth HTTP Client")
     }
 
+    pub fn build_pinned_infra(pm: &ProxyManager, host: &str, addr: std::net::SocketAddr) -> Result<Client> {
+        Self::create_builder_infra(pm, &crate::plugins::detection_evasion::stealth_policy::StealthPolicy::default())?
+            .resolve(host, addr)
+            .build()
+            .context("Failed to build Pinned Stealth Infrastructure Client")
+    }
+
+    fn create_builder_infra(pm: &ProxyManager, policy: &crate::plugins::detection_evasion::stealth_policy::StealthPolicy) -> Result<reqwest::ClientBuilder> {
+        let mut headers = HeaderMap::new();
+        let ua = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36";
+        headers.insert(reqwest::header::USER_AGENT, HeaderValue::from_str(ua)?);
+        
+        headers.entry(reqwest::header::ACCEPT).or_insert(HeaderValue::from_static("text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7"));
+        headers.entry(reqwest::header::ACCEPT_LANGUAGE).or_insert(HeaderValue::from_static("en-US,en;q=0.9"));
+
+        let mut builder = Client::builder()
+            .default_headers(headers)
+            .timeout(Duration::from_secs(30))
+            .danger_accept_invalid_certs(true);
+
+        if policy.ja3_spoofing {
+            builder = builder.use_rustls_tls(); 
+        }
+        
+        pm.configure_client_builder(builder)
+    }
+
     fn create_builder(target: &TargetHost, pm: &ProxyManager, policy: &crate::plugins::detection_evasion::stealth_policy::StealthPolicy) -> Result<reqwest::ClientBuilder> {
         let mut headers = HeaderMap::new();
         

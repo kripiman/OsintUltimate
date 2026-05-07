@@ -5,3 +5,4 @@ pub mod osv_scanner;
 pub mod syft;
 pub mod grype;
 pub mod cosign;
+pub mod semgrep;

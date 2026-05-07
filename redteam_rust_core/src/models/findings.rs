@@ -12,6 +12,18 @@ pub enum Severity {
     Critical,
 }
 
+impl Severity {
+    pub fn as_char(&self) -> char {
+        match self {
+            Severity::Info => 'I',
+            Severity::Low => 'L',
+            Severity::Medium => 'M',
+            Severity::High => 'H',
+            Severity::Critical => 'C',
+        }
+    }
+}
+
 impl fmt::Display for Severity {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "{:?}", self)
@@ -170,6 +182,8 @@ pub struct CoreFinding {
     pub tactical_path: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub parent_id: Option<String>,
+    #[serde(default)]
+    pub version: u64,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
@@ -294,6 +308,16 @@ impl Finding {
         self
     }
 
+    pub fn enrich_with_cvss(&mut self) {
+        if self.enrichment.cvss_score.is_none() {
+            let cvss = crate::utils::cvss::Cvss31::from_severity(&self.core.severity);
+            self.enrichment.cvss_score = Some(cvss.score);
+            self.enrichment.cvss_vector = Some(cvss.vector);
+            self.enrichment.cvss_version = "3.1".to_string();
+        }
+    }
+
+
     pub fn to_markdown(&self) -> String {
         let mut md = String::new();
         md.push_str(&format!("# Finding: {}\n\n", self.core.title));
@@ -384,6 +408,7 @@ impl FindingBuilder {
                 timestamps: chrono::Utc::now(),
                 tactical_path: None,
                 parent_id: None,
+                version: 0,
             },
             evidence: FindingEvidence::default(),
             enrichment: FindingEnrichment {

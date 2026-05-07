@@ -100,6 +100,13 @@ impl<M: ExecutorMode> StealthExecutor<M> {
         self.policy.validate_command(binary, &args)
             .context("V14.1 Security Block: Command failed policy validation.")?;
 
+        // 1.1 Egress Circuit Breaker Check
+        if let Some(ref pm) = self.proxy_manager {
+            if pm.is_egress_killed() {
+                anyhow::bail!("[EGRESS-KILL] Outbound blocked by circuit breaker for tool: {}", binary);
+            }
+        }
+
         info!("🚀 EXECUTOR: Policy verified for '{}'. Preparing execution...", binary);
 
         // 2. Stealth Wrapping (Proxy Integration)

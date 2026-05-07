@@ -23,6 +23,7 @@ rand_distr = "0.4"
 quick-xml = { version = "0.31", features = ["serialize"] }
 dashmap = "5.5"
 moka = { version = "0.10", features = ["future"] }
+arc-swap = "1.7"
 crossbeam = "0.8"
 bloomfilter = "1.0"
 which = "4.4"
@@ -95,6 +96,7 @@ tokio-socks = "0.5.2"
 zip = "8.5.1"
 cvss = "2.2.0"
 toml = "1.1.2"
+async-nats = "0.35"
 
 # Persistence & Swarm
 # RocksDB and Chitchat removed as they were not used in the final v4.0 architecture and caused build failures.

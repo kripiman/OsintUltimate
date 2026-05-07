@@ -55,6 +55,13 @@ Persistencia de alta velocidad basada en **Lock-Free Concurrency**:
 - ebhooks tácticos de forma asíncrona.
 - **Graceful Shutdown**: El sistema utiliza `CancellationToken` para garantizar que todos los buffers se vacíen a disco antes de finalizar el proceso, incluso tras una interrupción.
 
+### Sincronización Diferencial y Malla NATS (V14.8+)
+
+Para despliegues de alto volumen y multi-nodo, el motor implementa un sistema de estado sincronizado:
+- **Versioning de Hallazgos**: Cada hallazgo recibe un número de versión secuencial. El dashboard utiliza el parámetro `?since` para realizar sincronizaciones diferenciales (diff-only), descargando solo lo nuevo y reduciendo el ancho de banda en un 90%.
+- **NatsSink (Mesh Architecture)**: En lugar de depender de una única DB, los nodos pueden publicar hallazgos en un bus NATS distribuido. Esto permite una arquitectura de "Malla de Reconocimiento" donde el estado se propaga instantáneamente entre todos los operadores.
+- **Global Kill-Switch Synchronization**: Mediante suscripción NATS, cualquier nodo puede emitir una orden de "Egress Lock" que paraliza todas las comunicaciones de salida de la red Mimikri de forma inmediata ante una detección de compromiso.
+
 ---
 
 ## 3. Seguridad de Plugins y Aislamiento

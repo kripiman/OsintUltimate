@@ -45,6 +45,9 @@ pub const FINDING_APK_DISCOVERED: &str = "APK-DISCOVERED";
 pub const FINDING_MOBILE_TAINT_FLOW: &str = "MOBILE-TAINT-FLOW";
 pub const FINDING_MOBILE_RUNTIME_VULN: &str = "MOBILE-RUNTIME-VULN";
 pub const FINDING_CLOUD_METADATA: &str = "CLOUD-METADATA";
+pub const FINDING_SOURCE_CODE_EXPOSED: &str = "SOURCE-CODE-EXPOSED";
+pub const FINDING_JAVA_SERIAL: &str = "JAVA-SERIAL";
+pub const FINDING_OBJECT_INJECTION: &str = "OBJECT-INJECTION";
 
 // API/GraphQL Security
 pub const FINDING_GRAPHQL_SUGGESTIONS: &str = "GRAPHQL-SUGGESTIONS";
@@ -155,6 +158,8 @@ pub const PLUGIN_REBUFF: &str = "RebuffScanner";
 pub const PLUGIN_SCOUTSUITE: &str = "ScoutSuiteScanner";
 pub const PLUGIN_MODELSCAN: &str = "ModelScanScanner";
 pub const PLUGIN_VIGIL: &str = "VigilScanner";
+pub const PLUGIN_SEMGREP: &str = "SemgrepScanner";
+pub const PLUGIN_DESERIALIZATION: &str = "DeserializationScanner";
 
 // OOB Verification Defaults
 pub const OOB_DEFAULT_POLL_INTERVAL_MS: u64 = 5000;

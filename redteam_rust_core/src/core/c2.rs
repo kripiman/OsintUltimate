@@ -17,6 +17,7 @@ pub struct C2Session {
     pub target: String,
     pub state: SessionState,
     pub last_checkin: chrono::DateTime<chrono::Utc>,
+    pub fingerprint: Option<String>,
 }
 
 #[async_trait]
@@ -36,25 +37,124 @@ pub trait C2Operator: Send + Sync {
 }
 
 pub mod typestate {
+    use super::*;
+    use std::marker::PhantomData;
+
     pub struct Staged;
     pub struct Deployed;
     pub struct Established;
     pub struct Sovereign;
 
     pub struct SliverOperator<S> {
-        pub state: std::marker::PhantomData<S>,
-        // Add common fields here
+        pub state: PhantomData<S>,
+        pub expected_fingerprint: Option<String>,
     }
 
-    impl Default for SliverOperator<Staged> {
-        fn default() -> Self {
-            Self::new()
+    pub struct HavocOperator<S> {
+        pub state: PhantomData<S>,
+        pub expected_fingerprint: Option<String>,
+    }
+
+    impl<S> SliverOperator<S> {
+        pub fn with_fingerprint(mut self, fingerprint: String) -> Self {
+            self.expected_fingerprint = Some(fingerprint);
+            self
+        }
+    }
+
+    impl<S> HavocOperator<S> {
+        pub fn with_fingerprint(mut self, fingerprint: String) -> Self {
+            self.expected_fingerprint = Some(fingerprint);
+            self
         }
     }
 
     impl SliverOperator<Staged> {
         pub fn new() -> Self {
-            Self { state: std::marker::PhantomData }
+            Self { state: PhantomData, expected_fingerprint: None }
+        }
+
+        pub fn deploy(self) -> SliverOperator<Deployed> {
+            SliverOperator { state: PhantomData, expected_fingerprint: self.expected_fingerprint }
+        }
+    }
+
+    impl SliverOperator<Deployed> {
+        pub fn new() -> Self {
+            Self { state: PhantomData, expected_fingerprint: None }
+        }
+
+        pub fn establish(self) -> SliverOperator<Established> {
+            SliverOperator { state: PhantomData, expected_fingerprint: self.expected_fingerprint }
+        }
+    }
+
+    impl SliverOperator<Established> {
+        pub fn new() -> Self {
+            Self { state: PhantomData, expected_fingerprint: None }
+        }
+
+        pub fn promote(self, actual_fingerprint: &str) -> Result<SliverOperator<Sovereign>, String> {
+            if let Some(ref expected) = self.expected_fingerprint {
+                if expected == actual_fingerprint {
+                    Ok(SliverOperator { state: PhantomData, expected_fingerprint: self.expected_fingerprint })
+                } else {
+                    Err(format!("mTLS Fingerprint mismatch! Expected {}, got {}", expected, actual_fingerprint))
+                }
+            } else {
+                Err("No expected fingerprint configured for Sovereign promotion".to_string())
+            }
+        }
+    }
+
+    impl SliverOperator<Sovereign> {
+        pub fn new() -> Self {
+            Self { state: PhantomData, expected_fingerprint: None }
+        }
+    }
+
+    impl HavocOperator<Staged> {
+        pub fn new() -> Self {
+            Self { state: PhantomData, expected_fingerprint: None }
+        }
+
+        pub fn deploy(self) -> HavocOperator<Deployed> {
+            HavocOperator { state: PhantomData, expected_fingerprint: self.expected_fingerprint }
+        }
+    }
+
+    impl HavocOperator<Deployed> {
+        pub fn new() -> Self {
+            Self { state: PhantomData, expected_fingerprint: None }
+        }
+
+        pub fn establish(self) -> HavocOperator<Established> {
+            HavocOperator { state: PhantomData, expected_fingerprint: self.expected_fingerprint }
+        }
+    }
+
+    impl HavocOperator<Established> {
+        pub fn new() -> Self {
+            Self { state: PhantomData, expected_fingerprint: None }
+        }
+
+        pub fn promote(self, actual_fingerprint: &str) -> Result<HavocOperator<Sovereign>, String> {
+            if let Some(ref expected) = self.expected_fingerprint {
+                if expected == actual_fingerprint {
+                    Ok(HavocOperator { state: PhantomData, expected_fingerprint: self.expected_fingerprint })
+                } else {
+                    Err(format!("Havoc mTLS Fingerprint mismatch! Expected {}, got {}", expected, actual_fingerprint))
+                }
+            } else {
+                // If no fingerprint is configured, we allow promotion but mark it as a policy choice
+                Ok(HavocOperator { state: PhantomData, expected_fingerprint: None })
+            }
+        }
+    }
+
+    impl HavocOperator<Sovereign> {
+        pub fn new() -> Self {
+            Self { state: PhantomData, expected_fingerprint: None }
         }
     }
 }

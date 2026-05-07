@@ -48,6 +48,10 @@ Estas herramientas se ejecutan en la Etapa 2 (Discovery) para mapear la superfic
 | **CertStream** | Real-Time | Descubrimiento en vivo de certificados CT (Caza de subdominios). |
 | **Waymore** | Passive | Descubrimiento masivo de URLs históricas y parámetros. |
 | **AlterX** | Active | Generación inteligente de permutaciones de subdominios. |
+| **GitHub Dorks** | Recon / Passive | Escaneo automatizado de fugas de datos en GitHub mediante dorks específicos. |
+| **H2C Smuggler** | Exploit / Web | Detección de HTTP/2 Cleartext smuggling para bypass de proxies y WAFs. |
+
+---
 
 ---
 
@@ -115,7 +119,11 @@ Ataques dirigidos ejecutados bajo confirmación o en modo autónomo si la polít
 
 ### Escalada de Privilegios (PrivEsc)
 *   **Certipy:** Abuso de servicios de certificados en Active Directory (ADCS).
-*   **Privesc Hunter:** Automatización de rutas de escalada local (LinPEAS/WinPEAS wrappers).
+| **Privesc Hunter** | PrivEsc | Automatización de rutas de escalada local (LinPEAS/WinPEAS wrappers). |
+| **ScareCrow** | Evasion | (Sovereign) Framework de obfuscación de payloads para evadir EDRs modernos. |
+| **Donut** | Evasion | (Sovereign) Generador de shellcode posicionalmente independiente para evasión avanzada. |
+
+---
 
 ---
 
