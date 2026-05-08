@@ -63,6 +63,17 @@ pub struct Config {
     pub azure_openai_key: Option<String>,
     pub azure_openai_endpoint: Option<String>,
     pub clairvoyance_wordlist_path: Option<String>,
+    pub shuffledns_resolvers_path: Option<String>,
+    pub shuffledns_wordlist_path: Option<String>,
+    pub ssrfmap_path: Option<String>,
+    pub nosqlmap_path: Option<String>,
+    pub ghauri_path: Option<String>,
+    pub gopherus_path: Option<String>,
+    pub kxss_path: Option<String>,
+    pub s3scanner_path: Option<String>,
+    pub s3scanner_wordlist_path: Option<String>,
+    pub shuffledns_path: Option<String>,
+    pub massdns_path: Option<String>,
 }
 
 impl Config {
@@ -165,6 +176,17 @@ impl Config {
             azure_openai_key: env::var("AZURE_OPENAI_KEY").ok(),
             azure_openai_endpoint: env::var("AZURE_OPENAI_ENDPOINT").ok(),
             clairvoyance_wordlist_path: env::var("CLAIRVOYANCE_WORDLIST").ok(),
+            shuffledns_resolvers_path: env::var("SHUFFLEDNS_RESOLVERS").ok(),
+            shuffledns_wordlist_path: env::var("SHUFFLEDNS_WORDLIST").ok(),
+            ssrfmap_path: env::var("SSRFMAP_PATH").ok(),
+            nosqlmap_path: env::var("NOSQLMAP_PATH").ok(),
+            ghauri_path: env::var("GHAURI_PATH").ok(),
+            gopherus_path: env::var("GOPHERUS_PATH").ok(),
+            kxss_path: env::var("KXSS_PATH").ok(),
+            s3scanner_path: env::var("S3SCANNER_PATH").ok(),
+            s3scanner_wordlist_path: env::var("S3SCANNER_WORDLIST").ok(),
+            shuffledns_path: env::var("SHUFFLEDNS_PATH").ok(),
+            massdns_path: env::var("MASSDNS_PATH").ok(),
         }
     }
 

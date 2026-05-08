@@ -27,6 +27,7 @@
             <li data-tab="approvals">⚖️ Approvals</li>
             <li data-tab="launch">🚀 Launch Mission</li>
             <li data-tab="export">📤 Export Report</li>
+            <li data-tab="ecosystem">🌐 Tactical Ecosystem</li>
         </ul>
         <div class="sidebar-status">
             <div class="status-item">
@@ -282,6 +283,32 @@
                         </button>
                     </div>
                     <div id="export-status" style="margin-top:1rem;font-size:0.8rem;display:none"></div>
+                </div>
+            </div>
+
+            <!-- Ecosystem -->
+            <div class="tab-pane" id="ecosystem">
+                <div class="card">
+                    <h3>Tactical Dashboard Integrations</h3>
+                    <p style="font-size:0.8rem;color:var(--text-dim);margin-bottom:2rem">Direct access to the Mimikri auxiliary toolset. Links will open in a new tab.</p>
+                    
+                    <div class="grid" style="grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));">
+                        <!-- Caido -->
+                        <div class="mini-card" style="cursor:pointer; transition: transform 0.2s; height: 160px; display:flex; flex-direction:column; justify-content:center; align-items:center; border-color: rgba(0, 163, 255, 0.3);" onclick="window.open('http://localhost:8080', '_blank')">
+                            <span class="label">TACTICAL ANALYST WORKBENCH</span>
+                            <span class="value" style="color:#00a3ff; font-size:1.4rem; margin-top:10px">CAIDO</span>
+                            <p style="font-size:0.7rem; color:var(--text-dim); margin-top:10px; text-align:center">Manual verification & proxy interception</p>
+                        </div>
+
+                        <!-- MobSF -->
+                        <div class="mini-card" style="cursor:pointer; transition: transform 0.2s; height: 160px; display:flex; flex-direction:column; justify-content:center; align-items:center; border-color: rgba(255, 140, 0, 0.3);" onclick="window.open('http://localhost:8000', '_blank')">
+                            <span class="label">MOBILE SECURITY FRAMEWORK</span>
+                            <span class="value" style="color:#ff8c00; font-size:1.4rem; margin-top:10px">MobSF</span>
+                            <p style="font-size:0.7rem; color:var(--text-dim); margin-top:10px; text-align:center">Static & Dynamic APK/IPA Analysis</p>
+                        </div>
+
+                        <!-- Add more here -->
+                    </div>
                 </div>
             </div>
         </section>

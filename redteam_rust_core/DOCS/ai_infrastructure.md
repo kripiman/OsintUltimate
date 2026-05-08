@@ -1,15 +1,15 @@
 # 🧠 Infraestructura IA & Prompt Engineering
 
-OsintUltimate implementa una capa de abstracción de IA de alto rendimiento diseñada para maximizar la precisión técnica mientras se minimiza el costo operativo y la latencia. El sistema utiliza un motor de enrutamiento por niveles (Tiered Routing) y una tubería de optimización de tokens de 10 etapas.
+OsintUltimate implementa capa abstracción IA alto rendimiento. Maximiza precisión técnica, minimiza costo + latencia. Usa motor enrutamiento por niveles (Tiered Routing) + tubería optimización tokens 10 etapas.
 
 ## 1. Enrutamiento por Niveles (Tiered Routing)
 
-El `TieredAIRouter` actúa como el despachador central, clasificando cada hallazgo y tarea según su complejidad técnica y severidad.
+`TieredAIRouter` = despachador central. Clasifica cada hallazgo/tarea por complejidad técnica + severidad.
 
 ### Estrategia de Selección de Tiers
-*   **Tier 2 (Premium)**: Utilizado para análisis críticos de vulnerabilidades de alto impacto (CVSS ≥ 8.5) y planes de persistencia C2 avanzados. Modelos: GPT-4o, Claude 3.5 Sonnet.
-*   **Tier 1 (Mid)**: Balance óptimo entre costo y razonamiento para tareas de escaneo activo y análisis de configuración (CVSS 5.0 - 8.4). Modelos: GPT-3.5 Turbo, Gemini 1.5 Flash.
-*   **Tier 0 (Local)**: Prioridad máxima para privacidad y bajo costo en tareas de análisis de código fuente y reconocimiento masivo. Modelos: Ollama (Llama 3 / CodeLlama), Microsoft Phi-3.
+*   **Tier 2 (Premium)**: análisis críticos vulns alto impacto (CVSS ≥ 8.5) + planes persistencia C2 avanzados. Modelos: GPT-4o, Claude 3.5 Sonnet.
+*   **Tier 1 (Mid)**: balance costo/razonamiento para escaneo activo + análisis config (CVSS 5.0 - 8.4). Modelos: GPT-3.5 Turbo, Gemini 1.5 Flash.
+*   **Tier 0 (Local)**: máx privacidad + bajo costo para análisis código fuente + recon masivo. Modelos: Ollama (Llama 3 / CodeLlama), Microsoft Phi-3.
 
 ```mermaid
 graph TD
@@ -27,35 +27,35 @@ graph TD
 
 ## 2. Optimización de Tokens de 10 Etapas
 
-Para reducir el "bleed" de créditos API y permitir contextos masivos, OsintUltimate utiliza el **v13 Deterministic Prompt Optimizer**. Este motor procesa los prompts a través de diez transformaciones sucesivas.
+Reduce "bleed" créditos API + permite contextos masivos. OsintUltimate usa **v13 Deterministic Prompt Optimizer**. Motor procesa prompts vía diez transformaciones sucesivas.
 
 ### Etapas de Optimización
-1.  **Extractive Compressor**: Puntúa cada línea según su señal técnica (Keywords como `proxy`, `payload`, `vuln`) y elimina las de baja relevancia.
-2.  **Entropy Pruner**: Elimina adverbios de baja entropía (e.g., "basically", "actually") que no aportan valor operativo.
-3.  **Verbosity Reducer**: Colapsa frases verbales largas (e.g., "in order to" -> "to").
-4.  **Article Stripper**: Elimina artículos definidos e indefinidos (a, an, the).
-5.  **Filler Remover**: Limpia palabras de cortesía o relleno innecesario.
-6.  **Synonym Mapper**: Abrevia términos técnicos largos (e.g., `vulnerability` -> `vuln`).
-7.  **Suffix Lemmatizer**: Elimina sufijos gramaticales (-ing, -ed, -ly) con una heurística de detección de código endurecida para prevenir la corrupción de contextos técnicos.
-8.  **Punctuation Pruner**: (Modo Ultra) Elimina puntuación no estructural.
-9.  **Wenyan Ultra**: (Modo Ultra) Sustituye términos técnicos comunes por glifos CJK de un solo carácter (e.g., `security` -> `安`).
-10. **Deduplicator**: Pase final para eliminar redundancias introducidas por las etapas anteriores.
+1.  **Extractive Compressor**: puntúa cada línea por señal técnica (keywords `proxy`, `payload`, `vuln`). Elimina baja relevancia.
+2.  **Entropy Pruner**: elimina adverbios baja entropía (e.g., "basically", "actually"). No aportan valor operativo.
+3.  **Verbosity Reducer**: colapsa frases verbales largas (e.g., "in order to" -> "to").
+4.  **Article Stripper**: elimina artículos (a, an, the).
+5.  **Filler Remover**: limpia palabras cortesía/relleno.
+6.  **Synonym Mapper**: abrevia términos técnicos largos (e.g., `vulnerability` -> `vuln`).
+7.  **Suffix Lemmatizer**: elimina sufijos (-ing, -ed, -ly). Heurística detección código endurecida previene corrupción contextos técnicos.
+8.  **Punctuation Pruner**: (Modo Ultra) elimina puntuación no estructural.
+9.  **Wenyan Ultra**: (Modo Ultra) sustituye términos técnicos comunes por glifos CJK uno-carácter (e.g., `security` -> `安`).
+10. **Deduplicator**: pase final, elimina redundancias de etapas previas.
 
 ### Resultados de Compresión
-*   **Lite Mode**: ~15-20% de ahorro (Lectura humana intacta).
-*   **Full Mode**: ~40-60% de ahorro (Legible para LLMs modernos).
-*   **Ultra Mode (Wenyan)**: ~80% de ahorro (Optimizado para agentes autónomos V15).
+*   **Lite Mode**: ~15-20% ahorro (lectura humana intacta).
+*   **Full Mode**: ~40-60% ahorro (legible para LLMs modernos).
+*   **Ultra Mode (Wenyan)**: ~80% ahorro (optimizado agentes autónomos V15).
 
 ---
 
 ## 3. Inyección de Habilidades Técnicas (SkillManager)
 
-A diferencia de los prompts estáticos, OsintUltimate utiliza un sistema de **RAG Técnico** para inyectar conocimientos específicos de Red Team (TTPs) en el momento justo del análisis.
+A diferencia de prompts estáticos, OsintUltimate usa **RAG Técnico**. Inyecta conocimiento Red Team (TTPs) en momento justo del análisis.
 
 ### Flujo de Habilidades
-*   **Matching**: El `SkillManager` selecciona fragmentos de conocimiento basados en la categoría del hallazgo y la postura actual (`Ghost`, `Strike`, `Breach`).
-*   **Dynamic Budgeting**: El presupuesto de tokens para habilidades se escala según el Tier del modelo (más contexto para modelos Premium).
-*   **Surgical Injection**: Las habilidades se inyectan como "bloques de experto" que dictan la lógica de decisión del agente sin necesidad de re-entrenamiento.
+*   **Matching**: `SkillManager` selecciona fragmentos según categoría hallazgo + postura actual (`Ghost`, `Strike`, `Breach`).
+*   **Dynamic Budgeting**: presupuesto tokens skills escala según Tier modelo (más contexto para Premium).
+*   **Surgical Injection**: skills inyectadas como "bloques experto". Dictan lógica decisión agente sin re-entrenamiento.
 
 ```mermaid
 sequenceDiagram
@@ -76,22 +76,22 @@ sequenceDiagram
 
 ## 4. OPSEC & Privacidad (PII Scrubbing)
 
-Antes de que cualquier dato llegue a proveedores de IA externos (Azure/OpenAI/Anthropic), el `Scrubber` procesa la información para proteger la infraestructura:
+Antes que data llegue a proveedores IA externos (Azure/OpenAI/Anthropic), `Scrubber` procesa info para proteger infra:
 
-- **Identity Masking**: Reemplaza nombres de usuarios, IPs internas y paths sensibles por placeholders sintéticos.
-- **Credential Stripping**: Elimina automáticamente tokens, API keys y hashes detectados en el contexto de ataque.
-- **Tactical Cache**: Utiliza una caché **LRU (moka)** para evitar enviar el mismo hallazgo crítico a la IA varias veces, protegiendo tanto el presupuesto como la exposición de datos y garantizando la consistencia del contexto bajo carga masiva.
+- **Identity Masking**: reemplaza nombres usuarios, IPs internas, paths sensibles con placeholders sintéticos.
+- **Credential Stripping**: elimina tokens, API keys, hashes detectados en contexto ataque.
+- **Tactical Cache**: caché **LRU (moka)** evita reenviar mismo hallazgo crítico a IA. Protege presupuesto + exposición datos. Garantiza consistencia contexto bajo carga masiva.
 
 ---
 
 > [!IMPORTANT]
-> El modo **Wenyan Ultra** está diseñado exclusivamente para interacción máquina-máquina. Los operadores que deseen leer los logs de IA en lenguaje natural deben configurar el nivel de optimización en `Lite` o `Off`.
+> Modo **Wenyan Ultra** = exclusivo interacción máquina-máquina. Operadores que quieran leer logs IA en lenguaje natural deben usar nivel `Lite` o `Off`.
 
 ---
 
 ## 5. External AI Tool Token Strategy (Garak / PyRIT / Promptfoo / etc)
 
-Plugins ofensivos AI/LLM (`exploitation/ai_llm/*`) ejecutan binarios externos que generan **adversarial prompts** contra targets LLM. Estos prompts NO deben optimizarse — wording exacto = sagrado para test integrity.
+Plugins ofensivos AI/LLM (`exploitation/ai_llm/*`) ejecutan binarios externos. Generan **adversarial prompts** contra targets LLM. Estos prompts NO se optimizan — wording exacto = sagrado para test integrity.
 
 ### 5.1 Decisión arquitectónica: NO Bridge Optimizer
 
@@ -104,13 +104,13 @@ Plugins ofensivos AI/LLM (`exploitation/ai_llm/*`) ejecutan binarios externos qu
 - Reproducibility broken → CVE/bounty reports inválidos.
 - Optimizer domain = chat compression, NOT adversarial vector mutation.
 
-**Conclusión:** prompts de ataque pasan through unchanged. Optimization happens en **scan configuration**, no en payload content.
+**Conclusión:** prompts ataque pasan unchanged. Optimization en **scan configuration**, no en payload content.
 
 ---
 
 ### 5.2 Strategy A+B+C — Smart Scan Profiles
 
-Tres palancas de ahorro real **sin tocar payloads**:
+Tres palancas ahorro real **sin tocar payloads**:
 
 | Lever | Mechanism | Typical Saving |
 |---|---|---|
@@ -118,7 +118,7 @@ Tres palancas de ahorro real **sin tocar payloads**:
 | **B. Model tier** | `gpt-4o-mini` vs `gpt-4` (target side) | 10-200× |
 | **C. Generation cap** | `--generations 3` vs default 10 | 3× |
 
-Combinados → **150-30000× cost reduction** vs full default scan, sin perder coverage crítico.
+Combinados → **150-30000× cost reduction** vs full default scan. Coverage crítico intacto.
 
 ---
 
@@ -198,16 +198,16 @@ let profile = match pct_remaining {
 };
 ```
 
-Override via CLI flag: `--ai-profile thorough` (forces, ignores budget) — guarded by Sovereign feature gate.
+Override CLI: `--ai-profile thorough` (forces, ignores budget) — guarded by Sovereign feature gate.
 
 ---
 
 ### 5.6 Response Cache Layer
 
-Compatible con strategy (no payload mutation). Key = `hash(target_url + prompt + model)`. TTL = 24h. Stored vía existing `moka` LRU cache (sección 4 Tactical Cache pattern).
+Compatible con strategy (no payload mutation). Key = `hash(target_url + prompt + model)`. TTL = 24h. Usa `moka` LRU cache existente (sección 4 Tactical Cache pattern).
 
 **Saves on rerun scenarios:**
-- Re-running same probe against same target during dev/debug.
+- Re-running same probe vs same target durante dev/debug.
 - Multi-plugin overlap (Garak + PromptInject ambos usan `ignore_previous_instructions` corpus).
 
 ```rust
@@ -216,13 +216,13 @@ if let Some(cached) = ai_response_cache.get(&key) {
 }
 ```
 
-Cache invalidation: target endpoint version change → bust by including target's response to a probe canary in key.
+Cache invalidation: target endpoint version change → bust por incluir response del target a probe canary en key.
 
 ---
 
 ### 5.7 Cost Telemetry
 
-Plugin emits token-cost estimate to `TokenBudget` POST scan:
+Plugin emite token-cost estimate a `TokenBudget` POST scan:
 
 ```rust
 budget.add_usage(&TokenUsage {
@@ -232,7 +232,7 @@ budget.add_usage(&TokenUsage {
 });
 ```
 
-Estimation formula per tool documented en plugin source. Source-of-truth for budget enforcement → next scan reads updated budget → escalates to lower profile.
+Fórmula estimación per tool documentada en plugin source. Source-of-truth para budget enforcement → next scan lee budget actualizado → escala a profile menor.
 
 ---
 
@@ -243,4 +243,4 @@ Estimation formula per tool documented en plugin source. Source-of-truth for bud
 **Never:** mutate adversarial prompts mid-flight. Test integrity > token savings.
 
 > [!IMPORTANT]
-> AI/LLM scanning costs scale **multiplicatively**: probes × generations × target_model_price. A `Thorough` scan against GPT-4 = ~$50-200 USD per target. Always confirm budget tier before launching `--ai-profile thorough`.
+> AI/LLM scanning costs escalan **multiplicativo**: probes × generations × target_model_price. `Thorough` scan vs GPT-4 = ~$50-200 USD per target. Confirma budget tier antes de lanzar `--ai-profile thorough`.

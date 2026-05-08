@@ -1,133 +1,113 @@
-# Project Structure
+# OsintUltimate - Project Structure
 
 ## Directory Organization
-
-### Root Level
 ```
 OsintUltimate/
-├── redteam_rust_core/          # Main Rust application
-├── assets/                      # Visual assets (logos, images)
-├── prompts/                     # AI audit and documentation prompts
-├── repo_readmes/                # Reference documentation from similar projects
-├── scripts/                     # Deployment and utility scripts
-├── skills/                      # MITRE ATT&CK technique definitions
-├── .env.oracle                  # Production environment configuration
-└── README.md                    # Project documentation
-```
-
-### Core Application (`redteam_rust_core/`)
-```
-redteam_rust_core/
-├── src/                         # Source code
-│   ├── core/                    # Core engine components
-│   ├── infrastructure/          # Cloud and proxy infrastructure
-│   ├── models/                  # Data models and types
-│   ├── plugins/                 # Security tool plugins
-│   ├── utils/                   # Utility modules
-│   ├── main.rs                  # Application entry point
-│   ├── lib.rs                   # Library exports
-│   └── menu.rs                  # Interactive CLI menu
-├── DOCS/                        # Technical documentation
-├── tools/                       # Embedded security tools (graphw00f, crackql)
-├── bin/                         # Binary executables and tools
-├── docker/                      # Docker configurations
-├── migrations/                  # PostgreSQL schema migrations
-├── workspace/                   # Runtime workspace (logs, outputs)
-├── Cargo.toml                   # Rust dependencies
-├── package.json                 # Node.js dependencies (retire.js)
-└── docker-compose.yml           # Container orchestration
+├── .amazonq/rules/memory-bank/          # Memory bank documentation
+├── .github/workflows/                   # CI/CD pipelines
+├── assets/                              # Static assets (images, logos)
+├── prompts/                             # AI prompt templates
+├── redteam_rust_core/                   # Main Rust application
+│   ├── bin/                            # Binary tools and utilities
+│   ├── config/                         # Configuration files
+│   ├── docker/                         # Docker configurations
+│   ├── DOCS/                           # Technical documentation
+│   ├── migrations/                     # Database migrations
+│   ├── src/                            # Source code
+│   │   ├── core/                       # Core engine components
+│   │   ├── infrastructure/             # Infrastructure modules
+│   │   ├── models/                     # Data models
+│   │   ├── plugins/                    # Plugin system
+│   │   └── utils/                      # Utility functions
+│   ├── tools/                          # External security tools
+│   ├── workspace/logs/                 # Log files
+│   └── Cargo.toml                      # Rust dependencies
+├── repo_readmes/                       # External repository documentation
+├── scratch/                            # Temporary files
+├── scripts/                            # Shell scripts
+└── skills/                             # Skill definitions
 ```
 
 ## Core Components
 
-### `src/core/` - Engine Architecture
-- **agent.rs**: Agent behavior and task execution
-- **orchestrator.rs**: Multi-agent swarm coordination
-- **pipeline.rs**: 4-stage processing pipeline
-- **sink.rs / lock_free_sink.rs**: Lock-free data persistence
-- **sandbox.rs**: Docker container isolation
-- **approval_gate.rs**: Safety approval mechanism
-- **resource_manager.rs**: Memory and CPU management
-- **ai/**: AI routing and prompt engineering
-- **swarm/**: Multi-agent coordination logic
-- **engine/**: Core execution engine
-- **policy/**: Security policies and rules
-- **validation/**: Input validation and safety checks
-- **web/**: Web interface and API
+### 1. Main Application (`redteam_rust_core/`)
+- **Language**: Rust (2021 edition)
+- **Architecture**: Async-first, high-performance red team engine
+- **Build System**: Cargo with feature flags (bug-bounty, sovereign, mobile, ai-redteam)
 
-### `src/infrastructure/` - Cloud & Networking
-- **proxy.rs**: Proxy rotation and management
-- **digital_ocean.rs**: VPS provisioning and rotation
-- **certstream.rs**: Certificate transparency monitoring
-- **decoy/**: Decoy infrastructure for stealth
+### 2. Source Code Structure (`src/`)
+- **`core/`**: Core engine components (orchestrator, AI router, MCP server)
+- **`infrastructure/`**: Infrastructure modules (database, networking, caching)
+- **`models/`**: Data models and schemas
+- **`plugins/`**: Plugin system for tool integration
+- **`utils/`**: Utility functions and helpers
 
-### `src/models/` - Data Structures
-- **findings.rs**: Security finding models
-- **scan_result.rs**: Scan result aggregation
-- **engagement.rs**: Engagement tracking
-- **objectives.rs**: Mission objectives and goals
-- **constants.rs**: System-wide constants
+### 3. Documentation (`DOCS/`)
+- **`engine_core.md`**: 4-Stage architecture specification
+- **`stealth_opsec.md`**: Stealth execution and OPSEC guidelines
+- **`ai_infrastructure.md`**: AI tiered routing and token optimization
+- **`swarm_intelligence.md`**: Multi-agent tactical roles
+- **`plugins_and_tools.md`**: Complete arsenal of 60+ security tools
 
-### `src/plugins/` - Security Modules
-- **reconnaissance/**: Passive and active recon
-- **enumeration/**: Service and endpoint enumeration
-- **exploitation/**: Vulnerability exploitation
-- **intelligence/**: Threat intelligence gathering
-- **lateral_movement/**: Network traversal
-- **privilege_escalation/**: Privilege escalation techniques
-- **persistence/**: Persistence mechanisms
-- **detection_evasion/**: Evasion techniques
-- **compliance/**: Compliance checking
-- **verification/**: Result verification
-- **reporting/**: Report generation
-
-### `src/utils/` - Utilities
-- **executor.rs**: Command execution wrapper
-- **liveness.rs**: Target liveness checking
-- **security.rs**: Security utilities (is_safe_ip)
-- **stealth_http.rs**: Stealth HTTP client
-- **cve_cache.rs**: CVE database caching
-- **cvss.rs**: CVSS scoring
-- **telemetry.rs**: OpenTelemetry integration
-- **report_gen.rs**: Report generation
-- **deduplication.rs**: Finding deduplication
+### 4. Infrastructure Components
+- **Docker Integration**: Tool execution in isolated containers
+- **PostgreSQL**: Primary data persistence
+- **MCP Server**: Model Context Protocol integration
+- **Async Runtime**: Tokio-based async execution
 
 ## Architectural Patterns
 
-### Multi-Agent Swarm
-- Orchestrator coordinates multiple specialized agents (Scout, Planner, Exploiter)
-- Task decomposition based on Tactical Cascade Priority
-- Token budgeting for AI operations
-- Distributed task queue with PostgreSQL backing
+### 1. 4-Stage Sovereign Engine
+```
+Liveness & Ingestion → Planning → Cognition → Execution → Persistence
+```
 
-### Async-First Design
-- Tokio runtime for all I/O operations
-- Lock-free data structures (DashMap, lock_free_sink)
-- Async streams for real-time processing
-- Non-blocking persistence layer
+### 2. Multi-Agent Swarm Architecture
+- **Scout Agents**: Passive reconnaissance and discovery
+- **Planner Agents**: Task decomposition and prioritization
+- **Exploiter Agents**: Active exploitation and vulnerability testing
+- **AI Router**: Tiered AI system for decision-making
 
-### Plugin Architecture
-- Modular plugin system for security tools
-- Docker-based isolation for third-party tools
-- FFI support for native integrations
-- Dynamic plugin loading
+### 3. Plugin System
+- **Docker-based Isolation**: Each tool runs in isolated containers
+- **Standardized Interfaces**: Consistent plugin API
+- **Tool Orchestration**: Parallel execution with resource management
 
-### Tiered AI Routing
-- Tier 0: Ollama/Phi for high-volume filtering
-- Tier 1/2: Claude/GPT-4/Kimi for tactical decisions
-- Moka cache for prompt deduplication
-- Wenyan token optimization
+### 4. Data Flow
+```
+Target Input → DNS Safety Check → Task Decomposition → AI Analysis → 
+Tool Execution → Result Processing → PostgreSQL Storage → Reporting
+```
 
-### Fail-Closed Security
-- DNS-rebinding protection (is_safe_ip)
-- Approval gates for destructive operations
-- Graceful shutdown with data preservation
-- Audit logging for all operations
+## Key Files and Their Roles
 
-## Data Flow
-1. Target ingestion → Liveness validation → Safe IP check
-2. Orchestrator → Task decomposition → Priority assignment
-3. Agent selection → Docker sandbox → Tool execution
-4. Output capture → AI analysis → Finding enrichment
-5. CVE correlation → CVSS scoring → PostgreSQL persistence
-6. Report generation → Export (JSON/HTML/PDF)
+### Configuration Files
+- **`Cargo.toml`**: Rust dependencies and build configuration
+- **`.env.oracle`**: Environment variables (API keys, tokens)
+- **`docker-compose.yml`**: Docker orchestration
+- **`config/programs.json.example`**: Tool configuration template
+
+### Core Source Files
+- **`src/main.rs`**: Application entry point and CLI interface
+- **`src/core/orchestrator.rs`**: Main orchestration logic
+- **`src/core/mcp/server.rs`**: MCP server implementation
+- **`src/core/ai/token_optimizer.rs`**: AI token optimization
+- **`src/lib.rs`**: Library exports and module organization
+
+### Database
+- **`migrations/`**: PostgreSQL schema migrations
+- **Async Storage**: Lock-free PostgreSQL operations
+- **Data Enrichment**: CVE data integration with findings
+
+## Build Features
+- **`bug-bounty`**: Default mode for normal operations
+- **`sovereign`**: Full APT mode with C2/persistence capabilities
+- **`mobile`**: Mobile security testing features
+- **`ai-redteam`**: AI-powered red team operations
+
+## Development Workflow
+1. **Environment Setup**: Configure `.env.oracle` with API keys
+2. **Build**: `cargo build --release` or `cargo build --features sovereign`
+3. **Database**: Run PostgreSQL migrations
+4. **Execution**: Run with target and autonomous flags
+5. **Monitoring**: Check logs in `workspace/logs/`

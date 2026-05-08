@@ -1,205 +1,204 @@
-# Technology Stack
+# OsintUltimate - Technology Stack
 
-## Programming Languages
-- **Rust 2021 Edition**: Core engine implementation
-- **Python 3.x**: Embedded tools (graphw00f)
-- **JavaScript/Node.js**: Supply chain analysis (retire.js)
+## Core Technologies
 
-## Core Dependencies
+### Programming Languages
+- **Primary**: Rust (2021 edition)
+- **Build System**: Cargo
+- **Version**: Stable Rust toolchain
 
-### Async Runtime & Concurrency
-- **tokio 1.28** (full features): Async runtime foundation
-- **futures 0.3**: Future combinators and utilities
-- **async-trait 0.1**: Async trait support
-- **crossbeam 0.8**: Lock-free concurrent data structures
-- **async-stream 0.3.6**: Async stream macros
+### Runtime & Async
+- **Async Runtime**: Tokio 1.28 (full features)
+- **Futures**: futures 0.3
+- **Async Traits**: async-trait 0.1
+
+### Serialization & Data Handling
+- **JSON**: serde_json 1.0
+- **Serialization**: serde 1.0 with derive features
+- **Dates**: chrono 0.4 with serde support
+- **UUID**: uuid 1.4 (v4, serde)
+- **URL Parsing**: url 2.4
+- **Regex**: regex 1.9
+- **Random**: rand 0.8, rand_distr 0.4
+- **XML**: quick-xml 0.31 with serialize
+- **Caching**: moka 0.10 with future support
+- **Concurrent Maps**: dashmap 5.5
+- **Atomic Reference**: arc-swap 1.7
+- **Concurrency**: crossbeam 0.8
+- **Bloom Filters**: bloomfilter 1.0
 
 ### Networking & HTTP
-- **reqwest 0.11**: HTTP client with rustls-tls, gzip, socks, multipart
-- **axum 0.7**: Web framework for API and UI
-- **tower-http 0.5**: HTTP middleware (CORS, tracing, file serving)
-- **tower_governor 0.8.0**: Rate limiting
-- **tokio-tungstenite 0.21**: WebSocket client (CertStream)
-- **tokio-socks 0.5.2**: SOCKS proxy support
-- **hickory-resolver 0.24**: DNS resolution with DoH support
-
-### Data Structures & Caching
-- **dashmap 5.5**: Concurrent HashMap
-- **moka 0.10**: High-performance caching with TTL
-- **bloomfilter 1.0**: Probabilistic deduplication
-- **siphasher 0.3**: Fast hashing
-
-### Serialization & Data Formats
-- **serde 1.0**: Serialization framework
-- **serde_json 1.0**: JSON support
-- **quick-xml 0.31**: XML parsing with serialization
-- **toml 1.1.2**: TOML configuration parsing
-
-### Database & Persistence
-- **sqlx 0.7**: Async PostgreSQL driver with compile-time query checking
-  - Features: runtime-tokio-rustls, postgres, chrono, macros, json
-- **migrations/**: SQL schema migrations for PostgreSQL
+- **HTTP Client**: reqwest 0.11 (json, rustls-tls, gzip, stream, socks, multipart)
+- **DNS Resolution**: hickory-resolver 0.24 (tokio-rustls, system-config, dns-over-https-rustls)
+- **WebSocket**: tokio-tungstenite 0.21 with rustls-tls-webpki-roots
+- **High-Perf Networking**: io-uring 0.7, smoltcp 0.11
+- **Sockets**: socket2 0.5, tokio-socks 0.5.2
+- **NATS**: async-nats 0.35
 
 ### CLI & User Interface
-- **clap 4.3**: Command-line argument parsing with derive macros
-- **indicatif 0.17**: Progress bars and spinners
-- **inquire 0.6**: Interactive prompts
+- **CLI Framework**: clap 4.3 with derive
+- **Progress Bars**: indicatif 0.17
+- **Interactive Prompts**: inquire 0.6
 
 ### Logging & Observability
-- **tracing 0.1**: Structured logging framework
-- **tracing-subscriber 0.3**: Log formatting with env-filter and json
-- **tracing-opentelemetry 0.22**: OpenTelemetry integration
-- **opentelemetry 0.21**: Distributed tracing
-- **opentelemetry-otlp 0.14**: OTLP exporter
+- **Structured Logging**: tracing 0.1, tracing-subscriber 0.3
+- **OpenTelemetry**: tracing-opentelemetry 0.22, opentelemetry 0.21
+- **OTLP Export**: opentelemetry-otlp 0.14
+- **gRPC**: tonic 0.9
+- **Middleware**: tower 0.4
 
 ### Error Handling
-- **anyhow 1.0**: Flexible error handling
-- **thiserror 1.0**: Custom error types with derive macros
+- **Any Error**: anyhow 1.0
+- **Custom Errors**: thiserror 1.0
 
 ### Cryptography & Security
-- **ed25519-dalek 2.1**: EdDSA signatures
-- **sha2 0.10**: SHA-2 hashing
-- **base64 0.21**: Base64 encoding/decoding
-- **hex 0.4**: Hex encoding/decoding
+- **Digital Signatures**: ed25519-dalek 2.1 with rand_core
+- **Encoding**: hex 0.4, base64 0.21
+- **Hashing**: sha2 0.10
+- **CVSS Scoring**: cvss 2.2.0
 
 ### File System & Templating
-- **tempfile 3.8**: Temporary file management
-- **walkdir 2.3**: Recursive directory traversal
-- **handlebars 4.3**: Template engine for reports
-- **rust-embed 8.4**: Embed static assets in binary
-- **mime_guess 2.0**: MIME type detection
+- **Temporary Files**: tempfile 3.8
+- **Directory Walking**: walkdir 2.3
+- **Templating**: handlebars 4.3
+- **IO Utilities**: tokio-util 0.7.18
+- **Path Resolution**: which 4.4
+- **System Info**: sysinfo 0.30.5
+- **Compression**: flate2 1.0.28, zip 8.5.1
 
-### Utilities
-- **chrono 0.4**: Date and time handling
-- **uuid 1.4**: UUID generation (v4)
-- **url 2.4**: URL parsing and manipulation
-- **regex 1.9**: Regular expressions
-- **rand 0.8**: Random number generation
-- **rand_distr 0.4**: Random distributions
-- **which 4.4**: Executable path resolution
-- **dirs 5.0.1**: Standard directory paths
-- **addr 0.15**: IP address utilities
-- **html-escape 0.2**: HTML escaping
-- **urlencoding 2.1**: URL encoding
+### Web Framework
+- **Web Server**: axum 0.7 (macros, multipart)
+- **HTTP Middleware**: tower-http 0.5 (fs, cors, trace)
+- **Rate Limiting**: tower_governor 0.8.0 with axum
+- **Static Files**: rust-embed 8.4
+- **MIME Types**: mime_guess 2.0
 
-### Advanced Networking
-- **io-uring 0.7**: Linux io_uring support for high-performance I/O
-- **smoltcp 0.11**: TCP/IP stack implementation
-- **socket2 0.5**: Low-level socket operations
-- **aya 0.13**: eBPF support
-
-### Compression & Archives
-- **flate2 1.0.28**: Gzip compression
-- **zip 8.5.1**: ZIP archive handling
-
-### Security Analysis
-- **cvss 2.2.0**: CVSS score calculation
+### Database
+- **PostgreSQL**: sqlx 0.7 (runtime-tokio-rustls, postgres, chrono, macros, json)
+- **Migrations**: SQL files in migrations/ directory
 
 ### System Integration
-- **once_cell 1.21.3**: Lazy static initialization
-- **rustix 1.1.3**: Safe system calls (process features)
-- **libc 0.2.182**: C library bindings
-- **dotenv 0.15.0**: Environment variable loading
-- **libloading 0.9.0**: Dynamic library loading
-- **sysinfo 0.30.5**: System information gathering
+- **Environment Variables**: dotenv 0.15.0
+- **Dynamic Loading**: libloading 0.9.0
+- **System Calls**: rustix 1.1.3 with process feature
+- **Libc Bindings**: libc 0.2.182
 
-### Stream Processing
-- **tokio-util 0.7.18**: Tokio utilities (io, io-util)
-- **tokio-stream 0.1**: Stream utilities
-
-### gRPC & RPC
-- **tonic 0.9**: gRPC framework
-- **tower 0.4**: Service abstraction layer
+### Text Processing
+- **HTML Escaping**: html-escape 0.2
+- **URL Encoding**: urlencoding 2.1
+- **TOML Parsing**: toml 1.1.2
 
 ## Build Configuration
 
-### Cargo Features
-- **default**: ["bug-bounty"]
-- **bug-bounty**: Base feature set
-- **ai-redteam**: AI-powered red teaming (includes bug-bounty)
-- **mobile**: Mobile security testing (includes bug-bounty)
-- **sovereign**: Full feature set (bug-bounty + mobile + ai-redteam)
+### Cargo.toml Features
+```toml
+[features]
+default = ["bug-bounty"]
+bug-bounty = []                    # Normal operations
+ai-redteam = ["bug-bounty"]        # AI-powered red team
+mobile = ["bug-bounty"]            # Mobile security testing
+sovereign = ["bug-bounty", "mobile", "ai-redteam"]  # Full APT mode
+```
 
 ### Release Profile
 ```toml
 [profile.release]
-opt-level = 3              # Maximum optimization
-lto = true                 # Link-time optimization
-codegen-units = 1          # Single codegen unit for better optimization
-strip = true               # Strip symbols for smaller binary
+opt-level = 3      # Maximum optimization
+lto = true         # Link-time optimization
+codegen-units = 1  # Single codegen unit
+strip = true       # Strip symbols for smaller binary
 ```
 
-## External Tools & Binaries
+## System Dependencies
 
-### Reconnaissance
-- subfinder, amass, dnsx, httpx, nmap, masscan
+### Required System Packages
+- **Rust**: Stable toolchain
+- **Docker**: Container runtime for tool isolation
+- **PostgreSQL**: Database server (v12+)
+- **OpenSSL/Libssl-dev**: Cryptographic libraries
+- **Build Essentials**: C compiler, make, pkg-config
 
-### Web Security
-- nuclei, sqlmap, xsstrike, nikto, wappalyzer, graphw00f, crackql, schemathesis
-
-### Cloud Security
-- scoutsuite, prowler, cloudmapper
-
-### Container Security
-- grype, syft, cosign
-
-### Mobile Security
-- apktool, jadx, mobsf
-
-### Exploitation
-- metasploit, ligolo
-
-### Supply Chain
-- retire.js (Node.js dependency)
-
-## Infrastructure Requirements
-
-### Runtime Dependencies
-- **Docker**: Container isolation for security tools
-- **PostgreSQL**: Data persistence and distributed queue
-- **OpenSSL/libssl-dev**: TLS support
-
-### Cloud Services
-- **DigitalOcean API**: VPS rotation for stealth operations
-- **AI Backends**: Ollama (local), Claude CLI, OpenAI API, Kimi API
-
-### OSINT APIs
-- Chaos, Netlas, Shodan, SecurityTrails, VirusTotal
+### Infrastructure Requirements
+- **DigitalOcean Token**: For stealth VPS rotation
+- **AI Backends**: Ollama, Claude CLI, Kimi, or OpenAI API
+- **OSINT API Keys**: Chaos, Netlas, Shodan, etc.
 
 ## Development Commands
 
+### Building
 ```bash
-# Build release binary
+# Normal build (bug-bounty mode)
 cargo build --release
 
-# Run with full features
-cargo run --release --features sovereign -- --target example.com
+# Full sovereign mode with all features
+cargo build --release --features sovereign
 
-# Run tests
+# Development build with debug symbols
+cargo build
+
+# Check for compilation errors
+cargo check
+```
+
+### Testing
+```bash
+# Run all tests
 cargo test
 
-# Check without building
-cargo check
+# Run specific test module
+cargo test --test module_name
 
+# Run with verbose output
+cargo test -- --nocapture
+```
+
+### Code Quality
+```bash
 # Format code
 cargo fmt
 
-# Lint
+# Lint code
 cargo clippy
 
+# Check dependencies
+cargo audit
+```
+
+### Database Operations
+```bash
+# Run migrations
+sqlx migrate run
+
+# Create new migration
+sqlx migrate add migration_name
+
+# Revert migration
+sqlx migrate revert
+```
+
+### Docker Operations
+```bash
 # Build Docker image
-docker build -t osintultimate:latest .
+docker build -t osintultimate .
 
 # Run with Docker Compose
 docker-compose up -d
+
+# View logs
+docker-compose logs -f
 ```
 
-## Environment Configuration
-Configuration via `.env.oracle` file:
-- DIGITALOCEAN_TOKEN: VPS provisioning
-- OLLAMA_API_URL: Local AI inference
-- OPENAI_API_KEY: GPT-4 access
-- CLAUDE_API_KEY: Claude access
-- KIMI_API_KEY: Kimi K2.6 access
-- DATABASE_URL: PostgreSQL connection string
-- Various OSINT API keys
+## Tool Integration
+
+### Security Tools (60+ integrated)
+- **Reconnaissance**: Nmap, Subfinder, Amass, Assetfinder
+- **Web Security**: Sqlmap, Nuclei, FFUF, Gobuster
+- **Cloud Security**: ScoutSuite, CloudSploit, Pacu
+- **Mobile Security**: MobSF, Jadx, Apktool
+- **Network Security**: Masscan, ZGrab, RustScan
+
+### AI Integration
+- **Tier 0**: Ollama/Phi (local, high-speed inference)
+- **Tier 1**: Claude Code, Kimi K2.6
+- **Tier 2**: GPT-4 (complex tactical decision-making)
+- **Token Optimization**: Wenyan token optimization system

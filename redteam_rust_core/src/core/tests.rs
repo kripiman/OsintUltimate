@@ -35,6 +35,7 @@ mod tests {
             tactical_context: Arc::new(serde_json::json!({})),
             extra_data: Arc::new(serde_json::json!({})),
             version: 0,
+            skip_heavy_scan: false,
         };
 
         multi.write(&target).await?;
@@ -63,6 +64,7 @@ mod tests {
             tactical_context: Arc::new(serde_json::json!({})),
             extra_data: Arc::new(serde_json::json!({})),
             version: 0,
+            skip_heavy_scan: false,
         };
 
         let level = router.classify(&finding, &target_waf);

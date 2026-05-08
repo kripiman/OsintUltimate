@@ -213,6 +213,17 @@ pub struct GlobalConfig<M: ExecutorMode = crate::utils::executor::GhostMode> whe
     pub intigriti_token: Option<String>,
     pub bb_program_handle: Option<String>,
     pub clairvoyance_wordlist_path: Option<String>,
+    pub shuffledns_resolvers_path: Option<String>,
+    pub shuffledns_wordlist_path: Option<String>,
+    pub ssrfmap_path: Option<String>,
+    pub nosqlmap_path: Option<String>,
+    pub ghauri_path: Option<String>,
+    pub gopherus_path: Option<String>,
+    pub kxss_path: Option<String>,
+    pub s3scanner_path: Option<String>,
+    pub s3scanner_wordlist_path: Option<String>,
+    pub shuffledns_path: Option<String>,
+    pub massdns_path: Option<String>,
 }
 
 impl<M: ExecutorMode> Default for GlobalConfig<M>
@@ -280,6 +291,17 @@ impl<M: ExecutorMode> GlobalConfig<M> where M: Clone {
             intigriti_token: None,
             bb_program_handle: None,
             clairvoyance_wordlist_path: None,
+            shuffledns_resolvers_path: None,
+            shuffledns_wordlist_path: None,
+            ssrfmap_path: None,
+            nosqlmap_path: None,
+            ghauri_path: None,
+            gopherus_path: None,
+            kxss_path: None,
+            s3scanner_path: None,
+            s3scanner_wordlist_path: None,
+            shuffledns_path: None,
+            massdns_path: None,
         }
     }
 }
@@ -389,12 +411,17 @@ pub fn get_all_scanners<M: ExecutorMode>(config: GlobalConfig<M>) -> Vec<Box<dyn
     use crate::plugins::compliance::semgrep::SemgrepScanner;
     use crate::plugins::enumeration::web::oauth_security::OAuthScanner;
     use crate::plugins::enumeration::web::wcvs::WcvsScanner;
+    use crate::plugins::exploitation::web::kxss::KxssScanner;
     use crate::plugins::exploitation::web::deserialization::DeserializationScanner;
     use crate::plugins::reconnaissance::passive::github_dorks::GitHubDorksScanner;
     use crate::plugins::exploitation::web::h2csmuggler::H2CSmugglerScanner;
     use crate::plugins::reconnaissance::active::cdncheck::CdnCheckScanner;
     use crate::plugins::reconnaissance::active::tlsx::TlsxScanner;
     use crate::plugins::enumeration::web::api::clairvoyance::ClairvoyanceScanner;
+    use crate::plugins::exploitation::web::ghauri::GhauriScanner;
+    use crate::plugins::exploitation::web::ssrfmap::SsrfmapScanner;
+    use crate::plugins::exploitation::web::nosqlmap::NoSqlMapScanner;
+    use crate::plugins::exploitation::web::gopherus::GopherusScanner;
 
     #[cfg(feature = "ai-redteam")]
     use crate::plugins::exploitation::ai_llm::garak::GarakScanner;
@@ -541,6 +568,12 @@ pub fn get_all_scanners<M: ExecutorMode>(config: GlobalConfig<M>) -> Vec<Box<dyn
         Box::new(CdnCheckScanner::new()),
         Box::new(TlsxScanner::new()),
         Box::new(ClairvoyanceScanner::new(&config)),
+        Box::new(GhauriScanner::new(&config)),
+        Box::new(SsrfmapScanner::new(&config)),
+        Box::new(NoSqlMapScanner::new(&config)),
+        Box::new(GopherusScanner::new(&config)),
+        Box::new(KxssScanner::new(&config)),
+        Box::new(crate::plugins::enumeration::cloud::s3scanner::S3BucketScanner::new(&config)),
     ];
 
     #[cfg(feature = "ai-redteam")]
@@ -596,6 +629,7 @@ pub fn get_all_discovery<M: ExecutorMode>(config: GlobalConfig<M>) -> Vec<Box<dy
     use crate::plugins::reconnaissance::osint::alterx::AlterXScanner;
     use crate::plugins::reconnaissance::osint::puredns::PurednsScanner;
     use crate::plugins::reconnaissance::osint::bbscope::BBScopeScanner;
+    use crate::plugins::reconnaissance::osint::shuffledns::ShufflednsScanner;
     use crate::plugins::reconnaissance::active::asnmap::AsnmapScanner;
 
     vec![
@@ -607,6 +641,7 @@ pub fn get_all_discovery<M: ExecutorMode>(config: GlobalConfig<M>) -> Vec<Box<dy
         Box::new(AlterXScanner::new()),
         Box::new(PurednsScanner::new(config.proxy_manager.clone())),
         Box::new(BBScopeScanner::new(&config)),
+        Box::new(ShufflednsScanner::new(&config)),
         Box::new(AsnmapScanner::new()),
     ]
 }

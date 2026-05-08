@@ -225,6 +225,17 @@ async fn main() -> Result<()> {
         dashboard_tx: Some(dashboard_findings_tx.clone()),
         dashboard_targets: Some(dashboard_targets.clone()),
         clairvoyance_wordlist_path: utils_config.clairvoyance_wordlist_path.clone(),
+        shuffledns_resolvers_path: utils_config.shuffledns_resolvers_path.clone(),
+        shuffledns_wordlist_path: utils_config.shuffledns_wordlist_path.clone(),
+        ssrfmap_path: utils_config.ssrfmap_path.clone(),
+        nosqlmap_path: utils_config.nosqlmap_path.clone(),
+        ghauri_path: utils_config.ghauri_path.clone(),
+        gopherus_path: utils_config.gopherus_path.clone(),
+        kxss_path: utils_config.kxss_path.clone(),
+        s3scanner_path: utils_config.s3scanner_path.clone(),
+        s3scanner_wordlist_path: utils_config.s3scanner_wordlist_path.clone(),
+        shuffledns_path: utils_config.shuffledns_path.clone(),
+        massdns_path: utils_config.massdns_path.clone(),
     };
 
     let engine = RedTeamEngine::from_config(engine_config.clone(), &utils_config);
@@ -659,6 +670,17 @@ async fn run_worker_mode(args: &Args) -> Result<()> {
                 dashboard_tx: None,
                 dashboard_targets: None,
                 clairvoyance_wordlist_path: utils_config.clairvoyance_wordlist_path.clone(),
+                shuffledns_resolvers_path: utils_config.shuffledns_resolvers_path.clone(),
+                shuffledns_wordlist_path: utils_config.shuffledns_wordlist_path.clone(),
+                ssrfmap_path: utils_config.ssrfmap_path.clone(),
+                nosqlmap_path: utils_config.nosqlmap_path.clone(),
+                ghauri_path: utils_config.ghauri_path.clone(),
+                gopherus_path: utils_config.gopherus_path.clone(),
+                kxss_path: utils_config.kxss_path.clone(),
+                s3scanner_path: utils_config.s3scanner_path.clone(),
+                s3scanner_wordlist_path: utils_config.s3scanner_wordlist_path.clone(),
+                shuffledns_path: utils_config.shuffledns_path.clone(),
+                massdns_path: utils_config.massdns_path.clone(),
             };
 
             let engine = RedTeamEngine::from_config(engine_config, &utils_config);

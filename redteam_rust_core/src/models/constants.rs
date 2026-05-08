@@ -49,6 +49,9 @@ pub const FINDING_SOURCE_CODE_EXPOSED: &str = "SOURCE-CODE-EXPOSED";
 pub const FINDING_JAVA_SERIAL: &str = "JAVA-SERIAL";
 pub const FINDING_OBJECT_INJECTION: &str = "OBJECT-INJECTION";
 pub const FINDING_BBSCOPE_TARGET: &str = "BBSCOPE-TARGET";
+pub const FINDING_S3_BUCKET: &str = "S3-BUCKET-DISCOVERY";
+pub const FINDING_NOSQL_INJECTION: &str = "NOSQL-INJECTION";
+pub const FINDING_XSS_REFLECTION: &str = "XSS-REFLECTION";
 
 // API/GraphQL Security
 pub const FINDING_GRAPHQL_SUGGESTIONS: &str = "GRAPHQL-SUGGESTIONS";
@@ -167,6 +170,13 @@ pub const PLUGIN_CDNCHECK: &str = "CdnCheckScanner";
 pub const PLUGIN_TLSX: &str = "TlsxScanner";
 pub const PLUGIN_CLAIRVOYANCE: &str = "ClairvoyanceScanner";
 pub const PLUGIN_PUREDNS: &str = "PurednsScanner";
+pub const PLUGIN_GHAURI: &str = "GhauriScanner";
+pub const PLUGIN_SSRFMAP: &str = "SsrfmapScanner";
+pub const PLUGIN_GOPHERUS: &str = "GopherusScanner";
+pub const PLUGIN_SHUFFLEDNS: &str = "ShufflednsScanner";
+pub const PLUGIN_NOSQLMAP: &str = "NoSqlMapScanner";
+pub const PLUGIN_KXSS: &str = "KxssScanner";
+pub const PLUGIN_S3SCANNER: &str = "S3Scanner";
 
 // OOB Verification Defaults
 pub const OOB_DEFAULT_POLL_INTERVAL_MS: u64 = 5000;

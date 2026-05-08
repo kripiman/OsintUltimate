@@ -132,6 +132,7 @@ mod tests {
             })),
             extra_data: Arc::new(serde_json::json!({})),
             version: 0,
+            skip_heavy_scan: false,
         };
 
         let pm = ProxyManager::new(Vec::new(), true, crate::utils::config::ProxyMode::Dante, 0);

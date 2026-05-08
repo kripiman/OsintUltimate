@@ -59,6 +59,17 @@ pub struct EngineConfig {
     pub dashboard_tx: Option<tokio::sync::broadcast::Sender<crate::models::Finding>>,
     pub dashboard_targets: Option<Arc<dashmap::DashMap<String, TargetHost>>>,
     pub clairvoyance_wordlist_path: Option<String>,
+    pub shuffledns_resolvers_path: Option<String>,
+    pub shuffledns_wordlist_path: Option<String>,
+    pub ssrfmap_path: Option<String>,
+    pub nosqlmap_path: Option<String>,
+    pub ghauri_path: Option<String>,
+    pub gopherus_path: Option<String>,
+    pub kxss_path: Option<String>,
+    pub s3scanner_path: Option<String>,
+    pub s3scanner_wordlist_path: Option<String>,
+    pub shuffledns_path: Option<String>,
+    pub massdns_path: Option<String>,
 }
 
 use crate::utils::executor::{StealthExecutor, ExecutorMode};
@@ -372,6 +383,17 @@ impl<M: ExecutorMode> RedTeamEngine<M> {
             intigriti_token: self.config.intigriti_token.clone(),
             bb_program_handle: self.config.bb_program_handle.clone(),
             clairvoyance_wordlist_path: self.config.clairvoyance_wordlist_path.clone(),
+            shuffledns_resolvers_path: self.config.shuffledns_resolvers_path.clone(),
+            shuffledns_wordlist_path: self.config.shuffledns_wordlist_path.clone(),
+            ssrfmap_path: self.config.ssrfmap_path.clone(),
+            nosqlmap_path: self.config.nosqlmap_path.clone(),
+            ghauri_path: self.config.ghauri_path.clone(),
+            gopherus_path: self.config.gopherus_path.clone(),
+            kxss_path: self.config.kxss_path.clone(),
+            s3scanner_path: self.config.s3scanner_path.clone(),
+            s3scanner_wordlist_path: self.config.s3scanner_wordlist_path.clone(),
+            shuffledns_path: self.config.shuffledns_path.clone(),
+            massdns_path: self.config.massdns_path.clone(),
             stealth_policy: crate::plugins::detection_evasion::stealth_policy::StealthPolicy::default(),
         };
 

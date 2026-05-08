@@ -6,3 +6,4 @@ pub mod sovereign_recon;
 pub mod alterx;
 pub mod puredns;
 pub mod bbscope;
+pub mod shuffledns;
