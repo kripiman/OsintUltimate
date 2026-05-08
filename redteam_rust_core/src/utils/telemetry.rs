@@ -11,6 +11,16 @@ use regex::Regex;
 use tonic::transport::Endpoint;
 use tower::service_fn;
 use crate::utils::proxy::ProxyManager;
+use tracing::info;
+
+use std::sync::atomic::{AtomicU64, Ordering};
+
+pub static METRIC_FINDINGS_IN: AtomicU64 = AtomicU64::new(0);
+pub static METRIC_FPF_DROPS: AtomicU64 = AtomicU64::new(0);
+pub static METRIC_LOCAL_QWEN_TRIAGE: AtomicU64 = AtomicU64::new(0);
+pub static METRIC_MID_LLM_CALLS: AtomicU64 = AtomicU64::new(0);
+pub static METRIC_PREMIUM_LLM_CALLS: AtomicU64 = AtomicU64::new(0);
+pub static METRIC_MANUAL_SUBMISSIONS: AtomicU64 = AtomicU64::new(0);
 
 static SENSITIVE_REGEX: Lazy<Regex> = Lazy::new(|| {
     // Patterns for: Proxy Auth (user:pass@), Shodan/Censys Keys (32 chars hex), etc.
@@ -170,4 +180,17 @@ pub fn init_telemetry(endpoint: Option<String>, json_logs: bool, pm: Option<Arc<
 
 pub fn shutdown_telemetry() {
     opentelemetry::global::shutdown_tracer_provider();
+}
+
+/// Periodically dumps telemetry to logs for ROI baseline collection (Fase 0)
+pub fn dump_metrics() {
+    info!(
+        "📊 ROI METRICS: [Findings_In: {}] [FPF_Drops: {}] [Local_Triage: {}] [Mid_Calls: {}] [Premium_Calls: {}] [Manual_Submissions: {}]",
+        METRIC_FINDINGS_IN.load(Ordering::Relaxed),
+        METRIC_FPF_DROPS.load(Ordering::Relaxed),
+        METRIC_LOCAL_QWEN_TRIAGE.load(Ordering::Relaxed),
+        METRIC_MID_LLM_CALLS.load(Ordering::Relaxed),
+        METRIC_PREMIUM_LLM_CALLS.load(Ordering::Relaxed),
+        METRIC_MANUAL_SUBMISSIONS.load(Ordering::Relaxed),
+    );
 }

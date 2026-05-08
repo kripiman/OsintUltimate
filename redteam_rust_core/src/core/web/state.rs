@@ -19,6 +19,7 @@ pub struct DashboardState {
     pub auth: Arc<DashboardAuth>,
     pub mission_tx: Option<Arc<mpsc::Sender<MissionRequest>>>,
     pub discord_webhook_url: Option<String>,
+    pub credentials: Arc<dashmap::DashMap<String, super::models::CredentialStatus>>,
 }
 
 pub struct ValidatedOperator(pub crate::core::approval_gate::User);

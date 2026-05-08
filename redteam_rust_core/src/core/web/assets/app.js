@@ -1,5 +1,5 @@
 /**
- * OsintUltimate 4.0 Dashboard Controller
+ * Mimikri 4.0 Dashboard Controller
  */
 
 function getToken() {
@@ -49,12 +49,16 @@ UI.tabs.forEach(li => {
         document.getElementById(tab).classList.add('active');
         state.activeTab = tab;
         
-        document.getElementById('tab-title').textContent = li.textContent.trim();
+        // Rebranding tab title
+        let title = li.textContent.trim();
+        if (title.includes("Overview")) title = "Mimikri Operational Overview";
+        document.getElementById('tab-title').textContent = title;
         
         if (tab === 'graph' && !state.graphInitialized) {
             initAttackGraph();
             state.graphInitialized = true;
         }
+        if (tab === 'credentials') fetchCredentials();
     });
 });
 
@@ -101,6 +105,59 @@ async function refreshData() {
     fetchSwarmStatus();
     fetchStats();
     if (state.activeTab === 'graph') updateAttackGraph();
+    if (state.activeTab === 'roi') fetchRoiData();
+    if (state.activeTab === 'credentials') fetchCredentials();
+}
+
+async function fetchCredentials() {
+    const res = await authFetch('/api/v1/credentials');
+    const data = await res.json();
+    const tbody = document.querySelector('#credentials-table tbody');
+    tbody.innerHTML = data.map(c => {
+        let statusClass = 'badge-idle';
+        if (c.status === 'Working') statusClass = 'badge-active';
+        if (c.status === 'Failed') statusClass = 'badge-critical';
+        if (c.status === 'Partial Failure') statusClass = 'badge-warning';
+        if (c.status === 'Not Added') statusClass = 'badge-passive';
+
+        return `
+            <tr>
+                <td><strong>${c.service}</strong></td>
+                <td><span class="status-badge ${statusClass}">${c.status}</span></td>
+                <td><code style="font-size:0.7rem">${c.last_check || 'Never'}</code></td>
+                <td style="color:var(--accent); font-size:0.7rem">${c.error || 'None'}</td>
+            </tr>
+        `;
+    }).join('');
+}
+
+async function fetchRoiData() {
+    // 1. Fetch Metrics (Baseline)
+    const mRes = await authFetch('/api/v1/metrics');
+    const m = await mRes.json();
+    
+    document.getElementById('roi-findings-in').textContent = m.findings_in;
+    document.getElementById('roi-fpf-drops').textContent = m.fpf_drops;
+    document.getElementById('roi-premium-calls').textContent = m.premium_calls;
+    document.getElementById('roi-local-calls').textContent = m.local_qwen;
+    
+    const killRate = m.findings_in > 0 ? (m.fpf_drops / m.findings_in * 100).toFixed(1) : "0";
+    document.getElementById('roi-kill-rate').textContent = `${killRate}%`;
+
+    // 2. Fetch Rankings (Phase 1)
+    const rRes = await authFetch('/api/v1/roi/rankings');
+    const rankings = await rRes.json();
+    const tbody = document.querySelector('#roi-table tbody');
+    tbody.innerHTML = rankings.map(r => {
+        const potential = r[1] > 80 ? 'HIGH' : r[1] > 50 ? 'MED' : 'LOW';
+        return `
+            <tr>
+                <td><strong>${r[0]}</strong></td>
+                <td><code>${r[1].toFixed(1)}</code></td>
+                <td><span class="status-badge badge-${potential.toLowerCase()}">${potential}</span></td>
+            </tr>
+        `;
+    }).join('');
 }
 
 async function fetchStats() {

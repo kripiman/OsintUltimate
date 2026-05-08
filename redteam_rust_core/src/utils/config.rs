@@ -53,6 +53,16 @@ pub struct Config {
     pub bugcrowd_api_key: Option<String>,
     pub intigriti_token: Option<String>,
     pub bb_program_handle: Option<String>,
+    pub openai_api_key: Option<String>,
+    pub anthropic_api_key: Option<String>,
+    pub gemini_api_keys: Option<String>,
+    pub kimi_api_key: Option<String>,
+    pub claude_code_enabled: bool,
+    pub antigravity_api_key: Option<String>,
+    pub antigravity_endpoint: Option<String>,
+    pub azure_openai_key: Option<String>,
+    pub azure_openai_endpoint: Option<String>,
+    pub clairvoyance_wordlist_path: Option<String>,
 }
 
 impl Config {
@@ -145,6 +155,16 @@ impl Config {
             bugcrowd_api_key: env::var("BUGCROWD_API_KEY").ok(),
             intigriti_token: env::var("INTIGRITI_TOKEN").ok(),
             bb_program_handle: env::var("BB_PROGRAM_HANDLE").ok(),
+            openai_api_key: env::var("OPENAI_API_KEY").ok(),
+            anthropic_api_key: env::var("ANTHROPIC_API_KEY").ok(),
+            gemini_api_keys: env::var("GEMINI_API_KEYS").ok(),
+            kimi_api_key: env::var("KIMI_API_KEY").ok(),
+            claude_code_enabled: env::var("CLAUDE_CODE_ENABLED").ok().and_then(|s| s.parse().ok()).unwrap_or(false),
+            antigravity_api_key: env::var("ANTIGRAVITY_API_KEY").ok(),
+            antigravity_endpoint: env::var("ANTIGRAVITY_ENDPOINT").ok(),
+            azure_openai_key: env::var("AZURE_OPENAI_KEY").ok(),
+            azure_openai_endpoint: env::var("AZURE_OPENAI_ENDPOINT").ok(),
+            clairvoyance_wordlist_path: env::var("CLAIRVOYANCE_WORDLIST").ok(),
         }
     }
 

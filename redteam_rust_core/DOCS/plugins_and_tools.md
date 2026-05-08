@@ -110,32 +110,37 @@ Ataques dirigidos ejecutados bajo confirmación o en modo autónomo si la polít
 *   **Tplmap:** Detección y explotación de SSTI (Server-Side Template Injection).
 *   **OpenRedirex:** Fuzzer avanzado para vulnerabilidades de Open Redirect.
 
-### Explotación de Red y Active Directory
-*   **Impacket:** Navaja suiza para ataques a protocolos Microsoft (SMB, WMI).
-*   **NetExec:** (Anteriormente CrackMapExec) Pivoting y fuerza bruta en redes corporativas.
-*   **Responder / PetitPotam:** Envenenamiento LLMNR/NBT-NS y relay de NTLM.
-*   **Coercer:** Coerción forzada de autenticación (RPC) en Active Directory.
-*   **Hydra:** Ataques de fuerza bruta y diccionario contra servicios de login (SSH, FTP).
+### Explotación de Red y Active Directory (Gated: Sovereign)
+Las herramientas de esta categoría están restringidas al perfil **Sovereign** mediante gating a nivel de compilación para garantizar el cumplimiento en programas de Bug Bounty.
 
-### Escalada de Privilegios (PrivEsc)
-*   **Certipy:** Abuso de servicios de certificados en Active Directory (ADCS).
-| **Privesc Hunter** | PrivEsc | Automatización de rutas de escalada local (LinPEAS/WinPEAS wrappers). |
-| **ScareCrow** | Evasion | (Sovereign) Framework de obfuscación de payloads para evadir EDRs modernos. |
-| **Donut** | Evasion | (Sovereign) Generador de shellcode posicionalmente independiente para evasión avanzada. |
+| Herramienta | Perfil Requerido | Función Principal |
+| :--- | :--- | :--- |
+| **Impacket** | Sovereign / APT | Navaja suiza para ataques a protocolos Microsoft (SMB, WMI). |
+| **NetExec** | Standard | (Anteriormente CrackMapExec) Pivoting y fuerza bruta en redes corporativas. |
+| **Responder** | Sovereign / APT | Envenenamiento LLMNR/NBT-NS y relay de NTLM. |
+| **PetitPotam** | Sovereign / APT | Coerción forzada de autenticación (RPC) en Active Directory. |
+| **Coercer** | Sovereign / APT | Coerción forzada de autenticación (RPC) avanzada. |
+| **Hydra** | Standard | Fuerza bruta contra servicios de login (SSH, FTP). |
+
+### Escalada de Privilegios (PrivEsc - Gated: Sovereign)
+| Herramienta | Perfil Requerido | Función Principal |
+| :--- | :--- | :--- |
+| **Certipy** | Sovereign / APT | Abuso de servicios de certificados en ADCS. |
+| **Privesc Hunter**| Sovereign / APT | Automatización de rutas de escalada local (Wrappers LinPEAS/WinPEAS). |
+| **ScareCrow** | Sovereign / APT | Framework de obfuscación de payloads para evadir EDRs. |
+| **Donut** | Sovereign / APT | Generador de shellcode para evasión avanzada. |
 
 ---
 
----
-
-## 5. Movimiento Lateral, Persistencia y C2 (Breach)
+## 5. Movimiento Lateral, Persistencia y C2 (Breach - Gated: Sovereign)
 Consolidación de acceso una vez que se compromete una máquina objetivo.
 
-| Herramienta | Protocolo / Enfoque |
-| :--- | :--- |
-| **Bloodhound** | Recolección e ingestión de datos LDAP para trazar rutas al Domain Admin. |
-| **Ligolo-ng** | Túneles tácticos inversos (TUN/TAP) para movimiento lateral sin proxychains. |
-| **Sliver / Havoc**| Frameworks C2 integrados para comando y control avanzado. |
-| **Burp / ZAP / Caido**| Puentes de verificación y proxificado de tráfico web para análisis manual. |
+| Herramienta | Perfil Requerido | Protocolo / Enfoque |
+| :--- | :--- | :--- |
+| **Bloodhound** | Sovereign / APT | Mapeo de rutas al Domain Admin vía LDAP. |
+| **Ligolo-ng** | Sovereign / APT | Túneles tácticos inversos (TUN/TAP) para movimiento lateral. |
+| **Sliver / Havoc**| Sovereign / APT | Frameworks C2 integrados para comando y control. |
+| **Burp / ZAP / Caido**| Standard | Puentes de verificación y proxificado manual. |
 
 ---
 

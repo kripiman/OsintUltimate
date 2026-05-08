@@ -1,7 +1,7 @@
 use crate::models::{TargetHost, Finding, Severity, Category, TargetStatus, FINDING_PLUGIN_ERROR, FINDING_PLUGIN_PANIC, FINDING_SSTI, FINDING_SBOM_INVENTORY, FINDING_GRAPHQL_INTROSPECTION, FINDING_KATANA_ENDPOINT, FINDING_WAYMORE_URL, FINDING_JS_ENDPOINT, FINDING_TECH_STACK};
 use crate::models::constants::*;
 use dashmap::DashSet;
-use crate::plugins::ScannerPlugin;
+use crate::plugins::{ScannerPlugin, Capability};
 use std::sync::Arc;
 use futures::stream::StreamExt;
 use tracing::{info, error, warn};
@@ -40,12 +40,19 @@ pub struct OrchestratorConfig<M: ExecutorMode> {
     pub policy: Arc<dyn crate::core::policy::PolicyProvider>,
     pub executor: Arc<StealthExecutor<M>>,
     pub strict_scope: bool,
+    pub feedback_tx: Option<tokio::sync::mpsc::Sender<TargetHost>>,
 }
 
 impl<M: ExecutorMode> Orchestrator<M> {
     pub fn new(config: OrchestratorConfig<M>) -> Self {
         let hard_limit = config.memory_monitor.hard_limit_mb();
         let memory_semaphore = Arc::new(tokio::sync::Semaphore::new(hard_limit as usize));
+
+        if let Some(feedback_tx) = &config.feedback_tx {
+            for scanner in config.plugins.iter() {
+                scanner.set_feedback_channel(feedback_tx.clone());
+            }
+        }
 
         Self {
             plugins: config.plugins,
@@ -233,6 +240,17 @@ impl<M: ExecutorMode> Orchestrator<M> {
                         continue;
                     }
 
+                    // CDN GATING (V14.5): Skip heavy tools for targets behind CDN/WAF
+                    if target_ref.skip_heavy_scan {
+                        let meta = p.metadata();
+                        let is_heavy = meta.capabilities.contains(&Capability::VulnerabilityScanning) || 
+                                       meta.capabilities.contains(&Capability::WebFuzzing);
+                        if is_heavy {
+                            info!("🛡️ CDN GATE: Skipping heavy scan tool '{}' for {}", p.name(), target_ref.host);
+                            continue;
+                        }
+                    }
+
                     let plugins_clone = Arc::clone(&plugins);
                     // Create a scan snapshot to avoid Arc contention on the full TargetHost
                     let target_snapshot = TargetHost {
@@ -248,6 +266,7 @@ impl<M: ExecutorMode> Orchestrator<M> {
                         tactical_context: Arc::clone(&target_ref.tactical_context),
                         extra_data: Arc::clone(&target_ref.extra_data),
                         version: target_ref.version,
+                        skip_heavy_scan: target_ref.skip_heavy_scan,
                     };
                     let lp = lp;
                     let approval_gate = Arc::clone(&approval_gate);
@@ -369,6 +388,7 @@ impl<M: ExecutorMode> Orchestrator<M> {
                                         tactical_context: Arc::clone(&target.tactical_context),
                                         extra_data: Arc::clone(&target.extra_data),
                                         version: target.version,
+                                        skip_heavy_scan: target.skip_heavy_scan,
                                     };
 
                                     if let Some(url) = vuln_url {

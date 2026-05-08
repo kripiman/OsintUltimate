@@ -2,6 +2,7 @@ pub mod assets;
 pub mod handlers;
 pub mod models;
 pub mod state;
+pub mod probe;
 
 pub use models::*;
 pub use state::*;
@@ -38,11 +39,19 @@ pub fn generate_dashboard_token(
 }
 
 pub async fn start_dashboard(state: Arc<state::DashboardState>, port: u16) {
+    // Start background prober for API keys (Fase 1.5)
+    let probe_state = state.clone();
+    tokio::spawn(async move {
+        probe::start_credential_prober(probe_state).await;
+    });
+
     let cors = CorsLayer::new()
         .allow_origin(AllowOrigin::predicate(move |origin, _| {
             let origin_str = origin.to_str().unwrap_or("");
-            // Sprint 2: Exact matching including port to prevent subdomain hijacking/rebinding
-            origin_str == format!("http://127.0.0.1:{}", port) || origin_str == format!("http://localhost:{}", port)
+            origin_str == format!("http://127.0.0.1:{}", port) || 
+            origin_str == format!("http://localhost:{}", port) ||
+            origin_str == "https://mimikri.me" ||
+            origin_str == "http://mimikri.me"
         }))
         .allow_methods([axum::http::Method::GET, axum::http::Method::POST])
         .allow_headers([axum::http::header::AUTHORIZATION, axum::http::header::CONTENT_TYPE]);
@@ -57,6 +66,9 @@ pub async fn start_dashboard(state: Arc<state::DashboardState>, port: u16) {
         .route("/api/v1/targets", get(handlers::get_targets))
         .route("/api/v1/targets/:host/findings", get(handlers::get_target_findings))
         .route("/api/v1/stats", get(handlers::get_stats_handler))
+        .route("/api/v1/metrics", get(handlers::get_metrics))
+        .route("/api/v1/roi/rankings", get(handlers::get_roi_rankings))
+        .route("/api/v1/credentials", get(handlers::get_credentials))
         .route("/api/v1/swarm/status", get(handlers::get_swarm_status))
         .route("/api/v1/attack-graph", get(handlers::get_attack_graph))
         .route("/api/v1/containers", get(handlers::get_containers))

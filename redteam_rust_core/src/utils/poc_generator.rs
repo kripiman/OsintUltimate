@@ -1,5 +1,4 @@
-use crate::models::{Finding, Category, Severity};
-use serde_json::Value;
+use crate::models::{Finding, Category};
 
 pub struct PocGenerator;
 

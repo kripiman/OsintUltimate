@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>OsintUltimate 4.0 | Command Center</title>
+    <title>Mimikri 4.0 | Command Center</title>
     <link rel="stylesheet" href="style.css">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;900&family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet">
     <script src="https://d3js.org/d3.v7.min.js"></script>
@@ -13,14 +13,16 @@
     
     <nav class="sidebar">
         <div class="logo">
-            <img src="mimicry.png" alt="Mimicry Octopus" class="logo-img">
-            <h1>OSINT<span>ULTIMATE</span></h1>
+            <img src="mimicry.png" alt="Mimikri Octopus" class="logo-img">
+            <h1>MIMIKRI<span>V4</span></h1>
         </div>
         <ul class="nav-links">
             <li class="active" data-tab="overview">📡 Overview</li>
             <li data-tab="graph">🕸️ Attack Graph</li>
             <li data-tab="targets">🎯 Targets</li>
             <li data-tab="findings">🔥 Findings</li>
+            <li data-tab="roi">📊 ROI Metrics</li>
+            <li data-tab="credentials">🔑 API Credentials</li>
             <li data-tab="swarm">🐝 Swarm Monitor</li>
             <li data-tab="approvals">⚖️ Approvals</li>
             <li data-tab="launch">🚀 Launch Mission</li>
@@ -122,6 +124,71 @@
                         </thead>
                         <tbody></tbody>
                     </table>
+                </div>
+            </div>
+
+            <!-- Credentials -->
+            <div class="tab-pane" id="credentials">
+                <div class="card">
+                    <h3>API Key Health & Status</h3>
+                    <p style="font-size:0.8rem;color:var(--text-dim);margin-bottom:1.5rem">Monitor the status of external service integrations. Differentiates between missing, idle, and failed keys.</p>
+                    <table id="credentials-table">
+                        <thead>
+                            <tr>
+                                <th>Service</th>
+                                <th>Status</th>
+                                <th>Last Check</th>
+                                <th>Error Log</th>
+                            </tr>
+                        </thead>
+                        <tbody></tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- ROI -->
+            <div class="tab-pane" id="roi">
+                <div class="grid">
+                    <div class="card">
+                        <h3>ROI Baseline Telemetry (Phase 0)</h3>
+                        <div class="stats-grid">
+                            <div class="mini-card">
+                                <span class="label">FINDINGS IN</span>
+                                <span class="value" id="roi-findings-in">0</span>
+                            </div>
+                            <div class="mini-card">
+                                <span class="label">FPF DROPS</span>
+                                <span class="value" id="roi-fpf-drops">0</span>
+                            </div>
+                            <div class="mini-card">
+                                <span class="label">KILL RATE</span>
+                                <span class="value" id="roi-kill-rate">0%</span>
+                            </div>
+                        </div>
+                        <div class="stats-grid" style="margin-top: 1rem;">
+                            <div class="mini-card">
+                                <span class="label">PREMIUM CALLS</span>
+                                <span class="value" id="roi-premium-calls">0</span>
+                            </div>
+                            <div class="mini-card">
+                                <span class="label">LOCAL CALLS</span>
+                                <span class="value" id="roi-local-calls">0</span>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="card">
+                        <h3>Program ROI Rankings (Phase 1)</h3>
+                        <table id="roi-table">
+                            <thead>
+                                <tr>
+                                    <th>Program Name</th>
+                                    <th>ROI Score</th>
+                                    <th>Potential</th>
+                                </tr>
+                            </thead>
+                            <tbody></tbody>
+                        </table>
+                    </div>
                 </div>
             </div>
 

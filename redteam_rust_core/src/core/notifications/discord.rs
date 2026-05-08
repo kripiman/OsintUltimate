@@ -59,7 +59,7 @@ impl DataSink for DiscordSink {
             }
 
             let payload = json!({
-                "username": "OsintUltimate Sentinel",
+                "username": "Mimikri Sentinel",
                 "avatar_url": "https://raw.githubusercontent.com/kripiman/OsintUltimate/main/mimicry_logo.png",
                 "embeds": [{
                     "title": format!("🔱 Potential Vulnerability: {}", target.host),
@@ -83,7 +83,7 @@ impl DataSink for DiscordSink {
                         }
                     ],
                     "footer": {
-                        "text": "Sovereign Audit Mode • OsintUltimate V14.1"
+                        "text": "Sovereign Audit Mode • Mimikri V14.1"
                     },
                     "timestamp": chrono::Utc::now().to_rfc3339()
                 }]

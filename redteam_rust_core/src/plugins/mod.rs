@@ -57,6 +57,10 @@ pub enum Capability {
     MassAssignmentTesting,
     UploadTesting,
     Evasion,
+    AsnMapping,
+    CdnDetection,
+    TlsFingerprinting,
+    ScopeExtraction,
 }
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, PartialOrd, Ord)]
@@ -118,6 +122,8 @@ pub trait ScannerPlugin: Send + Sync {
     fn as_c2_operator(&self) -> Option<&dyn crate::core::c2::C2Operator> {
         None
     }
+
+    fn set_feedback_channel(&self, _tx: tokio::sync::mpsc::Sender<TargetHost>) {}
 }
 
 #[async_trait]
@@ -206,6 +212,7 @@ pub struct GlobalConfig<M: ExecutorMode = crate::utils::executor::GhostMode> whe
     pub bugcrowd_api_key: Option<String>,
     pub intigriti_token: Option<String>,
     pub bb_program_handle: Option<String>,
+    pub clairvoyance_wordlist_path: Option<String>,
 }
 
 impl<M: ExecutorMode> Default for GlobalConfig<M>
@@ -272,6 +279,7 @@ impl<M: ExecutorMode> GlobalConfig<M> where M: Clone {
             bugcrowd_api_key: None,
             intigriti_token: None,
             bb_program_handle: None,
+            clairvoyance_wordlist_path: None,
         }
     }
 }
@@ -308,15 +316,19 @@ pub fn get_all_scanners<M: ExecutorMode>(config: GlobalConfig<M>) -> Vec<Box<dyn
     use crate::plugins::enumeration::web::katana::KatanaScanner;
     #[cfg(feature = "sovereign")]
     use crate::plugins::lateral_movement::bloodhound::BloodHoundScanner;
+    #[cfg(feature = "sovereign")]
     use crate::plugins::exploitation::network::responder::ResponderScanner;
+    #[cfg(feature = "sovereign")]
     use crate::plugins::exploitation::network::impacket::ImpacketScanner;
     #[cfg(feature = "sovereign")]
     use crate::plugins::privilege_escalation::certipy::CertipyScanner;
+    #[cfg(feature = "sovereign")]
     use crate::plugins::exploitation::network::petitpotam::PetitPotamScanner;
     #[cfg(feature = "sovereign")]
     use crate::plugins::lateral_movement::sliver::SliverScanner;
     #[cfg(feature = "sovereign")]
     use crate::plugins::enumeration::cloud::scoutsuite::ScoutSuiteScanner;
+    #[cfg(feature = "sovereign")]
     use crate::plugins::lateral_movement::ligolo::LigoloScanner;
     use crate::plugins::enumeration::cloud::pacu::PacuScanner;
     use crate::plugins::enumeration::cloud::cloudenum::CloudEnumScanner;
@@ -354,6 +366,7 @@ pub fn get_all_scanners<M: ExecutorMode>(config: GlobalConfig<M>) -> Vec<Box<dyn
     #[cfg(feature = "sovereign")]
     use crate::plugins::privilege_escalation::privesc_hunter::{PrivescHunterScanner, PrivescCheckLevel};
     use crate::plugins::exploitation::web::graphql_cop::GraphQLCopScanner; // NUEVO
+    #[cfg(feature = "sovereign")]
     use crate::plugins::exploitation::network::coercer::CoercerScanner; // NUEVO
     use crate::plugins::enumeration::web::jsluice::JsluiceScanner; // NUEVO
     use crate::plugins::reconnaissance::active::subzy::SubzyScanner; // NUEVO
@@ -379,6 +392,9 @@ pub fn get_all_scanners<M: ExecutorMode>(config: GlobalConfig<M>) -> Vec<Box<dyn
     use crate::plugins::exploitation::web::deserialization::DeserializationScanner;
     use crate::plugins::reconnaissance::passive::github_dorks::GitHubDorksScanner;
     use crate::plugins::exploitation::web::h2csmuggler::H2CSmugglerScanner;
+    use crate::plugins::reconnaissance::active::cdncheck::CdnCheckScanner;
+    use crate::plugins::reconnaissance::active::tlsx::TlsxScanner;
+    use crate::plugins::enumeration::web::api::clairvoyance::ClairvoyanceScanner;
 
     #[cfg(feature = "ai-redteam")]
     use crate::plugins::exploitation::ai_llm::garak::GarakScanner;
@@ -437,15 +453,19 @@ pub fn get_all_scanners<M: ExecutorMode>(config: GlobalConfig<M>) -> Vec<Box<dyn
         Box::new(KatanaScanner::new()), 
         #[cfg(feature = "sovereign")]
         Box::new(BloodHoundScanner::new(config.executor.clone(), config.correlation_engine.clone())), 
+        #[cfg(feature = "sovereign")]
         Box::new(ResponderScanner::new()), 
+        #[cfg(feature = "sovereign")]
         Box::new(ImpacketScanner::new()), 
         #[cfg(feature = "sovereign")]
         Box::new(CertipyScanner::new()), 
+        #[cfg(feature = "sovereign")]
         Box::new(PetitPotamScanner::new()), 
         #[cfg(feature = "sovereign")]
         Box::new(SliverScanner::new(config.executor.clone())), 
         #[cfg(feature = "sovereign")]
         Box::new(ScoutSuiteScanner::new()),
+        #[cfg(feature = "sovereign")]
         Box::new(LigoloScanner::new(config.executor.clone())), 
         Box::new(PacuScanner::new()), 
         Box::new(CloudEnumScanner::new()), 
@@ -483,6 +503,7 @@ pub fn get_all_scanners<M: ExecutorMode>(config: GlobalConfig<M>) -> Vec<Box<dyn
         #[cfg(feature = "sovereign")]
         Box::new(PrivescHunterScanner::new(PrivescCheckLevel::Moderate)), 
         Box::new(GraphQLCopScanner::new()), 
+        #[cfg(feature = "sovereign")]
         Box::new(CoercerScanner::new()), 
         Box::new(CaidoScanner::new(&crate::utils::config::Config::from_env(), config.proxy_manager.clone())), 
         Box::new(JsluiceScanner::new()),
@@ -517,6 +538,9 @@ pub fn get_all_scanners<M: ExecutorMode>(config: GlobalConfig<M>) -> Vec<Box<dyn
         Box::new(DeserializationScanner::new()),
         Box::new(GitHubDorksScanner::new(config.clone())),
         Box::new(H2CSmugglerScanner::new(config.clone())),
+        Box::new(CdnCheckScanner::new()),
+        Box::new(TlsxScanner::new()),
+        Box::new(ClairvoyanceScanner::new(&config)),
     ];
 
     #[cfg(feature = "ai-redteam")]
@@ -571,6 +595,8 @@ pub fn get_all_discovery<M: ExecutorMode>(config: GlobalConfig<M>) -> Vec<Box<dy
     use crate::plugins::reconnaissance::osint::sovereign_recon::SovereignReconScanner;
     use crate::plugins::reconnaissance::osint::alterx::AlterXScanner;
     use crate::plugins::reconnaissance::osint::puredns::PurednsScanner;
+    use crate::plugins::reconnaissance::osint::bbscope::BBScopeScanner;
+    use crate::plugins::reconnaissance::active::asnmap::AsnmapScanner;
 
     vec![
         Box::new(SovereignReconScanner::new(&crate::utils::config::Config::from_env(), config.proxy_manager.clone())),
@@ -580,6 +606,8 @@ pub fn get_all_discovery<M: ExecutorMode>(config: GlobalConfig<M>) -> Vec<Box<dy
         Box::new(UncoverScanner::new()), 
         Box::new(AlterXScanner::new()),
         Box::new(PurednsScanner::new(config.proxy_manager.clone())),
+        Box::new(BBScopeScanner::new(&config)),
+        Box::new(AsnmapScanner::new()),
     ]
 }
 

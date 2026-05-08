@@ -10,7 +10,8 @@ La arquitectura de datos de OsintUltimate garantiza que cada activo pase por una
 
 ```mermaid
 graph LR
-    E0[Stage 0: Prep] --> E1[Stage 1: Liveness]
+    E_minus_1[Stage -1: ROI Selection] --> E0[Stage 0: Prep]
+    E0 --> E1[Stage 1: Liveness]
     E1 --> E2[Stage 2: Tactical & Discovery]
     E2 --> E3[Stage 3: Sovereign Persistence]
   
@@ -20,6 +21,12 @@ graph LR
 ---
 
 ## 2. Inmersión Técnica por Etapa
+
+### Etapa -1: ROI Selection & Prioritization
+La inteligencia de negocio de Mimikri reside en este filtro inicial. El sistema no escanea todos los objetivos por igual, sino que prioriza aquellos con el mayor retorno esperado.
+- **Scoring Dinámico**: Calcula un ROI Score basado en pagos históricos y probabilidad de éxito.
+- **Reserva de Tokens**: Gating de modelos premium (GPT-4/Claude 3.5) basado en el ROI del objetivo.
+- Para más detalles, ver [ROI_ANALYTICS.md](file:///home/kripi/Documentos/GitHub/OsintUltimate/redteam_rust_core/DOCS/ROI_ANALYTICS.md).
 
 ### Etapa 0: Mission Preparation & Ingestion
 

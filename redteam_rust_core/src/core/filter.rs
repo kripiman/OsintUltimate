@@ -12,8 +12,16 @@ impl FalsePositiveFilter {
 
     /// Evaluates a finding and returns true if it should be KEPT, false if it's a FALSE POSITIVE
     pub fn evaluate(&self, finding: &Finding) -> bool {
+        crate::utils::telemetry::METRIC_FINDINGS_IN.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
         let score = self.calculate_noise_score(finding);
-        score < self.noise_threshold
+        let keep = score < self.noise_threshold;
+        
+        if !keep {
+            crate::utils::telemetry::METRIC_FPF_DROPS.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+            tracing::debug!("🛡️ FPF: Finding {} dropped (Noise Score: {:.2})", finding.core.id, score);
+        }
+        
+        keep
     }
 
     /// Calculates a heuristic "Noise Score" (0.0 to 1.0)

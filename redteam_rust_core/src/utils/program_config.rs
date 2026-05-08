@@ -41,7 +41,7 @@ impl ProgramConfig {
             concurrency_override: None,
             nuclei_custom_templates: None,
             excluded_endpoints: vec!["/logout".to_string(), "/delete-account".to_string()],
-            custom_headers: vec![("X-Bug-Bounty".to_string(), "OsintUltimate-Operator".to_string())],
+            custom_headers: vec![("X-Bug-Bounty".to_string(), "Mimikri-Operator".to_string())],
             reporting_platform: None,
         }
     }

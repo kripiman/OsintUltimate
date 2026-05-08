@@ -58,3 +58,11 @@ pub struct MissionRequest {
     pub max_concurrency: u8,
     pub notes: String,
 }
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct CredentialStatus {
+    pub service: String,
+    pub status: String, // "Not Added", "Idle", "Working", "Failed"
+    pub last_check: Option<String>,
+    pub error: Option<String>,
+}

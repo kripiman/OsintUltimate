@@ -27,7 +27,7 @@ const HTML_TEMPLATE: &str = r#"
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>🛡️ OsintUltimate Professional Report</title>
+  <title>🛡️ Mimikri Professional Report</title>
   <script src="https://cdn.jsdelivr.net/npm/mermaid/dist/mermaid.min.js"></script>
   <script>mermaid.initialize({ startOnLoad: true, theme: 'dark' });</script>
   <style>
@@ -102,7 +102,7 @@ const HTML_TEMPLATE: &str = r#"
 <body>
   <div class="container">
     <header>
-      <h1>🛡️ OsintUltimate Professional Report</h1>
+      <h1>🛡️ Mimikri Professional Report</h1>
       <div class="meta">
         <p><strong>Engagement Date:</strong> {{metadata.timestamp}} | <strong>Version:</strong> {{metadata.version}}</p>
         <p><strong>Scope / Execution:</strong> <code>{{metadata.command_line}}</code></p>
@@ -254,7 +254,7 @@ pub async fn generate_report(jsonl_path: &str, output_path: &str) -> Result<()> 
     let in_file = File::open(jsonl_path).await?;
     let mut reader = BufReader::new(in_file).lines();
 
-    let mut metadata = ScanMetadata::new("OsintUltimate");
+    let mut metadata = ScanMetadata::new("Mimikri");
     let mut stats = SummaryStats::default();
     let mut targets = Vec::new();
 

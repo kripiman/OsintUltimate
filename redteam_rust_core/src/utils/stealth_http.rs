@@ -1,8 +1,7 @@
-use reqwest::{Client, ClientBuilder, header::{HeaderMap, HeaderName, HeaderValue}};
+use reqwest::{Client, header::{HeaderMap, HeaderName, HeaderValue}};
 use crate::models::TargetHost;
 use anyhow::{Result, Context};
 use std::time::Duration;
-use std::sync::Arc;
 use crate::utils::proxy::ProxyManager;
 
 pub struct StealthClientBuilder;
@@ -132,6 +131,7 @@ mod tests {
                 }
             })),
             extra_data: Arc::new(serde_json::json!({})),
+            version: 0,
         };
 
         let pm = ProxyManager::new(Vec::new(), true, crate::utils::config::ProxyMode::Dante, 0);

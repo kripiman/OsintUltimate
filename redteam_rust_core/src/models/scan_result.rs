@@ -69,6 +69,9 @@ pub struct TargetHost {
     /// Target version for differential dashboard updates
     #[serde(default)]
     pub version: u64,
+    /// CDN detection flag to skip resource-intensive scans (Nuclei, Fuzzing)
+    #[serde(default)]
+    pub skip_heavy_scan: bool,
 }
 
 impl TargetHost {

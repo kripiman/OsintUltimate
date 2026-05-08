@@ -122,7 +122,7 @@ impl CaidoScanner {
     }
 
     async fn create_project_if_needed(&self, domain: &str) -> Result<String> {
-        let project_name = format!("OsintUltimate_{}", domain.replace('.', "_"));
+        let project_name = format!("Mimikri_{}", domain.replace('.', "_"));
         
         // 1. List projects to see if it exists
         let query = json!({

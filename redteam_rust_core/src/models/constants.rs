@@ -160,6 +160,12 @@ pub const PLUGIN_MODELSCAN: &str = "ModelScanScanner";
 pub const PLUGIN_VIGIL: &str = "VigilScanner";
 pub const PLUGIN_SEMGREP: &str = "SemgrepScanner";
 pub const PLUGIN_DESERIALIZATION: &str = "DeserializationScanner";
+pub const PLUGIN_BBSCOPE: &str = "BBScopeScanner";
+pub const PLUGIN_ASNMAP: &str = "AsnmapScanner";
+pub const PLUGIN_CDNCHECK: &str = "CdnCheckScanner";
+pub const PLUGIN_TLSX: &str = "TlsxScanner";
+pub const PLUGIN_CLAIRVOYANCE: &str = "ClairvoyanceScanner";
+pub const PLUGIN_PUREDNS: &str = "PurednsScanner";
 
 // OOB Verification Defaults
 pub const OOB_DEFAULT_POLL_INTERVAL_MS: u64 = 5000;

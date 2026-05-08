@@ -194,6 +194,7 @@ impl WafEvasionEngine {
             tactical_context: Arc::new(serde_json::json!({})),
             extra_data: Arc::new(serde_json::json!({})),
             version: 0,
+            skip_heavy_scan: false,
         };
 
         let payload = original.body.as_deref().unwrap_or("");

@@ -3,6 +3,25 @@ use crate::models::constants::{FINDING_GRAPHQL_INTROSPECTION, FINDING_PROTOTYPE_
 use std::collections::{HashMap, HashSet};
 use serde::{Deserialize, Serialize};
 use tracing::info;
+use uuid::Uuid;
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum OutcomeType {
+    Accepted,
+    Rejected,
+    Duplicate,
+    Na,
+    Informational,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SubmissionOutcome {
+    pub chain_id: Uuid,
+    pub pattern_signature: String,
+    pub outcome: OutcomeType,
+    pub payout_usd: Option<f64>,
+}
 
 pub mod ad_ingestor;
 
@@ -11,6 +30,13 @@ pub struct AttackPath {
     pub nodes: Vec<String>, // Finding IDs
     pub total_cvss: f32,
     pub description: String,
+}
+
+impl AttackPath {
+    /// Generates a stable signature for the attack chain pattern (Fase 4)
+    pub fn pattern_signature(&self) -> String {
+        self.nodes.join("->")
+    }
 }
 
 #[derive(Default, Debug, Clone)]
@@ -60,8 +86,14 @@ impl CorrelationEngine {
     }
 
     pub fn add_edge(&mut self, source_id: &str, target_id: &str) {
-        info!("🔱 V14.1 SOVEREIGN: Manually adding AttackGraph edge: {} -> {}", source_id, target_id);
+        info!("🔱 SOVEREIGN: Manually adding AttackGraph edge: {} -> {}", source_id, target_id);
         self.graph.add_edge(source_id, target_id);
+    }
+
+    /// Ingests a submission outcome to adjust correlation weights (Fase 4)
+    pub fn ingest_outcome(&mut self, outcome: SubmissionOutcome) {
+        info!("🔱 ROI: Ingesting outcome for chain {}: {:?}", outcome.chain_id, outcome.outcome);
+        // TODO: Implement weight adjustment logic in Fase 4
     }
 
     fn correlate_new_finding(&mut self, new_finding: &Finding) {
@@ -91,7 +123,7 @@ impl CorrelationEngine {
                     if let (Some(ev_ext), Some(ev_new)) = (evidence_existing, evidence_new) {
                         if let (Some(u_sid), Some(c_sid)) = (ev_ext.data.get("SID"), ev_new.data.get("SID")) {
                             if u_sid != c_sid {
-                                info!("🔱 V14.1 SOVEREIGN: Correlation AD relationship detected between {} and {}", existing.core.id, new_finding.core.id);
+                                info!("🔱 SOVEREIGN: Correlation AD relationship detected between {} and {}", existing.core.id, new_finding.core.id);
                                 self.graph.add_edge(&existing.core.id, &new_finding.core.id);
                             }
                         }
@@ -112,7 +144,7 @@ impl CorrelationEngine {
                         if let (Some(ua), Some(ub)) = (url_a, url_b) {
                             if extract_domain(ua) == extract_domain(ub) {
                                 self.graph.add_edge(&existing.core.id, &new_finding.core.id);
-                                info!("🔱 V14.1 SOVEREIGN: API Attack Chain link detected: {} <-> {}", existing.core.id, new_finding.core.id);
+                                info!("🔱 SOVEREIGN: API Attack Chain link detected: {} <-> {}", existing.core.id, new_finding.core.id);
                             }
                         }
                     }
@@ -145,7 +177,7 @@ impl CorrelationEngine {
                 if let (Some(ua), Some(ub)) = (url_a, url_b) {
                     if extract_domain(ua) == extract_domain(ub) {
                         self.graph.add_edge(&existing.core.id, &new_finding.core.id);
-                        info!("🔱 V14.3 SOVEREIGN: SSTI -> RCE chain link detected: {} -> {}", existing.core.id, new_finding.core.id);
+                        info!("🔱 SOVEREIGN: SSTI -> RCE chain link detected: {} -> {}", existing.core.id, new_finding.core.id);
                     }
                 }
             }
@@ -160,7 +192,7 @@ impl CorrelationEngine {
                 if let (Some(ua), Some(ub)) = (url_a, url_b) {
                     if extract_domain(ua) == extract_domain(ub) {
                         self.graph.add_edge(&new_finding.core.id, &existing.core.id);
-                        info!("🔱 V14.3 SOVEREIGN: SSTI -> RCE chain link detected: {} -> {}", new_finding.core.id, existing.core.id);
+                        info!("🔱 SOVEREIGN: SSTI -> RCE chain link detected: {} -> {}", new_finding.core.id, existing.core.id);
                     }
                 }
             }

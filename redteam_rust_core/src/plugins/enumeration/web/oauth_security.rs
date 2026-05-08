@@ -4,7 +4,7 @@ use crate::utils::tool_detection::detect_tool;
 use crate::core::capability_layer::ScanLayer;
 use async_trait::async_trait;
 use anyhow::{Result, Context};
-use tracing::{info, warn};
+use tracing::info;
 use std::process::Stdio;
 use tokio::process::Command;
 

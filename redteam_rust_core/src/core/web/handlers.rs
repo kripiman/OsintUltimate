@@ -216,12 +216,12 @@ pub async fn export_report(
             .count();
 
         let payload = serde_json::json!({
-            "username": "OsintUltimate Sentinel",
+            "username": "Mimikri Sentinel",
             "embeds": [{
                 "title": format!("📤 Report Exported — {}", platform_name),
                 "color": 0x00CC66,
                 "description": format!("**{} High/Critical findings** exported to {} format.", count, platform_name),
-                "footer": { "text": "OsintUltimate Bounty Exporter" },
+                "footer": { "text": "Mimikri Bounty Exporter" },
                 "timestamp": chrono::Utc::now().to_rfc3339()
             }]
         });
@@ -417,4 +417,108 @@ pub async fn submit_mobile_scan(
     } else {
         (StatusCode::SERVICE_UNAVAILABLE, "Mission channel not configured").into_response()
     }
+}
+
+pub async fn get_metrics(
+    _auth: ValidatedOperator,
+) -> Json<serde_json::Value> {
+    use crate::utils::telemetry::*;
+    use std::sync::atomic::Ordering;
+    
+    Json(serde_json::json!({
+        "findings_in": METRIC_FINDINGS_IN.load(Ordering::Relaxed),
+        "fpf_drops": METRIC_FPF_DROPS.load(Ordering::Relaxed),
+        "local_qwen": METRIC_LOCAL_QWEN_TRIAGE.load(Ordering::Relaxed),
+        "mid_calls": METRIC_MID_LLM_CALLS.load(Ordering::Relaxed),
+        "premium_calls": METRIC_PREMIUM_LLM_CALLS.load(Ordering::Relaxed),
+        "manual_submissions": METRIC_MANUAL_SUBMISSIONS.load(Ordering::Relaxed),
+    }))
+}
+
+pub async fn get_roi_rankings(
+    _auth: ValidatedOperator,
+) -> Json<Vec<(String, f64)>> {
+    use crate::core::selection::ProgramAnalyzer;
+    let analyzer = ProgramAnalyzer::new();
+    
+    // We try to load programs from the standard config path
+    let programs = match analyzer.load_from_json("config/programs.json") {
+        Ok(p) => p,
+        Err(e) => {
+            tracing::warn!("⚠️ ProgramAnalyzer: Failed to load config/programs.json ({}). Dashboard ROI will be empty.", e);
+            vec![]
+        }
+    };
+        
+    let rankings = analyzer.rank_programs(programs);
+    Json(rankings)
+}
+
+pub async fn get_credentials(
+    _auth: ValidatedOperator,
+    State(state): State<Arc<DashboardState>>,
+) -> Json<Vec<super::models::CredentialStatus>> {
+    use crate::utils::config::Config;
+    let config = Config::from_env();
+    
+    let mut keys_refs: Vec<(&str, Option<&String>)> = vec![
+        ("DigitalOcean", config.do_token.as_ref()),
+        ("Shodan", config.shodan_api_key.as_ref()),
+        ("HackerOne", config.h1_api_key.as_ref()),
+        ("Bugcrowd", config.bugcrowd_api_key.as_ref()),
+        ("Intigriti", config.intigriti_token.as_ref()),
+        ("Netlas", config.netlas_api_key.as_ref()),
+        ("SecurityTrails", config.securitytrails_api_key.as_ref()),
+        ("MobSF", config.mobsf_api_key.as_ref()),
+        ("OpenAI", config.openai_api_key.as_ref()),
+        ("Anthropic", config.anthropic_api_key.as_ref()),
+        ("Gemini", config.gemini_api_keys.as_ref()),
+        ("Kimi", config.kimi_api_key.as_ref()),
+        ("Antigravity", config.antigravity_api_key.as_ref()),
+        ("Azure OpenAI", config.azure_openai_key.as_ref()),
+    ];
+
+    let claude_status_string = "Enabled".to_string();
+    if config.claude_code_enabled {
+        keys_refs.push(("Claude Code", Some(&claude_status_string)));
+    } else {
+        keys_refs.push(("Claude Code", None));
+    }
+
+    let mut results = Vec::new();
+    for (name, key) in keys_refs {
+        let mut display_name = name.to_string();
+        if name == "Gemini" {
+            if let Some(keys_str) = config.gemini_api_keys.as_ref() {
+                let count = keys_str.split(',').filter(|k| !k.trim().is_empty()).count();
+                if count > 1 {
+                    display_name = format!("Gemini ({} keys)", count);
+                }
+            }
+        }
+
+        let mut status = if key.is_none() {
+            "Not Added".to_string()
+        } else {
+            "Idle".to_string()
+        };
+        
+        let mut last_check = None;
+        let mut error = None;
+
+        if let Some(tracked) = state.credentials.get(name) {
+            status = tracked.status.clone();
+            last_check = tracked.last_check.clone();
+            error = tracked.error.clone();
+        }
+
+        results.push(super::models::CredentialStatus {
+            service: display_name,
+            status,
+            last_check,
+            error,
+        });
+    }
+
+    Json(results)
 }

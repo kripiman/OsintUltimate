@@ -213,6 +213,11 @@ pub struct FindingEnrichment {
     pub blackarch_category: Option<String>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub references: Vec<String>,
+    /// Target urgency for report consolidation. 
+    /// MIGRATION NOTE (v10): Moved from ExecutionContext. Data in old JSON files under 
+    /// context.consolidation_urgency will be lost unless aliased or migrated.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub consolidation_urgency: Option<ConsolidationUrgency>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
@@ -231,8 +236,6 @@ pub struct ExecutionContext {
     pub detected: Option<bool>,
     #[serde(default, skip_serializing_if = "String::is_empty")]
     pub detection_notes: String,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub consolidation_urgency: Option<ConsolidationUrgency>,
     #[serde(default)]
     pub validation: ValidationMetadata,
 }
@@ -258,6 +261,11 @@ impl Deref for Finding {
 impl Finding {
     pub fn builder(id: &str, category: Category, severity: Severity, description: &str) -> FindingBuilder {
         FindingBuilder::new(id, category, severity, description)
+    }
+
+    /// Generates a stable signature for the vulnerability pattern (Fase 4)
+    pub fn pattern_signature(&self) -> String {
+        format!("{:?}:{:?}:{}", self.core.category, self.core.severity, self.core.id)
     }
 
     pub fn new(id: &str, category: Category, severity: Severity, description: &str, evidence: serde_json::Value) -> Self {
@@ -288,6 +296,21 @@ impl Finding {
 
     pub fn with_cvss(mut self, score: f32) -> Self {
         self.enrichment.cvss_score = Some(score);
+        self
+    }
+
+    pub fn with_cvss_vector(mut self, vector: &str) -> Self {
+        self.enrichment.cvss_vector = Some(vector.to_string());
+        self
+    }
+
+    pub fn with_cwe(mut self, cwe: Vec<String>) -> Self {
+        self.enrichment.cwe = cwe;
+        self
+    }
+
+    pub fn with_consolidation_urgency(mut self, urgency: crate::models::ConsolidationUrgency) -> Self {
+        self.enrichment.consolidation_urgency = Some(urgency);
         self
     }
 

@@ -239,7 +239,7 @@ async fn message_handler(
                 "tools": { "listChanged": false }
             },
             "serverInfo": {
-                "name": "OsintUltimate-MCP",
+                "name": "Mimikri-MCP",
                 "version": "4.0.0"
             }
         }),
@@ -703,6 +703,7 @@ async fn handle_execute_plugin(state: &Arc<McpServer>, args: serde_json::Value) 
             tactical_context: Arc::new(json!({})),
             extra_data: Arc::new(json!({})),
             version: 0,
+            skip_heavy_scan: false,
         };
 
         // 2.1 MOTOR DE RESILIENCIA (Fase 6 Roadmap)

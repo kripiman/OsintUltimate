@@ -56,7 +56,7 @@ impl CveCacheManager {
         // Cache miss — fetch from NVD API v2
         let url = format!("https://services.nvd.nist.gov/rest/json/cves/2.0?cveId={}", cve_id);
         let mut req = reqwest::Client::new().get(&url)
-            .header("User-Agent", "OsintUltimate/14.2 (security-research)");
+            .header("User-Agent", "Mimikri/14.2 (security-research)");
 
         if let Ok(key) = std::env::var("NVD_API_KEY") {
             req = req.header("apiKey", key);

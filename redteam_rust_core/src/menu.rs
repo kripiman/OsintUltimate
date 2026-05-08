@@ -3,7 +3,7 @@ use anyhow::Result;
 use inquire::{Text, Confirm, MultiSelect, validator::Validation};
 
 pub fn show_menu() -> Result<Option<Args>> {
-    println!("🛡️  Bienvenido a OsintUltimate v3.0 - Unified Wizard");
+    println!("🛡️  Bienvenido a MIMIKRI v4.0 - Unified Wizard");
     println!("=================================================\n");
     
     let target = Text::new("🎯 Introduce el objetivo (ej. example.com o targets.txt):")

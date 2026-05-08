@@ -2,7 +2,7 @@ use crate::models::{TargetHost, ScanMetadata};
 use crate::core::sink::DataSink;
 use async_trait::async_trait;
 use anyhow::{Result, Context};
-use tracing::{info, error};
+use tracing::info;
 
 /// SOVEREIGN: Decentralized DataSink using NATS JetStream for high-availability findings.
 pub struct NatsSink {

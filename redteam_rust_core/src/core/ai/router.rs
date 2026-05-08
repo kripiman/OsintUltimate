@@ -108,7 +108,8 @@ impl TieredAIRouter {
         format!("f:{:x}", hasher.finish())
     }
 
-    /// V10 HARDENING: AI-Decision logic is now WAF-aware and OPSEC-aware.
+    /// Note: this method is not instrumented. Use analyze/decide_action for telemetry.
+    /// AI-Decision logic is now WAF-aware and OPSEC-aware.
     pub fn classify(&self, finding: &Finding, target: &TargetHost) -> RouteLevel {
         let cvss = finding.enrichment.cvss_score.unwrap_or(0.0);
         let mut level = if cvss >= 8.5 {
@@ -137,7 +138,7 @@ impl TieredAIRouter {
             }
         }
 
-        // NEW V11: Source-aware findings prefer Local Code-Models (Tier 0) 
+        // Source-aware findings prefer Local Code-Models (Tier 0) 
         if let Some(ref evidence) = finding.evidence.evidence {
             if evidence.data.get("type").and_then(|v| v.as_str()) == Some("source_aware") {
                 return RouteLevel::Local;
@@ -175,7 +176,7 @@ impl TieredAIRouter {
             };
             let providers_map = self.providers.load();
             if let Some(providers) = providers_map.get(&current_level) {
-                // V15: SKILL INJECTION BRIDGE (ENRICHED)
+                // SKILL INJECTION BRIDGE (ENRICHED)
                 let effective_ctx = self.enrich_context_v15(finding, attack_context, current_level, Posture::Ghost, caveman).await;
 
                 for entry in providers {
@@ -188,6 +189,11 @@ impl TieredAIRouter {
                     };
                     match entry.client.analyze(config).await {
                         Ok(analysis) => {
+                            match current_level {
+                                RouteLevel::Local => crate::utils::telemetry::METRIC_LOCAL_QWEN_TRIAGE.fetch_add(1, Ordering::Relaxed),
+                                RouteLevel::Mid => crate::utils::telemetry::METRIC_MID_LLM_CALLS.fetch_add(1, Ordering::Relaxed),
+                                RouteLevel::Premium => crate::utils::telemetry::METRIC_PREMIUM_LLM_CALLS.fetch_add(1, Ordering::Relaxed),
+                            };
                             let mut analysis = analysis;
                             analysis.model = format!("{} (Tiered: {:?}, Provider: {:?})", analysis.model, current_level, entry.kind);
                             self.analysis_cache.insert(cache_key, analysis.clone()).await;
@@ -231,7 +237,7 @@ impl TieredAIRouter {
                 let caveman = adaptive_context.map(|c| c.current_caveman).unwrap_or_default();
                 let posture = adaptive_context.map(|c| c.posture).unwrap_or(Posture::Ghost);
                 
-                // V15: SKILL INJECTION FOR DECISION (ENRICHED)
+                // SKILL INJECTION FOR DECISION (ENRICHED)
                 let effective_ctx = self.enrich_context_v15(finding, attack_context, current_level, posture, caveman).await;
 
                 for entry in providers {
@@ -248,6 +254,11 @@ impl TieredAIRouter {
                     
                     match entry.client.decide_action(config).await {
                         Ok(Some((action, context))) => {
+                            match current_level {
+                                RouteLevel::Local => crate::utils::telemetry::METRIC_LOCAL_QWEN_TRIAGE.fetch_add(1, Ordering::Relaxed),
+                                RouteLevel::Mid => crate::utils::telemetry::METRIC_MID_LLM_CALLS.fetch_add(1, Ordering::Relaxed),
+                                RouteLevel::Premium => crate::utils::telemetry::METRIC_PREMIUM_LLM_CALLS.fetch_add(1, Ordering::Relaxed),
+                            };
                             return Ok(Some((action, context)));
                         }
                         Ok(None) => continue,
@@ -262,7 +273,7 @@ impl TieredAIRouter {
         Ok(None)
     }
 
-    /// V15.2: Unified Context Enrichment with Dynamic Budgeting and Token Optimization.
+    /// Unified Context Enrichment with Dynamic Budgeting and Token Optimization.
     async fn enrich_context_v15(
         &self,
         finding: &Finding,
@@ -280,7 +291,7 @@ impl TieredAIRouter {
                 RouteLevel::Premium => 1500,
             };
 
-            // V14.8 Hardening: Cache skill-injection to prevent redundant heavy optimization
+            // Hardening: Cache skill-injection to prevent redundant heavy optimization
             let cache_key = format!("inj:{:?}:{:?}:{:?}:{}", level, posture, caveman, finding.core.id);
             
             let optimized_injection = if let Some(cached) = self.injection_cache.get(&cache_key) {

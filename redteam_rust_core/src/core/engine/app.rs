@@ -58,6 +58,7 @@ pub struct EngineConfig {
     pub bb_program_handle: Option<String>,
     pub dashboard_tx: Option<tokio::sync::broadcast::Sender<crate::models::Finding>>,
     pub dashboard_targets: Option<Arc<dashmap::DashMap<String, TargetHost>>>,
+    pub clairvoyance_wordlist_path: Option<String>,
 }
 
 use crate::utils::executor::{StealthExecutor, ExecutorMode};
@@ -370,6 +371,7 @@ impl<M: ExecutorMode> RedTeamEngine<M> {
             bugcrowd_api_key: self.config.bugcrowd_api_key.clone(),
             intigriti_token: self.config.intigriti_token.clone(),
             bb_program_handle: self.config.bb_program_handle.clone(),
+            clairvoyance_wordlist_path: self.config.clairvoyance_wordlist_path.clone(),
             stealth_policy: crate::plugins::detection_evasion::stealth_policy::StealthPolicy::default(),
         };
 

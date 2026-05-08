@@ -338,6 +338,10 @@ td {
 }
 
 .badge-scanning { background: rgba(204, 0, 0, 0.1); color: var(--accent); border: 1px solid var(--accent); }
+.badge-active { background: rgba(0, 204, 102, 0.1); color: #00cc66; border: 1px solid #00cc66; }
+.badge-critical { background: rgba(255, 0, 0, 0.1); color: #ff0000; border: 1px solid #ff0000; }
+.badge-warning { background: rgba(255, 140, 0, 0.1); color: #ff8c00; border: 1px solid #ff8c00; }
+.badge-passive { background: rgba(255, 255, 255, 0.05); color: #888; border: 1px dotted #444; }
 .badge-idle { background: rgba(102, 102, 114, 0.1); color: var(--text-dim); }
 
 /* Agent Cards */

@@ -17,6 +17,7 @@ use redteam_rust_core::utils::security::is_ssrf_safe_host_async;
 use tracing::{info, error, warn};
 use anyhow::{Context, Result};
 use futures::StreamExt;
+use tokio;
 
 #[derive(Parser, Debug, Clone)]
 #[command(author, version, about, long_about = None)]
@@ -96,6 +97,17 @@ pub struct Args {
 
 // End of file cleanup
 
+async fn binary_health_check() {
+    let p0_tools = vec!["bbscope", "asnmap", "cdncheck", "tlsx", "clairvoyance"];
+    for tool in p0_tools {
+        if !redteam_rust_core::utils::tool_detection::check_tool_availability(tool).await {
+            warn!("🛡️ [PREFLIGHT] P0 TOOL MISSING: {}. Pipeline may be incomplete.", tool);
+        } else {
+            info!("🛡️ [PREFLIGHT] {} detected. OK.", tool);
+        }
+    }
+}
+
 #[tokio::main]
 async fn main() -> Result<()> { 
     dotenv::dotenv().ok();
@@ -110,8 +122,19 @@ async fn main() -> Result<()> {
     }
 
     // Initialize Telemetry
-    redteam_rust_core::utils::init_telemetry(args.otel_endpoint.clone(), args.json_logs, None)
-        .context("Failed to initialize telemetry")?;
+    redteam_rust_core::utils::init_telemetry(args.otel_endpoint.clone(), args.json_logs, None).context("Failed to initialize telemetry")?;
+    
+    // Perform preflight binary health check for P0 tools
+    binary_health_check().await;
+    
+    // 📊 ROI Baseline Collection (Fase 0): Periodic metrics dump to logs
+    tokio::spawn(async move {
+        let mut interval = tokio::time::interval(Duration::from_secs(300));
+        loop {
+            interval.tick().await;
+            redteam_rust_core::utils::telemetry::dump_metrics();
+        }
+    });
 
     if args.worker {
         return run_worker_mode(&args).await;
@@ -140,7 +163,7 @@ async fn main() -> Result<()> {
         args.max_tokens
     };
 
-    info!("🚀 OSINT Ultimate Core v0.1.0 starting...");
+    info!("🚀 Mimikri Core v0.1.0 starting...");
     info!("Hardware Detected: {:?} (Cores: {}, RAM: {}MB)", hw.infra_type, hw.cores, hw.ram_mb);
     info!("Infrastructure limits: Soft={}MB, Hard={}MB", utils_config.soft_memory_limit_mb, utils_config.hard_memory_limit_mb);
 
@@ -201,6 +224,7 @@ async fn main() -> Result<()> {
         bb_program_handle: utils_config.bb_program_handle.clone(),
         dashboard_tx: Some(dashboard_findings_tx.clone()),
         dashboard_targets: Some(dashboard_targets.clone()),
+        clairvoyance_wordlist_path: utils_config.clairvoyance_wordlist_path.clone(),
     };
 
     let engine = RedTeamEngine::from_config(engine_config.clone(), &utils_config);
@@ -375,6 +399,7 @@ async fn main() -> Result<()> {
                     })),
                     extra_data: Arc::new(serde_json::json!({})),
                     version: 0,
+                    skip_heavy_scan: false,
                 };
 
                 if let Err(e) = injection_tx_for_dashboard.send(host).await {
@@ -392,6 +417,7 @@ async fn main() -> Result<()> {
             auth: auth.clone(),
             mission_tx: Some(std::sync::Arc::new(mission_tx)),
             discord_webhook_url: utils_config.discord_webhook_url.clone(),
+            credentials: std::sync::Arc::new(dashmap::DashMap::new()),
         });
         tokio::spawn(redteam_rust_core::core::web::start_dashboard(dashboard_state, port));
     }
@@ -419,6 +445,7 @@ async fn main() -> Result<()> {
             tactical_context: Arc::new(serde_json::json!({})),
             extra_data: Arc::new(serde_json::json!({})),
             version: 0,
+            skip_heavy_scan: false,
         }]))
     } else if let Some(image_ref) = args.image.clone() {
         Box::pin(futures::stream::iter(vec![TargetHost {
@@ -434,6 +461,7 @@ async fn main() -> Result<()> {
             tactical_context: Arc::new(serde_json::json!({})),
             extra_data: Arc::new(serde_json::json!({})),
             version: 0,
+            skip_heavy_scan: false,
         }]))
     } else if let Some(input_path) = args.input.clone() {
         let file = tokio::fs::File::open(&input_path).await?;
@@ -460,6 +488,7 @@ async fn main() -> Result<()> {
                     findings: Arc::new(Vec::new()), tool_suggestions: Arc::new(Vec::new()),
                     tactical_context: Arc::new(serde_json::json!({})), extra_data: Arc::new(serde_json::json!({})),
                     version: 0,
+                    skip_heavy_scan: false,
                 }
             })
             .boxed()
@@ -494,6 +523,7 @@ async fn main() -> Result<()> {
             tactical_context: Arc::new(serde_json::json!({})),
             extra_data: Arc::new(serde_json::json!({})),
             version: 0,
+            skip_heavy_scan: false,
         }]))
     } else if certstream_rx.is_some() || args.dashboard.is_some() {
         info!("📡 Waiting for targets from CertStream or Dashboard...");
@@ -531,6 +561,7 @@ async fn main() -> Result<()> {
                     findings: Arc::new(Vec::new()), tool_suggestions: Arc::new(Vec::new()),
                     tactical_context: Arc::new(serde_json::json!({})), extra_data: Arc::new(serde_json::json!({})),
                     version: 0,
+                    skip_heavy_scan: false,
                 }
             });
         target_hosts = futures::stream::select(target_hosts, cs_stream).boxed();
@@ -627,6 +658,7 @@ async fn run_worker_mode(args: &Args) -> Result<()> {
                 rebuff_api_token: utils_config.rebuff_api_token.clone(),
                 dashboard_tx: None,
                 dashboard_targets: None,
+                clairvoyance_wordlist_path: utils_config.clairvoyance_wordlist_path.clone(),
             };
 
             let engine = RedTeamEngine::from_config(engine_config, &utils_config);
@@ -644,6 +676,7 @@ async fn run_worker_mode(args: &Args) -> Result<()> {
                 tactical_context: Arc::new(tactical_context),
                 extra_data: Arc::new(serde_json::json!({})),
                 version: 0,
+                skip_heavy_scan: false,
             };
 
             let mut multi_sink = MultiSink::new();

@@ -122,8 +122,9 @@ impl<M: ExecutorMode> Pipeline<M> {
         drop(scan_tx);
 
         // --- STAGE 3: Scanning ---
-        handles.push(self.spawn_scanning_stage(scan_rx, sink_tx.clone()));
+        handles.push(self.spawn_scanning_stage(scan_rx, sink_tx.clone(), liveness_tx.clone()));
         drop(sink_tx);
+        drop(liveness_tx);
 
         // --- STAGE 4: Sink (v4 Lock-Free) ---
         self.run_sink_stage(sink, sink_rx).await?;
@@ -187,6 +188,7 @@ impl<M: ExecutorMode> Pipeline<M> {
                                     tactical_context: Arc::new(serde_json::json!({})),
                                     extra_data: Arc::new(serde_json::json!({})),
                                     version: 0,
+                                    skip_heavy_scan: false,
                                 }).await;
                             }
                         }
@@ -228,6 +230,14 @@ impl<M: ExecutorMode> Pipeline<M> {
                         }
                         target.ip = Some(ip.to_string()); 
                         target.resolved_ip = Some(ip.to_string());
+
+                        // CDN GATING (V14.5): Auto-detect CDN/WAF to optimize scan resources
+                        let cdn_checker = crate::plugins::reconnaissance::active::cdncheck::CdnCheckScanner::new();
+                        if let Ok(true) = cdn_checker.is_cdn(&ip.to_string()).await {
+                             info!("🛡️ CDN GATE: Target {} detected behind CDN/Cloud. Scans will be filtered.", target.host);
+                             target.skip_heavy_scan = true;
+                        }
+
                         let _ = scan_tx.send(target).await;
                     } else { 
                         warn!("⚠️ V13: Resolution failed for host {}. Aborting scan to prevent DNS Rebinding.", target.host);
@@ -239,7 +249,7 @@ impl<M: ExecutorMode> Pipeline<M> {
         })
     }
 
-    fn spawn_scanning_stage(&self, scan_rx: mpsc::Receiver<TargetHost>, sink_tx: mpsc::Sender<TargetHost>) -> tokio::task::JoinHandle<()> {
+    fn spawn_scanning_stage(&self, scan_rx: mpsc::Receiver<TargetHost>, sink_tx: mpsc::Sender<TargetHost>, liveness_tx: mpsc::Sender<TargetHost>) -> tokio::task::JoinHandle<()> {
         let plugins = self.plugins.clone();
         let concurrency = self.concurrency;
         let layer_policy = self.layer_policy;
@@ -270,6 +280,7 @@ impl<M: ExecutorMode> Pipeline<M> {
                 policy,
                 executor,
                 strict_scope,
+                feedback_tx: Some(liveness_tx),
             });
             if let (Some(tx), Some(targets)) = (dashboard_tx, dashboard_targets) {
                 orchestrator.with_dashboard_preconfigured(tx, targets);
@@ -392,6 +403,7 @@ impl<M: ExecutorMode> Pipeline<M> {
             policy: self.policy.clone(),
             executor: self.executor.clone(),
             strict_scope: self.strict_scope,
+            feedback_tx: None,
         });
         let token = self.shutdown_token.clone();
         
@@ -470,7 +482,7 @@ impl<M: ExecutorMode> PipelineBuilder<M> {
             sink: None,
             shutdown_token: CancellationToken::new(),
             liveness_checker: None,
-            command_line: "OsintUltimate".to_string(),
+            command_line: "Mimikri".to_string(),
             layer_policy: None,
             approval_gate: None,
             jitter: None,
