@@ -1,4 +1,4 @@
-use crate::plugins::{DiscoveryPlugin, Capability, PluginMetadata, RiskLevel, TargetType};
+use crate::plugins::{DiscoveryPlugin, Capability, PluginMetadata, RiskLevel, TargetType, DiscoveryResult};
 use crate::models::{TargetHost, PLUGIN_SOVEREIGN_RECON};
 use crate::core::capability_layer::ScanLayer;
 use crate::utils::proxy::ProxyManager;
@@ -315,31 +315,31 @@ impl DiscoveryPlugin for SovereignReconScanner {
         Ok(true) // Native plugin, no binaries required
     }
 
-    async fn discover(&self, target: &TargetHost) -> Result<Vec<String>> {
+    async fn discover(&self, target: &TargetHost) -> Result<Vec<DiscoveryResult>> {
         info!("🔱 SOVEREIGN RECON: Launching optimized pipeline for {}", target.host);
         
-        let mut all_results = HashSet::new();
+        let mut all_results: std::collections::HashMap<String, serde_json::Value> = std::collections::HashMap::new();
 
         // Phase 0: Instant Free Aggregates
         info!("🕰️ Phase 0: Wayback & HackerTarget historical lookup...");
         let wayback = self.query_wayback(&target.host).await;
         if !wayback.is_empty() {
             info!("  ✅ Wayback Machine found {} unique subdomains", wayback.len());
-            all_results.extend(wayback);
+            for s in wayback { all_results.insert(s, serde_json::json!({})); }
         }
         
         let ht = self.query_hackertarget(&target.host).await;
         if !ht.is_empty() {
             info!("  ✅ HackerTarget found {} unique hosts", ht.len());
-            all_results.extend(ht);
+            for s in ht { all_results.insert(s, serde_json::json!({})); }
         }
 
         // 1. Chaos (Fast & Free) - STRATEGIC PRIORITY
         info!("🚀 Phase 1/5: Chaos strike (Fast/Free)...");
         let chaos = self.query_chaos(&target.host).await;
         if !chaos.is_empty() {
-            info!("  ✅ Chaos captured {} subdomains", chaos.len());
-            all_results.extend(chaos);
+            info!("  ✅ Chaos found {} unique subdomains", chaos.len());
+            for s in chaos { all_results.insert(s, serde_json::json!({})); }
         } else {
             warn!("  ⚠️ Phase 1: No subdomains found in Chaos.");
         }
@@ -350,7 +350,7 @@ impl DiscoveryPlugin for SovereignReconScanner {
         let st = self.query_securitytrails(&target.host).await;
         if !st.is_empty() {
             info!("  ✅ SecurityTrails captured {} subdomains", st.len());
-            all_results.extend(st);
+            for s in st { all_results.insert(s, serde_json::json!({})); }
         }
 
         // 3. Netlas (Paid - Precision)
@@ -359,7 +359,7 @@ impl DiscoveryPlugin for SovereignReconScanner {
         let netlas = self.query_netlas(&target.host).await;
         if !netlas.is_empty() {
             info!("  ✅ Netlas captured {} subdomains", netlas.len());
-            all_results.extend(netlas);
+            for s in netlas { all_results.insert(s, serde_json::json!({})); }
         }
 
         // 4. Shodan
@@ -368,7 +368,7 @@ impl DiscoveryPlugin for SovereignReconScanner {
         let shodan = self.query_shodan(&target.host).await;
         if !shodan.is_empty() {
             info!("  ✅ Shodan captured {} subdomains", shodan.len());
-            all_results.extend(shodan);
+            for s in shodan { all_results.insert(s, serde_json::json!({})); }
         }
 
         // 5. Criminal IP (Reputation)
@@ -386,11 +386,13 @@ impl DiscoveryPlugin for SovereignReconScanner {
             let subfinder = SubfinderScanner::new(self.proxy_manager.clone());
             if let Ok(subs) = subfinder.discover(target).await {
                 info!("  🚑 Subfinder Fallback captured {} subdomains", subs.len());
-                all_results.extend(subs);
+                for r in subs { all_results.insert(r.host, r.metadata); }
             }
         }
 
-        let final_list: Vec<String> = all_results.into_iter().collect();
+        let final_list: Vec<DiscoveryResult> = all_results.into_iter()
+            .map(|(host, metadata)| DiscoveryResult { host, metadata })
+            .collect();
         info!("✅ SOVEREIGN RECON COMPLETE: Captured {} total assets for {}", final_list.len(), target.host);
         
         Ok(final_list)

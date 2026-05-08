@@ -1,4 +1,4 @@
-use crate::plugins::{DiscoveryPlugin, Capability};
+use crate::plugins::{DiscoveryPlugin, Capability, DiscoveryResult};
 use crate::models::TargetHost;
 use crate::utils::tool_detection::detect_tool;
 use async_trait::async_trait;
@@ -59,7 +59,7 @@ impl DiscoveryPlugin for AmassScanner {
     }
 
 
-    async fn discover(&self, target: &TargetHost) -> Result<Vec<String>> {
+    async fn discover(&self, target: &TargetHost) -> Result<Vec<DiscoveryResult>> {
         info!("AmassScanner: launching discovery against {}", target.host);
 
         // Amass 'enum' mode is standard for subdomain discovery
@@ -86,7 +86,7 @@ impl DiscoveryPlugin for AmassScanner {
         for line in content.lines() {
             let domain = line.trim().to_string();
             if !domain.is_empty() && domain.contains(&target.host) {
-                discovered.push(domain);
+                discovered.push(DiscoveryResult { host: domain, metadata: serde_json::json!({}) });
             }
         }
 

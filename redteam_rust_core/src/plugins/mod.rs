@@ -16,7 +16,7 @@ pub mod reporting;
 pub mod ffi;
 
 use async_trait::async_trait;
-pub use crate::models::{TargetHost, Finding, TargetType};
+pub use crate::models::{TargetHost, Finding, constants, TargetType, DiscoveryResult};
 use anyhow::Result;
 use serde::{Deserialize, Serialize};
 use crate::core::capability_layer::ScanLayer;
@@ -132,7 +132,7 @@ pub trait DiscoveryPlugin: Send + Sync {
     fn metadata(&self) -> PluginMetadata;
     fn capabilities(&self) -> Vec<Capability>;
     async fn check_dependencies(&self) -> Result<bool>;
-    async fn discover(&self, target: &TargetHost) -> Result<Vec<String>>;
+    async fn discover(&self, target: &TargetHost) -> Result<Vec<DiscoveryResult>>;
 }
 
 pub struct PluginRegistry {

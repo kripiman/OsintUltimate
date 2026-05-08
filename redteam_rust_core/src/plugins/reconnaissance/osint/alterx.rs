@@ -2,7 +2,7 @@
 // 🔧 AlterX: Subdomain permutation and generation
 // ⚡ Async DiscoveryPlugin wrapper
 
-use crate::plugins::{DiscoveryPlugin, Capability};
+use crate::plugins::{DiscoveryPlugin, Capability, DiscoveryResult};
 use crate::models::{TargetHost, PLUGIN_ALTERX};
 use crate::utils::tool_detection::detect_tool;
 use async_trait::async_trait;
@@ -63,7 +63,7 @@ impl DiscoveryPlugin for AlterXScanner {
         Ok(crate::utils::check_tool_availability("alterx").await)
     }
 
-    async fn discover(&self, target: &TargetHost) -> Result<Vec<String>> {
+    async fn discover(&self, target: &TargetHost) -> Result<Vec<DiscoveryResult>> {
         info!("🧬 ALTERX: Generating subdomain permutations for {}", target.host);
         
         // alterx -i domain.com -silent
@@ -91,6 +91,6 @@ impl DiscoveryPlugin for AlterXScanner {
             .collect();
 
         info!("✨ ALTERX: Generated {} permutations for {}", permutations.len(), target.host);
-        Ok(permutations)
+        Ok(permutations.into_iter().map(|s| DiscoveryResult { host: s, metadata: serde_json::json!({}) }).collect())
     }
 }

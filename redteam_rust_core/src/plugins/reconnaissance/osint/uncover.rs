@@ -1,4 +1,4 @@
-use crate::plugins::{DiscoveryPlugin, Capability};
+use crate::plugins::{DiscoveryPlugin, Capability, DiscoveryResult};
 use crate::models::TargetHost;
 use crate::utils::tool_detection::detect_tool;
 use async_trait::async_trait;
@@ -52,7 +52,7 @@ impl DiscoveryPlugin for UncoverScanner {
     async fn check_dependencies(&self) -> Result<bool> {
         Ok(crate::utils::check_tool_availability("uncover").await)
     }
-    async fn discover(&self, target: &TargetHost) -> Result<Vec<String>> {
+    async fn discover(&self, target: &TargetHost) -> Result<Vec<DiscoveryResult>> {
         info!("UncoverScanner: searching OSINT engines for {}", target.host);
         // uncover -q <target> -e shodan,censys,fofa -silent
         let child = Command::new(&self.binary_path)
@@ -72,7 +72,7 @@ impl DiscoveryPlugin for UncoverScanner {
         for line in content.lines() {
             let host = line.trim().to_string();
             if !host.is_empty() {
-                discovered.push(host);
+                discovered.push(DiscoveryResult { host, metadata: serde_json::json!({}) });
             }
         }
         Ok(discovered)

@@ -1,4 +1,4 @@
-use crate::plugins::{DiscoveryPlugin, Capability, GlobalConfig};
+use crate::plugins::{DiscoveryPlugin, Capability, GlobalConfig, DiscoveryResult};
 use crate::models::TargetHost;
 use crate::utils::tool_detection::detect_tool;
 use async_trait::async_trait;
@@ -61,7 +61,7 @@ impl DiscoveryPlugin for BBScopeScanner {
         Ok(crate::utils::check_tool_availability("bbscope").await)
     }
 
-    async fn discover(&self, _target: &TargetHost) -> Result<Vec<String>> {
+    async fn discover(&self, _target: &TargetHost) -> Result<Vec<DiscoveryResult>> {
         info!("BBScopeScanner: launching scope extraction");
 
         let mut discovered = Vec::new();
@@ -92,7 +92,7 @@ impl DiscoveryPlugin for BBScopeScanner {
 }
 
 impl BBScopeScanner {
-    async fn run_bbscope(&self, platform: &str, user: Option<&str>, token: &str) -> Result<Vec<String>> {
+    async fn run_bbscope(&self, platform: &str, user: Option<&str>, token: &str) -> Result<Vec<DiscoveryResult>> {
         let mut cmd = tokio::process::Command::new(&self.binary_path);
         cmd.arg(platform)
            .arg("-t").arg(token);
@@ -120,9 +120,15 @@ impl BBScopeScanner {
         for line in stdout.lines() {
             let target = line.trim().to_string();
             if !target.is_empty() && !target.contains('*') { // Simplistic wildcard handling
-                 results.push(target);
+                 results.push(DiscoveryResult {
+                     host: target,
+                     metadata: serde_json::json!({ "platform": platform }),
+                 });
             } else if target.contains("*.") {
-                 results.push(target.replace("*.", ""));
+                 results.push(DiscoveryResult {
+                     host: target.replace("*.", ""),
+                     metadata: serde_json::json!({ "platform": platform }),
+                 });
             }
         }
 

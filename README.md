@@ -81,6 +81,8 @@ cp ../.env.example ../.env.oracle
 # Edit .env.oracle with your DIGITALOCEAN_TOKEN and AI keys
 
 # Build for release
+# cargo build = bug-bounty (default) para operaciones normales;
+# cargo build --features sovereign = full APT mode (C2/Persistence).
 cargo build --release
 
 # Run in autonomous mode targeting PostgreSQL

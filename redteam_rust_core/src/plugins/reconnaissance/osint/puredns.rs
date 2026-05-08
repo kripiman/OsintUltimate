@@ -1,4 +1,4 @@
-use crate::plugins::{DiscoveryPlugin, Capability, PluginMetadata, RiskLevel, TargetType};
+use crate::plugins::{DiscoveryPlugin, Capability, PluginMetadata, RiskLevel, TargetType, DiscoveryResult};
 use crate::models::TargetHost;
 use crate::utils::tool_detection::detect_tool;
 use crate::utils::proxy::ProxyManager;
@@ -55,7 +55,7 @@ impl DiscoveryPlugin for PurednsScanner {
         Ok(crate::utils::check_tool_availability("puredns").await)
     }
 
-    async fn discover(&self, target: &TargetHost) -> Result<Vec<String>> {
+    async fn discover(&self, target: &TargetHost) -> Result<Vec<DiscoveryResult>> {
         info!("PurednsScanner: performing wildcard-filtered resolution for {}", target.host);
 
         // 1. Prepare resolvers (Fail-safe default or from env)
@@ -108,7 +108,7 @@ impl DiscoveryPlugin for PurednsScanner {
             while let Some(line) = lines.next_line().await? {
                 let domain = line.trim().to_string();
                 if !domain.is_empty() {
-                    discovered.push(domain);
+                    discovered.push(DiscoveryResult { host: domain, metadata: serde_json::json!({}) });
                 }
             }
         }

@@ -171,21 +171,29 @@ impl<M: ExecutorMode> Pipeline<M> {
 
                 while let Some(join_res) = join_set.join_next().await {
                     if let Ok((name, Ok(subdomains))) = join_res {
-                        for sub in subdomains {
-                            if !seen_domains.check(&sub) {
-                                seen_domains.set(&sub);
-                                Arc::make_mut(&mut target.findings).push(Finding::new("DISCOVERED_SUBDOMAIN", Category::Recon, Severity::Info, &format!("Discovered via {}: {}", name, sub), json!({ "subdomain": sub, "source": name })));
+                        for res in subdomains {
+                            if !seen_domains.check(&res.host) {
+                                seen_domains.set(&res.host);
+                                
+                                let mut data = serde_json::json!({ "subdomain": res.host, "source": name });
+                                if let Some(obj) = res.metadata.as_object() {
+                                    for (k, v) in obj {
+                                        data[k] = v.clone();
+                                    }
+                                }
+
+                                Arc::make_mut(&mut target.findings).push(Finding::new("DISCOVERED_SUBDOMAIN", Category::Recon, Severity::Info, &format!("Discovered via {}: {}", name, res.host), data));
                                 let _ = liveness_tx.send(TargetHost { 
-                                    host: sub, 
+                                    host: res.host, 
                                     ip: None, 
                                     resolved_ip: None,
                                     status: TargetStatus::Pending, 
                                     target_type: crate::models::TargetType::Web,
-            file_path: None,
+                                    file_path: None,
                                     user: None,
                                     findings: Arc::new(Vec::new()),
                                     tool_suggestions: Arc::new(Vec::new()),
-                                    tactical_context: Arc::new(serde_json::json!({})),
+                                    tactical_context: target.tactical_context.clone(),
                                     extra_data: Arc::new(serde_json::json!({})),
                                     version: 0,
                                     skip_heavy_scan: false,

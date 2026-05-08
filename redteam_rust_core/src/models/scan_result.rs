@@ -12,6 +12,12 @@ pub struct ScanMetadata {
     pub command_line: String,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Hash)]
+pub struct DiscoveryResult {
+    pub host: String,
+    pub metadata: serde_json::Value,
+}
+
 impl ScanMetadata {
     pub fn new(command_line: &str) -> Self {
         Self {

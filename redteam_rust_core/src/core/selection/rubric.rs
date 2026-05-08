@@ -48,7 +48,7 @@ pub fn calculate_proven_bonus(age_months: u32, resolved_reports: u32) -> f64 {
     match (age_months, resolved_reports) {
         (a, r) if a < 6 && r < PROVEN_BONUS_THRESHOLD => HOT_FRESH_FACTOR,
         (a, r) if a > 24 && r < PROVEN_BONUS_THRESHOLD => FORGOTTEN_GEM_FACTOR,
-        /// (_, r) if r < THRESHOLD: stable-age low-volume programs (mid-tier opportunity)
+        // (_, r) if r < THRESHOLD: stable-age low-volume programs (mid-tier opportunity)
         (_, r) if r < PROVEN_BONUS_THRESHOLD => DEFAULT_BONUS_FACTOR,
         _ => 1.0,
     }

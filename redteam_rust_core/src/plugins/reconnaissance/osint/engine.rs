@@ -1,4 +1,4 @@
-use crate::plugins::{DiscoveryPlugin, Capability};
+use crate::plugins::{DiscoveryPlugin, Capability, DiscoveryResult};
 use crate::models::TargetHost;
 use async_trait::async_trait;
 use anyhow::Result;
@@ -130,7 +130,7 @@ impl DiscoveryPlugin for OsintScanner {
     }
 
 
-    async fn discover(&self, target: &TargetHost) -> Result<Vec<String>> {
+    async fn discover(&self, target: &TargetHost) -> Result<Vec<DiscoveryResult>> {
         info!("OsintScanner: enumerating subdomains for {}", target.host);
         
         let (crt_res, shodan_res) = tokio::join!(
@@ -156,6 +156,6 @@ impl DiscoveryPlugin for OsintScanner {
         }
 
         info!("OsintScanner: Found {} potential subdomains for {}", subdomains.len(), target.host);
-        Ok(subdomains.into_iter().collect())
+        Ok(subdomains.into_iter().map(|s| DiscoveryResult { host: s, metadata: serde_json::json!({}) }).collect())
     }
 }

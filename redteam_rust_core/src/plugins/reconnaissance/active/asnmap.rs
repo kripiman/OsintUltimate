@@ -1,4 +1,4 @@
-use crate::plugins::{DiscoveryPlugin, Capability, PluginMetadata, RiskLevel, TargetType};
+use crate::plugins::{DiscoveryPlugin, Capability, PluginMetadata, RiskLevel, TargetType, DiscoveryResult};
 use crate::models::{TargetHost};
 use crate::utils::tool_detection::detect_tool;
 use async_trait::async_trait;
@@ -48,7 +48,7 @@ impl DiscoveryPlugin for AsnmapScanner {
         Ok(crate::utils::check_tool_availability("asnmap").await)
     }
 
-    async fn discover(&self, target: &TargetHost) -> Result<Vec<String>> {
+    async fn discover(&self, target: &TargetHost) -> Result<Vec<DiscoveryResult>> {
         info!("AsnmapScanner: launching mapping for {}", target.host);
 
         let child = tokio::process::Command::new(&self.binary_path)
@@ -70,7 +70,7 @@ impl DiscoveryPlugin for AsnmapScanner {
         for line in stdout.lines() {
             let item = line.trim().to_string();
             if !item.is_empty() {
-                discovered.push(item);
+                discovered.push(DiscoveryResult { host: item, metadata: serde_json::json!({}) });
             }
         }
 

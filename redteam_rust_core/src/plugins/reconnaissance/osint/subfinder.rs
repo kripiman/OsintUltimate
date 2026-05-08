@@ -1,4 +1,4 @@
-use crate::plugins::{DiscoveryPlugin, Capability};
+use crate::plugins::{DiscoveryPlugin, Capability, DiscoveryResult};
 use crate::models::TargetHost;
 use crate::utils::tool_detection::detect_tool;
 use async_trait::async_trait;
@@ -57,7 +57,7 @@ impl DiscoveryPlugin for SubfinderScanner {
     }
 
 
-    async fn discover(&self, target: &TargetHost) -> Result<Vec<String>> {
+    async fn discover(&self, target: &TargetHost) -> Result<Vec<DiscoveryResult>> {
         info!("SubfinderScanner: launching discovery against {}", target.host);
 
         let temp_file = tempfile::NamedTempFile::new().context("Failed to create temp file for Subfinder")?;
@@ -88,7 +88,7 @@ impl DiscoveryPlugin for SubfinderScanner {
             while let Some(line) = lines.next_line().await? {
                 let domain = line.trim().to_string();
                 if !domain.is_empty() {
-                    discovered.push(domain);
+                    discovered.push(DiscoveryResult { host: domain, metadata: serde_json::json!({}) });
                 }
             }
         }
