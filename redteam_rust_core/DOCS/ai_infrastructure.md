@@ -1,35 +1,51 @@
-# 🧠 Infraestructura IA & Prompt Engineering
+# 🧠 AI Infrastructure & Prompt Engineering
 
-OsintUltimate implementa capa abstracción IA alto rendimiento. Maximiza precisión técnica, minimiza costo + latencia. Usa motor enrutamiento por niveles (Tiered Routing) + tubería optimización tokens 10 etapas.
+> Source-verified from `src/core/ai/`. Last verified: 2026-05-08.
 
-## 1. Enrutamiento por Niveles (Tiered Routing)
+OsintUltimate implements a high-performance AI abstraction layer. Maximizes technical precision, minimizes cost + latency via a tiered routing engine + 10-stage token optimization pipeline.
 
-`TieredAIRouter` = despachador central. Clasifica cada hallazgo/tarea por complejidad técnica + severidad.
+## 1. Tiered Routing (`TieredAIRouter`)
 
-### Estrategia de Selección de Tiers
-*   **Tier 2 (Premium)**: análisis críticos vulns alto impacto (CVSS ≥ 8.5) + planes persistencia C2 avanzados. Modelos: GPT-4o, Claude 3.5 Sonnet.
-*   **Tier 1 (Mid)**: balance costo/razonamiento para escaneo activo + análisis config (CVSS 5.0 - 8.4). Modelos: GPT-3.5 Turbo, Gemini 1.5 Flash.
-*   **Tier 0 (Local)**: máx privacidad + bajo costo para análisis código fuente + recon masivo. Modelos: Ollama (Llama 3 / CodeLlama), Microsoft Phi-3.
+`TieredAIRouter` is the central AI dispatcher. Classifies each finding by technical complexity + severity. Uses `ArcSwap<HashMap<RouteLevel, Vec<ProviderEntry>>>` for lock-free provider updates.
+
+### Tier Configuration (from `src/core/factory.rs`)
+
+| Tier | RouteLevel | Condition | Actual Models |
+|---|---|---|---|
+| 0 | Local | CVSS < 5.0 OR `source_aware` evidence | Ollama `qwen2.5-coder:7b` |
+| 1 | Mid | CVSS 5.0–8.4 OR WAF detected | Azure `gpt-4o-mini` (p0), OpenAI `gpt-4o-mini` (p1), Gemini `1.5-flash` (p2) |
+| 2 | Premium | CVSS ≥ 8.5 OR CredentialLeak/ExposedAsset | Gemini `1.5-pro` (p0), Anthropic `claude-3-5-sonnet-20240620` (p1), Kimi `kimi-for-coding` (p1), ClaudeCode SDK (p2), Antigravity bridge (p5) |
+
+**WAF escalation:** targets with Cloudflare, Akamai, Incapsula, F5, Barracuda, or Sucuri detected → escalate to at least Mid.
+
+**source_aware override:** findings with `evidence.data.type = "source_aware"` are always routed Local, regardless of CVSS.
 
 ```mermaid
 graph TD
-    Finding[Hallazgo Detectado] --> Classifier{Clasificador de Riesgo}
-    Classifier -->|CVSS >= 8.5| Premium[Tier 2: Premium LLM]
-    Classifier -->|CVSS 5.0-8.4| Mid[Tier 1: Mid-Tier LLM]
-    Classifier -->|CVSS < 5.0| Local[Tier 0: Local LLM]
-    
-    Premium -->|Failover| Mid
-    Mid -->|Failover| Local
-    Local -->|Success| Dashboard[Resultados Enriquecidos]
+    Finding[Finding + TargetHost] --> Classifier{classify\nCVSS + Category + WAF}
+    Classifier -->|CVSS >= 8.5| Premium[Tier 2: Premium]
+    Classifier -->|CVSS 5.0-8.4 OR WAF| Mid[Tier 1: Mid]
+    Classifier -->|else| Local[Tier 0: Local]
+    Classifier -->|source_aware evidence| Local
+
+    Local -->|error| Mid
+    Mid -->|error| Premium
+    Premium -->|all fail| Error[RouterError returned]
 ```
+
+### Cache Layer (`src/core/ai/router.rs`)
+
+- **Analysis cache:** `moka` async cache, 5000 entries, 2h TTL. Key = `SipHash-1-3(host + ip + finding_id + category)` — HashDoS resistant.
+- **Injection cache:** 1000 entries, 30-min TTL. Prevents redundant `SkillManager` calls for repeated finding patterns.
+- Cache hit → return immediately, no provider call. `CacheMetrics.hits/misses` tracked atomically.
 
 ---
 
-## 2. Optimización de Tokens de 10 Etapas
+## 2. Token Optimization Pipeline (10 Stages)
 
 Reduce "bleed" créditos API + permite contextos masivos. OsintUltimate usa **v13 Deterministic Prompt Optimizer**. Motor procesa prompts vía diez transformaciones sucesivas.
 
-### Etapas de Optimización
+### Optimization Stages (`src/core/ai/token_optimizer.rs`)
 1.  **Extractive Compressor**: puntúa cada línea por señal técnica (keywords `proxy`, `payload`, `vuln`). Elimina baja relevancia.
 2.  **Entropy Pruner**: elimina adverbios baja entropía (e.g., "basically", "actually"). No aportan valor operativo.
 3.  **Verbosity Reducer**: colapsa frases verbales largas (e.g., "in order to" -> "to").
@@ -48,14 +64,15 @@ Reduce "bleed" créditos API + permite contextos masivos. OsintUltimate usa **v1
 
 ---
 
-## 3. Inyección de Habilidades Técnicas (SkillManager)
+## 3. Tactical Knowledge Injection (SkillManager)
 
-A diferencia de prompts estáticos, OsintUltimate usa **RAG Técnico**. Inyecta conocimiento Red Team (TTPs) en momento justo del análisis.
+Unlike static prompts, Mimikri uses **Tactical RAG**. Injects Red Team TTPs into prompts at analysis time.
 
-### Flujo de Habilidades
-*   **Matching**: `SkillManager` selecciona fragmentos según categoría hallazgo + postura actual (`Ghost`, `Strike`, `Breach`).
-*   **Dynamic Budgeting**: presupuesto tokens skills escala según Tier modelo (más contexto para Premium).
-*   **Surgical Injection**: skills inyectadas como "bloques experto". Dictan lógica decisión agente sin re-entrenamiento.
+### Skill Flow
+- **Matching**: `SkillManager::match_for_context(finding, posture, level, budget)` — selects TTP fragments by finding category + current posture (`Ghost` / `Strike` / `Breach`).
+- **Dynamic Budgeting**: token budget scales by tier — Local=300, Mid=800, Premium=1500 tokens for skill injection.
+- **Surgical Injection**: skills prepended to base context as expert blocks. Loaded from `../skills/` directory at startup.
+- **Injection cache**: 30-min TTL on `format!("inj:{level:?}:{posture:?}:{caveman:?}:{finding_id}")` key — prevents redundant `SkillManager` calls for same pattern.
 
 ```mermaid
 sequenceDiagram
@@ -74,22 +91,22 @@ sequenceDiagram
 
 ---
 
-## 4. OPSEC & Privacidad (PII Scrubbing)
+## 4. OPSEC & Privacy (PII Scrubbing)
 
-Antes que data llegue a proveedores IA externos (Azure/OpenAI/Anthropic), `Scrubber` procesa info para proteger infra:
+Before data reaches external AI providers (Azure/OpenAI/Anthropic), `Scrubber` (`src/core/ai/scrubber.rs`) processes context to protect infrastructure:
 
-- **Identity Masking**: reemplaza nombres usuarios, IPs internas, paths sensibles con placeholders sintéticos.
-- **Credential Stripping**: elimina tokens, API keys, hashes detectados en contexto ataque.
-- **Tactical Cache**: caché **LRU (moka)** evita reenviar mismo hallazgo crítico a IA. Protege presupuesto + exposición datos. Garantiza consistencia contexto bajo carga masiva.
+- **Identity Masking**: replaces usernames, internal IPs, sensitive paths with synthetic placeholders.
+- **Credential Stripping**: removes tokens, API keys, hashes detected in attack context.
+- **Tactical Cache**: `moka` LRU cache (5000 entries, 2h TTL) prevents resending the same critical finding to AI. Protects API budget + data exposure. Ensures context consistency under high load.
 
 ---
 
 > [!IMPORTANT]
-> Modo **Wenyan Ultra** = exclusivo interacción máquina-máquina. Operadores que quieran leer logs IA en lenguaje natural deben usar nivel `Lite` o `Off`.
+> **Wenyan Ultra** mode is machine-to-machine only. Operators who need human-readable AI logs must use `Lite` or `Off` level.
 
 ---
 
-## 5. External AI Tool Token Strategy (Garak / PyRIT / Promptfoo / etc)
+## 5. External AI Tool Token Strategy (Garak / PyRIT / Promptfoo / etc.) `sovereign`
 
 Plugins ofensivos AI/LLM (`exploitation/ai_llm/*`) ejecutan binarios externos. Generan **adversarial prompts** contra targets LLM. Estos prompts NO se optimizan — wording exacto = sagrado para test integrity.
 
