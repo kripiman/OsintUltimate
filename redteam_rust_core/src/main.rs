@@ -236,6 +236,7 @@ async fn main() -> Result<()> {
         s3scanner_wordlist_path: utils_config.s3scanner_wordlist_path.clone(),
         shuffledns_path: utils_config.shuffledns_path.clone(),
         massdns_path: utils_config.massdns_path.clone(),
+        workspace_dir: utils_config.workspace_dir.clone(),
     };
 
     let engine = RedTeamEngine::from_config(engine_config.clone(), &utils_config);
@@ -319,7 +320,7 @@ async fn main() -> Result<()> {
 
     // --- ACTIVITY LOG (TIMELINE) ---
     // V15: Quick Win integration to ensure timeline.jsonl is populated automatically
-    let timeline_path = std::path::PathBuf::from("workspace/logs/timeline.jsonl");
+    let timeline_path = std::path::PathBuf::from(&utils_config.workspace_dir).join("logs").join("timeline.jsonl");
     if let Ok(activity_log) = redteam_rust_core::utils::activity_log::ActivityLog::new(timeline_path).await {
         let act_log_arc = std::sync::Arc::new(activity_log);
         multi_sink.add(Box::new(redteam_rust_core::core::sink::TimelineSink::new(act_log_arc)));
@@ -351,8 +352,9 @@ async fn main() -> Result<()> {
         let token = generate_dashboard_token(&signing_key, session_id, 86400);
 
         // Securely write token to workspace/logs/dashboard.token (Sprint 1)
-        let token_path = "workspace/logs/dashboard.token";
-        let _ = tokio::fs::create_dir_all("workspace/logs").await;
+        let logs_dir = std::path::PathBuf::from(&utils_config.workspace_dir).join("logs");
+        let token_path = logs_dir.join("dashboard.token");
+        let _ = tokio::fs::create_dir_all(&logs_dir).await;
 
         use std::os::unix::fs::OpenOptionsExt;
         match std::fs::OpenOptions::new()
@@ -360,12 +362,12 @@ async fn main() -> Result<()> {
             .write(true)
             .truncate(true)
             .mode(0o600)
-            .open(token_path)
+            .open(&token_path)
         {
             Ok(mut file) => {
                 use std::io::Write;
                 let _ = file.write_all(token.as_bytes());
-                info!("🔑 [DASHBOARD-AUTH] Token de acceso guardado de forma segura en {}", token_path);
+                info!("🔑 [DASHBOARD-AUTH] Token de acceso guardado de forma segura en {}", token_path.display());
             },
             Err(e) => warn!("⚠️ [DASHBOARD-AUTH] No se pudo guardar el token en disco ({}). No disponible para el operador.", e),
         }
@@ -681,6 +683,7 @@ async fn run_worker_mode(args: &Args) -> Result<()> {
                 s3scanner_wordlist_path: utils_config.s3scanner_wordlist_path.clone(),
                 shuffledns_path: utils_config.shuffledns_path.clone(),
                 massdns_path: utils_config.massdns_path.clone(),
+                workspace_dir: utils_config.workspace_dir.clone(),
             };
 
             let engine = RedTeamEngine::from_config(engine_config, &utils_config);

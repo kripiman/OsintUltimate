@@ -70,6 +70,7 @@ pub struct EngineConfig {
     pub s3scanner_wordlist_path: Option<String>,
     pub shuffledns_path: Option<String>,
     pub massdns_path: Option<String>,
+    pub workspace_dir: String,
 }
 
 use crate::utils::executor::{StealthExecutor, ExecutorMode};
@@ -180,13 +181,16 @@ impl<M: ExecutorMode> RedTeamEngine<M> {
         }
 
         // Phase 3: Initialize ActivityLog
-        let timeline_path = std::path::PathBuf::from("workspace/timeline.jsonl");
+        let timeline_path = std::path::PathBuf::from(&self.config.workspace_dir).join("timeline.jsonl");
         let activity_log = Arc::new(crate::utils::activity_log::ActivityLog::new(timeline_path).await?);
         
-        // Add TimelineSink to the pipeline
+        // Add TimelineSink and BugBountyDraftSink to the pipeline
         let mut multi_sink = crate::core::sink::MultiSink::new();
         multi_sink.add(sink);
         multi_sink.add(Box::new(crate::core::sink::TimelineSink::new(activity_log.clone())));
+        
+        // V14 Phase 1: Repro-Proof Generator Drafts
+        multi_sink.add(Box::new(crate::core::sink::BugBountyDraftSink::new(std::path::PathBuf::from(&self.config.workspace_dir)).await));
         
         let builder = self.prepare_pipeline_builder(Box::new(multi_sink));
         let mut pipeline = builder.build()?;
@@ -225,7 +229,12 @@ impl<M: ExecutorMode> RedTeamEngine<M> {
             info!("🐝 SWARM: Multi-Agent Enjambre mode activated.");
         }
 
-        let mut builder = self.prepare_pipeline_builder(sink);
+        // V14 Phase 1: Wrap sink in MultiSink to include BugBountyDraftSink
+        let mut multi_sink = crate::core::sink::MultiSink::new();
+        multi_sink.add(sink);
+        multi_sink.add(Box::new(crate::core::sink::BugBountyDraftSink::new(std::path::PathBuf::from(&self.config.workspace_dir)).await));
+
+        let mut builder = self.prepare_pipeline_builder(Box::new(multi_sink));
         
         // V13: Readiness Gate - Prevent OPSEC leak by waiting for stealth readiness
         if self.config.stealth {

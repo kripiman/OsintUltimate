@@ -58,36 +58,58 @@ fn build_report(target: &TargetHost, finding: &Finding) -> BugBountyReport {
         let _ = writeln!(md, "{}", default_impact(&finding.core.severity));
     }
     let _ = writeln!(md);
-
-    // Steps to reproduce
     let _ = writeln!(md, "## Steps to Reproduce");
     let _ = writeln!(md);
-    
-    let evidence_data = finding.evidence.evidence.as_ref();
-    let matched_at = evidence_data
-        .and_then(|e| e.data.get("matched_at"))
-        .and_then(|v| v.as_str())
-        .unwrap_or(&target.host);
-    let template_id = evidence_data
-        .and_then(|e| e.data.get("template_id"))
-        .and_then(|v| v.as_str())
-        .unwrap_or("");
 
-    let _ = writeln!(md, "1. Navigate to or send a request to: `{}`", matched_at);
-    if !template_id.is_empty() {
-        let _ = writeln!(md, "2. The vulnerability was detected via Nuclei template: `{}`", template_id);
+    let evidence_data = finding.evidence.evidence.as_ref();
+    let evidence = http_evidence_view(finding);
+    let curl_cmd = evidence.raw_request.and_then(|r| build_curl_from_raw(r, &target.host));
+
+    if let Some(curl) = curl_cmd {
+        let _ = writeln!(md, "1. Execute the following `curl` command to reproduce the finding:");
+        let _ = writeln!(md, "   ```bash");
+        let _ = writeln!(md, "   {}", curl);
+        let _ = writeln!(md, "   ```");
+        let _ = writeln!(md, "2. Observe that the response contains the vulnerability pattern described above.");
+    } else {
+        let matched_at = evidence_data
+            .and_then(|e| e.data.get("matched_at"))
+            .and_then(|v| v.as_str())
+            .unwrap_or(&target.host);
+        let template_id = evidence_data
+            .and_then(|e| e.data.get("template_id"))
+            .and_then(|v| v.as_str())
+            .unwrap_or("");
+
+        let _ = writeln!(md, "1. Navigate to or send a request to: `{}`", matched_at);
+        if !template_id.is_empty() {
+            let _ = writeln!(md, "2. The vulnerability was detected via Nuclei template: `{}`", template_id);
+        }
+        let _ = writeln!(md, "3. Observe the response matches the vulnerability pattern described above.");
     }
-    let _ = writeln!(md, "3. Observe the response matches the vulnerability pattern described above.");
     let _ = writeln!(md);
 
     // PoC evidence
     let _ = writeln!(md, "## Proof of Concept");
     let _ = writeln!(md);
-    let _ = writeln!(md, "```");
-    if let Some(e) = evidence_data {
-        let _ = writeln!(md, "{}", serde_json::to_string_pretty(&e.data).unwrap_or_default());
+
+    if let (Some(req), Some(res)) = (evidence.raw_request, evidence.raw_response) {
+        let _ = writeln!(md, "### Raw Request");
+        let _ = writeln!(md, "```http");
+        let _ = writeln!(md, "{}", req);
+        let _ = writeln!(md, "```");
+        let _ = writeln!(md);
+        let _ = writeln!(md, "### Raw Response");
+        let _ = writeln!(md, "```http");
+        let _ = writeln!(md, "{}", res);
+        let _ = writeln!(md, "```");
+    } else {
+        let _ = writeln!(md, "```json");
+        if let Some(e) = evidence_data {
+            let _ = writeln!(md, "{}", serde_json::to_string_pretty(&e.data).unwrap_or_default());
+        }
+        let _ = writeln!(md, "```");
     }
-    let _ = writeln!(md, "```");
     let _ = writeln!(md);
 
     // Exploit Path
@@ -195,5 +217,105 @@ fn default_impact(s: &Severity) -> &'static str {
         Severity::High     => "An attacker could gain significant unauthorized access or cause substantial damage to the affected system or its users.",
         Severity::Medium   => "An attacker could obtain sensitive information or perform actions that partially compromise the security of the affected system.",
         _                  => "Limited security impact. No immediate risk to users or data.",
+    }
+}
+
+// --- Phase 1: Repro-Proof Generator Enhancements ---
+
+struct HttpEvidence<'a> {
+    raw_request: Option<&'a str>,
+    raw_response: Option<&'a str>,
+}
+
+fn http_evidence_view(finding: &Finding) -> HttpEvidence<'_> {
+    let data = finding.evidence.evidence.as_ref().map(|e| &e.data);
+    HttpEvidence {
+        raw_request: data.and_then(|d| d.get("raw_request")).and_then(|v| v.as_str()),
+        raw_response: data.and_then(|d| d.get("raw_response")).and_then(|v| v.as_str()),
+    }
+}
+
+/// Parses a raw HTTP request and returns a formatted curl command.
+fn build_curl_from_raw(raw: &str, default_host: &str) -> Option<String> {
+    let mut lines = raw.lines();
+    let first_line = lines.next()?;
+    let mut parts = first_line.split_whitespace();
+    
+    let method = parts.next()?;
+    let path = parts.next()?;
+    
+    let mut headers = Vec::new();
+    let mut host = default_host.to_string();
+    let mut body = String::new();
+    let mut reading_body = false;
+
+    for line in lines {
+        if reading_body {
+            body.push_str(line);
+            body.push('\n');
+            continue;
+        }
+
+        if line.is_empty() {
+            reading_body = true;
+            continue;
+        }
+
+        if let Some((key, value)) = line.split_once(':') {
+            let key = key.trim();
+            let value = value.trim();
+            if key.eq_ignore_ascii_case("Host") {
+                host = value.to_string();
+            }
+            // Skip common auto-generated headers that curl adds anyway or might cause issues
+            if !key.eq_ignore_ascii_case("Content-Length") {
+                headers.push((key.to_string(), value.to_string()));
+            }
+        }
+    }
+
+    let url = if path.starts_with("http") {
+        path.to_string()
+    } else {
+        format!("https://{}{}", host, path)
+    };
+
+    let mut curl = format!("curl -i -s -k -X {}", method);
+    
+    for (k, v) in headers {
+        let _ = write!(curl, " \\\n  -H \"{}: {}\"", k, v.replace('\"', "\\\""));
+    }
+
+    if !body.trim().is_empty() {
+        let escaped_body = body.trim().replace('\'', "'\\''");
+        let _ = write!(curl, " \\\n  --data-raw '{}'", escaped_body);
+    }
+
+    let escaped_url = url.replace('\'', "'\\''");
+    let _ = write!(curl, " \\\n  '{}'", escaped_url);
+
+    Some(curl)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_build_curl_get() {
+        let raw = "GET /api/v1/user HTTP/1.1\r\nHost: example.com\r\nAuthorization: Bearer secret\r\n\r\n";
+        let curl = build_curl_from_raw(raw, "fallback.com").unwrap();
+        assert!(curl.contains("-X GET"));
+        assert!(curl.contains("-H \"Authorization: Bearer secret\""));
+        assert!(curl.contains("'https://example.com/api/v1/user'"));
+    }
+
+    #[test]
+    fn test_build_curl_post_json() {
+        let raw = "POST /login HTTP/1.1\nHost: target.local\nContent-Type: application/json\n\n{\"user\":\"admin\"}";
+        let curl = build_curl_from_raw(raw, "fallback.com").unwrap();
+        assert!(curl.contains("-X POST"));
+        assert!(curl.contains("--data-raw '{\"user\":\"admin\"}'"));
+        assert!(curl.contains("'https://target.local/login'"));
     }
 }
