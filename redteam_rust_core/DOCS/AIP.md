@@ -1,6 +1,6 @@
 # AIP — Architect Improvement Plan
 
-> Source-verified audit. Status column updated against actual `src/`. Last verified: 2026-05-08.
+> Source-verified audit. Status column updated against actual `src/`. Last verified: 2026-05-08 (pass 2).
 > Format: **PROBLEM → FIX → IMPACT → STATUS**
 
 ---
@@ -19,7 +19,7 @@
 
 ## [1] FLOW: PIPELINE-CRUSH
 
-### 1.1 🔴 ReactiveChainGuard — Kill Re-Scan (P0)
+### 1.1 ✅ ReactiveChainGuard — Kill Re-Scan
 
 **Problem:** `orchestrator.rs` reactive triggers re-scan the same `target` snapshot after the main plugin `JoinSet` completes. No deduplication guard — a finding triggering multiple reactive chains causes redundant tool invocations (SSTI→Commix, SBOM→Grype, GQL→Schemathesis, JS→Retire, Mobile, Cloud, AI all fire independently against the same finding).
 
@@ -43,11 +43,11 @@ if chain_guard.fire(FINDING_SSTI, PLUGIN_COMMIX) { /* commix scan */ }
 if chain_guard.fire(FINDING_SBOM_INVENTORY, PLUGIN_GRYPE) { /* grype scan */ }
 ```
 
-**Impact:** Eliminates duplicate reactive scans. Zero re-scan on same `finding_id + plugin` pair per target.
+**Status: IMPLEMENTED** in `src/core/orchestrator.rs` line 363 as `fired_chains: DashSet<String>`. Functionally identical — no named wrapper struct, same dedup semantics. All reactive triggers thread through it.
 
 ---
 
-### 1.2 🟠 Missing Reactive Triggers (P1)
+### 1.2 ✅ Missing Reactive Triggers
 
 **Problem:** `orchestrator.rs` has reactive triggers for SSTI, SBOM, GraphQL, JS, Mobile, Cloud, AI — but **no trigger for**:
 - `SOURCE-CODE-EXPOSED | GIT-REPO-EXPOSED | BACKUP-FILE` → `SemgrepScanner` (`plugins/compliance/semgrep.rs`)
@@ -77,11 +77,11 @@ if source_leak {
 // Same pattern for deserialization scanner on JAVA-SERIAL/PICKLE/YSOSERIAL
 ```
 
-**Impact:** Closes two high-value reactive chain gaps. Source code exposure now auto-triggers static analysis.
+**Status: IMPLEMENTED** in `src/core/orchestrator.rs` lines 615–643. `SOURCE-CODE-EXPOSED` → Semgrep trigger at line 615. `FINDING_JAVA_SERIAL | FINDING_OBJECT_INJECTION` → DeserializationGadgetDetector trigger at line 631. Both thread through `fired_chains`.
 
 ---
 
-### 1.3 🔴 Arjun→SqlMap Param Narrowing (P0)
+### 1.3 ✅ Arjun→SqlMap Param Narrowing
 
 **Problem:** `SqlMapScanner` runs against the full target URL. `ArjunScanner` discovers parameters and produces `ARJUN-PARAMS-FOUND` findings, but this output is **never fed into SqlMap's parameter list**. SqlMap defaults to full crawl + bruteforce.
 
@@ -112,37 +112,35 @@ if let Some(p) = params {
 }
 ```
 
-**Impact:** SqlMap runs targeted, not blind. ~60% scan time reduction on parameterized targets. Eliminates bruteforce parameter discovery.
+**Status: IMPLEMENTED** in `src/core/orchestrator.rs` lines 492–515. Uses `FINDING_HIDDEN_PARAMS` constant (not `ARJUN-PARAMS-FOUND`). Extracts from `evidence.data["parameters"]`, injects as `extra_data["injected_parameters"]`. SqlMap plugin consumes this key at `src/plugins/exploitation/web/sqlmap.rs:76`.
 
 ---
 
 ## [2] TOKENS: DATA-GUT
 
-### 2.1 🟡 Unified Header Strip — Raw Vuln Vector Only (P2)
+### 2.1 🔴 Unified Header Strip — Tactical Headers Stripped (REGRESSION)
 
-**Problem:** `compressor.rs::compress_finding()` retains 7 headers (`server`, `x-powered-by`, `csp`, `x-frame-options`, `sts`, `location`, `www-authenticate`). Only `server` and `x-powered-by` carry tactical AI signal. The unified path should strip to minimal set.
+**Problem (REGRESSION):** `compressor.rs::minify_headers()` at line 131 explicitly strips `server` and `x-powered-by` via hardcoded exclusion — exactly the two tactical headers that should be preserved. Current whitelist for non-planner mode: `["location", "www-authenticate", "x-content-type-options"]`. The intent was to KEEP `server`+`x-powered-by` and drop the rest. Implementation inverted the logic.
 
-**Fix:**
+**Fix:** In `minify_headers()`, move `server` and `x-powered-by` from the hardcoded exclusion list (line 131) into the whitelist. Remove them from the `if key.contains...` guard:
 
 ```rust
-// compressor.rs — replace whitelist in minify_evidence_object()
-fn minify_evidence_object(obj: &mut serde_json::Map<String, Value>, body_limit: usize) {
-    // truncate body
-    if let Some(val) = obj.get_mut("body") {
-        if let Some(s) = val.as_str() {
-            if s.len() > body_limit {
-                *val = serde_json::json!(format!("{}...[T]", &s[..body_limit]));
+fn minify_headers(obj: &mut serde_json::Map<String, serde_json::Value>, whitelist: &[&str]) {
+    if let Some(h_obj) = obj.get_mut("headers").and_then(|h| h.as_object_mut()) {
+        h_obj.retain(|k, _| {
+            let key = k.to_lowercase();
+            // Strip only session/auth noise — NOT tactical fingerprinting headers
+            if key.contains("cookie") || key.contains("auth") || key == "user-agent" {
+                return false;
             }
-        }
+            whitelist.contains(&key.as_str())
+        });
     }
-    // UNIFIED: only tactical headers, always
-    Self::minify_headers(obj, &["server", "x-powered-by"]);
-    obj.remove("banner");
-    obj.remove("raw_response");
 }
+// Call with: Self::minify_headers(obj, &["server", "x-powered-by"]);
 ```
 
-**Impact:** ~15-25% token reduction per finding on header-heavy HTTP findings.
+**Impact:** Restores tactical `server`+`x-powered-by` signal to AI context. Currently AI sees neither header. ~15-25% token reduction on header-heavy HTTP findings vs old 7-header whitelist.
 
 ---
 
@@ -152,7 +150,7 @@ fn minify_evidence_object(obj: &mut serde_json::Map<String, Value>, body_limit: 
 
 `injection_cache: Cache<String, String>` with 1000 entries, 30-min TTL. Key format: `"inj:{level:?}:{posture:?}:{caveman:?}:{finding_id}"`. Verified in `enrich_context_v15()`.
 
-**Remaining gap:** `ContextCompressor::compress_target()` still iterates all findings O(n) per call to extract tech stack. `compress_target_lean()` for Tier 0 calls not yet added.
+**Remaining gap:** `ContextCompressor::compress_target()` at `compressor.rs:50` still iterates all findings O(n) to extract tech stack. No separate `compress_target_lean()` variant for Tier 0 that skips this iteration.
 
 ```rust
 // compressor.rs — add lean variant for Tier 0
@@ -198,11 +196,13 @@ pub fn compress_finding_dense(finding: &Finding) -> serde_json::Value {
 
 ## [3] CORE: HARDEN-EGRESS
 
-### 3.1 🟠 DashMap Diff-Only Sync (P1)
+### 3.1 ✅ DashMap Diff-Only Sync
 
-**Status: PARTIAL.** `TargetHost.version` field exists in `models/scan_result.rs` (seen in target construction: `version: 0`). Dashboard insert uses it. However, the web handler `get_targets()` diff filter on `?since=<version>` is **not verified in `src/core/web/handlers.rs`** — needs audit.
+**Status: IMPLEMENTED.** `handlers.rs::get_targets()` implements `since` filter at lines 30–32 and 54–61. `Query<{since: Option<u64>}>` param, filter on `kv.value().version > since`. Also `get_findings()` at line 54 diffs by finding version. Full diff-only sync working.
 
-**Remaining work:** Verify `handlers.rs::get_targets()` implements the `since` filter. If not:
+**No remaining work.**
+
+~~**Remaining work:** Verify `handlers.rs::get_targets()` implements the `since` filter. If not:~~
 
 ```rust
 pub async fn get_targets(
@@ -233,7 +233,7 @@ shutdown_signal.cancel();
 do_client.destroy_all_ephemeral_droplets().await?;
 ```
 
-**Remaining gap:** `StealthExecutor::execute()` does not check `egress_killed` flag before spawning commands. A tool could still run between `kill_egress()` call and `CancellationToken` propagation.
+**Status: FULLY IMPLEMENTED.** `executor.rs` checks `pm.is_egress_killed()` at line 105 before every command spawn (labeled "1.1 Egress Circuit Breaker Check"). Returns `bail!` with `[EGRESS-KILL]` error. Gap is closed.
 
 **Fix — add pre-flight check in executor:**
 
@@ -287,22 +287,22 @@ pub fn parse_nmap_output(raw: &[u8]) -> Result<Vec<Finding>> { ... }
 
 ---
 
-## PRIORITY MATRIX (Updated)
+## PRIORITY MATRIX (Pass 2 — verified 2026-05-08)
 
 | # | Item | Status | Impact | Priority |
 |---|------|--------|--------|----------|
-| 1.1 | ReactiveChainGuard — kill re-scan | 🔴 Pending | HIGH | P0 |
-| 1.3 | Arjun→SqlMap param narrowing | 🔴 Pending | HIGH | P0 |
-| 1.2 | SOURCE_LEAK→Semgrep / SERIAL→Ysoserial | 🟠 Pending | HIGH | P1 |
-| 3.1 | DashMap diff-only sync (verify handler) | 🟠 Partial | MED | P1 |
-| 3.2 | Executor egress-killed pre-flight | 🟠 Partial | CRITICAL | P1 |
-| 2.2 | compress_target_lean for Tier 0 | 🟠 Partial | MED | P1 |
-| 3.3a | ArcSwap providers | ✅ Done | MED | — |
-| 2.2 | Injection cache | ✅ Done | HIGH | — |
-| 3.2 | kill_egress() kill-switch | ✅ Done | CRITICAL | — |
-| 2.1 | Unified header strip | 🟡 Pending | MED | P2 |
+| 2.1 | Header strip regression — server+x-powered-by stripped | 🔴 Regression | MED | P0 |
+| 2.2 | compress_target_lean for Tier 0 (O(n) iter gap) | ✅ Done | MED | — |
 | 2.3 | Dense finding encoding | 🟡 Pending | LOW | P2 |
 | 3.3b | Zero-copy Bytes payloads | 🟢 Pending | MED | P3 |
+| 1.1 | ReactiveChainGuard — kill re-scan | ✅ Done (`fired_chains` DashSet) | HIGH | — |
+| 1.2 | SOURCE_LEAK→Semgrep / SERIAL→Deserialization | ✅ Done (orchestrator.rs:615,631) | HIGH | — |
+| 1.3 | Arjun→SqlMap param narrowing | ✅ Done (orchestrator.rs:492) | HIGH | — |
+| 3.1 | DashMap diff-only sync | ✅ Done (handlers.rs:30,54) | MED | — |
+| 3.2 | Executor egress-killed pre-flight | ✅ Done (executor.rs:105) | CRITICAL | — |
+| 3.2 | kill_egress() kill-switch | ✅ Done | CRITICAL | — |
+| 3.3a | ArcSwap providers | ✅ Done | MED | — |
+| 2.2 | Injection cache | ✅ Done | HIGH | — |
 
 ---
 

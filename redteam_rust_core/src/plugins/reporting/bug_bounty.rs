@@ -1,6 +1,6 @@
 /// Bug Bounty report generator — produces one Markdown file per finding,
 /// formatted for HackerOne / Bugcrowd triage requirements.
-use crate::models::{Finding, Severity, TargetHost};
+use crate::models::{Finding, Severity, TargetHost, Category};
 use std::fmt::Write;
 
 pub struct BugBountyReport {
@@ -40,6 +40,21 @@ fn build_report(target: &TargetHost, finding: &Finding) -> BugBountyReport {
     let _ = writeln!(md, "| **Finding ID** | `{}` |", finding.core.id);
     if let Some(mitre) = &finding.enrichment.mitre_attack {
         let _ = writeln!(md, "| **MITRE ATT&CK** | {} |", mitre.join(", "));
+    }
+    // Validation status
+    let validated = finding.evidence.evidence.as_ref().map(|e| e.verified).unwrap_or(false);
+    let _ = writeln!(md, "| **Validation** | {} |",
+        if validated { "Verified ✅" } else { "Potential 🔍" });
+
+    // Risk score (only if AI analysis present)
+    if let Some(ai) = &finding.enrichment.ai_analysis {
+        if ai.risk_score > 0 {
+            let _ = writeln!(md, "| **Risk Score** | {}/100 |", ai.risk_score);
+        }
+        if ai.confidence > 0.0 {
+            let _ = writeln!(md, "| **AI Confidence** | {:.0}% |",
+                ai.confidence * 100.0);
+        }
     }
     let _ = writeln!(md);
 
@@ -112,6 +127,17 @@ fn build_report(target: &TargetHost, finding: &Finding) -> BugBountyReport {
     }
     let _ = writeln!(md);
 
+    // AI-generated PoC payload (from PocValidator)
+    if let Some(ai) = &finding.enrichment.ai_analysis {
+        if let Some(poc) = &ai.poc {
+            let _ = writeln!(md, "### AI-Generated PoC");
+            let _ = writeln!(md, "```");
+            let _ = writeln!(md, "{}", poc.payload);
+            let _ = writeln!(md, "```");
+            let _ = writeln!(md);
+        }
+    }
+
     // Exploit Path
     let _ = writeln!(md, "## Exploit Path");
     let _ = writeln!(md);
@@ -120,6 +146,21 @@ fn build_report(target: &TargetHost, finding: &Finding) -> BugBountyReport {
     } else {
         let _ = writeln!(md, "Please refer to the PoC evidence to understand the exploit step-by-step.");
     }
+    let _ = writeln!(md);
+
+    // Operator-only note — strip before submitting to platform
+    if let Some(ai) = &finding.enrichment.ai_analysis {
+        if !ai.stealth_notes.is_empty() {
+            let _ = writeln!(md, "> **[Operator Note — remove before submission]** {}",
+                ai.stealth_notes);
+            let _ = writeln!(md);
+        }
+    }
+
+    // Remediation
+    let _ = writeln!(md, "## Remediation");
+    let _ = writeln!(md);
+    let _ = writeln!(md, "{}", default_remediation(&finding.core.severity, &finding.core.category));
     let _ = writeln!(md);
 
     // References
@@ -217,6 +258,17 @@ fn default_impact(s: &Severity) -> &'static str {
         Severity::High     => "An attacker could gain significant unauthorized access or cause substantial damage to the affected system or its users.",
         Severity::Medium   => "An attacker could obtain sensitive information or perform actions that partially compromise the security of the affected system.",
         _                  => "Limited security impact. No immediate risk to users or data.",
+    }
+}
+
+fn default_remediation(_severity: &Severity, category: &Category) -> &'static str {
+    match category {
+        Category::Vulnerability => "Implement robust input validation and output encoding. Ensure all software components are patched to the latest version.",
+        Category::Misconfiguration => "Review the configuration against security benchmarks (e.g., CIS). Disable unnecessary services and implement the principle of least privilege.",
+        Category::CredentialLeak => "Revoke the leaked credentials immediately and rotate them. Enable MFA and investigate if the credentials were used for unauthorized access.",
+        Category::Idor => "Implement proper access control checks at the object level. Ensure users can only access resources they are authorized to view.",
+        Category::FileUploadVulnerability => "Restrict allowed file types, implement strict filename validation, and store uploaded files in a non-executable directory.",
+        _ => "Investigate the finding and apply necessary security controls or patches according to organizational policy."
     }
 }
 

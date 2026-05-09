@@ -46,7 +46,6 @@ impl ContextCompressor {
         }).collect()
     }
 
-    /// Compress target host info including tech stack for AI context.
     pub fn compress_target(target: &TargetHost) -> serde_json::value::Value {
         let tech_stack: Vec<String> = target.findings.iter()
             .filter(|f| f.core.category == Category::TechnologyStack)
@@ -59,6 +58,15 @@ impl ContextCompressor {
             "ip": target.ip.as_deref().unwrap_or("?"),
             "t": format!("{:?}", target.target_type),
             "tech": tech_stack,
+        })
+    }
+
+    /// Lean target compression for Tier 0 (skips O(n) tech stack search)
+    pub fn compress_target_lean(target: &TargetHost) -> serde_json::value::Value {
+        serde_json::json!({
+            "h": target.host,
+            "ip": target.ip.as_deref().unwrap_or("?"),
+            "t": format!("{:?}", target.target_type),
         })
     }
 
@@ -116,7 +124,7 @@ impl ContextCompressor {
             vec![]
         } else {
             vec![
-                "location", "www-authenticate", "x-content-type-options"
+                "location", "www-authenticate", "x-content-type-options", "server", "x-powered-by"
             ]
         };
 
@@ -128,7 +136,7 @@ impl ContextCompressor {
             h_obj.retain(|k, _| {
                 let key = k.to_lowercase();
                 // Explicitly strip sensitive or noisy headers if they somehow bypass whitelist logic
-                if key.contains("cookie") || key.contains("auth") || key == "user-agent" || key == "server" || key == "x-powered-by" {
+                if key.contains("cookie") || key.contains("auth") || key == "user-agent" {
                     return false;
                 }
                 whitelist.contains(&key.as_str())

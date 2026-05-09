@@ -33,7 +33,7 @@ impl LlmClient for OllamaClient {
             Target: {}\n\
             {}Finding: {}\n\n\
             JSON Schema: {{ \"summary\": \"...\", \"impact\": \"...\", \"stealth_notes\": \"...\", \"risk_score\": 1-10, \"confidence\": 0.0-1.0, \"mitre_attack\": [\"T1234\"], \"exploit_path\": \"...\", \"model\": \"{}\" }}",
-            config.target.host, ctx_header, serde_json::to_string(&compressed)?, self.model
+            serde_json::to_string(&ContextCompressor::compress_target_lean(config.target)).unwrap_or_default(), ctx_header, serde_json::to_string(&compressed)?, self.model
         );
         let prompt = crate::core::ai::caveman::CavemanOptimizer::optimize_prompt(&prompt_raw, config.caveman);
 
@@ -70,7 +70,7 @@ impl LlmClient for OllamaClient {
             Plugins: {}\n\n\
             Decision instructions: If previous actions failed/blocked, suggest a bypass action (different User-Agent, headers, or a different tool).\n\
             Return JSON: {{ \"action\": \"plugin_name\", \"tactical_context\": {{ \"user_agent\": \"...\", \"headers\": {{...}} }} }}",
-            config.target.host, ctx_header, serde_json::to_string(&compressed_finding)?, adaptive_json, serde_json::to_string(&compressed_plugins)?
+            serde_json::to_string(&ContextCompressor::compress_target_lean(config.target)).unwrap_or_default(), ctx_header, serde_json::to_string(&compressed_finding)?, adaptive_json, serde_json::to_string(&compressed_plugins)?
         );
         let prompt = crate::core::ai::caveman::CavemanOptimizer::optimize_prompt(&prompt_raw, config.caveman);
 
