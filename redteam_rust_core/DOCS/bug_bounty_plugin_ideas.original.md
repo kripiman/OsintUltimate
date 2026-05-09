@@ -46,7 +46,7 @@ Este documento propone plugins adicionales que aportan valor al flujo de trabajo
 
 ## 4. Calidad del hallazgo y priorización
 
-- **`repro-proof-generator`**
+- **`repro-proof-generator`** [COMPLETO - V14 Phase 1]
   - Crea automáticamente pasos claros de reproducción, comandos `curl`, requests/responses y capturas de pantalla.
   - Ayuda a presentar informes más profesionales y facilitar remedición.
 

@@ -29,7 +29,7 @@ OsintUltimate is not a simple scanner; it is an **Autonomous Multi-Agent Swarm**
     - *Tier 0 (Ollama/Phi)* handles high-volume noise filtering.
     - *Tier 1/2 (Claude Code / Kimi K2.6 / GPT-4)* perform complex tactical decision-making and exploit planning based on CVSS scoring.
 4.  **Execution (Isolated Pipeline)**: Tasks are executed via isolated Docker containers leveraging over 60+ integrated industry tools (Nmap, Subfinder, Sqlmap, Ligolo, etc.).
-5.  **Sovereign Persistence (Lock-Free)**: Findings are enriched with CVE data and stored asynchronously in **PostgreSQL** to prevent I/O blocking during active strikes.
+5.  **Sovereign Persistence & Reporting**: Findings are enriched with CVE data and stored asynchronously in **PostgreSQL**. Simultaneously, the system generates triage-ready **Bug Bounty drafts** (.md) with automated `curl` reproduction steps in the `workspace/` directory.
 
 ---
 
