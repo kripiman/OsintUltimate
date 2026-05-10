@@ -117,6 +117,7 @@ impl ScannerPlugin for TlsxScanner {
                                     extra_data: Arc::new(serde_json::json!({})),
                                     version: 0,
                                     skip_heavy_scan: false,
+                                    scan_id: None,
                                 };
                                 let _ = tx.send(new_target).await;
                             }

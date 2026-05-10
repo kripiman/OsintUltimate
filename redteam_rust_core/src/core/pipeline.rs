@@ -121,8 +121,11 @@ impl<M: ExecutorMode> Pipeline<M> {
         handles.push(self.spawn_liveness_stage(liveness_rx, scan_tx.clone(), sink_tx.clone()));
         drop(scan_tx);
 
+        let db_pool = sink.get_db_pool();
+        let current_scan_id = sink.get_scan_id();
+
         // --- STAGE 3: Scanning ---
-        handles.push(self.spawn_scanning_stage(scan_rx, sink_tx.clone(), liveness_tx.clone()));
+        handles.push(self.spawn_scanning_stage(scan_rx, sink_tx.clone(), liveness_tx.clone(), db_pool, current_scan_id));
         drop(sink_tx);
         drop(liveness_tx);
 
@@ -182,6 +185,9 @@ impl<M: ExecutorMode> Pipeline<M> {
                                     }
                                 }
 
+                                let priority_plugins = res.metadata["priority_plugins"].clone();
+                                let high_value = res.metadata["high_value_target"].clone();
+
                                 Arc::make_mut(&mut target.findings).push(Finding::new("DISCOVERED_SUBDOMAIN", Category::Recon, Severity::Info, &format!("Discovered via {}: {}", name, res.host), data));
                                 let _ = liveness_tx.send(TargetHost { 
                                     host: res.host, 
@@ -193,10 +199,14 @@ impl<M: ExecutorMode> Pipeline<M> {
                                     user: None,
                                     findings: Arc::new(Vec::new()),
                                     tool_suggestions: Arc::new(Vec::new()),
-                                    tactical_context: target.tactical_context.clone(),
+                                    tactical_context: Arc::new(serde_json::json!({
+                                        "priority_plugins": priority_plugins,
+                                        "high_value_target": high_value,
+                                    })),
                                     extra_data: Arc::new(serde_json::json!({})),
                                     version: 0,
                                     skip_heavy_scan: false,
+                                    scan_id: target.scan_id,
                                 }).await;
                             }
                         }
@@ -257,7 +267,7 @@ impl<M: ExecutorMode> Pipeline<M> {
         })
     }
 
-    fn spawn_scanning_stage(&self, scan_rx: mpsc::Receiver<TargetHost>, sink_tx: mpsc::Sender<TargetHost>, liveness_tx: mpsc::Sender<TargetHost>) -> tokio::task::JoinHandle<()> {
+    fn spawn_scanning_stage(&self, scan_rx: mpsc::Receiver<TargetHost>, sink_tx: mpsc::Sender<TargetHost>, liveness_tx: mpsc::Sender<TargetHost>, db_pool: Option<sqlx::PgPool>, current_scan_id: Option<i64>) -> tokio::task::JoinHandle<()> {
         let plugins = self.plugins.clone();
         let concurrency = self.concurrency;
         let layer_policy = self.layer_policy;
@@ -289,6 +299,8 @@ impl<M: ExecutorMode> Pipeline<M> {
                 executor,
                 strict_scope,
                 feedback_tx: Some(liveness_tx),
+                db_pool,
+                current_scan_id,
             });
             if let (Some(tx), Some(targets)) = (dashboard_tx, dashboard_targets) {
                 orchestrator.with_dashboard_preconfigured(tx, targets);
@@ -412,6 +424,8 @@ impl<M: ExecutorMode> Pipeline<M> {
             executor: self.executor.clone(),
             strict_scope: self.strict_scope,
             feedback_tx: None,
+            db_pool: None,
+            current_scan_id: None,
         });
         let token = self.shutdown_token.clone();
         

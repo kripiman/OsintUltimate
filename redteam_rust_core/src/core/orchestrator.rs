@@ -27,6 +27,8 @@ pub struct Orchestrator<M: ExecutorMode> {
     policy: Arc<dyn crate::core::policy::PolicyProvider>,
     executor: Arc<StealthExecutor<M>>,
     strict_scope: bool,
+    db_pool: Option<sqlx::PgPool>,
+    current_scan_id: Option<i64>,
 }
 
 pub struct OrchestratorConfig<M: ExecutorMode> {
@@ -41,6 +43,8 @@ pub struct OrchestratorConfig<M: ExecutorMode> {
     pub executor: Arc<StealthExecutor<M>>,
     pub strict_scope: bool,
     pub feedback_tx: Option<tokio::sync::mpsc::Sender<TargetHost>>,
+    pub db_pool: Option<sqlx::PgPool>,
+    pub current_scan_id: Option<i64>,
 }
 
 impl<M: ExecutorMode> Orchestrator<M> {
@@ -72,6 +76,8 @@ impl<M: ExecutorMode> Orchestrator<M> {
             policy: config.policy,
             executor: config.executor,
             strict_scope: config.strict_scope,
+            db_pool: config.db_pool,
+            current_scan_id: config.current_scan_id,
         }
     }
 
@@ -232,8 +238,23 @@ impl<M: ExecutorMode> Orchestrator<M> {
                 
                 // CRIT-003 & HIGH-009 FIX: Parallel execution + Panic Isolation via tokio::spawn
                 let mut join_set = tokio::task::JoinSet::new();
+
+                // V14.6: Extract priority_plugins from tactical_context for two-round spawn
+                let priority_set: std::collections::HashSet<String> = target_ref.tactical_context
+                    .get("priority_plugins")
+                    .and_then(|v| v.as_array())
+                    .map(|arr| arr.iter()
+                        .filter_map(|v| v.as_str().map(|s| s.to_string()))
+                        .collect())
+                    .unwrap_or_default();
+
+                // Two-round spawn: pass=true → priority plugins first, pass=false → rest
+                // Both rounds are parallel within the same JoinSet (no await between rounds)
+                for pass in [true, false] {
                 for i in 0..plugins.len() {
                     let p = &plugins[i];
+                    let is_priority = priority_set.contains(p.name());
+                    if pass != is_priority { continue; }
                     
                     // ARCH-EXT: Context-aware filtering
                     if p.metadata().target_type != target_ref.target_type {
@@ -267,6 +288,7 @@ impl<M: ExecutorMode> Orchestrator<M> {
                         extra_data: Arc::clone(&target_ref.extra_data),
                         version: target_ref.version,
                         skip_heavy_scan: target_ref.skip_heavy_scan,
+                        scan_id: target_ref.scan_id,
                     };
                     let lp = lp;
                     let approval_gate = Arc::clone(&approval_gate);
@@ -307,6 +329,7 @@ impl<M: ExecutorMode> Orchestrator<M> {
                         }
                     });
                 }
+                } // end for pass (V14.6 two-round priority spawn)
 
                 // Collect all findings first via JoinSet results
                 let mut all_findings = Vec::new();
@@ -389,6 +412,7 @@ impl<M: ExecutorMode> Orchestrator<M> {
                                         extra_data: Arc::clone(&target.extra_data),
                                         version: target.version,
                                         skip_heavy_scan: target.skip_heavy_scan,
+                                        scan_id: target.scan_id,
                                     };
 
                                     if let Some(url) = vuln_url {
@@ -724,7 +748,13 @@ impl<M: ExecutorMode> Orchestrator<M> {
             }
         }).buffer_unordered(self.concurrency);
 
-        while let Some(result) = processed_stream.next().await {
+        while let Some(mut result) = processed_stream.next().await {
+            result.scan_id = self.current_scan_id;
+            if let Some(ref pool) = self.db_pool {
+                if let Err(e) = crate::core::temporal::diff_target(pool, &mut result).await {
+                    error!("Temporal diff failed for {}: {}", result.host, e);
+                }
+            }
             if let Err(e) = output_tx.send(result).await {
                 error!("Failed to send result to output channel: {}", e);
                 break; // Downstream closed

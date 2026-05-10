@@ -1,2 +1,1 @@
-Arsenal P0: COMPLETO (7/6). Infraestructura de configuración para wordlists/binarios estabilizada. Filtros RFC1918 y lógica PSL integrados. Build 100% verde.
-V14 Phase 1 (Repro-Proof Generator): COMPLETO. Generación automática de reportes Markdown en workspace/reports/drafts/ con comandos curl y evidencia HTTP raw integrada.
+[SYSTEM] Target Change Tracker / Temporal Diff mode is implemented and verified. Orchestrator now correctly retrieves `scan_id` and `PgPool` to execute scan-to-scan finding deltas. TargetHost missing field instantiation across `main.rs`, `engine.rs`, `pipeline.rs` etc. was resolved and cleanly compiles.

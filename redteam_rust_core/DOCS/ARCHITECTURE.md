@@ -8,18 +8,18 @@
 
 ```mermaid
 flowchart TD
-    A[main.rs: tokio::main] --> B{args.len == 1?}
-    B -- yes --> C[menu::show_menu\ninteractive TUI]
-    B -- no --> D[Args::parse via clap]
-    C & D --> E[init_telemetry\nOTEL + JSON logs]
-    E --> F[binary_health_check\nP0: bbscope asnmap cdncheck tlsx clairvoyance]
-    F --> G[EngineFactory::detect_infrastructure_limits\nUltraLow / LocalPC / Hybrid / Server]
-    G --> H[Config::from_env\n70+ env vars → typed Config struct]
-    H --> I[Build EngineConfig\nbridge: Config → Engine]
-    I --> J[RedTeamEngine::from_config]
-    J --> K{--worker flag?}
-    K -- yes --> L[run_worker_mode\nNATS + scan_queue polling]
-    K -- no --> M[Normal scan + sink assembly]
+    A["main.rs: tokio::main"] --> B{"args.len == 1?"}
+    B -- yes --> C["menu::show_menu<br/>interactive TUI"]
+    B -- no --> D["Args::parse via clap"]
+    C & D --> E["init_telemetry<br/>OTEL + JSON logs"]
+    E --> F["binary_health_check<br/>P0: bbscope asnmap cdncheck tlsx clairvoyance"]
+    F --> G["EngineFactory::detect_infrastructure_limits<br/>UltraLow / LocalPC / Hybrid / Server"]
+    G --> H["Config::from_env<br/>70+ env vars, typed Config struct"]
+    H --> I["Build EngineConfig<br/>bridge: Config to Engine"]
+    I --> J["RedTeamEngine::from_config"]
+    J --> K{"--worker flag?"}
+    K -- yes --> L["run_worker_mode<br/>NATS + scan_queue polling"]
+    K -- no --> M["Normal scan + sink assembly"]
 ```
 
 **Key invariants:**
@@ -122,25 +122,30 @@ flowchart LR
 
 ```mermaid
 flowchart TD
-    IN[scan_rx: mpsc::Receiver] --> UNFOLD[stream::unfold\nshutdown-aware drain]
-    UNFOLD --> FOR[for_each_concurrent\nconcurrency limit]
-    FOR --> MEM{Semaphore permit\nRAM pressure guard}
-    MEM --> SCOPE{StrictScope check\nfail-closed if out}
-    SCOPE -- fail --> AUDIT[AUDIT finding → sink]
-    SCOPE -- pass --> LAYER{ScanLayer ≤ max_layer?}
-    LAYER -- blocked --> DEAD[Dead status → sink]
-    LAYER -- ok --> GATE{ApprovalGate\nLayer 3+ = Verification\nLayer 4+ = Exploitation}
+    IN["scan_rx: mpsc::Receiver"] --> UNFOLD["stream::unfold<br/>shutdown-aware drain"]
+    UNFOLD --> FOR["for_each_concurrent<br/>concurrency limit"]
+    FOR --> MEM{"Semaphore permit<br/>RAM pressure guard"}
+    MEM --> SCOPE{"StrictScope check<br/>fail-closed if out"}
+    SCOPE -- fail --> AUDIT["AUDIT finding to sink"]
+    SCOPE -- pass --> LAYER{"ScanLayer <= max_layer?"}
+    LAYER -- blocked --> DEAD["Dead status to sink"]
+    LAYER -- ok --> GATE{"ApprovalGate<br/>Layer 3+ = Verification<br/>Layer 4+ = Exploitation"}
     GATE -- denied --> DEAD
-    GATE -- approved --> BA[BlackArch bridge\ntool suggestions appended]
-    BA --> RUN[plugin.scan\nSandboxDispatcher\nStealthExecutor]
-    RUN --> DASH[broadcast_tx\nDashboard live feed]
-    RUN --> FEED[feedback_tx\nnew discovered assets → S2]
-    RUN --> OUT[sink_tx → Stage 4]
+    GATE -- approved --> BA["BlackArch bridge<br/>tool suggestions appended"]
+    BA --> RUN["plugin.scan<br/>SandboxDispatcher<br/>StealthExecutor"]
+    RUN --> DASH["broadcast_tx<br/>Dashboard live feed"]
+    RUN --> FEED["feedback_tx<br/>new discovered assets to S2"]
+    RUN --> OUT["sink_tx to Stage 4"]
 
-    SWARM{swarm_mode?} -- yes --> AROUTER[TieredAIRouter.decide_action\nnext plugin + context]
+    SWARM{"swarm_mode?"} -- yes --> AROUTER["TieredAIRouter.decide_action<br/>next plugin + context"]
     AROUTER --> RUN
     OUT --> SWARM
 ```
+
+**Priority Scheduling (V14.6):**
+The Orchestrator implements a two-round dispatch model to ensure critical scanners run first:
+1. **Round 1 (Priority)**: Plugins listed in `tactical_context["priority_plugins"]` (e.g., `auth_state_machine` for SSO subdomains).
+2. **Round 2 (Standard)**: All other plugins matching capability/layer requirements.
 
 **ScanLayer hierarchy** (`capability_layer.rs`):
 ```
@@ -154,31 +159,31 @@ Default: `Scanning`. Unlock with `--max-layer exploitation`.
 
 ```mermaid
 flowchart TD
-    F[Finding + TargetHost] --> CL[classify\nCVSS + Category + WAF tech detection]
-    CL -->|CVSS ≥ 8.5 OR CredentialLeak/ExposedAsset| PR[RouteLevel::Premium]
-    CL -->|CVSS ≥ 5.0 OR WAF detected| MI[RouteLevel::Mid]
-    CL -->|else OR source_aware evidence| LO[RouteLevel::Local]
+    F["Finding + TargetHost"] --> CL["classify<br/>CVSS + Category + WAF tech detection"]
+    CL -->|CVSS >= 8.5 OR CredentialLeak| PR["RouteLevel::Premium"]
+    CL -->|CVSS >= 5.0 OR WAF detected| MI["RouteLevel::Mid"]
+    CL -->|else OR source_aware| LO["RouteLevel::Local"]
 
-    PR & MI & LO --> CACHE{moka cache hit?\n5000 entries / 2h TTL}
-    CACHE -- hit --> RET[return cached AIAnalysis]
-    CACHE -- miss --> SK[SkillManager.match_for_context\ntactical TTP injection\nbudget: Local=300 Mid=800 Premium=1500 tokens]
-    SK --> TO[TokenOptimizer\nLite / Full / Ultra compression]
-    TO --> CASCADE[Provider cascade\nLocal → Mid → Premium on any error]
+    PR & MI & LO --> CACHE{"moka cache hit?<br/>5000 entries / 2h TTL"}
+    CACHE -- hit --> RET["return cached AIAnalysis"]
+    CACHE -- miss --> SK["SkillManager.match_for_context<br/>TTP injection<br/>Local=300 Mid=800 Premium=1500 tokens"]
+    SK --> TO["TokenOptimizer<br/>Lite / Full / Ultra"]
+    TO --> CASCADE["Provider cascade<br/>Local → Mid → Premium on error"]
 
-    subgraph Tier0[Local - Ollama]
-        OL[qwen2.5-coder:7b]
+    subgraph Tier0["Local - Ollama"]
+        OL["qwen2.5-coder:7b"]
     end
-    subgraph Tier1[Mid]
-        AZ[Azure GPT-4o-mini priority 0]
-        OA[OpenAI GPT-4o-mini priority 1]
-        GF[Gemini 1.5-flash priority 2]
+    subgraph Tier1["Mid"]
+        AZ["Azure GPT-4o-mini p0"]
+        OA["OpenAI GPT-4o-mini p1"]
+        GF["Gemini 1.5-flash p2"]
     end
-    subgraph Tier2[Premium]
-        GP[Gemini 1.5-pro priority 0]
-        AN[Anthropic claude-3-5-sonnet priority 1]
-        KI[Kimi kimi-for-coding priority 1]
-        CC[ClaudeCode SDK priority 2]
-        AG[Antigravity bridge priority 5 last-resort]
+    subgraph Tier2["Premium"]
+        GP["Gemini 1.5-pro p0"]
+        AN["Anthropic claude-3-5-sonnet p1"]
+        KI["Kimi kimi-for-coding p1"]
+        CC["ClaudeCode SDK p2"]
+        AG["Antigravity bridge p5"]
     end
 
     CASCADE --> Tier0 & Tier1 & Tier2
@@ -250,6 +255,7 @@ erDiagram
     scans ||--o{ targets : "1 scan → N targets"
     targets ||--o{ findings : "1 target → N findings"
     targets ||--o{ agent_sessions : "1 target → N sessions"
+    findings ||--o{ submitted_reports : "1 finding → N platforms"
 
     scans {
         serial id PK
@@ -277,6 +283,14 @@ erDiagram
         int target_id FK
         text posture
         text memory_json
+    }
+    submitted_reports {
+        bigserial id PK
+        text finding_hash
+        text program_handle
+        text platform
+        text submission_url
+        timestamptz submitted_at
     }
     plugin_cache {
         text cache_key PK
@@ -306,6 +320,7 @@ erDiagram
 - `20260428` — core schema (scans, targets, findings, objectives, agent_sessions, plugin_cache, mcp_stats, checkpoints, deduplication, cve_cache)
 - `20260506` — distributed worker queue (workers, scan_queue + priority index)
 - `20260508` — bug bounty program targets (program_targets, h1/bc/intigriti platform column)
+- `20260508000003` — [V14.7] bug bounty submission deduplication (`submitted_reports`)
 
 ---
 
@@ -314,17 +329,17 @@ erDiagram
 ```mermaid
 flowchart LR
     subgraph Interfaces
-        CLI["CLI\n--target / --input / --apk"]
-        DASH["Web Dashboard\nAxum + Ed25519 JWT\n0o600 token file"]
-        MCP["MCP SSE Server :3001\nClaude Code integration\nMCP_TOKEN auth"]
-        WRK["Worker Node\n--worker + --nats-url\nclaims from scan_queue PG"]
+        CLI["CLI<br/>--target / --input / --apk"]
+        DASH["Web Dashboard<br/>Axum + Ed25519 JWT<br/>0o600 token file"]
+        MCP["MCP SSE Server :3001<br/>Claude Code integration<br/>MCP_TOKEN auth"]
+        WRK["Worker Node<br/>--worker + --nats-url<br/>claims from scan_queue PG"]
     end
 
     CLI & DASH & MCP & WRK --> ENG[RedTeamEngine]
     ENG --> PIPE[Pipeline stages 1-4]
     PIPE --> MSINK[MultiSink]
 
-    DASH -->|MissionRequest mpsc| MQ[Mission Queue → injection_tx]
+    DASH -->|MissionRequest mpsc| MQ["Mission Queue to injection_tx"]
     MQ --> PIPE
 ```
 

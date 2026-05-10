@@ -3,6 +3,7 @@ use anyhow::{Result, anyhow};
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum ProxyMode {
+    None,
     Dante,
     Shadowsocks,
     Hysteria,

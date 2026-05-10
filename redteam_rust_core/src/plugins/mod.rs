@@ -61,6 +61,7 @@ pub enum Capability {
     CdnDetection,
     TlsFingerprinting,
     ScopeExtraction,
+    AuthStateMachine,   // V14.6: Stateful OAuth/custom auth flow probing
 }
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, PartialOrd, Ord)]

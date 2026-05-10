@@ -26,6 +26,7 @@ pub mod policy;
 pub mod middleware;
 pub mod persistence;
 pub mod orchestrator;
+pub mod temporal;
 pub mod verification;
 pub mod notifications;
 pub mod selection;

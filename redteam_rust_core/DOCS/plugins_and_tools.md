@@ -92,6 +92,7 @@ All exploitation plugins require `--max-layer exploitation` or higher.
 | S3 bucket scanner | s3scanner | `S3SCANNER_PATH`, `S3SCANNER_WORDLIST` | open bucket enumeration |
 | Reflected XSS | kxss | `KXSS_PATH` | parameter reflection detection |
 | NoSQL injection | nosqlmap | `NOSQLMAP_PATH` | MongoDB/Redis injection |
+| Auth State Machine | custom | — | OAuth2/OIDC state fixation & step skipping |
 
 ---
 

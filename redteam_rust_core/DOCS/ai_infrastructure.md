@@ -101,6 +101,21 @@ Before data reaches external AI providers (Azure/OpenAI/Anthropic), `Scrubber` (
 
 ---
 
+## 5. WAF AI Hardening & Real-time Evasion (V14.6)
+
+For high-value targets behind a WAF, Mimikri uses the **OffPathAiEngine** to generate real-time mutation strategies.
+
+### 5.1 Real-time Mutation Path
+- **Latency Fail-safe**: Synchronous inference path with a strict **2000ms timeout**.
+- **Graceful Fallback**: If inference exceeds 2000ms or fails, the engine falls back to local heuristic mutations to ensure pipeline continuity.
+- **LSH Cache**: Implements Locality Sensitive Hashing (LSH) for mutation patterns. Near-duplicate WAF response signatures trigger high-speed cache hits, bypassing the LLM.
+
+### 5.2 LSH Metrics
+- `WAF_LSH_HITS`: Atomic counter for successful sub-2ms evasion strategy retrievals.
+- `WAF_INFERENCE_TIMEOUTS`: Tracks when real-time AI was too slow, triggering local fallback.
+
+---
+
 > [!IMPORTANT]
 > **Wenyan Ultra** mode is machine-to-machine only. Operators who need human-readable AI logs must use `Lite` or `Off` level.
 

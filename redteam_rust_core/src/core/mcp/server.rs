@@ -51,6 +51,8 @@ pub struct McpServer {
     pub cache_hits: AtomicU32,
     pub tokens_saved: AtomicU64,
     pub bytes_processed: AtomicU64,
+    /// V14.6: WAF AI engine reference for LSH/inference metrics in stats
+    pub off_path_engine: Option<Arc<crate::core::ai::off_path::OffPathAiEngine>>,
 }
 
 impl McpServer {
@@ -73,6 +75,7 @@ impl McpServer {
             cache_hits: AtomicU32::new(0),
             tokens_saved: AtomicU64::new(0),
             bytes_processed: AtomicU64::new(0),
+            off_path_engine: None,
         }
     }
 
@@ -88,6 +91,12 @@ impl McpServer {
             }
             self.db = Some(Arc::new(db));
         }
+        self
+    }
+
+    /// V14.6: Attach the WAF off-path AI engine for LSH/inference metrics in stats.
+    pub fn with_off_path_engine(mut self, engine: Arc<crate::core::ai::off_path::OffPathAiEngine>) -> Self {
+        self.off_path_engine = Some(engine);
         self
     }
 
@@ -704,6 +713,7 @@ async fn handle_execute_plugin(state: &Arc<McpServer>, args: serde_json::Value) 
             extra_data: Arc::new(json!({})),
             version: 0,
             skip_heavy_scan: false,
+            scan_id: None,
         };
 
         // 2.1 MOTOR DE RESILIENCIA (Fase 6 Roadmap)
@@ -919,6 +929,19 @@ async fn handle_get_stats(state: &Arc<McpServer>) -> serde_json::Value {
         loop_warnings.join("\n")
     };
 
+    // V14.6: WAF AI engine metrics
+    let (lsh_hits, ai_inferences, waf_rate) = match &state.off_path_engine {
+        Some(e) => {
+            let h = e.lsh_cache_hits.load(Ordering::SeqCst);
+            let i = e.ai_inference_count.load(Ordering::SeqCst);
+            let rate = if h + i > 0 {
+                format!("{:.1}%", h as f64 / (h + i) as f64 * 100.0)
+            } else { "N/A (cold)".to_string() };
+            (h, i, rate)
+        }
+        None => (0, 0, "N/A (disabled)".to_string()),
+    };
+
     safe_result(format!(
         "[MCP-STATS] Rendimiento de Sesion:\n\
         - Llamadas totales: {}\n\
@@ -927,9 +950,11 @@ async fn handle_get_stats(state: &Arc<McpServer>) -> serde_json::Value {
         - Ratio de Compresion: {:.1}%\n\
         - Bytes Procesados: {} KB\n\
         - Archivos en Delta Cache: {}\n\
-        - Loop Detection:\n{}",
+        - Loop Detection:\n{}\n\
+        - WAF LSH Hits: {} | AI Inferences: {} | LSH Hit Rate: {}",
         calls, hits, hit_rate, tokens, usd_saved, compression_ratio,
-        bytes / 1024, state.file_hash_cache.len(), loop_section
+        bytes / 1024, state.file_hash_cache.len(), loop_section,
+        lsh_hits, ai_inferences, waf_rate
     ), false)
 }
 

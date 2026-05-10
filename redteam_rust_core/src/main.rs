@@ -413,6 +413,7 @@ async fn main() -> Result<()> {
                     extra_data: Arc::new(serde_json::json!({})),
                     version: 0,
                     skip_heavy_scan: false,
+                    scan_id: None,
                 };
 
                 if let Err(e) = injection_tx_for_dashboard.send(host).await {
@@ -459,6 +460,7 @@ async fn main() -> Result<()> {
             extra_data: Arc::new(serde_json::json!({})),
             version: 0,
             skip_heavy_scan: false,
+            scan_id: None,
         }]))
     } else if let Some(image_ref) = args.image.clone() {
         Box::pin(futures::stream::iter(vec![TargetHost {
@@ -475,6 +477,7 @@ async fn main() -> Result<()> {
             extra_data: Arc::new(serde_json::json!({})),
             version: 0,
             skip_heavy_scan: false,
+            scan_id: None,
         }]))
     } else if let Some(input_path) = args.input.clone() {
         let file = tokio::fs::File::open(&input_path).await?;
@@ -502,6 +505,7 @@ async fn main() -> Result<()> {
                     tactical_context: Arc::new(serde_json::json!({})), extra_data: Arc::new(serde_json::json!({})),
                     version: 0,
                     skip_heavy_scan: false,
+                    scan_id: None,
                 }
             })
             .boxed()
@@ -537,6 +541,7 @@ async fn main() -> Result<()> {
             extra_data: Arc::new(serde_json::json!({})),
             version: 0,
             skip_heavy_scan: false,
+            scan_id: None,
         }]))
     } else if certstream_rx.is_some() || args.dashboard.is_some() {
         info!("📡 Waiting for targets from CertStream or Dashboard...");
@@ -575,6 +580,7 @@ async fn main() -> Result<()> {
                     tactical_context: Arc::new(serde_json::json!({})), extra_data: Arc::new(serde_json::json!({})),
                     version: 0,
                     skip_heavy_scan: false,
+                    scan_id: None,
                 }
             });
         target_hosts = futures::stream::select(target_hosts, cs_stream).boxed();
@@ -702,6 +708,7 @@ async fn run_worker_mode(args: &Args) -> Result<()> {
                 extra_data: Arc::new(serde_json::json!({})),
                 version: 0,
                 skip_heavy_scan: false,
+                scan_id: None,
             };
 
             let mut multi_sink = MultiSink::new();

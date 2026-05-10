@@ -29,9 +29,10 @@ impl ScanMetadata {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Default)]
 #[serde(rename_all = "snake_case")]
 pub enum TargetStatus {
+    #[default]
     Pending,
     Scanning,
     Scanned,
@@ -39,8 +40,9 @@ pub enum TargetStatus {
     Error,
 }
 
-#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Default)]
 pub enum TargetType {
+    #[default]
     Network,
     Web,
     Cloud,
@@ -53,7 +55,7 @@ pub enum TargetType {
     Mobile,
 }
 
-#[derive(Debug, Serialize, Deserialize, Clone)]
+#[derive(Debug, Serialize, Deserialize, Clone, Default)]
 pub struct TargetHost {
     pub host: String,
     pub ip: Option<String>,
@@ -78,6 +80,9 @@ pub struct TargetHost {
     /// CDN detection flag to skip resource-intensive scans (Nuclei, Fuzzing)
     #[serde(default)]
     pub skip_heavy_scan: bool,
+    /// Temporal Diff: tracks the scan instance ID for historical comparisons
+    #[serde(default)]
+    pub scan_id: Option<i64>,
 }
 
 impl TargetHost {

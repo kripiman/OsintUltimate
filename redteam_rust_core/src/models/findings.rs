@@ -218,6 +218,9 @@ pub struct FindingEnrichment {
     /// context.consolidation_urgency will be lost unless aliased or migrated.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub consolidation_urgency: Option<ConsolidationUrgency>,
+    #[serde(default)]
+    #[serde(skip_serializing_if = "std::ops::Not::not")]
+    pub is_new: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]

@@ -7,6 +7,14 @@ use reqwest::Client;
 use serde::Deserialize;
 use std::sync::Arc;
 use std::collections::HashSet;
+use once_cell::sync::Lazy;
+use regex::Regex;
+
+/// V14.6: Identifies high-value administrative subdomains for priority auth scanning
+static ADMIN_SUBDOMAIN_RE: Lazy<Regex> = Lazy::new(|| {
+    Regex::new(r"(?i)^(admin|internal|vpn|auth|sso|idp|staff|portal|dev|backend|manage|mgmt)\.")
+        .expect("Valid admin subdomain regex")
+});
 
 // V5 FIX (Stealth): Removed LivenessChecker and Jitter from OsintScanner.
 // A passive OSINT phase should never touch the target's infrastructure directly.
@@ -156,6 +164,16 @@ impl DiscoveryPlugin for OsintScanner {
         }
 
         info!("OsintScanner: Found {} potential subdomains for {}", subdomains.len(), target.host);
-        Ok(subdomains.into_iter().map(|s| DiscoveryResult { host: s, metadata: serde_json::json!({}) }).collect())
+        Ok(subdomains.into_iter().map(|s| {
+            let is_hvt = ADMIN_SUBDOMAIN_RE.is_match(&s);
+            DiscoveryResult {
+                host: s,
+                metadata: serde_json::json!({
+                    "high_value_target": is_hvt,
+                    "priority_plugins": if is_hvt { serde_json::json!(["auth_state_machine"]) } else { serde_json::json!([]) },
+                    "source": "crt.sh"
+                }),
+            }
+        }).collect())
     }
 }

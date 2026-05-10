@@ -16,18 +16,18 @@ Activation: `--swarm` flag → `run_pipeline(..., swarm: true)` → `Orchestrato
 
 ```mermaid
 flowchart TD
-    FIND[Finding received] --> PLAN[plan_next_step\nTieredAIRouter Premium/Mid]
-    PLAN --> ROLE{AgentRole assigned}
-    ROLE --> SC[Scout\nPosture: Ghost]
-    ROLE --> EX[Exploiter\nPosture: Strike]
-    ROLE --> C2[C2Operator\nPosture: Breach]
-    ROLE --> GR[GhostReporter\nPassive documentation]
-    ROLE --> PL[Planner\nCorrelation only no budget spend]
+    FIND["Finding received"] --> PLAN["plan_next_step<br/>TieredAIRouter Premium/Mid"]
+    PLAN --> ROLE{"AgentRole assigned"}
+    ROLE --> SC["Scout<br/>Posture: Ghost"]
+    ROLE --> EX["Exploiter<br/>Posture: Strike"]
+    ROLE --> C2["C2Operator<br/>Posture: Breach"]
+    ROLE --> GR["GhostReporter<br/>Passive documentation"]
+    ROLE --> PL["Planner<br/>Correlation only, no budget spend"]
 
-    SC -->|new assets → discovery_tx| FIND
-    EX -->|verified findings → sink_tx| SINK
-    C2 -->|session established → sink_tx| SINK
-    GR -->|info finding → sink_tx| SINK
+    SC -->|new assets to discovery_tx| FIND
+    EX -->|verified findings to sink_tx| SINK
+    C2 -->|session established to sink_tx| SINK
+    GR -->|info finding to sink_tx| SINK
 ```
 
 | Role | `TaskPriority` | Behavior |
@@ -164,22 +164,22 @@ pm.wait_for_readiness(Duration::from_secs(30)).await
 
 ```mermaid
 flowchart TD
-    START[SwarmOrchestrator::run] --> READY[ProxyManager readiness 30s]
-    READY --> DISC[pipeline.run_discovery → discovery_rx]
-    DISC --> LOOP{finding from rx}
-    LOOP --> DEDUP[seen_finding_ids dedup]
-    DEDUP --> CORR[CorrelationEngine.add_finding]
-    CORR --> AD{AD path detected\nCVSS > 0.8?}
-    AD -- yes --> FORCE[force role = Exploiter]
-    AD -- no --> PLAN[plan_next_step\nrouter Premium/Mid]
-    PLAN & FORCE --> BUDGET{budget.is_exhausted?}
-    BUDGET -- yes --> BREAK[break loop]
-    BUDGET -- no --> GUARD[TokenGuard::new\npriority-based]
-    GUARD -- None budget full --> SKIP[skip finding]
-    GUARD -- Some --> SPAWN[JoinSet::spawn\nsemaphore 10]
-    SPAWN --> CHECK{effective > 95%?}
-    CHECK -- yes --> REPORTER[force GhostReporter]
-    CHECK -- no --> ROLE[execute role agent]
-    ROLE --> COMMIT[guard.commit actual_tokens]
+    START["SwarmOrchestrator::run"] --> READY["ProxyManager readiness 30s"]
+    READY --> DISC["pipeline.run_discovery to discovery_rx"]
+    DISC --> LOOP{"finding from rx"}
+    LOOP --> DEDUP["seen_finding_ids dedup"]
+    DEDUP --> CORR["CorrelationEngine.add_finding"]
+    CORR --> AD{"AD path detected<br/>CVSS gt 0.8?"}
+    AD -- yes --> FORCE["force role = Exploiter"]
+    AD -- no --> PLAN["plan_next_step<br/>router Premium/Mid"]
+    PLAN & FORCE --> BUDGET{"budget.is_exhausted?"}
+    BUDGET -- yes --> BREAK["break loop"]
+    BUDGET -- no --> GUARD["TokenGuard::new<br/>priority-based"]
+    GUARD -- None budget full --> SKIP["skip finding"]
+    GUARD -- Some --> SPAWN["JoinSet::spawn<br/>semaphore 10"]
+    SPAWN --> CHECK{"effective gt 95%?"}
+    CHECK -- yes --> REPORTER["force GhostReporter"]
+    CHECK -- no --> ROLE["execute role agent"]
+    ROLE --> COMMIT["guard.commit actual_tokens"]
     COMMIT --> LOOP
 ```

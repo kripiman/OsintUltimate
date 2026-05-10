@@ -98,6 +98,13 @@ impl BountyExporter {
         if !f.enrichment.cwe.is_empty() {
             out.push_str(&format!("- **CWE:** {}\n", f.enrichment.cwe.join(", ")));
         }
+        // V14.7: CVSS data in submission path (previously only in draft path)
+        if let Some(score) = f.enrichment.cvss_score {
+            out.push_str(&format!("- **CVSS Score:** {:.1}\n", score));
+        }
+        if let Some(ref vector) = f.enrichment.cvss_vector {
+            out.push_str(&format!("- **CVSS Vector:** `{}`\n", vector));
+        }
         out.push('\n');
 
         out.push_str("## Steps to Reproduce\n");

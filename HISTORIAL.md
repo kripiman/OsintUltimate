@@ -69,3 +69,6 @@ Finalized P0 Arsenal Integration. S3BucketScanner, KXSS, ShuffleDNS, Ghauri, SSR
 - Inyección automática de pasos de reproducción y evidencia en formato Markdown (HackerOne/Bugcrowd ready).
 - Centralización de logs y tokens en el directorio `workspace` dinámico.
 - Verificación completa con `cargo test` y `cargo check`. PROD_READY: 100%.
+
+### [2026-05-08 23:33:39] Atomic Strike
+[TARGET CHANGE TRACKER] Completed. Implemented Temporal Diff Mode. Added `scan_id` and `PgPool` propagation into Orchestrator. Solved compile-time issues with `TargetHost` missing field `scan_id` via mass refactor across 7 files. `cargo check --all-features` passes cleanly.

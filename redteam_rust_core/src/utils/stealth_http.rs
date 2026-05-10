@@ -100,6 +100,10 @@ impl StealthClientBuilder {
             builder = builder.http2_initial_stream_window_size(65535);
         }
 
+        if !policy.follow_redirects {
+            builder = builder.redirect(reqwest::redirect::Policy::none());
+        }
+
         // 7. Mandatory Proxy Injection (Fail-Closed)
         pm.configure_client_builder(builder)
     }
@@ -115,14 +119,7 @@ mod tests {
     fn test_stealth_client_headers() -> Result<()> {
         let target = TargetHost {
             host: "test.com".to_string(),
-            ip: None,
-            resolved_ip: None,
-            status: TargetStatus::Pending,
             target_type: TargetType::Web,
-            file_path: None,
-            user: None,
-            findings: Arc::new(Vec::new()),
-            tool_suggestions: Arc::new(Vec::new()),
             tactical_context: Arc::new(serde_json::json!({
                 "user_agent": "TacticalAgent/1.0",
                 "headers": {
@@ -130,9 +127,7 @@ mod tests {
                     "X-Experimental": "1"
                 }
             })),
-            extra_data: Arc::new(serde_json::json!({})),
-            version: 0,
-            skip_heavy_scan: false,
+            ..Default::default()
         };
 
         let pm = ProxyManager::new(Vec::new(), true, crate::utils::config::ProxyMode::Dante, 0);

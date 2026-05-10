@@ -371,8 +371,11 @@ impl ProxyManager {
         }
     }
 
-    /// V14.1 Professional: Applies the best available proxy to a ClientBuilder.
     pub fn configure_client_builder(&self, mut builder: reqwest::ClientBuilder) -> Result<reqwest::ClientBuilder> {
+        if self.proxy_mode == ProxyMode::None {
+            return Ok(builder);
+        }
+
         let proxy_url = self.pick_best_proxy()
             .context("V14.1 OPSEC Violation: No proxy available for client configuration.")?;
         
@@ -476,6 +479,16 @@ transport:
     }
 
     pub fn get_client(&self, host: &str) -> Option<(String, Client)> {
+        if self.proxy_mode == ProxyMode::None {
+             let ua = self.identity_cache.get(host)
+                .unwrap_or_else(|| {
+                    let picked = self.pick_user_agent();
+                    self.identity_cache.insert(host.to_string(), picked.clone());
+                    picked
+                });
+             return self.build_client(None, ua).ok().map(|c| ("direct".to_string(), c));
+        }
+
         if self.is_empty() { return None; }
 
         let p_url = self.pick_best_proxy()?;

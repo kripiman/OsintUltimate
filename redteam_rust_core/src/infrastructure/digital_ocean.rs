@@ -111,6 +111,7 @@ runcmd:
   - hysteria server -c /etc/hysteria.yaml &
   - shutdown -h +120
 "#, pass = pass),
+        ProxyMode::None => String::new(),
     }
 }
 

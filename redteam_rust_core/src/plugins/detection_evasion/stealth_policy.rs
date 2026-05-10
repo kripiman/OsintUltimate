@@ -6,6 +6,7 @@ pub struct StealthPolicy {
     pub http2_priority_manipulation: bool,
     pub header_order_randomization: bool,
     pub user_agent_rotation: bool,
+    pub follow_redirects: bool,
 }
 
 impl Default for StealthPolicy {
@@ -15,6 +16,7 @@ impl Default for StealthPolicy {
             http2_priority_manipulation: true,
             header_order_randomization: true,
             user_agent_rotation: true,
+            follow_redirects: true,
         }
     }
 }
