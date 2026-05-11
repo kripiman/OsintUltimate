@@ -1,6 +1,6 @@
 # Mimikri Core — System Architecture Reference
 
-> Derived from source code (`src/`). Authoritative. Last verified: 2026-05-08.
+> Derived from source code (`src/`). Authoritative. Last verified: 2026-05-10.
 
 ---
 
@@ -230,19 +230,17 @@ All steps logged to `ActivityLog` → `workspace/logs/timeline.jsonl` (JSONL app
 
 ## 8. Plugin Taxonomy
 
-| Namespace | Feature Gate | ScanLayer | Notable tools |
-|---|---|---|---|
-| `reconnaissance` | always | 1-2 | cdncheck, tlsx, shodan, netlas, certstream |
-| `enumeration` | always | 2 | nuclei, katana, ffuf, shuffledns, clairvoyance |
-| `exploitation` | always | 4 | gopherus, ssrfmap, ghauri, kxss, s3scanner, nosqlmap |
-| `intelligence` | always | 1 | chaos, securitytrails, criminalip |
+| `reconnaissance` | always | 1-2 | cdncheck, tlsx, shodan, netlas, certstream, waymore, gitleaks, subfinder |
+| `enumeration` | always | 2 | nuclei, katana, ffuf, shuffledns, s3scanner, cloudenum, rustscan |
+| `exploitation` | always | 4 | gopherus, ssrfmap, ghauri, kxss, sqlmap, dalfox, hydra, impacket |
+| `intelligence` | always | 1 | chaos, securitytrails, criminalip, greynoise, searchsploit |
 | `verification` | always | 3 | PocValidator (AI-driven PoC generation + execution) |
 | `detection_evasion` | always | any | StealthPolicy, HumanJitter |
 | `reporting` | always | sink-side | BugBountyReport (H/C/M → MD), AttackChain consolidated |
 | `compliance` | always | 2 | policy-file driven audit |
-| `lateral_movement` | `sovereign` | 5 | AD coercion |
+| `lateral_movement` | `sovereign` | 5 | AD coercion, Responder, Coercer |
 | `persistence` | `sovereign` | 5 | WebShell, C2, SSH key inject, registry autorun |
-| `privilege_escalation` | `sovereign` | 5 | CredentialInjection, ProcessInjection |
+| `privilege_escalation` | `sovereign` | 5 | CredentialInjection, ProcessInjection, Certipy, PrivescHunter |
 
 `sovereign` feature flag gates all post-exploitation at compile time. Not compiled in default release builds.
 

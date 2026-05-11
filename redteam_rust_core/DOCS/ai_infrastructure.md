@@ -1,6 +1,6 @@
 # 🧠 AI Infrastructure & Prompt Engineering
 
-> Source-verified from `src/core/ai/`. Last verified: 2026-05-08.
+> Source-verified from `src/core/ai/`. Last verified: 2026-05-10.
 
 OsintUltimate implements a high-performance AI abstraction layer. Maximizes technical precision, minimizes cost + latency via a tiered routing engine + 10-stage token optimization pipeline.
 
@@ -200,6 +200,9 @@ Cost target: ~100k+ tokens / scan.
 | **Promptmap** | `--rules <subset>` | (single-shot) | `promptmap.profile: economy` |
 | **PromptInject** | corpus subset (`base64`, `ignore_prev`, `dan`) | iteration cap | `promptinject.profile: economy` |
 | **LLMFuzzer** | mutation strategy (`grammar`, `random`, `corpus`) | budget (max attempts) | `llmfuzzer.profile: economy` |
+| **Rebuff** | heuristic check | — | `rebuff.profile: economy` |
+| **Vigil** | policy evaluation | — | `vigil.profile: economy` |
+| **ModelScan** | model weight analysis | — | `modelscan.profile: economy` |
 
 **Each plugin exposes:**
 ```rust

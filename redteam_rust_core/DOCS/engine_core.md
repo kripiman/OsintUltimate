@@ -22,7 +22,7 @@ Entry point: `RedTeamEngine::run_pipeline()` or `run_autopilot()` in `src/core/e
 - Original target also forwarded to Stage 2 after discovery completes.
 - `TargetType::Mobile` and `TargetType::Container` bypass this stage entirely.
 
-**Discovery plugins** (`src/plugins/reconnaissance/`): passive subdomain enumeration, ASN expansion, certificate transparency, ChaosDB, SecurityTrails, Netlas, Shodan.
+**Discovery plugins** (`src/plugins/reconnaissance/`): passive subdomain enumeration (subfinder, amass, waymore), ASN expansion (asnmap), certificate transparency (certstream), ChaosDB, SecurityTrails, Netlas, Shodan, GitHub dorks.
 
 ---
 

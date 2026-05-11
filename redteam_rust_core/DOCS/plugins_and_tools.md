@@ -1,6 +1,6 @@
 # Plugin Arsenal & Tool Registry
 
-> Source-verified from `src/plugins/`. Last verified: 2026-05-08.
+> Source-verified from `src/plugins/`. Last verified: 2026-05-10.
 > `sovereign` = compile-time gated (`#[cfg(feature = "sovereign")]`). Not in default release builds.
 
 ---
@@ -53,6 +53,13 @@ Passive and active surface mapping.
 | SecurityTrails | securitytrails API | `SECURITYTRAILS_API_KEY` |
 | CriminalIP | criminalip API | `CRIMINALIP_API_KEY` |
 | Scope extraction | bbscope | — |
+| GitHub dorking | github-dorks | `GITHUB_TOKEN` |
+| Historical URLs | waymore, wayback | — |
+| Secret scanning | gitleaks, trufflehog | — |
+| Subdomain takeover | subzy | — |
+| Altered subdomains | alterx | — |
+| Internet-wide search | uncover | `SHODAN_API_KEY`, `CENSYS_API_KEY`, etc. |
+| Pure DNS resolution | puredns | — |
 
 ---
 
@@ -62,21 +69,51 @@ Passive and active surface mapping.
 
 | Plugin | Tool | Notes |
 |---|---|---|
-| Port scanning | nmap | configured by `NmapOptions` (stealth, fragment, decoy, ports, vuln_scan) |
+| Port scanning | nmap, rustscan | configured by `NmapOptions` or `RustScanOptions` |
 | Web probing | httpx | — |
 | DNS resolution | shuffledns | `SHUFFLEDNS_PATH`, `SHUFFLEDNS_RESOLVERS`, `SHUFFLEDNS_WORDLIST` |
 | Mass DNS | massdns | `MASSDNS_PATH` |
+| Service fingerprinting | naabu | — |
+| DNS analysis | dnsx | — |
 
 #### Web
 
 | Plugin | Tool | Notes |
 |---|---|---|
-| Vulnerability templates | nuclei | `NUCLEI_TAGS`, `NUCLEI_SEVERITY`, `NUCLEI_CUSTOM_TEMPLATES`, `NUCLEI_AUTO_UPDATE` |
-| Web crawling | katana | — |
-| Directory brute-force | ffuf | — |
-| GraphQL schema discovery | clairvoyance | `CLAIRVOYANCE_WORDLIST` |
-| JS endpoint extraction | custom | finds `FINDING_JS_ENDPOINT` |
-| Historical URLs | waymore | finds `FINDING_WAYMORE_URL` |
+| Vulnerability templates | nuclei, tsunami | `NUCLEI_TAGS`, `NUCLEI_SEVERITY`, etc. |
+| Web crawling | katana, gowitness | — |
+| Directory brute-force | ffuf, feroxbuster | — |
+| JS endpoint extraction | linkfinder, jsluice | finds `FINDING_JS_ENDPOINT` |
+| Parameter discovery | arjun, x8 | — |
+| Tech stack detection | whatweb | — |
+| CRLF injection | crlfuzz | — |
+| Endpoint discovery | kiterunner, wcd | — |
+| CMS scanning | wpsec, nikto | — |
+| Auth/SSO security | oauth-security, corsy | — |
+| Secrets in JS | secretfinder | — |
+| Historical URLs | waymore, gauplus | — |
+| 403 bypass | nomore403 | — |
+
+##### API Security
+
+| Plugin | Tool | Notes |
+|---|---|---|
+| GraphQL discovery | clairvoyance, graphql-cop, inql | — |
+| API fingerprinting | graphw00f | — |
+| Fuzzing/Contract | schemathesis, crackql | — |
+| Vulnerability scan | wcvs | — |
+
+---
+
+#### Cloud
+
+| Plugin | Tool | Notes |
+|---|---|---|
+| Cloud auditing | scoutsuite, prowler | AWS, Azure, GCP compliance |
+| AWS exploitation | pacu | — |
+| S3 bucket scanner | s3scanner | `S3SCANNER_PATH`, `S3SCANNER_WORDLIST` |
+| Cloud enumeration | cloudenum, cloudfox, cloudbrute | — |
+| Kubernetes audit | kube-bench | — |
 
 ---
 
@@ -87,18 +124,57 @@ All exploitation plugins require `--max-layer exploitation` or higher.
 | Plugin | Tool | Key config | Target |
 |---|---|---|---|
 | SSRF chain generator | gopherus | `GOPHERUS_PATH` | generates payloads for SSRF → RCE |
-| SSRF mapper | ssrfmap | `SSRFMAP_PATH` | blind SSRF + OOB detection |
-| SQL injection | ghauri | `GHAURI_PATH` | modern SQLi (alternative to sqlmap) |
-| S3 bucket scanner | s3scanner | `S3SCANNER_PATH`, `S3SCANNER_WORDLIST` | open bucket enumeration |
-| Reflected XSS | kxss | `KXSS_PATH` | parameter reflection detection |
+| SSRF mapper | ssrfmap, ssrf-king | `SSRFMAP_PATH` | blind SSRF + OOB detection |
+| SQL injection | ghauri, sqlmap | `GHAURI_PATH` | modern SQLi |
+| Reflected XSS | kxss, dalfox | `KXSS_PATH` | parameter reflection detection |
 | NoSQL injection | nosqlmap | `NOSQLMAP_PATH` | MongoDB/Redis injection |
 | Auth State Machine | custom | — | OAuth2/OIDC state fixation & step skipping |
+| HTTP smuggling | smuggler, h2csmuggler | — | — |
+| Template injection | tplmap | — | — |
+| JWT exploitation | jwt-tool | — | — |
+| Command injection | commix | — | — |
+| File upload | upload-strike | — | — |
+| Open redirect | openredirex | — | — |
+
+#### Mobile
+
+| Plugin | Tool | Target |
+|---|---|---|
+| Static analysis | jadx, apktool | APK/IPA decompilation |
+| Secret extraction | apkleaks | hardcoded API keys |
+| Dynamic analysis | frida, objection, drozer | runtime instrumentation |
+| SAST | mobsf, mariana-trench | security analysis |
+
+#### AI & LLM
+
+| Plugin | Tool | Notes |
+|---|---|---|
+| Adversarial testing | garak, promptinject | jailbreaks, prompt injections |
+| Red teaming | pyrit | multi-turn attack strategies |
+| Fuzzing | llmfuzzer | — |
+| Security gates | rebuff, vigil | testing AI firewalls |
+| Scan profiles | promptfoo | evaluation & benchmark |
+| Model scanning | modelscan | — |
+
+#### Network
+
+| Plugin | Tool | Notes |
+|---|---|---|
+| Brute force | hydra | — |
+| SMB/AD | impacket, responder, netexec | — |
+| NTLM coercion | petitpotam, coercer | — |
 
 ---
 
 ### `intelligence` — Layer 1
 
 OSINT aggregation and threat correlation. No active scanning.
+
+| Plugin | Tool | Notes |
+|---|---|---|
+| Vulnerability DB | searchsploit | — |
+| Threat Intel | greynoise | — |
+| Template-based | jaeles, nuclei | — |
 
 ---
 
@@ -119,7 +195,8 @@ Only triggers for High/Critical findings (risk_score ≥ 8 in autonomous mode).
 ### `detection_evasion` — any layer
 
 - `StealthPolicy` — rate-limiting, header randomization, UA rotation.
-- `HumanJitter` — random delay 100–1500ms between requests. Applied in discovery stage when stealth mode active.
+- `HumanJitter` — random delay 100–1500ms between requests.
+- `PayloadObfuscation` — Donut, Scarecrow for shellcode hardening.
 
 ---
 
@@ -142,13 +219,28 @@ Both written to `workspace/reports/drafts/` by `BugBountyDraftSink`.
 
 ### `compliance` — Layer 2
 
-Policy-file driven audit. Reads `POLICY_FILE` env var. Uses `StaticPolicy` or file-loaded rules to gate plugin execution in strict_scope mode.
+Supply chain and policy-file driven audit.
+
+| Plugin | Tool | Notes |
+|---|---|---|
+| SBOM analysis | syft, grype | — |
+| Vulnerability scan | trivy, osv-scanner | — |
+| Static analysis | semgrep | — |
+| Cloud compliance | checkov, kubescape | — |
+| Signature verify | cosign | — |
 
 ---
 
 ### `lateral_movement` `sovereign` — Layer 5
 
-Active Directory coercion, credential relay. Requires `--max-layer post-exploitation`.
+Active Directory coercion, credential relay.
+
+| Plugin | Tool | Notes |
+|---|---|---|
+| AD Analysis | BloodHound | — |
+| C2 Framework | Sliver, Ligolo-ng | — |
+| Relay/Coercion | Responder, PetitPotam, Coercer | — |
+| Execution | NetExec, Impacket | — |
 
 ---
 
@@ -158,9 +250,10 @@ Active Directory coercion, credential relay. Requires `--max-layer post-exploita
 
 | Method | Description |
 |---|---|
-| `SshKeyInjection` | Generates ephemeral Ed25519 keypairs, injects into `authorized_keys` |
-| `WebShell` | Deploys obfuscated shell responding only to signed commands |
-| `PersistentC2` | Deploys C2 implant with mTLS hardening |
+| `Havoc` | Advanced C2 framework integration |
+| `SshKeyInjection` | Generates ephemeral Ed25519 keypairs |
+| `WebShell` | Deploys obfuscated shells |
+| `PersistentC2` | Deploys C2 implants with mTLS |
 | `ScheduledTask` | Cron/systemd-based persistence |
 | `ServiceModification` | Modifies existing service configs |
 | `RegistryAutorun` | Windows registry autorun (via Sovereign) |
@@ -172,7 +265,7 @@ C2 session lifecycle: `Staged → Deployed → Established → Sovereign`
 
 ### `privilege_escalation` `sovereign` — Layer 5
 
-CredentialInjection, ADCS abuse (Certipy), local PrivEsc automation.
+CredentialInjection, ADCS abuse (Certipy), local PrivEsc automation (PrivescHunter).
 
 ---
 
@@ -205,5 +298,5 @@ External `.so` plugins loaded from `--plugins-dir <DIR>` at runtime via `Dynamic
 These are checked by `binary_health_check()` at startup. Missing = warning, not abort:
 
 ```
-bbscope   asnmap   cdncheck   tlsx   clairvoyance
+bbscope   asnmap   cdncheck   tlsx   clairvoyance   subfinder   shuffledns   httpx
 ```
