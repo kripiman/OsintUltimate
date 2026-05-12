@@ -1,81 +1,125 @@
-use crate::models::Finding;
-use super::similarity_engine;
-use tracing::{debug, info};
+use super::{bk_tree::BkTree, fingerprint::build_fingerprint, similarity_engine};
+use crate::models::{Finding, Category, Severity};
+use std::collections::HashMap;
+use tracing::{debug, info, warn};
 
-const SIMILARITY_THRESHOLD: u32 = 30; // TLSH distance < 30 indicates high similarity (>85%)
+const SIMILARITY_THRESHOLD: u32 = 30;
 
-pub struct TriageEngine;
+/// Shard key: groups findings by vulnerability class for efficient BK-Tree partitioning.
+///
+/// C3: Using (Category, Severity) creates ~90 shards max (18 categories × 5 severities).
+/// Hot-shard detection: a warn! fires at runtime if any shard exceeds 50% of total findings.
+#[derive(Hash, Eq, PartialEq, Clone, Debug)]
+struct ShardKey {
+    category: Category,
+    severity: Severity,
+}
+
+/// Fuzzy deduplication engine using TLSH + BK-Tree, sharded by (Category, Severity).
+///
+/// LIFETIME INVARIANT (C1 — Plan A):
+///   This engine is per-target, per-scan. It is created fresh for each `process()` call.
+///   It does NOT accumulate state across different targets or scan sessions.
+///
+///   Cross-session exact dedup is handled by `utils::deduplication::DeduplicationEngine`
+///   (V14.2, SHA-256 + Postgres-backed). These two systems have complementary, non-overlapping
+///   responsibilities:
+///     - V14.2: exact dedup, cross-scan, persistent
+///     - TriageEngine: fuzzy dedup, intra-batch, ephemeral
+pub struct TriageEngine {
+    shards: HashMap<ShardKey, BkTree>,
+}
 
 impl TriageEngine {
     pub fn new() -> Self {
-        Self
+        Self {
+            shards: HashMap::new(),
+        }
     }
 
-    /// Main processing loop for deduplication.
-    /// 
-    /// NOTE (Complexity): Current implementation is O(n^2) due to nested similarity comparison.
-    /// This is acceptable for findings counts < 1000. For larger scales, consider KD-Tree or BK-Tree.
     pub async fn process(&mut self, findings: Vec<Finding>) -> Vec<Finding> {
-        let mut unique_findings: Vec<Finding> = Vec::new();
-        let mut skipped_count = 0;
+        let mut unique: Vec<Finding> = Vec::new();
+        let mut skipped = 0usize;
+        let mut unindexed = 0usize;
+
+        // C3: Track shard distribution to detect hot-shard skew
+        let mut shard_counts: HashMap<ShardKey, usize> = HashMap::new();
 
         for mut finding in findings {
-            // Compute TLSH based on description + evidence data to form a robust fingerprint
-            let mut input_data = finding.core.description.clone();
-            if let Some(ref ev) = finding.evidence.evidence {
-                if let Ok(json_str) = serde_json::to_string(&ev.data) {
-                    input_data.push_str(&json_str);
-                }
-            }
+            let key = ShardKey {
+                category: finding.core.category.clone(),
+                severity: finding.core.severity.clone(),
+            };
+            *shard_counts.entry(key.clone()).or_insert(0) += 1;
 
-            if let Some(hash) = similarity_engine::compute_tlsh(&input_data) {
+            // C2 + C8 + D5: Deterministic canonical fingerprint (title + description + JSON)
+            let fingerprint = build_fingerprint(&finding);
+
+            if let Some(hash) = similarity_engine::compute_tlsh(&fingerprint) {
                 finding.enrichment.similarity_hash = Some(hash.clone());
-                
-                // Compare with existing unique findings
-                let mut is_duplicate = false;
-                for existing in &mut unique_findings {
-                    // [Constraint]: Only compare findings of the same root vulnerability type (core.id).
-                    // This prevents cross-vulnerability merging but might miss identical flaws reported by tools with different IDs.
-                    if finding.core.id == existing.core.id { 
-                        if let Some(ref existing_hash) = existing.enrichment.similarity_hash {
-                            if let Some(distance) = similarity_engine::calculate_distance(&hash, existing_hash) {
-                                if distance < SIMILARITY_THRESHOLD {
-                                    debug!("Triage: Merged duplicate {} (distance {})", finding.core.id, distance);
-                                    is_duplicate = true;
-                                    break;
-                                }
-                            }
-                        }
-                    }
+
+                // C6: No &dyn Fn — BkTree calls calculate_distance directly (zero vtable overhead)
+                let shard = self.shards.entry(key).or_insert_with(BkTree::new);
+
+                // C5: find_any_within short-circuits on first hit
+                // A7: find FIRST, then decide, then insert (borrow separation)
+                if shard.find_any_within(&hash, SIMILARITY_THRESHOLD) {
+                    debug!("TRIAGE: Duplicate merged via BK-Tree (hash: {}...)", &hash[..hash.len().min(8)]);
+                    skipped += 1;
+                    continue;
                 }
 
-                if is_duplicate {
-                    skipped_count += 1;
-                    continue; // Skip adding this to the unique list
+                // D3: insert returns false on distance failure — treat as unique but unindexed
+                if !shard.insert(hash, unique.len()) {
+                    warn!("TRIAGE: Finding unindexed (BK-Tree insert failed) — treated as unique.");
+                    unindexed += 1;
                 }
             } else {
-                // Fallback for inputs < 50 bytes: exact matching on ID and Title
-                let mut is_duplicate = false;
-                for existing in &mut unique_findings {
-                    if finding.core.id == existing.core.id && finding.core.title == existing.core.title {
-                        is_duplicate = true;
-                        break;
-                    }
-                }
-                if is_duplicate {
-                    skipped_count += 1;
+                // Fallback for inputs < 50 bytes: exact match on title within same category
+                let is_exact_dup = unique.iter().any(|ex| {
+                    ex.core.category == finding.core.category
+                        && ex.core.title == finding.core.title
+                });
+                if is_exact_dup {
+                    skipped += 1;
                     continue;
                 }
             }
 
-            // It's a new, unique finding
-            unique_findings.push(finding);
+            unique.push(finding);
         }
 
-        if skipped_count > 0 {
-            info!("🛡️ TRIAGE ENGINE: Consolidated {} redundant findings via fuzzy TLSH clustering", skipped_count);
+        // C3: Hot-shard detection — warn if any shard dominates
+        let total = shard_counts.values().sum::<usize>();
+        if total > 0 {
+            if let Some((hot_key, hot_count)) = shard_counts.iter().max_by_key(|(_, &c)| c) {
+                let pct = *hot_count as f64 / total as f64 * 100.0;
+                if pct > 50.0 {
+                    warn!(
+                        "⚠️ TRIAGE: Hot shard detected — {:?} holds {:.0}% of findings ({}/{}). \
+                         Consider adding plugin_prefix as sub-shard dimension.",
+                        hot_key, pct, hot_count, total
+                    );
+                }
+            }
         }
 
-        unique_findings
+        if skipped > 0 || unindexed > 0 {
+            info!(
+                "🛡️ TRIAGE v3: {} duplicates merged, {} unindexed. {} active shards. {} unique findings remain.",
+                skipped,
+                unindexed,
+                self.shards.len(),
+                unique.len()
+            );
+        }
+
+        unique
+    }
+}
+
+impl Default for TriageEngine {
+    fn default() -> Self {
+        Self::new()
     }
 }
