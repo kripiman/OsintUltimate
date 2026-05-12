@@ -299,27 +299,64 @@ impl SovereignReconScanner {
         use base64::{Engine as _, engine::general_purpose::URL_SAFE};
         let query = format!("domain=\"{}\"", domain);
         let qbase64 = URL_SAFE.encode(query);
-        let url = format!("https://fofa.info/api/v1/search/all?email={}&key={}&qbase64={}&fields=host,ip,port&size=1000", email, key, qbase64);
         
-        if let Ok(client) = self.get_client("fofa.info").await {
-            if let Ok(resp) = client.get(&url).send().await {
-                if !resp.status().is_success() {
-                    warn!("⚠️ FOFA API error: HTTP {}", resp.status());
-                    return subdomains;
-                }
-                #[derive(Deserialize)]
-                struct FofaResp { results: Option<Vec<Vec<String>>> }
-                if let Ok(data) = resp.json::<FofaResp>().await {
-                    if let Some(results) = data.results {
-                        for row in results {
-                            if let Some(host) = row.first() {
-                                let clean_host = host.replace("http://", "").replace("https://", "");
-                                subdomains.insert(clean_host);
+        let mut page = 1;
+        let max_pages = 5; // Guard against excessive credit consumption (5,000 results)
+        let page_size = 1000;
+        
+        loop {
+            let url = format!("https://fofa.info/api/v1/search/all?email={}&key={}&qbase64={}&fields=host&size={}&page={}", 
+                email, key, qbase64, page_size, page);
+            
+            match self.get_client("fofa.info").await {
+                Ok(client) => match client.get(&url).send().await {
+                    Ok(resp) => {
+                        if !resp.status().is_success() {
+                            warn!("⚠️ FOFA API error at page {}: HTTP {}", page, resp.status());
+                            break;
+                        }
+                        #[derive(Deserialize)]
+                        struct FofaResp { results: Option<Vec<Vec<String>>>, total: Option<usize> }
+                        match resp.json::<FofaResp>().await {
+                            Ok(data) => {
+                                if let Some(results) = data.results {
+                                    let count = results.len();
+                                    for row in results {
+                                        if let Some(host) = row.first() {
+                                            let clean_host = host.replace("http://", "").replace("https://", "");
+                                            subdomains.insert(clean_host);
+                                        }
+                                    }
+                                    
+                                    // G2: Use 'total' for precise bounds
+                                    let total = data.total.unwrap_or(0);
+                                    let total_pages = (total + page_size - 1) / page_size;
+                                    
+                                    if count < page_size || page >= total_pages || page >= max_pages {
+                                        break;
+                                    }
+                                } else {
+                                    break;
+                                }
+                            }
+                            Err(e) => {
+                                warn!("⚠️ FOFA JSON parse error at page {}: {}", page, e);
+                                break;
                             }
                         }
                     }
+                    Err(e) => {
+                        warn!("⚠️ FOFA request failure at page {}: {}", page, e);
+                        break;
+                    }
+                },
+                Err(e) => {
+                    warn!("⚠️ FOFA client creation failure: {}", e);
+                    break;
                 }
             }
+            page += 1;
+            self.jitter.sleep().await;
         }
         subdomains
     }
@@ -333,28 +370,65 @@ impl SovereignReconScanner {
         };
 
         debug!("👁️ Phase 7: ZoomEye network context discovery for {}", domain);
-        let url = format!("https://api.zoomeye.org/web/search?query=site:{}&page=1", domain);
         
-        if let Ok(client) = self.get_client("api.zoomeye.org").await {
-            if let Ok(resp) = client.get(&url).header("API-KEY", key).send().await {
-                if !resp.status().is_success() {
-                    warn!("⚠️ ZoomEye API error: HTTP {}", resp.status());
-                    return subdomains;
-                }
-                #[derive(Deserialize)]
-                struct ZoomEyeMatch { site: Option<String> }
-                #[derive(Deserialize)]
-                struct ZoomEyeResp { matches: Option<Vec<ZoomEyeMatch>> }
-                if let Ok(data) = resp.json::<ZoomEyeResp>().await {
-                    if let Some(matches) = data.matches {
-                        for m in matches {
-                            if let Some(site) = m.site {
-                                subdomains.insert(site);
+        let mut page = 1;
+        let max_pages = 10; // ZoomEye default is 20/page, so 10 pages = 200 results
+        let page_size = 20;
+        
+        loop {
+            let url = format!("https://api.zoomeye.org/web/search?query=site:{}&page={}", domain, page);
+            
+            match self.get_client("api.zoomeye.org").await {
+                Ok(client) => match client.get(&url).header("API-KEY", key).send().await {
+                    Ok(resp) => {
+                        if !resp.status().is_success() {
+                            warn!("⚠️ ZoomEye API error at page {}: HTTP {}", page, resp.status());
+                            break;
+                        }
+                        #[derive(Deserialize)]
+                        struct ZoomEyeMatch { site: Option<String> }
+                        #[derive(Deserialize)]
+                        struct ZoomEyeResp { matches: Option<Vec<ZoomEyeMatch>>, total: Option<usize> }
+                        match resp.json::<ZoomEyeResp>().await {
+                            Ok(data) => {
+                                if let Some(matches) = data.matches {
+                                    let count = matches.len();
+                                    if count == 0 { break; }
+                                    for m in matches {
+                                        if let Some(site) = m.site {
+                                            subdomains.insert(site);
+                                        }
+                                    }
+                                    
+                                    // G4: Use 'total' for precise bounds
+                                    let total = data.total.unwrap_or(0);
+                                    let total_pages = (total + page_size - 1) / page_size;
+
+                                    if count < page_size || page >= total_pages || page >= max_pages {
+                                        break;
+                                    }
+                                } else {
+                                    break;
+                                }
+                            }
+                            Err(e) => {
+                                warn!("⚠️ ZoomEye JSON parse error at page {}: {}", page, e);
+                                break;
                             }
                         }
                     }
+                    Err(e) => {
+                        warn!("⚠️ ZoomEye request failure at page {}: {}", page, e);
+                        break;
+                    }
+                },
+                Err(e) => {
+                    warn!("⚠️ ZoomEye client creation failure: {}", e);
+                    break;
                 }
             }
+            page += 1;
+            self.jitter.sleep().await;
         }
         subdomains
     }

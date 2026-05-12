@@ -10,7 +10,7 @@ pub struct BkTree {
 
 struct BkNode {
     hash: String,
-    finding_idx: usize,
+    _finding_idx: usize,
     children: std::collections::HashMap<u32, BkNode>,
 }
 
@@ -37,7 +37,7 @@ impl BkTree {
             None => {
                 self.root = Some(BkNode {
                     hash,
-                    finding_idx: idx,
+                    _finding_idx: idx,
                     children: std::collections::HashMap::new(),
                 });
                 self.len += 1;
@@ -89,7 +89,7 @@ impl BkTree {
                     d,
                     BkNode {
                         hash,
-                        finding_idx: idx,
+                        _finding_idx: idx,
                         children: std::collections::HashMap::new(),
                     },
                 );
