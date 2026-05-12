@@ -180,3 +180,4 @@ redteam_rust_core/urls.txt
 .claude/
 
 
+redteam_rust_core/src/scratch.rs
