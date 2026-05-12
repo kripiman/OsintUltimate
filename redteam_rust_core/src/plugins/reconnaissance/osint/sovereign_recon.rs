@@ -60,6 +60,9 @@ pub struct SovereignReconScanner {
     sectrails_key: Option<String>,
     shodan_key: Option<String>,
     criminalip_key: Option<String>,
+    fofa_email: Option<String>,
+    fofa_key: Option<String>,
+    zoomeye_key: Option<String>,
 }
 
 impl SovereignReconScanner {
@@ -73,6 +76,9 @@ impl SovereignReconScanner {
             sectrails_key: config.securitytrails_api_key.clone(),
             shodan_key: config.shodan_api_key.clone(),
             criminalip_key: config.criminalip_api_key.clone(),
+            fofa_email: config.fofa_email.clone(),
+            fofa_key: config.fofa_api_key.clone(),
+            zoomeye_key: config.zoomeye_api_key.clone(),
         }
     }
 
@@ -280,6 +286,78 @@ impl SovereignReconScanner {
         }
         findings
     }
+
+    // --- Phase 6: FOFA (High Coverage) ---
+    async fn query_fofa(&self, domain: &str) -> HashSet<String> {
+        let mut subdomains = HashSet::new();
+        let (email, key) = match (&self.fofa_email, &self.fofa_key) {
+            (Some(e), Some(k)) if !e.is_empty() && !k.is_empty() => (e, k),
+            _ => return subdomains,
+        };
+
+        debug!("🌍 Phase 6: FOFA global asset discovery for {}", domain);
+        use base64::{Engine as _, engine::general_purpose::URL_SAFE};
+        let query = format!("domain=\"{}\"", domain);
+        let qbase64 = URL_SAFE.encode(query);
+        let url = format!("https://fofa.info/api/v1/search/all?email={}&key={}&qbase64={}&fields=host,ip,port&size=1000", email, key, qbase64);
+        
+        if let Ok(client) = self.get_client("fofa.info").await {
+            if let Ok(resp) = client.get(&url).send().await {
+                if !resp.status().is_success() {
+                    warn!("⚠️ FOFA API error: HTTP {}", resp.status());
+                    return subdomains;
+                }
+                #[derive(Deserialize)]
+                struct FofaResp { results: Option<Vec<Vec<String>>> }
+                if let Ok(data) = resp.json::<FofaResp>().await {
+                    if let Some(results) = data.results {
+                        for row in results {
+                            if let Some(host) = row.first() {
+                                let clean_host = host.replace("http://", "").replace("https://", "");
+                                subdomains.insert(clean_host);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        subdomains
+    }
+
+    // --- Phase 7: ZoomEye (Network Context) ---
+    async fn query_zoomeye(&self, domain: &str) -> HashSet<String> {
+        let mut subdomains = HashSet::new();
+        let key = match &self.zoomeye_key {
+            Some(k) if !k.is_empty() => k,
+            _ => return subdomains,
+        };
+
+        debug!("👁️ Phase 7: ZoomEye network context discovery for {}", domain);
+        let url = format!("https://api.zoomeye.org/web/search?query=site:{}&page=1", domain);
+        
+        if let Ok(client) = self.get_client("api.zoomeye.org").await {
+            if let Ok(resp) = client.get(&url).header("API-KEY", key).send().await {
+                if !resp.status().is_success() {
+                    warn!("⚠️ ZoomEye API error: HTTP {}", resp.status());
+                    return subdomains;
+                }
+                #[derive(Deserialize)]
+                struct ZoomEyeMatch { site: Option<String> }
+                #[derive(Deserialize)]
+                struct ZoomEyeResp { matches: Option<Vec<ZoomEyeMatch>> }
+                if let Ok(data) = resp.json::<ZoomEyeResp>().await {
+                    if let Some(matches) = data.matches {
+                        for m in matches {
+                            if let Some(site) = m.site {
+                                subdomains.insert(site);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        subdomains
+    }
 }
 
 #[async_trait]
@@ -291,7 +369,7 @@ impl DiscoveryPlugin for SovereignReconScanner {
     fn metadata(&self) -> PluginMetadata {
         PluginMetadata {
             name: self.name().to_string(),
-            description: "Sentinel Sovereign Orchestrator: Multi-phase optimized OSINT pipeline (Chaos -> Netlas -> Shodan).".to_string(),
+            description: "Sentinel Sovereign Orchestrator: Multi-phase optimized OSINT pipeline (Chaos -> Netlas -> Shodan -> FOFA -> ZoomEye).".to_string(),
             target_type: TargetType::Osint,
             risk_level: RiskLevel::Safe,
             layer: ScanLayer::Passive,
@@ -335,7 +413,7 @@ impl DiscoveryPlugin for SovereignReconScanner {
         }
 
         // 1. Chaos (Fast & Free) - STRATEGIC PRIORITY
-        info!("🚀 Phase 1/5: Chaos strike (Fast/Free)...");
+        info!("🚀 Phase 1/7: Chaos strike (Fast/Free)...");
         let chaos = self.query_chaos(&target.host).await;
         if !chaos.is_empty() {
             info!("  ✅ Chaos found {} unique subdomains", chaos.len());
@@ -346,7 +424,7 @@ impl DiscoveryPlugin for SovereignReconScanner {
 
         // 2. SecurityTrails
         self.jitter.sleep().await;
-        info!("🛰️ Phase 2/5: SecurityTrails mapping...");
+        info!("🛰️ Phase 2/7: SecurityTrails mapping...");
         let st = self.query_securitytrails(&target.host).await;
         if !st.is_empty() {
             info!("  ✅ SecurityTrails captured {} subdomains", st.len());
@@ -355,7 +433,7 @@ impl DiscoveryPlugin for SovereignReconScanner {
 
         // 3. Netlas (Paid - Precision)
         self.jitter.sleep().await;
-        info!("💎 Phase 3/5: Netlas High-Precision Deep Dive...");
+        info!("💎 Phase 3/7: Netlas High-Precision Deep Dive...");
         let netlas = self.query_netlas(&target.host).await;
         if !netlas.is_empty() {
             info!("  ✅ Netlas captured {} subdomains", netlas.len());
@@ -364,7 +442,7 @@ impl DiscoveryPlugin for SovereignReconScanner {
 
         // 4. Shodan
         self.jitter.sleep().await;
-        info!("🔭 Phase 4/5: Shodan infrastructure discovery...");
+        info!("🔭 Phase 4/7: Shodan infrastructure discovery...");
         let shodan = self.query_shodan(&target.host).await;
         if !shodan.is_empty() {
             info!("  ✅ Shodan captured {} subdomains", shodan.len());
@@ -373,10 +451,28 @@ impl DiscoveryPlugin for SovereignReconScanner {
 
         // 5. Criminal IP (Reputation)
         self.jitter.sleep().await;
-        info!("🏴‍☠️ Phase 5/5: Criminal IP reputation scoring...");
+        info!("🏴‍☠️ Phase 5/7: Criminal IP reputation scoring...");
         let cip_findings = self.query_criminalip(&target.host).await;
         for finding in cip_findings {
             info!("  ✅ {}", finding);
+        }
+
+        // 6. FOFA (Global Coverage)
+        self.jitter.sleep().await;
+        info!("🌍 Phase 6/7: FOFA Global Asset Discovery...");
+        let fofa = self.query_fofa(&target.host).await;
+        if !fofa.is_empty() {
+            info!("  ✅ FOFA captured {} assets", fofa.len());
+            for s in fofa { all_results.insert(s, serde_json::json!({})); }
+        }
+
+        // 7. ZoomEye (Network Context)
+        self.jitter.sleep().await;
+        info!("👁️ Phase 7/7: ZoomEye Network Context...");
+        let zoomeye = self.query_zoomeye(&target.host).await;
+        if !zoomeye.is_empty() {
+            info!("  ✅ ZoomEye captured {} assets", zoomeye.len());
+            for s in zoomeye { all_results.insert(s, serde_json::json!({})); }
         }
 
         // 6. Automatic Fallback: Subfinder (Emergency)

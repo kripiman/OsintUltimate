@@ -25,6 +25,9 @@ pub struct Config {
     pub securitytrails_api_key: Option<String>,
     pub shodan_api_key: Option<String>,
     pub criminalip_api_key: Option<String>,
+    pub fofa_email: Option<String>,
+    pub fofa_api_key: Option<String>,
+    pub zoomeye_api_key: Option<String>,
     pub netlas_daily_budget: u32,
     pub caido_api_key: Option<String>,
     pub caido_api_url: String,
@@ -118,6 +121,9 @@ impl Config {
             securitytrails_api_key: env::var("SECURITYTRAILS_API_KEY").ok(),
             shodan_api_key: env::var("SHODAN_API_KEY").ok(),
             criminalip_api_key: env::var("CRIMINALIP_API_KEY").ok(),
+            fofa_email: env::var("FOFA_EMAIL").ok(),
+            fofa_api_key: env::var("FOFA_KEY").ok(),
+            zoomeye_api_key: env::var("ZOOMEYE_KEY").ok(),
             netlas_daily_budget: env::var("NETLAS_DAILY_BUDGET")
                 .ok()
                 .and_then(|s| s.parse().ok())
