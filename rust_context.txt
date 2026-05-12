@@ -14237,6 +14237,116 @@ alert.clone()
 Ok(findings)
 </file>
 
+<file path="redteam_rust_core/src/utils/liveness.rs">
+use std::net::IpAddr;
+⋮----
+use std::sync::Arc;
+use crate::utils::proxy::ProxyManager;
+⋮----
+pub async fn is_target_live(checker: &LivenessChecker, target: &str) -> Option<IpAddr> {
+checker.is_live(target).await
+⋮----
+pub fn is_safe_ip(ip: &IpAddr) -> bool {
+⋮----
+let octets = ipv4.octets();
+if ipv4.is_private() || ipv4.is_loopback() || ipv4.is_link_local()
+|| ipv4.is_broadcast() || ipv4.is_documentation() || ipv4.is_unspecified() || ipv4.is_multicast() {
+⋮----
+if ipv6.is_loopback() || ipv6.is_unspecified() { return false; }
+if let Some(mapped_v4) = ipv6.to_ipv4_mapped() { return is_safe_ip(&IpAddr::V4(mapped_v4)); }
+⋮----
+let segments = ipv6.segments();
+⋮----
+pub async fn is_ssrf_safe_host(target: &str) -> bool {
+⋮----
+return is_safe_ip(&ip);
+⋮----
+pub struct LivenessChecker {
+⋮----
+impl LivenessChecker {
+pub fn new(custom_resolvers: Option<Vec<String>>, doh: bool) -> Self {
+⋮----
+pub fn new_with_proxy(custom_resolvers: Option<Vec<String>>, doh: bool, pm: Option<Arc<ProxyManager>>) -> Self {
+⋮----
+name_servers.push(hickory_resolver::config::NameServerConfig::new(socket_addr, hickory_resolver::config::Protocol::Udp));
+name_servers.push(hickory_resolver::config::NameServerConfig::new(socket_addr, hickory_resolver::config::Protocol::Tcp));
+⋮----
+if !name_servers.is_empty() {
+router_config = hickory_resolver::config::ResolverConfig::from_parts(None, vec![], name_servers);
+⋮----
+pub async fn is_live(&self, target: &str) -> Option<IpAddr> {
+⋮----
+if is_safe_ip(&ip) {
+return Some(ip);
+⋮----
+warn!("🚫 LIVENESS: Blocked attempt to scan unsafe IP: {}", ip);
+⋮----
+if !pm.is_empty() {
+return match self.proxied_lookup(target, pm).await {
+Ok(ip) => Some(ip),
+⋮----
+warn!("⚠️ V13: Proxied DNS lookup failed for {}: {}", target, e);
+⋮----
+match self.resolver.lookup_ip(target).await {
+⋮----
+for ip in response.iter() {
+⋮----
+warn!("🚫 LIVENESS: Resolved unsafe IP {} for host {}, skipping.", ip, target);
+⋮----
+async fn proxied_lookup(&self, target: &str, pm: &ProxyManager) -> Result<IpAddr> {
+⋮----
+let (_, client) = pm.get_client_fail_closed(dns_host)?;
+⋮----
+let url = format!("https://{}/resolve?name={}&type=A", dns_host, target);
+info!("🛡️ V13: Routing stealth DNS query for {} through SOCKS5 DoH...", target);
+⋮----
+let resp = client.get(url)
+.header("Host", dns_host)
+.send().await
+.context("Stealth DoH request failed")?;
+⋮----
+let json: serde_json::Value = resp.json().await.context("Invalid DoH response JSON")?;
+⋮----
+if let Some(answers) = json["Answer"].as_array() {
+⋮----
+if let Some(data) = answer["data"].as_str() {
+⋮----
+return Ok(ip);
+⋮----
+mod tests {
+⋮----
+fn test_is_safe_ip_v4() {
+assert!(is_safe_ip(&"8.8.8.8".parse().unwrap()));
+assert!(!is_safe_ip(&"127.0.0.1".parse().unwrap()));
+assert!(!is_safe_ip(&"10.0.0.1".parse().unwrap()));
+assert!(!is_safe_ip(&"100.64.0.1".parse().unwrap()));
+⋮----
+fn test_is_safe_ip_v6() {
+⋮----
+assert!(is_safe_ip(&"2001:4860:4860::8888".parse().unwrap()));
+⋮----
+assert!(!is_safe_ip(&"::1".parse().unwrap()));
+assert!(!is_safe_ip(&"::".parse().unwrap()));
+⋮----
+assert!(!is_safe_ip(&"fe80::1".parse().unwrap()));
+⋮----
+assert!(!is_safe_ip(&"fc00::1".parse().unwrap()));
+⋮----
+assert!(!is_safe_ip(&"2001:db8::1".parse().unwrap()));
+assert!(!is_safe_ip(&"2001:10::1".parse().unwrap()));
+assert!(!is_safe_ip(&"2002::1".parse().unwrap()));
+⋮----
+fn test_is_ssrf_safe_host_rejects_hostnames() {
+⋮----
+.enable_all()
+.build()
+.expect("Failed to create tokio runtime");
+⋮----
+runtime.block_on(async {
+assert!(!is_ssrf_safe_host("example.com").await);
+assert!(is_ssrf_safe_host("8.8.8.8").await);
+</file>
+
 <file path="redteam_rust_core/src/core/mcp/sanitizer.rs">
 use regex::Regex;
 use once_cell::sync::Lazy;
@@ -17455,116 +17565,6 @@ pub async fn execute_remote(&self, target: &crate::models::TargetHost, cmd: &str
 re.execute(target, cmd).await
 </file>
 
-<file path="redteam_rust_core/src/utils/liveness.rs">
-use std::net::IpAddr;
-⋮----
-use std::sync::Arc;
-use crate::utils::proxy::ProxyManager;
-⋮----
-pub async fn is_target_live(checker: &LivenessChecker, target: &str) -> Option<IpAddr> {
-checker.is_live(target).await
-⋮----
-pub fn is_safe_ip(ip: &IpAddr) -> bool {
-⋮----
-let octets = ipv4.octets();
-if ipv4.is_private() || ipv4.is_loopback() || ipv4.is_link_local()
-|| ipv4.is_broadcast() || ipv4.is_documentation() || ipv4.is_unspecified() || ipv4.is_multicast() {
-⋮----
-if ipv6.is_loopback() || ipv6.is_unspecified() { return false; }
-if let Some(mapped_v4) = ipv6.to_ipv4_mapped() { return is_safe_ip(&IpAddr::V4(mapped_v4)); }
-⋮----
-let segments = ipv6.segments();
-⋮----
-pub async fn is_ssrf_safe_host(target: &str) -> bool {
-⋮----
-return is_safe_ip(&ip);
-⋮----
-pub struct LivenessChecker {
-⋮----
-impl LivenessChecker {
-pub fn new(custom_resolvers: Option<Vec<String>>, doh: bool) -> Self {
-⋮----
-pub fn new_with_proxy(custom_resolvers: Option<Vec<String>>, doh: bool, pm: Option<Arc<ProxyManager>>) -> Self {
-⋮----
-name_servers.push(hickory_resolver::config::NameServerConfig::new(socket_addr, hickory_resolver::config::Protocol::Udp));
-name_servers.push(hickory_resolver::config::NameServerConfig::new(socket_addr, hickory_resolver::config::Protocol::Tcp));
-⋮----
-if !name_servers.is_empty() {
-router_config = hickory_resolver::config::ResolverConfig::from_parts(None, vec![], name_servers);
-⋮----
-pub async fn is_live(&self, target: &str) -> Option<IpAddr> {
-⋮----
-if is_safe_ip(&ip) {
-return Some(ip);
-⋮----
-warn!("🚫 LIVENESS: Blocked attempt to scan unsafe IP: {}", ip);
-⋮----
-if !pm.is_empty() {
-return match self.proxied_lookup(target, pm).await {
-Ok(ip) => Some(ip),
-⋮----
-warn!("⚠️ V13: Proxied DNS lookup failed for {}: {}", target, e);
-⋮----
-match self.resolver.lookup_ip(target).await {
-⋮----
-for ip in response.iter() {
-⋮----
-warn!("🚫 LIVENESS: Resolved unsafe IP {} for host {}, skipping.", ip, target);
-⋮----
-async fn proxied_lookup(&self, target: &str, pm: &ProxyManager) -> Result<IpAddr> {
-⋮----
-let (_, client) = pm.get_client_fail_closed(dns_host)?;
-⋮----
-let url = format!("https://{}/resolve?name={}&type=A", dns_host, target);
-info!("🛡️ V13: Routing stealth DNS query for {} through SOCKS5 DoH...", target);
-⋮----
-let resp = client.get(url)
-.header("Host", dns_host)
-.send().await
-.context("Stealth DoH request failed")?;
-⋮----
-let json: serde_json::Value = resp.json().await.context("Invalid DoH response JSON")?;
-⋮----
-if let Some(answers) = json["Answer"].as_array() {
-⋮----
-if let Some(data) = answer["data"].as_str() {
-⋮----
-return Ok(ip);
-⋮----
-mod tests {
-⋮----
-fn test_is_safe_ip_v4() {
-assert!(is_safe_ip(&"8.8.8.8".parse().unwrap()));
-assert!(!is_safe_ip(&"127.0.0.1".parse().unwrap()));
-assert!(!is_safe_ip(&"10.0.0.1".parse().unwrap()));
-assert!(!is_safe_ip(&"100.64.0.1".parse().unwrap()));
-⋮----
-fn test_is_safe_ip_v6() {
-⋮----
-assert!(is_safe_ip(&"2001:4860:4860::8888".parse().unwrap()));
-⋮----
-assert!(!is_safe_ip(&"::1".parse().unwrap()));
-assert!(!is_safe_ip(&"::".parse().unwrap()));
-⋮----
-assert!(!is_safe_ip(&"fe80::1".parse().unwrap()));
-⋮----
-assert!(!is_safe_ip(&"fc00::1".parse().unwrap()));
-⋮----
-assert!(!is_safe_ip(&"2001:db8::1".parse().unwrap()));
-assert!(!is_safe_ip(&"2001:10::1".parse().unwrap()));
-assert!(!is_safe_ip(&"2002::1".parse().unwrap()));
-⋮----
-fn test_is_ssrf_safe_host_rejects_hostnames() {
-⋮----
-.enable_all()
-.build()
-.expect("Failed to create tokio runtime");
-⋮----
-runtime.block_on(async {
-assert!(!is_ssrf_safe_host("example.com").await);
-assert!(is_ssrf_safe_host("8.8.8.8").await);
-</file>
-
 <file path="redteam_rust_core/src/core/ai/compressor.rs">
 use crate::plugins::PluginMetadata;
 use super::types::RouteLevel;
@@ -18470,6 +18470,62 @@ if let Some(end) = text.rfind('}') {
 if let Some(end) = text.rfind(']') {
 </file>
 
+<file path="redteam_rust_core/src/utils/report_gen.rs">
+use anyhow::Result;
+use handlebars::Handlebars;
+use serde::Serialize;
+⋮----
+use tokio::fs::File;
+⋮----
+struct SummaryStats {
+⋮----
+struct FullReportVM<'a> {
+⋮----
+struct TargetVM {
+⋮----
+pub async fn generate_report(jsonl_path: &str, output_path: &str) -> Result<()> {
+⋮----
+if out_path.components().any(|c| matches!(c, std::path::Component::ParentDir)) {
+⋮----
+let mut reader = BufReader::new(in_file).lines();
+⋮----
+while let Some(line) = reader.next_line().await? {
+if line.trim().is_empty() { continue; }
+⋮----
+if let Some(meta_val) = peek.get("metadata") {
+if let Ok(m) = serde_json::from_value(meta_val.clone()) {
+⋮----
+metadata.command_line = html_escape::encode_safe(&metadata.command_line).to_string();
+⋮----
+for f in target.findings.iter() {
+⋮----
+targets.push(TargetVM {
+host: html_escape::encode_safe(&target.host).to_string(),
+ip: target.ip.clone().unwrap_or_default(),
+status: format!("{:?}", target.status),
+max_severity: severity_str.to_string(),
+has_findings: !target.findings.is_empty(),
+findings: (*target.findings).clone(),
+⋮----
+reg.set_strict_mode(true);
+reg.register_helper("json_stringify", Box::new(|h: &handlebars::Helper, _: &Handlebars, _: &handlebars::Context, _: &mut handlebars::RenderContext, out: &mut dyn handlebars::Output| -> handlebars::HelperResult {
+let param = h.param(0).ok_or(handlebars::RenderError::new("Missing parameter"))?;
+out.write(&serde_json::to_string_pretty(param.value()).unwrap_or_default())?;
+Ok(())
+⋮----
+let host_id = t.host.replace(['.', '-'], "_");
+mermaid.push_str(&format!("  Targets --> {}\n", host_id));
+⋮----
+for (i, f) in t.findings.iter().enumerate() {
+let finding_id = format!("{}_f{}", host_id, i);
+mermaid.push_str(&format!("  {} --> {}[\"{:?}\"]\n", host_id, finding_id, f.core.category));
+⋮----
+let rendered = reg.render_template(HTML_TEMPLATE, &vm)?;
+⋮----
+if let Some(parent) = out_path.parent() {
+if !parent.as_os_str().is_empty() && !parent.exists() {
+</file>
+
 <file path="redteam_rust_core/src/core/ai/router.rs">
 use std::sync::Arc;
 use tracing::info;
@@ -19262,62 +19318,6 @@ discovered.push(DiscoveryResult { host: domain, metadata: serde_json::json!({}) 
 Ok(discovered)
 </file>
 
-<file path="redteam_rust_core/src/utils/report_gen.rs">
-use anyhow::Result;
-use handlebars::Handlebars;
-use serde::Serialize;
-⋮----
-use tokio::fs::File;
-⋮----
-struct SummaryStats {
-⋮----
-struct FullReportVM<'a> {
-⋮----
-struct TargetVM {
-⋮----
-pub async fn generate_report(jsonl_path: &str, output_path: &str) -> Result<()> {
-⋮----
-if out_path.components().any(|c| matches!(c, std::path::Component::ParentDir)) {
-⋮----
-let mut reader = BufReader::new(in_file).lines();
-⋮----
-while let Some(line) = reader.next_line().await? {
-if line.trim().is_empty() { continue; }
-⋮----
-if let Some(meta_val) = peek.get("metadata") {
-if let Ok(m) = serde_json::from_value(meta_val.clone()) {
-⋮----
-metadata.command_line = html_escape::encode_safe(&metadata.command_line).to_string();
-⋮----
-for f in target.findings.iter() {
-⋮----
-targets.push(TargetVM {
-host: html_escape::encode_safe(&target.host).to_string(),
-ip: target.ip.clone().unwrap_or_default(),
-status: format!("{:?}", target.status),
-max_severity: severity_str.to_string(),
-has_findings: !target.findings.is_empty(),
-findings: (*target.findings).clone(),
-⋮----
-reg.set_strict_mode(true);
-reg.register_helper("json_stringify", Box::new(|h: &handlebars::Helper, _: &Handlebars, _: &handlebars::Context, _: &mut handlebars::RenderContext, out: &mut dyn handlebars::Output| -> handlebars::HelperResult {
-let param = h.param(0).ok_or(handlebars::RenderError::new("Missing parameter"))?;
-out.write(&serde_json::to_string_pretty(param.value()).unwrap_or_default())?;
-Ok(())
-⋮----
-let host_id = t.host.replace(['.', '-'], "_");
-mermaid.push_str(&format!("  Targets --> {}\n", host_id));
-⋮----
-for (i, f) in t.findings.iter().enumerate() {
-let finding_id = format!("{}_f{}", host_id, i);
-mermaid.push_str(&format!("  {} --> {}[\"{:?}\"]\n", host_id, finding_id, f.core.category));
-⋮----
-let rendered = reg.render_template(HTML_TEMPLATE, &vm)?;
-⋮----
-if let Some(parent) = out_path.parent() {
-if !parent.as_os_str().is_empty() && !parent.exists() {
-</file>
-
 <file path="redteam_rust_core/src/utils/stealth_http.rs">
 use crate::models::TargetHost;
 ⋮----
@@ -19773,153 +19773,6 @@ fn as_c2_operator(&self) -> Option<&dyn C2Operator> {
 Some(self)
 </file>
 
-<file path="redteam_rust_core/src/models/constants.rs">
-
-</file>
-
-<file path="redteam_rust_core/src/models/scan_result.rs">
-use super::findings::Finding;
-⋮----
-use std::sync::Arc;
-⋮----
-pub struct ScanMetadata {
-⋮----
-pub struct DiscoveryResult {
-⋮----
-impl ScanMetadata {
-pub fn new(command_line: &str) -> Self {
-⋮----
-tool: "RedTeam-Rust-Engine".to_string(),
-version: env!("CARGO_PKG_VERSION").to_string(),
-⋮----
-command_line: command_line.to_string(),
-⋮----
-pub enum TargetStatus {
-⋮----
-pub enum TargetType {
-⋮----
-pub struct TargetHost {
-⋮----
-impl TargetHost {
-⋮----
-pub fn target_addr(&self) -> &str {
-⋮----
-warn!("⚠️ SECURITY WARNING: Using UNPINNED address for {}. Possible DNS Rebinding risk.", self.host);
-self.ip.as_deref().unwrap_or(&self.host)
-⋮----
-pub fn pinned_addr(&self) -> Result<&str, anyhow::Error> {
-debug_assert!(self.target_type != TargetType::Mobile, "pinned_addr() called on Mobile target");
-self.resolved_ip.as_deref()
-.ok_or_else(|| {
-⋮----
-pub fn is_artifact_target(&self) -> bool {
-self.file_path.is_some()
-⋮----
-pub fn artifact_path(&self) -> Result<&str, anyhow::Error> {
-self.file_path.as_deref()
-.ok_or_else(|| anyhow::anyhow!("Target has no artifact path (Mobile/static scan required file_path)"))
-⋮----
-pub fn findings_since(&self, version: u64) -> Vec<Finding> {
-self.findings.iter()
-.filter(|f| f.version > version)
-.cloned()
-.collect()
-⋮----
-fn default_arc_json() -> Arc<serde_json::Value> {
-</file>
-
-<file path="redteam_rust_core/src/plugins/enumeration/network/net.rs">
-pub struct NmapScanner<M: ExecutorMode> {
-⋮----
-pub fn new(
-⋮----
-use crate::plugins::enumeration::network::nmap::parse_nmap_xml;
-use async_trait::async_trait;
-⋮----
-use std::sync::Arc;
-use once_cell::sync::Lazy;
-⋮----
-static TARGET_HOST_RE: Lazy<regex::Regex> = Lazy::new(|| regex::Regex::new(r"^[a-zA-Z0-9.\-:]+$").unwrap());
-static DECOY_RE: Lazy<regex::Regex> = Lazy::new(|| regex::Regex::new(r"^[a-zA-Z0-9.,_]+$").unwrap());
-static SCRIPT_RE: Lazy<regex::Regex> = Lazy::new(|| regex::Regex::new(r"^[a-zA-Z0-9,-]+$").unwrap());
-⋮----
-impl<M: ExecutorMode> ScannerPlugin for NmapScanner<M> {
-fn name(&self) -> &'static str {
-⋮----
-fn metadata(&self) -> crate::plugins::PluginMetadata {
-⋮----
-name: self.name().to_string(),
-description: "Port scanning, service detection, and OS fingerprinting using Nmap. Essential for initial network discovery.".to_string(),
-⋮----
-capabilities: self.capabilities(),
-⋮----
-category: "Enumeration".to_string(),
-mitre_attacks: vec!["T1046".to_string()],
-⋮----
-blackarch_category: Some("scanner".to_string()),
-⋮----
-fn capabilities(&self) -> Vec<Capability> {
-vec![Capability::VulnerabilityScanning]
-⋮----
-async fn check_dependencies(&self) -> Result<bool> {
-Ok(crate::utils::check_tool_availability("nmap").await)
-⋮----
-async fn scan(&self, target: &TargetHost) -> Result<Vec<Finding>> {
-let target_addr = target.pinned_addr()?;
-info!("NmapScanner: launching scan against {} (via {})", target.host, target_addr);
-⋮----
-if !TARGET_HOST_RE.is_match(&target.host) || target.host.starts_with('-') {
-warn!("NmapScanner: Skipping invalid/unsafe target: {}", target.host);
-return Ok(Vec::new());
-⋮----
-let mut args = vec!["-n".to_string(), "-Pn".to_string(), "--open".to_string(), "-oX".to_string(), "-".to_string()];
-⋮----
-args.push("-p".to_string());
-args.push(ports.clone());
-⋮----
-args.push("--top-ports".to_string());
-args.push(port_count.to_string());
-⋮----
-args.push(speed.to_string());
-args.push("--host-timeout".to_string());
-args.push(timeout.to_string());
-args.push("--max-retries".to_string());
-args.push("3".to_string());
-⋮----
-args.push(format!("-{}", self.scan_type));
-if self.fragment { args.push("-f".to_string()); }
-⋮----
-if DECOY_RE.is_match(decoy) && !decoy.starts_with('-') { args.push(format!("-D{}", decoy)); }
-⋮----
-args.push("-sV".to_string());
-args.push("--version-intensity".to_string()); args.push("9".to_string());
-args.push("-O".to_string());
-args.push("--osscan-guess".to_string());
-args.push("--script=vuln,exploit,auth,default,discovery".to_string());
-args.push("--script-timeout".to_string()); args.push("10m".to_string());
-⋮----
-if self.service_detection { args.push("-sV".to_string()); }
-⋮----
-if SCRIPT_RE.is_match(scripts) { args.push(format!("--script={}", scripts)); }
-⋮----
-args.push(target_addr.to_string());
-⋮----
-let output = self.executor.execute_and_wait("nmap", args).await
-.context("Fallo en la ejecución de Nmap a través del StealthExecutor")?;
-⋮----
-if !output.status.success() {
-error!("Nmap failed on {} with status: {}", target.host, output.status);
-⋮----
-let findings = parse_nmap_xml(&output.stdout[..])?;
-Ok(findings)
-⋮----
-mod tests {
-⋮----
-async fn test_nmap_target_validation() {
-assert!(TARGET_HOST_RE.is_match("google.com"));
-assert!(!TARGET_HOST_RE.is_match("google.com; rm -rf /"));
-</file>
-
 <file path="redteam_rust_core/src/core/plugin_loader.rs">
 use crate::plugins::ScannerPlugin;
 ⋮----
@@ -20095,6 +19948,270 @@ let signature = Signature::from_slice(&sig_bytes).context("Invalid signature len
 public_key.verify(plugin_bytes, &signature)
 .map_err(|e| {
 error!("🛑 UNTRUSTED PLUGIN DETECTED: Signature verification FAILED for {:?}. Possible tampering or MITM.", path);
+</file>
+
+<file path="redteam_rust_core/src/models/constants.rs">
+
+</file>
+
+<file path="redteam_rust_core/src/models/scan_result.rs">
+use super::findings::Finding;
+⋮----
+use std::sync::Arc;
+⋮----
+pub struct ScanMetadata {
+⋮----
+pub struct DiscoveryResult {
+⋮----
+impl ScanMetadata {
+pub fn new(command_line: &str) -> Self {
+⋮----
+tool: "RedTeam-Rust-Engine".to_string(),
+version: env!("CARGO_PKG_VERSION").to_string(),
+⋮----
+command_line: command_line.to_string(),
+⋮----
+pub enum TargetStatus {
+⋮----
+pub enum TargetType {
+⋮----
+pub struct TargetHost {
+⋮----
+impl TargetHost {
+⋮----
+pub fn target_addr(&self) -> &str {
+⋮----
+warn!("⚠️ SECURITY WARNING: Using UNPINNED address for {}. Possible DNS Rebinding risk.", self.host);
+self.ip.as_deref().unwrap_or(&self.host)
+⋮----
+pub fn pinned_addr(&self) -> Result<&str, anyhow::Error> {
+debug_assert!(self.target_type != TargetType::Mobile, "pinned_addr() called on Mobile target");
+self.resolved_ip.as_deref()
+.ok_or_else(|| {
+⋮----
+pub fn is_artifact_target(&self) -> bool {
+self.file_path.is_some()
+⋮----
+pub fn artifact_path(&self) -> Result<&str, anyhow::Error> {
+self.file_path.as_deref()
+.ok_or_else(|| anyhow::anyhow!("Target has no artifact path (Mobile/static scan required file_path)"))
+⋮----
+pub fn findings_since(&self, version: u64) -> Vec<Finding> {
+self.findings.iter()
+.filter(|f| f.version > version)
+.cloned()
+.collect()
+⋮----
+fn default_arc_json() -> Arc<serde_json::Value> {
+</file>
+
+<file path="redteam_rust_core/src/plugins/enumeration/network/net.rs">
+pub struct NmapScanner<M: ExecutorMode> {
+⋮----
+pub fn new(
+⋮----
+use crate::plugins::enumeration::network::nmap::parse_nmap_xml;
+use async_trait::async_trait;
+⋮----
+use std::sync::Arc;
+use once_cell::sync::Lazy;
+⋮----
+static TARGET_HOST_RE: Lazy<regex::Regex> = Lazy::new(|| regex::Regex::new(r"^[a-zA-Z0-9.\-:]+$").unwrap());
+static DECOY_RE: Lazy<regex::Regex> = Lazy::new(|| regex::Regex::new(r"^[a-zA-Z0-9.,_]+$").unwrap());
+static SCRIPT_RE: Lazy<regex::Regex> = Lazy::new(|| regex::Regex::new(r"^[a-zA-Z0-9,-]+$").unwrap());
+⋮----
+impl<M: ExecutorMode> ScannerPlugin for NmapScanner<M> {
+fn name(&self) -> &'static str {
+⋮----
+fn metadata(&self) -> crate::plugins::PluginMetadata {
+⋮----
+name: self.name().to_string(),
+description: "Port scanning, service detection, and OS fingerprinting using Nmap. Essential for initial network discovery.".to_string(),
+⋮----
+capabilities: self.capabilities(),
+⋮----
+category: "Enumeration".to_string(),
+mitre_attacks: vec!["T1046".to_string()],
+⋮----
+blackarch_category: Some("scanner".to_string()),
+⋮----
+fn capabilities(&self) -> Vec<Capability> {
+vec![Capability::VulnerabilityScanning]
+⋮----
+async fn check_dependencies(&self) -> Result<bool> {
+Ok(crate::utils::check_tool_availability("nmap").await)
+⋮----
+async fn scan(&self, target: &TargetHost) -> Result<Vec<Finding>> {
+let target_addr = target.pinned_addr()?;
+info!("NmapScanner: launching scan against {} (via {})", target.host, target_addr);
+⋮----
+if !TARGET_HOST_RE.is_match(&target.host) || target.host.starts_with('-') {
+warn!("NmapScanner: Skipping invalid/unsafe target: {}", target.host);
+return Ok(Vec::new());
+⋮----
+let mut args = vec!["-n".to_string(), "-Pn".to_string(), "--open".to_string(), "-oX".to_string(), "-".to_string()];
+⋮----
+args.push("-p".to_string());
+args.push(ports.clone());
+⋮----
+args.push("--top-ports".to_string());
+args.push(port_count.to_string());
+⋮----
+args.push(speed.to_string());
+args.push("--host-timeout".to_string());
+args.push(timeout.to_string());
+args.push("--max-retries".to_string());
+args.push("3".to_string());
+⋮----
+args.push(format!("-{}", self.scan_type));
+if self.fragment { args.push("-f".to_string()); }
+⋮----
+if DECOY_RE.is_match(decoy) && !decoy.starts_with('-') { args.push(format!("-D{}", decoy)); }
+⋮----
+args.push("-sV".to_string());
+args.push("--version-intensity".to_string()); args.push("9".to_string());
+args.push("-O".to_string());
+args.push("--osscan-guess".to_string());
+args.push("--script=vuln,exploit,auth,default,discovery".to_string());
+args.push("--script-timeout".to_string()); args.push("10m".to_string());
+⋮----
+if self.service_detection { args.push("-sV".to_string()); }
+⋮----
+if SCRIPT_RE.is_match(scripts) { args.push(format!("--script={}", scripts)); }
+⋮----
+args.push(target_addr.to_string());
+⋮----
+let output = self.executor.execute_and_wait("nmap", args).await
+.context("Fallo en la ejecución de Nmap a través del StealthExecutor")?;
+⋮----
+if !output.status.success() {
+error!("Nmap failed on {} with status: {}", target.host, output.status);
+⋮----
+let findings = parse_nmap_xml(&output.stdout[..])?;
+Ok(findings)
+⋮----
+mod tests {
+⋮----
+async fn test_nmap_target_validation() {
+assert!(TARGET_HOST_RE.is_match("google.com"));
+assert!(!TARGET_HOST_RE.is_match("google.com; rm -rf /"));
+</file>
+
+<file path="redteam_rust_core/src/plugins/ffi.rs">
+use tokio::sync::Mutex;
+use std::os::raw::c_char;
+⋮----
+use anyhow::Result;
+⋮----
+pub struct PluginNameFFI {
+⋮----
+pub struct TargetHostFFI {
+⋮----
+pub struct FindingFFI {
+⋮----
+pub struct FFIFindings {
+⋮----
+pub struct ScannerPluginFFI {
+⋮----
+unsafe impl Send for ScannerPluginFFI {}
+unsafe impl Sync for ScannerPluginFFI {}
+⋮----
+pub struct FFIPluginWrapper {
+⋮----
+impl FFIPluginWrapper {
+pub fn new(ffi: ScannerPluginFFI) -> Result<Self> {
+// V10 ABI Handshake: Prevent loading incompatible plugins
+⋮----
+if c_str.is_null() {
+"unknown".to_string()
+⋮----
+std::ffi::CStr::from_ptr(c_str).to_string_lossy().into_owned()
+⋮----
+// V12: satisfy &'static str requirement for dynamic plugins
+let cached_name = Box::leak(name_str.into_boxed_str());
+Ok(Self { ffi, cached_name, sync_lock: Mutex::new(()) })
+⋮----
+fn name(&self) -> &'static str {
+⋮----
+fn metadata(&self) -> crate::plugins::PluginMetadata {
+⋮----
+name: self.name().to_string(),
+description: "Dynamic plugin loaded via SafeFFI bridge.".to_string(),
+⋮----
+capabilities: self.capabilities(),
+⋮----
+category: "General".to_string(),
+mitre_attacks: vec![],
+⋮----
+fn capabilities(&self) -> Vec<crate::plugins::Capability> {
+vec![crate::plugins::Capability::VulnerabilityScanning]
+⋮----
+async fn check_dependencies(&self) -> Result<bool> {
+Ok(crate::utils::check_tool_availability("ffi").await)
+⋮----
+async fn scan(&self, target: &TargetHost) -> Result<Vec<Finding>> {
+// V12 HARDENING: Serialize access to FFI scan method
+let _guard = self.sync_lock.lock().await;
+⋮----
+// V15 HARDENING: Map native TargetHost to FFI-safe TargetHostFFI
+use std::ffi::CString;
+let c_host = CString::new(target.host.as_str()).unwrap_or_default();
+let c_ip = CString::new(target.target_addr()).unwrap_or_default();
+let target_status = target.status.clone() as u8;
+⋮----
+let timeout_duration = self.metadata().expected_duration;
+⋮----
+// V15 HARDENING: Wrap raw pointer to make it Send for transport between threads.
+struct SendPtr(*mut FFIFindings);
+unsafe impl Send for SendPtr {}
+⋮----
+// PFC-001: Bridge de pánico + spawn_blocking + timeout
+⋮----
+// SAFETY: CStrings are moved into this closure and kept alive explicitly
+// until the scan returns, preventing potential Use-After-Free in the plugin.
+⋮----
+host: c_host.as_ptr(),
+ip: c_ip.as_ptr(),
+⋮----
+let result = catch_unwind(AssertUnwindSafe(move || {
+⋮----
+// Explicitly drop CStrings AFTER ffi.scan returns
+drop(c_host);
+drop(c_ip);
+⋮----
+result.map(SendPtr)
+⋮----
+if findings_ptr.is_null() {
+return Ok(Vec::new());
+⋮----
+use std::ffi::CStr;
+// V11 HARDENING (CRIT-002): Read the struct via pointer.
+⋮----
+// Validation of pointers and length before slice creation
+if ffi_findings.data.is_null() && ffi_findings.len > 0 {
+⋮----
+if ffi_findings.len > 10_000 { // Reduced cap for safety
+⋮----
+let title = CStr::from_ptr(f_ffi.title).to_string_lossy().into_owned();
+let desc = CStr::from_ptr(f_ffi.description).to_string_lossy().into_owned();
+let evidence_raw = CStr::from_ptr(f_ffi.evidence_json).to_string_lossy();
+let evidence: serde_json::Value = serde_json::from_str(&evidence_raw).unwrap_or(serde_json::json!({}));
+⋮----
+let severity = severity_from_u8(f_ffi.severity);
+let category = category_from_u8(f_ffi.category);
+⋮----
+let mut finding = Finding::new(&uuid::Uuid::new_v4().to_string(), category, severity, &desc, evidence);
+⋮----
+native_findings.push(finding);
+⋮----
+Ok(native_findings)
+⋮----
+pub(crate) fn category_from_u8(v: u8) -> crate::models::Category {
+⋮----
+pub(crate) fn severity_from_u8(v: u8) -> crate::models::Severity {
+⋮----
+impl Drop for FFIPluginWrapper {
+fn drop(&mut self) {
 </file>
 
 <file path="redteam_rust_core/src/utils/proxy.rs">
@@ -20283,123 +20400,6 @@ pub use orchestrator::Orchestrator;
 ⋮----
 pub use filter::FalsePositiveFilter;
 pub use validation::PocValidator;
-</file>
-
-<file path="redteam_rust_core/src/plugins/ffi.rs">
-use tokio::sync::Mutex;
-use std::os::raw::c_char;
-⋮----
-use anyhow::Result;
-⋮----
-pub struct PluginNameFFI {
-⋮----
-pub struct TargetHostFFI {
-⋮----
-pub struct FindingFFI {
-⋮----
-pub struct FFIFindings {
-⋮----
-pub struct ScannerPluginFFI {
-⋮----
-unsafe impl Send for ScannerPluginFFI {}
-unsafe impl Sync for ScannerPluginFFI {}
-⋮----
-pub struct FFIPluginWrapper {
-⋮----
-impl FFIPluginWrapper {
-pub fn new(ffi: ScannerPluginFFI) -> Result<Self> {
-// V10 ABI Handshake: Prevent loading incompatible plugins
-⋮----
-if c_str.is_null() {
-"unknown".to_string()
-⋮----
-std::ffi::CStr::from_ptr(c_str).to_string_lossy().into_owned()
-⋮----
-// V12: satisfy &'static str requirement for dynamic plugins
-let cached_name = Box::leak(name_str.into_boxed_str());
-Ok(Self { ffi, cached_name, sync_lock: Mutex::new(()) })
-⋮----
-fn name(&self) -> &'static str {
-⋮----
-fn metadata(&self) -> crate::plugins::PluginMetadata {
-⋮----
-name: self.name().to_string(),
-description: "Dynamic plugin loaded via SafeFFI bridge.".to_string(),
-⋮----
-capabilities: self.capabilities(),
-⋮----
-category: "General".to_string(),
-mitre_attacks: vec![],
-⋮----
-fn capabilities(&self) -> Vec<crate::plugins::Capability> {
-vec![crate::plugins::Capability::VulnerabilityScanning]
-⋮----
-async fn check_dependencies(&self) -> Result<bool> {
-Ok(crate::utils::check_tool_availability("ffi").await)
-⋮----
-async fn scan(&self, target: &TargetHost) -> Result<Vec<Finding>> {
-// V12 HARDENING: Serialize access to FFI scan method
-let _guard = self.sync_lock.lock().await;
-⋮----
-// V15 HARDENING: Map native TargetHost to FFI-safe TargetHostFFI
-use std::ffi::CString;
-let c_host = CString::new(target.host.as_str()).unwrap_or_default();
-let c_ip = CString::new(target.target_addr()).unwrap_or_default();
-let target_status = target.status.clone() as u8;
-⋮----
-let timeout_duration = self.metadata().expected_duration;
-⋮----
-// V15 HARDENING: Wrap raw pointer to make it Send for transport between threads.
-struct SendPtr(*mut FFIFindings);
-unsafe impl Send for SendPtr {}
-⋮----
-// PFC-001: Bridge de pánico + spawn_blocking + timeout
-⋮----
-// SAFETY: CStrings are moved into this closure and kept alive explicitly
-// until the scan returns, preventing potential Use-After-Free in the plugin.
-⋮----
-host: c_host.as_ptr(),
-ip: c_ip.as_ptr(),
-⋮----
-let result = catch_unwind(AssertUnwindSafe(move || {
-⋮----
-// Explicitly drop CStrings AFTER ffi.scan returns
-drop(c_host);
-drop(c_ip);
-⋮----
-result.map(SendPtr)
-⋮----
-if findings_ptr.is_null() {
-return Ok(Vec::new());
-⋮----
-use std::ffi::CStr;
-// V11 HARDENING (CRIT-002): Read the struct via pointer.
-⋮----
-// Validation of pointers and length before slice creation
-if ffi_findings.data.is_null() && ffi_findings.len > 0 {
-⋮----
-if ffi_findings.len > 10_000 { // Reduced cap for safety
-⋮----
-let title = CStr::from_ptr(f_ffi.title).to_string_lossy().into_owned();
-let desc = CStr::from_ptr(f_ffi.description).to_string_lossy().into_owned();
-let evidence_raw = CStr::from_ptr(f_ffi.evidence_json).to_string_lossy();
-let evidence: serde_json::Value = serde_json::from_str(&evidence_raw).unwrap_or(serde_json::json!({}));
-⋮----
-let severity = severity_from_u8(f_ffi.severity);
-let category = category_from_u8(f_ffi.category);
-⋮----
-let mut finding = Finding::new(&uuid::Uuid::new_v4().to_string(), category, severity, &desc, evidence);
-⋮----
-native_findings.push(finding);
-⋮----
-Ok(native_findings)
-⋮----
-pub(crate) fn category_from_u8(v: u8) -> crate::models::Category {
-⋮----
-pub(crate) fn severity_from_u8(v: u8) -> crate::models::Severity {
-⋮----
-impl Drop for FFIPluginWrapper {
-fn drop(&mut self) {
 </file>
 
 <file path="redteam_rust_core/src/core/agent.rs">

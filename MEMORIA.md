@@ -1,1 +1,5 @@
-[SYSTEM] Target Change Tracker / Temporal Diff mode is implemented and verified. Orchestrator now correctly retrieves `scan_id` and `PgPool` to execute scan-to-scan finding deltas. TargetHost missing field instantiation across `main.rs`, `engine.rs`, `pipeline.rs` etc. was resolved and cleanly compiles.
+[SYSTEM] V15 SOVEREIGN: 
+1. AD Enumeration Hardened: Kerbrute and Enum4Linux-NG plugins implemented and verified. 
+2. SSRF-to-Cloud-Metadata Automation: New 'CloudMetadataExtractor' plugin added. 
+3. Reactive Pipeline: Orchestrator now automatically triggers cloud metadata extraction upon FINDING_SSRF detection. 
+4. Documentation Sync: plugins_and_tools.md updated with latest arsenal status. All components compile with zero errors.

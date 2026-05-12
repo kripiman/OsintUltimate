@@ -221,6 +221,8 @@ pub struct FindingEnrichment {
     #[serde(default)]
     #[serde(skip_serializing_if = "std::ops::Not::not")]
     pub is_new: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub similarity_hash: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]

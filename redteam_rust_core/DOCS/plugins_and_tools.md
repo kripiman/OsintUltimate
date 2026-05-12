@@ -10,7 +10,7 @@
 Plugins are not run all at once. The `Orchestrator` dispatches them based on the `ScanLayerPolicy` gate. Each plugin declares its `ScanLayer` in `PluginMetadata`.
 
 ```mermaid
-flowchart LR
+flowchart TD
     TGT[TargetHost] --> SCOPE[ScopePolicy check]
     SCOPE --> LAYER[LayerPolicy: ScanLayer ≤ max_layer]
     LAYER --> GATE[ApprovalGate: Layer 3+ confirm]
@@ -18,7 +18,16 @@ flowchart LR
     SANDBOX --> EXEC[plugin.scan target]
     EXEC -->|findings| FEEDBACK[feedback_tx new assets]
     EXEC -->|findings| SINK[sink_tx]
+    EXEC -->|Finding_SSRF| REACTIVE{Reactive Trigger}
+    REACTIVE -->|Trigger| CLOUD[CloudMetadata Extraction]
+    REACTIVE -->|Trigger| COMMIX[Command Injection]
 ```
+
+**Reactive Triggers:**
+The Orchestrator implements autonomous chaining for high-impact vulnerabilities:
+- **SSRF → Cloud Metadata**: On `FINDING_SSRF`, immediately probes for AWS/GCP/Azure instance metadata.
+- **SSTI → Commix**: On `FINDING_SSTI`, triggers OS command injection validation.
+- **Deserialization → GadgetDetector**: On `JAVA-SERIAL`, triggers gadget chain discovery.
 
 **ScanLayer thresholds:**
 
@@ -48,10 +57,10 @@ Passive and active surface mapping.
 | CDN/cloud detection | cdncheck | — |
 | TLS fingerprinting | tlsx | — |
 | CertStream daemon | certstream | `CERTSTREAM_KEYWORDS` |
-| Shodan lookup | shodan API | `SHODAN_API_KEY` |
-| Netlas lookup | netlas API | `NETLAS_API_KEY`, `NETLAS_DAILY_BUDGET` |
-| SecurityTrails | securitytrails API | `SECURITYTRAILS_API_KEY` |
-| CriminalIP | criminalip API | `CRIMINALIP_API_KEY` |
+| Shodan lookup (Integrated) | sovereign_recon.rs | `SHODAN_API_KEY` |
+| Netlas lookup (Integrated) | sovereign_recon.rs | `NETLAS_API_KEY`, `NETLAS_DAILY_BUDGET` |
+| SecurityTrails (Integrated) | sovereign_recon.rs | `SECURITYTRAILS_API_KEY` |
+| CriminalIP (Integrated) | sovereign_recon.rs | `CRIMINALIP_API_KEY` |
 | Scope extraction | bbscope | — |
 | GitHub dorking | github-dorks | `GITHUB_TOKEN` |
 | Historical URLs | waymore, wayback | — |
@@ -72,9 +81,11 @@ Passive and active surface mapping.
 | Port scanning | nmap, rustscan | configured by `NmapOptions` or `RustScanOptions` |
 | Web probing | httpx | — |
 | DNS resolution | shuffledns | `SHUFFLEDNS_PATH`, `SHUFFLEDNS_RESOLVERS`, `SHUFFLEDNS_WORDLIST` |
-| Mass DNS | massdns | `MASSDNS_PATH` |
+| Mass DNS (Wrapper) | massdns | Wrapped by `shuffledns` via `MASSDNS_PATH` |
 | Service fingerprinting | naabu | — |
 | DNS analysis | dnsx | — |
+| AD User Enum | kerbrute | `KERBRUTE_USERLIST` wordlist required |
+| AD/SMB Enum | enum4linux-ng | requires `enum4linux-ng` binary |
 
 #### Web
 
@@ -135,6 +146,7 @@ All exploitation plugins require `--max-layer exploitation` or higher.
 | Command injection | commix | — | — |
 | File upload | upload-strike | — | — |
 | Open redirect | openredirex | — | — |
+| Cloud Metadata Extraction | custom | `ssrf_url` | Automated extraction of AWS/Azure/GCP credentials via SSRF |
 
 #### Mobile
 

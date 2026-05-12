@@ -72,3 +72,6 @@ Finalized P0 Arsenal Integration. S3BucketScanner, KXSS, ShuffleDNS, Ghauri, SSR
 
 ### [2026-05-08 23:33:39] Atomic Strike
 [TARGET CHANGE TRACKER] Completed. Implemented Temporal Diff Mode. Added `scan_id` and `PgPool` propagation into Orchestrator. Solved compile-time issues with `TargetHost` missing field `scan_id` via mass refactor across 7 files. `cargo check --all-features` passes cleanly.
+
+### [2026-05-12 04:50:00] Atomic Strike
+[V15 SOVEREIGN - AD & CLOUD] Finalized integration of Kerbrute and Enum4Linux-NG for AD enumeration. Implemented reactive SSRF-to-Cloud-Metadata automation with new `CloudMetadataExtractor` plugin. Orchestrator now chains findings automatically. Documentation updated. `cargo check` passes with 0 errors.

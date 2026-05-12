@@ -1,4 +1,4 @@
-use crate::models::{TargetHost, Finding, Severity, Category, TargetStatus, FINDING_PLUGIN_ERROR, FINDING_PLUGIN_PANIC, FINDING_SSTI, FINDING_SBOM_INVENTORY, FINDING_GRAPHQL_INTROSPECTION, FINDING_KATANA_ENDPOINT, FINDING_WAYMORE_URL, FINDING_JS_ENDPOINT, FINDING_TECH_STACK};
+use crate::models::{TargetHost, Finding, Severity, Category, TargetStatus, FINDING_PLUGIN_ERROR, FINDING_PLUGIN_PANIC};
 use crate::models::constants::*;
 use dashmap::DashSet;
 use crate::plugins::{ScannerPlugin, Capability};
@@ -384,287 +384,51 @@ impl<M: ExecutorMode> Orchestrator<M> {
                 
                 if !all_findings.is_empty() {
                     let fired_chains: DashSet<String> = DashSet::new();
-                    let mut extra_findings = Vec::new();
-                    // --- REACTIVE TRIGGER: SSTI -> COMMIX ---
-                    let ssti_hit = all_findings.iter().find(|f| f.core.id == FINDING_SSTI).cloned();
-                    if let Some(ssti_f) = ssti_hit {
-                        if fired_chains.insert(format!("{}::{}", ssti_f.core.id, PLUGIN_COMMIX)) {
-                            if let Some(commix) = plugins.iter().find(|p| p.name() == PLUGIN_COMMIX) {
-                                if !self.layer_policy.needs_approval(commix.metadata().layer) || approval_gate.is_approved(commix.name()).await {
-                                    info!("🔱 V14.3 SOVEREIGN: SSTI detected! Triggering reactive Commix chain for {}", target.host);
+                    // --- NEW: REACTIVE RULE ENGINE (CHAINS 1-10) ---
+                    let rules = crate::core::reactive_engine::get_all_rules();
+                    let mut extra_findings = crate::core::reactive_engine::evaluate(
+                        &rules, &all_findings, &target,
+                        &plugins, &self.layer_policy, &approval_gate, &fired_chains,
+                    ).await;
+
+                    // --- REACTIVE TRIGGER: SSRF -> CLOUD METADATA ---
+                    let ssrf_hit = all_findings.iter().find(|f| f.core.id == FINDING_SSRF).cloned();
+                    if let Some(ssrf_f) = ssrf_hit {
+                        if fired_chains.insert(format!("{}::{}", ssrf_f.core.id, PLUGIN_CLOUD_METADATA)) {
+                            if let Some(cloud_meta) = plugins.iter().find(|p| p.name() == PLUGIN_CLOUD_METADATA) {
+                                if !self.layer_policy.needs_approval(cloud_meta.metadata().layer) || approval_gate.is_approved(cloud_meta.name()).await {
+                                    info!("🔱 V15 SOVEREIGN: SSRF detected! Triggering reactive Cloud Metadata extraction for {}", target.host);
                                     
-                                    // Pass vulnerable URL into snapshot extra_data
-                                    let vuln_url = ssti_f.evidence.evidence.as_ref()
-                                        .and_then(|e| e.data.get("url"))
-                                        .cloned();
-                                    
-                                    let mut reactive_snapshot = TargetHost {
-                                        host: target.host.clone(),
-                                        ip: target.ip.clone(),
-                                        resolved_ip: target.resolved_ip.clone(),
-                                        target_type: target.target_type,
-                file_path: None,
-                                        user: None,
-                                        status: TargetStatus::Scanning,
-                                        findings: Arc::new(Vec::new()),
-                                        tool_suggestions: Arc::new(Vec::new()),
-                                        tactical_context: Arc::clone(&target.tactical_context),
-                                        extra_data: Arc::clone(&target.extra_data),
-                                        version: target.version,
-                                        skip_heavy_scan: target.skip_heavy_scan,
-                                        scan_id: target.scan_id,
+                                    // Extract URL from evidence
+                                    let tool_name = ssrf_f.evidence.evidence.as_ref()
+                                        .and_then(|e| e.data.get("tool"))
+                                        .and_then(|t| t.as_str());
+
+                                    let vuln_url = if tool_name == Some("ssrfmap") {
+                                         ssrf_f.evidence.evidence.as_ref()
+                                            .and_then(|e| e.data.get("url"))
+                                            .and_then(|u| u.as_str())
+                                            .map(|s| s.to_string())
+                                    } else {
+                                        // Fallback for ssrf_king or others: use target.host
+                                        Some(target.host.clone())
                                     };
 
                                     if let Some(url) = vuln_url {
-                                        Arc::make_mut(&mut reactive_snapshot.extra_data)
-                                            .as_object_mut()
-                                            .and_then(|obj| obj.insert("discovered_urls".into(), serde_json::json!([url])));
-                                    }
-
-                                    if let Ok(mut rce_findings) = commix.scan(&reactive_snapshot).await {
-                                        if !rce_findings.is_empty() {
-                                            info!("🔥 V14.3 SOVEREIGN: Commix confirmed RCE from SSTI on {}", target.host);
-                                            extra_findings.append(&mut rce_findings);
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    }
-                    // --- END REACTIVE TRIGGER: SSTI ---
-                    
-                    // --- REACTIVE TRIGGER: SBOM -> GRYPE/COSIGN ---
-                    let sbom_hit = all_findings.iter().find(|f| f.core.id == FINDING_SBOM_INVENTORY).cloned();
-                    if let Some(sbom_f) = sbom_hit {
-                        for chain_plugin_name in &[PLUGIN_GRYPE, PLUGIN_COSIGN] {
-                            if fired_chains.insert(format!("{}::{}", sbom_f.core.id, chain_plugin_name)) {
-                                if let Some(plugin) = plugins.iter().find(|p| p.name() == *chain_plugin_name) {
-                                    if !self.layer_policy.needs_approval(plugin.metadata().layer) || approval_gate.is_approved(plugin.name()).await {
-                                        info!("🔱 V14.3 SOVEREIGN: SBOM detected! Triggering reactive {} for {}", plugin.name(), target.host);
-                                        if let Ok(mut chain_findings) = plugin.scan(&target).await {
-                                            extra_findings.append(&mut chain_findings);
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    }
-                    // --- END REACTIVE TRIGGER: SBOM ---
-
-                    // --- REACTIVE TRIGGER: GRAPHQL -> API FUZZ ---
-                    let gql_hit = all_findings.iter()
-                        .find(|f| f.core.id == FINDING_GRAPHQL_INTROSPECTION).cloned();
-                    
-                    if let Some(f) = gql_hit {
-                        if let Some(url) = f.evidence.evidence.as_ref()
-                            .and_then(|e| e.data.get("url"))
-                            .and_then(|u| u.as_str())
-                        {
-                            let url = url.to_string();
-                        tracing::trace!("🔍 REACTIVE_DEBUG: Found GRAPHQL-INTROSPECTION. URL: {}", url);
-
-                        for chain_plugin_name in &[PLUGIN_GRAPHW00F, PLUGIN_SCHEMATHESIS, PLUGIN_CRACKQL] {
-                            if fired_chains.insert(format!("{}::{}", f.core.id, chain_plugin_name)) {
-                                if let Some(plugin) = plugins.iter().find(|p| p.name() == *chain_plugin_name) {
-                                    let needs_appr = self.layer_policy.needs_approval(plugin.metadata().layer);
-                                    let is_appr = approval_gate.is_approved(plugin.name()).await;
-                                    
-                                    tracing::trace!("🔍 REACTIVE_DEBUG: Tool {} | Needs Approval: {} | Is Approved: {}", plugin.name(), needs_appr, is_appr);
-
-                                    if !needs_appr || is_appr {
-                                        info!("🔱 V14.3 SOVEREIGN: GraphQL Introspection detected! Triggering reactive {} for {}", plugin.name(), target.host);
-                                        
                                         let mut reactive_snapshot = target.clone();
                                         Arc::make_mut(&mut reactive_snapshot.extra_data)
                                             .as_object_mut()
-                                            .and_then(|obj| {
-                                                obj.insert("api_schema_url".into(), url.clone().into());
-                                                obj.insert("discovered_urls".into(), serde_json::json!([url]));
-                                                Some(obj)
-                                            });
+                                            .and_then(|obj| obj.insert("ssrf_url".into(), serde_json::json!(url)));
 
-                                        if let Ok(mut api_findings) = plugin.scan(&reactive_snapshot).await {
-                                            extra_findings.append(&mut api_findings);
+                                        if let Ok(mut cloud_findings) = cloud_meta.scan(&reactive_snapshot).await {
+                                            extra_findings.append(&mut cloud_findings);
                                         }
                                     }
                                 }
                             }
                         }
                     }
-                }
-                    // --- END REACTIVE TRIGGER: GRAPHQL ---
-
-                    // --- REACTIVE TRIGGER: JS DISCOVERY ---
-                    let js_hit = all_findings.iter().find(|f| f.core.id == "JS-FILES-DISCOVERED").cloned();
-                    if let Some(f) = js_hit {
-                        for chain_plugin_name in &["retire", "sourcemapper"] {
-                            if fired_chains.insert(format!("{}::{}", f.core.id, chain_plugin_name)) {
-                                if let Some(plugin) = plugins.iter().find(|p| p.name() == *chain_plugin_name) {
-                                    if !self.layer_policy.needs_approval(plugin.metadata().layer) || approval_gate.is_approved(plugin.name()).await {
-                                        info!("🔱 V14.3 SOVEREIGN: JS files discovered! Triggering reactive {} for {}", plugin.name(), target.host);
-                                        if let Ok(mut findings) = plugin.scan(&target).await {
-                                            extra_findings.append(&mut findings);
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    }
-                    // --- END REACTIVE TRIGGER: JS DISCOVERY ---
-                    
-                    // --- REACTIVE TRIGGER: HIDDEN PARAMS -> SQLMAP ---
-                    let arjun_hit = all_findings.iter().find(|f| f.core.id == FINDING_HIDDEN_PARAMS).cloned();
-                    if let Some(f) = arjun_hit {
-                        if fired_chains.insert(format!("{}::{}", f.core.id, PLUGIN_SQLMAP)) {
-                            if let Some(sqlmap) = plugins.iter().find(|p| p.name() == PLUGIN_SQLMAP) {
-                                if !self.layer_policy.needs_approval(sqlmap.metadata().layer) || approval_gate.is_approved(sqlmap.name()).await {
-                                    info!("🔱 V14.8 SOVEREIGN: Hidden parameters discovered! Triggering reactive SqlMap for {}", target.host);
-                                    
-                                    let mut reactive_snapshot = target.clone();
-                                    if let Some(params) = f.evidence.evidence.as_ref()
-                                        .and_then(|e| e.data.get("parameters"))
-                                        .and_then(|p| p.as_array()) {
-                                            let param_list: Vec<String> = params.iter().filter_map(|p| p.as_str().map(|s| s.to_string())).collect();
-                                            Arc::make_mut(&mut reactive_snapshot.extra_data)
-                                                .as_object_mut()
-                                                .and_then(|obj| obj.insert("injected_parameters".into(), serde_json::json!(param_list)));
-                                    }
-
-                                    if let Ok(mut sql_findings) = sqlmap.scan(&reactive_snapshot).await {
-                                        extra_findings.append(&mut sql_findings);
-                                    }
-                                }
-                            }
-                        }
-                    }
-
-                    // --- REACTIVE TRIGGER: MOBILE ARTIFACTS (V14.8) ---
-                    #[cfg(feature = "sovereign")]
-                    {
-                        let apk_regex = regex::Regex::new(r"\.apk($|\?)").unwrap();
-                        let mobile_hit = all_findings.iter().find(|finding| {
-                            if finding.core.id == FINDING_KATANA_ENDPOINT || finding.core.id == FINDING_WAYMORE_URL || finding.core.id == FINDING_JS_ENDPOINT {
-                                if let Some(evidence) = finding.evidence.evidence.as_ref() {
-                                    let content = evidence.data.to_string();
-                                    return apk_regex.is_match(&content);
-                                }
-                            }
-                            false
-                        }).cloned();
-
-                        if let Some(f) = mobile_hit {
-                            let mut mobile_findings = Vec::new();
-                            for chain_plugin_name in &[PLUGIN_MOBSF, PLUGIN_APKLEAKS, PLUGIN_APKTOOL, PLUGIN_JADX, PLUGIN_DROZER, PLUGIN_FRIDA, PLUGIN_OBJECTION, PLUGIN_MARIANA_TRENCH] {
-                                if fired_chains.insert(format!("{}::{}", f.core.id, chain_plugin_name)) {
-                                    if let Some(plugin) = plugins.iter().find(|p| p.name() == *chain_plugin_name) {
-                                        if !self.layer_policy.needs_approval(plugin.metadata().layer) || approval_gate.is_approved(plugin.name()).await {
-                                            info!("🔱 V14.8 SOVEREIGN: Mobile artifact detected! Triggering reactive {} for {}", plugin.name(), target.host);
-                                            if let Ok(mut findings) = plugin.scan(&target).await {
-                                                mobile_findings.append(&mut findings);
-                                            }
-                                        }
-                                    }
-                                }
-                            }
-                            extra_findings.append(&mut mobile_findings);
-                        }
-                    }
-
-                    // --- REACTIVE TRIGGER: CLOUD INFRASTRUCTURE (V14.8) ---
-                    #[cfg(feature = "sovereign")]
-                    {
-                        let cloud_keywords = ["kubernetes", "k8s", "s3-bucket", "aws-metadata", "gcp-identity", "azure-storage", "lambda", "fargate"];
-                        let cloud_hit = all_findings.iter().find(|f| {
-                            if f.core.id == FINDING_TECH_STACK || f.core.id == "NSE-SCRIPT" {
-                                if let Some(evidence) = f.evidence.evidence.as_ref() {
-                                    let content = evidence.data.to_string().to_lowercase();
-                                    return cloud_keywords.iter().any(|&k| content.contains(k));
-                                }
-                            }
-                            false
-                        }).cloned();
-
-                        if let Some(f) = cloud_hit {
-                            let mut cloud_findings = Vec::new();
-                            for chain_plugin_name in &[PLUGIN_KUBE_BENCH, PLUGIN_KUBESCAPE, PLUGIN_PROWLER, PLUGIN_SCOUTSUITE] {
-                                if fired_chains.insert(format!("{}::{}", f.core.id, chain_plugin_name)) {
-                                    if let Some(plugin) = plugins.iter().find(|p| p.name() == *chain_plugin_name) {
-                                        if !self.layer_policy.needs_approval(plugin.metadata().layer) || approval_gate.is_approved(plugin.name()).await {
-                                            info!("🔱 V14.8 SOVEREIGN: Cloud infrastructure detected! Triggering reactive {} for {}", plugin.name(), target.host);
-                                            if let Ok(mut findings) = plugin.scan(&target).await {
-                                                cloud_findings.append(&mut findings);
-                                            }
-                                        }
-                                    }
-                                }
-                            }
-                            extra_findings.append(&mut cloud_findings);
-                        }
-                    }
-
-                    // --- REACTIVE TRIGGER: AI/LLM SECURITY (V14.8) ---
-                    #[cfg(feature = "sovereign")]
-                    {
-                        let ai_keywords = ["openai", "anthropic", "ollama", "vllm", "mistral", "llama", "langchain"];
-                        let ai_hit = all_findings.iter().find(|f| {
-                            if f.core.id == FINDING_TECH_STACK || f.core.id == FINDING_JS_ENDPOINT {
-                                if let Some(evidence) = f.evidence.evidence.as_ref() {
-                                    let content = evidence.data.to_string().to_lowercase();
-                                    let has_keyword = ai_keywords.iter().any(|&k| content.contains(k));
-                                    let has_endpoint = content.contains("/v1/chat/completions") || content.contains("api.openai.com") || content.contains(":11434");
-                                    return has_keyword && has_endpoint;
-                                }
-                            }
-                            false
-                        }).cloned();
-
-                        if let Some(f) = ai_hit {
-                            let mut ai_findings = Vec::new();
-                            for chain_plugin_name in &[PLUGIN_GARAK, PLUGIN_PROMPTMAP, PLUGIN_LLMFUZZER] {
-                                if fired_chains.insert(format!("{}::{}", f.core.id, chain_plugin_name)) {
-                                    if let Some(plugin) = plugins.iter().find(|p| p.name() == *chain_plugin_name) {
-                                        if !self.layer_policy.needs_approval(plugin.metadata().layer) || approval_gate.is_approved(plugin.name()).await {
-                                            info!("🔱 V14.8 SOVEREIGN: AI endpoint detected! Triggering reactive {} for {}", plugin.name(), target.host);
-                                            if let Ok(mut findings) = plugin.scan(&target).await {
-                                                ai_findings.append(&mut findings);
-                                            }
-                                        }
-                                    }
-                                }
-                            }
-                            extra_findings.append(&mut ai_findings);
-                        }
-                    }
-
-                    // --- REACTIVE TRIGGER: SOURCE-CODE-EXPOSED -> SEMGREP ---
-                    let source_hit = all_findings.iter().find(|f| f.core.id == FINDING_SOURCE_CODE_EXPOSED).cloned();
-                    if let Some(f) = source_hit {
-                        if fired_chains.insert(format!("{}::{}", f.core.id, PLUGIN_SEMGREP)) {
-                            if let Some(plugin) = plugins.iter().find(|p| p.name() == PLUGIN_SEMGREP) {
-                                if !self.layer_policy.needs_approval(plugin.metadata().layer) || approval_gate.is_approved(plugin.name()).await {
-                                    info!("SOVEREIGN: Source code exposed! Triggering reactive Semgrep for {}", target.host);
-                                    if let Ok(mut findings) = plugin.scan(&target).await {
-                                        extra_findings.append(&mut findings);
-                                    }
-                                }
-                            }
-                        }
-                    }
-
-                    // --- REACTIVE TRIGGER: DESERIALIZATION -> GADGET DETECTOR ---
-                    let deserialization_hit = all_findings.iter().find(|f| f.core.id == FINDING_JAVA_SERIAL || f.core.id == FINDING_OBJECT_INJECTION).cloned();
-                    if let Some(f) = deserialization_hit {
-                        if fired_chains.insert(format!("{}::{}", f.core.id, PLUGIN_DESERIALIZATION)) {
-                            if let Some(plugin) = plugins.iter().find(|p| p.name() == PLUGIN_DESERIALIZATION) {
-                                if !self.layer_policy.needs_approval(plugin.metadata().layer) || approval_gate.is_approved(plugin.name()).await {
-                                    info!("SOVEREIGN: Deserialization vulnerability suspected! Triggering reactive DeserializationGadgetDetector for {}", target.host);
-                                    if let Ok(mut findings) = plugin.scan(&target).await {
-                                        extra_findings.append(&mut findings);
-                                    }
-                                }
-                            }
-                        }
-                    }
+                    // --- END REACTIVE TRIGGER: SSRF ---
 
                     all_findings.append(&mut extra_findings);
 
@@ -697,6 +461,9 @@ impl<M: ExecutorMode> Orchestrator<M> {
                     for f in all_findings.iter_mut() {
                         f.core.version = target.version + 1;
                     }
+
+                    // --- NEW: TRIAGE ENGINE DEDUPLICATION ---
+                    all_findings = crate::plugins::triage::process(all_findings).await;
 
                     Arc::make_mut(&mut target.findings).append(&mut all_findings);
                     target.version += 1;

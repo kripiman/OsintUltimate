@@ -25,6 +25,7 @@ pub mod c2;
 pub mod policy;
 pub mod middleware;
 pub mod persistence;
+pub mod reactive_engine;
 pub mod orchestrator;
 pub mod temporal;
 pub mod verification;

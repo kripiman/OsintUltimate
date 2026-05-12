@@ -12,6 +12,7 @@ pub mod detection_evasion;
 pub mod intelligence;
 pub mod verification;
 pub mod reporting;
+pub mod triage;
 
 pub mod ffi;
 
@@ -333,6 +334,8 @@ pub fn get_all_scanners<M: ExecutorMode>(config: GlobalConfig<M>) -> Vec<Box<dyn
     use crate::plugins::enumeration::web::ffuf::FfufScanner;
     use crate::plugins::enumeration::web::arjun::ArjunScanner;
     use crate::plugins::enumeration::network::rustscan::RustScanScanner;
+    use crate::plugins::enumeration::network::kerbrute::KerbruteScanner;
+    use crate::plugins::enumeration::network::enum4linux::Enum4LinuxScanner;
     use crate::plugins::exploitation::network::netexec::NetExecScanner;
     use crate::plugins::reconnaissance::passive::trufflehog::TruffleHogScanner;
     use crate::plugins::exploitation::web::dalfox::DalfoxScanner;
@@ -423,6 +426,7 @@ pub fn get_all_scanners<M: ExecutorMode>(config: GlobalConfig<M>) -> Vec<Box<dyn
     use crate::plugins::exploitation::web::ssrfmap::SsrfmapScanner;
     use crate::plugins::exploitation::web::nosqlmap::NoSqlMapScanner;
     use crate::plugins::exploitation::web::gopherus::GopherusScanner;
+    use crate::plugins::exploitation::web::cloud_metadata::CloudMetadataExtractor;
 
     #[cfg(feature = "ai-redteam")]
     use crate::plugins::exploitation::ai_llm::garak::GarakScanner;
@@ -475,6 +479,8 @@ pub fn get_all_scanners<M: ExecutorMode>(config: GlobalConfig<M>) -> Vec<Box<dyn
         Box::new(FfufScanner::new(None)), 
         Box::new(ArjunScanner::new()), 
         Box::new(RustScanScanner::new()), 
+        Box::new(KerbruteScanner::new()),
+        Box::new(Enum4LinuxScanner::new()), 
         Box::new(NetExecScanner::new()), 
         Box::new(TruffleHogScanner::new()), 
         Box::new(DalfoxScanner::new()), 
@@ -575,6 +581,7 @@ pub fn get_all_scanners<M: ExecutorMode>(config: GlobalConfig<M>) -> Vec<Box<dyn
         Box::new(GopherusScanner::new(&config)),
         Box::new(KxssScanner::new(&config)),
         Box::new(crate::plugins::enumeration::cloud::s3scanner::S3BucketScanner::new(&config)),
+        Box::new(CloudMetadataExtractor::new()),
     ];
 
     #[cfg(feature = "ai-redteam")]

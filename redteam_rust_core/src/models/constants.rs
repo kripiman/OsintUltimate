@@ -177,6 +177,7 @@ pub const PLUGIN_SHUFFLEDNS: &str = "ShufflednsScanner";
 pub const PLUGIN_NOSQLMAP: &str = "NoSqlMapScanner";
 pub const PLUGIN_KXSS: &str = "KxssScanner";
 pub const PLUGIN_S3SCANNER: &str = "S3Scanner";
+pub const PLUGIN_CLOUD_METADATA: &str = "CloudMetadataExtractor";
 
 // OOB Verification Defaults
 pub const OOB_DEFAULT_POLL_INTERVAL_MS: u64 = 5000;
