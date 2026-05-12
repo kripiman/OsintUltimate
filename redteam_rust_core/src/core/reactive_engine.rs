@@ -6,6 +6,20 @@ use dashmap::DashSet;
 use std::sync::Arc;
 use tracing::debug;
 use crate::models::constants::*;
+use std::sync::LazyLock;
+use std::collections::HashMap;
+
+static COMPILED_REGEXES: LazyLock<HashMap<&'static str, regex::Regex>> = LazyLock::new(|| {
+    get_all_rules().into_iter()
+        .filter_map(|rule| {
+            if let ContextExtractor::RegexMatch { pattern } = rule.extractor {
+                Some((pattern, regex::Regex::new(pattern).expect("Invalid regex in rule")))
+            } else {
+                None
+            }
+        })
+        .collect()
+});
 
 /// 觸發條件：單一ID或多ID聯集
 #[derive(Clone, Debug)]
@@ -186,13 +200,15 @@ pub async fn evaluate(
                     }
                 }
                 ContextExtractor::RegexMatch { pattern } => {
-                    if let Ok(re) = regex::Regex::new(pattern) {
+                    if let Some(re) = COMPILED_REGEXES.get(*pattern) {
                         if let Some(evidence) = f.evidence.evidence.as_ref() {
                             let content = evidence.data.to_string();
                             if re.is_match(&content) {
                                 should_fire = true;
                             }
                         }
+                    } else {
+                        tracing::warn!("Regex pattern '{}' was not pre-compiled!", pattern);
                     }
                 }
                 ContextExtractor::KeywordAndEndpoint { keywords, endpoints } => {
