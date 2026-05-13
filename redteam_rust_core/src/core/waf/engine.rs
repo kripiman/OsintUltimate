@@ -196,6 +196,7 @@ impl WafEvasionEngine {
             version: 0,
             skip_heavy_scan: false,
             scan_id: None,
+            scope_id: String::new(),
         };
 
         let payload = original.body.as_deref().unwrap_or("");

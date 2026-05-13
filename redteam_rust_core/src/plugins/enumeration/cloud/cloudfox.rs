@@ -43,8 +43,7 @@ impl ScannerPlugin for CloudFoxScanner {
             exploit_difficulty: crate::plugins::RiskLevel::Medium,
             blackarch_category: None,
             is_destructive: false,
-            poc_mode: false,
-        }
+            poc_mode: false, ..Default::default() }
     }
     fn capabilities(&self) -> Vec<Capability> {
         vec![Capability::VulnerabilityScanning]

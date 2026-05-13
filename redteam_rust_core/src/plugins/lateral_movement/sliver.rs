@@ -232,8 +232,7 @@ impl<M: ExecutorMode> ScannerPlugin for SliverScanner<M> {
             exploit_difficulty: crate::plugins::RiskLevel::High,
             blackarch_category: Some("backdoor".to_string()),
             is_destructive: false,
-            poc_mode: false,
-        }
+            poc_mode: false, ..Default::default() }
     }
     
     fn capabilities(&self) -> Vec<Capability> {

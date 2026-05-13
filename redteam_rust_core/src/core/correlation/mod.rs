@@ -1,9 +1,8 @@
 use crate::models::{Finding, Category};
-use crate::models::constants::{FINDING_GRAPHQL_INTROSPECTION, FINDING_PROTOTYPE_POLLUTION, FINDING_CORS_MISCONFIG, FINDING_WEB_CACHE_DECEPTION, FINDING_SSTI, FINDING_OPEN_REDIRECT, FINDING_WAYMORE_URL};
+use crate::models::constants::FINDING_ATTACK_PATH;
 use std::collections::{HashMap, HashSet};
 use serde::{Deserialize, Serialize};
 use tracing::info;
-use uuid::Uuid;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -24,6 +23,8 @@ pub struct SubmissionOutcome {
 }
 
 pub mod ad_ingestor;
+pub mod analyzer;
+pub mod ingestor;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AttackPath {
@@ -39,7 +40,7 @@ impl AttackPath {
     }
 }
 
-#[derive(Default, Debug, Clone)]
+#[derive(Default, Debug, Clone, Serialize, Deserialize)]
 pub struct AttackGraph {
     pub nodes: HashMap<String, Finding>,
     pub edges: HashMap<String, Vec<String>>, // Source ID -> Target IDs
@@ -59,8 +60,16 @@ impl AttackGraph {
     }
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CorrelationEngine {
     graph: AttackGraph,
+    owned_nodes: HashSet<String>, // SIDs of nodes we have credentials/sessions for
+    #[serde(skip, default = "true_bool")]
+    is_dirty: bool,
+    #[serde(skip)]
+    cached_paths: Vec<AttackPath>,
+    #[serde(skip)]
+    cached_critical_paths: Vec<AttackPath>,
 }
 
 impl Default for CorrelationEngine {
@@ -73,175 +82,114 @@ impl CorrelationEngine {
     pub fn new() -> Self {
         Self {
             graph: AttackGraph::new(),
+            owned_nodes: HashSet::new(),
+            is_dirty: true,
+            cached_paths: Vec::new(),
+            cached_critical_paths: Vec::new(),
         }
     }
 
-    pub fn add_finding(&mut self, finding: Finding) {
-        let is_new = !self.graph.nodes.contains_key(&finding.core.id);
-        self.graph.add_node(finding.clone());
-        
-        if is_new {
-            self.correlate_new_finding(&finding);
+    pub fn mark_node_as_owned(&mut self, sid: &str) {
+        info!("🔱 SOVEREIGN: Node {} marked as OWNED.", sid);
+        if self.owned_nodes.insert(sid.to_string()) {
+            self.is_dirty = true;
         }
+    }
+
+    pub fn find_sid_by_username(&self, username: &str) -> Option<String> {
+        let normalized_user = username.to_uppercase();
+        for (id, node) in &self.graph.nodes {
+            if let Some(props) = node.evidence.evidence.as_ref().and_then(|e| e.data.get("properties")) {
+                if let Some(name) = props.get("name").and_then(|v| v.as_str()) {
+                    let name_upper = name.to_uppercase();
+                    let is_match = name_upper == normalized_user || 
+                                   name_upper.starts_with(&format!("{}\\", normalized_user)) ||
+                                   name_upper.starts_with(&format!("{}@", normalized_user)) ||
+                                   name_upper.contains(&format!("\\{}", normalized_user));
+                    
+                    if is_match {
+                        return Some(id.replace("AD-NODE-", ""));
+                    }
+                }
+            }
+        }
+        None
+    }
+
+    pub fn get_graph_mut(&mut self) -> &mut AttackGraph {
+        &mut self.graph
+    }
+
+    pub fn mark_dirty(&mut self) {
+        self.is_dirty = true;
     }
 
     pub fn add_edge(&mut self, source_id: &str, target_id: &str) {
         info!("🔱 SOVEREIGN: Manually adding AttackGraph edge: {} -> {}", source_id, target_id);
         self.graph.add_edge(source_id, target_id);
+        self.is_dirty = true;
     }
 
-    /// Ingests a submission outcome to adjust correlation weights (Fase 4)
+    pub fn get_graph(&self) -> &AttackGraph {
+        &self.graph
+    }
+
+    pub fn save(&self, path: &str) -> anyhow::Result<()> {
+        let json = serde_json::to_string_pretty(self)?;
+        std::fs::write(path, json)?;
+        Ok(())
+    }
+
+    pub fn load(path: &str) -> anyhow::Result<Self> {
+        let content = std::fs::read_to_string(path)?;
+        let ce: Self = serde_json::from_str(&content)?;
+        Ok(ce)
+    }
+
     pub fn ingest_outcome(&mut self, outcome: SubmissionOutcome) {
         info!("🔱 ROI: Ingesting outcome for chain {}: {:?}", outcome.chain_id, outcome.outcome);
         // TODO: Implement weight adjustment logic in Fase 4
     }
 
-    fn correlate_new_finding(&mut self, new_finding: &Finding) {
-        let existing_nodes: Vec<Finding> = self.graph.nodes.values().cloned().collect();
-        
-        for existing in existing_nodes {
-            if existing.core.id == new_finding.core.id { continue; }
-
-            let evidence_new = new_finding.evidence.evidence.as_ref();
-            let evidence_existing = existing.evidence.evidence.as_ref();
-
-            // Rule 1: Port -> Service/Tech -> Vulnerability -> Exploit
-            match (&existing.core.category, &new_finding.core.category) {
-                (Category::NetworkPort, Category::TechnologyStack) => {
-                    self.graph.add_edge(&existing.core.id, &new_finding.core.id);
-                },
-                (Category::TechnologyStack, Category::Vulnerability) | (Category::Misconfiguration, Category::Vulnerability) => {
-                    self.graph.add_edge(&existing.core.id, &new_finding.core.id);
-                },
-                (Category::Vulnerability, Category::CredentialLeak) | (Category::Vulnerability, Category::ExposedAsset) => {
-                    self.graph.add_edge(&existing.core.id, &new_finding.core.id);
-                },
-                (Category::Windows, Category::Vulnerability) | (Category::Windows, Category::CredentialLeak) => {
-                    self.graph.add_edge(&existing.core.id, &new_finding.core.id);
-                },
-                (Category::Windows, Category::Windows) => {
-                    if let (Some(ev_ext), Some(ev_new)) = (evidence_existing, evidence_new) {
-                        if let (Some(u_sid), Some(c_sid)) = (ev_ext.data.get("SID"), ev_new.data.get("SID")) {
-                            if u_sid != c_sid {
-                                info!("🔱 SOVEREIGN: Correlation AD relationship detected between {} and {}", existing.core.id, new_finding.core.id);
-                                self.graph.add_edge(&existing.core.id, &new_finding.core.id);
-                            }
-                        }
-                    }
-                },
-                (Category::CredentialLeak, Category::Vulnerability) => {
-                    self.graph.add_edge(&existing.core.id, &new_finding.core.id);
-                },
-                _ => {
-                    // Rule 5: API Attack Chain (InQL -> Ppmap -> Corsy -> WCD)
-                    let is_api_vuln_a = is_api_chain_finding(&existing);
-                    let is_api_vuln_b = is_api_chain_finding(new_finding);
-
-                    if is_api_vuln_a && is_api_vuln_b {
-                        let url_a = existing.evidence.evidence.as_ref().and_then(|e| e.data.get("url")).and_then(|v| v.as_str());
-                        let url_b = new_finding.evidence.evidence.as_ref().and_then(|e| e.data.get("url")).and_then(|v| v.as_str());
-                        
-                        if let (Some(ua), Some(ub)) = (url_a, url_b) {
-                            if extract_domain(ua) == extract_domain(ub) {
-                                self.graph.add_edge(&existing.core.id, &new_finding.core.id);
-                                info!("🔱 SOVEREIGN: API Attack Chain link detected: {} <-> {}", existing.core.id, new_finding.core.id);
-                            }
-                        }
-                    }
-                }
-            }
-
-            // Rule 4: SAST Endpoint -> DAST Finding (Source-Aware Correlation)
-            if let (Some(ev_ext), Some(ev_new)) = (evidence_existing, evidence_new) {
-                if let (Some(a_type), Some(b_type)) = (ev_ext.data.get("type"), ev_new.data.get("type")) {
-                    if a_type == "source_aware" || b_type == "source_aware" {
-                        let a_end = ev_ext.data.get("endpoint").and_then(|v| v.as_str());
-                        let b_end = ev_new.data.get("endpoint").and_then(|v| v.as_str());
-                        
-                        if let (Some(ae), Some(be)) = (a_end, b_end) {
-                            if ae.to_lowercase().contains(&be.to_lowercase()) || be.to_lowercase().contains(&ae.to_lowercase()) {
-                                self.graph.add_edge(&existing.core.id, &new_finding.core.id);
-                            }
-                        }
-                    }
-                }
-            }
-            
-            // Rule 6: SSTI -> RCE Chain (Tplmap -> Commix)
-            let is_ssti = existing.core.id == FINDING_SSTI;
-            let is_rce = new_finding.core.id.starts_with("COMMIX-RCE");
-            if is_ssti && is_rce {
-                let url_a = existing.evidence.evidence.as_ref().and_then(|e| e.data.get("url")).and_then(|v| v.as_str());
-                let url_b = new_finding.evidence.evidence.as_ref().and_then(|e| e.data.get("url")).and_then(|v| v.as_str());
-                
-                if let (Some(ua), Some(ub)) = (url_a, url_b) {
-                    if extract_domain(ua) == extract_domain(ub) {
-                        self.graph.add_edge(&existing.core.id, &new_finding.core.id);
-                        info!("🔱 SOVEREIGN: SSTI -> RCE chain link detected: {} -> {}", existing.core.id, new_finding.core.id);
-                    }
-                }
-            }
-            
-            // Reverse Rule 6
-            let is_ssti_new = new_finding.core.id == FINDING_SSTI;
-            let is_rce_old = existing.core.id.starts_with("COMMIX-RCE");
-            if is_ssti_new && is_rce_old {
-                let url_a = existing.evidence.evidence.as_ref().and_then(|e| e.data.get("url")).and_then(|v| v.as_str());
-                let url_b = new_finding.evidence.evidence.as_ref().and_then(|e| e.data.get("url")).and_then(|v| v.as_str());
-                
-                if let (Some(ua), Some(ub)) = (url_a, url_b) {
-                    if extract_domain(ua) == extract_domain(ub) {
-                        self.graph.add_edge(&new_finding.core.id, &existing.core.id);
-                        info!("🔱 SOVEREIGN: SSTI -> RCE chain link detected: {} -> {}", new_finding.core.id, existing.core.id);
-                    }
-                }
-            }
-            
-            // Reverse rules
-            match (&new_finding.core.category, &existing.core.category) {
-                (Category::NetworkPort, Category::TechnologyStack) => {
-                    self.graph.add_edge(&new_finding.core.id, &existing.core.id);
-                },
-                (Category::TechnologyStack, Category::Vulnerability) | (Category::Misconfiguration, Category::Vulnerability) => {
-                    self.graph.add_edge(&new_finding.core.id, &existing.core.id);
-                },
-                (Category::Vulnerability, Category::CredentialLeak) | (Category::Vulnerability, Category::ExposedAsset) => {
-                    self.graph.add_edge(&new_finding.core.id, &existing.core.id);
-                },
-                (Category::Windows, Category::Vulnerability) | (Category::Windows, Category::CredentialLeak) => {
-                    self.graph.add_edge(&new_finding.core.id, &existing.core.id);
-                },
-                (Category::CredentialLeak, Category::Vulnerability) => {
-                    self.graph.add_edge(&new_finding.core.id, &existing.core.id);
-                },
-                _ => {}
-            }
-        }
-    }
-
-    pub fn get_attack_paths(&self) -> Vec<AttackPath> {
-        let mut paths = Vec::new();
-        let mut visited = HashSet::new();
-
-        for source_id in self.graph.nodes.keys() {
-            if self.is_root_node(source_id) {
-                self.dfs_paths(source_id, &mut vec![], &mut paths, &mut visited);
-            }
+    pub fn get_attack_paths(&mut self) -> Vec<AttackPath> {
+        if !self.is_dirty && !self.cached_paths.is_empty() {
+            return self.cached_paths.clone();
         }
 
-        paths.sort_by(|a, b| b.total_cvss.partial_cmp(&a.total_cvss).unwrap_or(std::cmp::Ordering::Equal));
+        let analyzer = analyzer::GraphAnalyzer::new(&self.graph);
+        let paths = analyzer.find_all_paths();
+
+        self.cached_paths = paths.clone();
+        // Do NOT reset is_dirty here because critical findings might still be stale
         paths
     }
 
-    fn is_root_node(&self, node_id: &str) -> bool {
-        if let Some(node) = self.graph.nodes.get(node_id) {
-            matches!(node.core.category, Category::Recon | Category::NetworkPort | Category::TechnologyStack)
-        } else {
-            false
+    /// Phase 6: Returns critical attack paths from owned nodes.
+    pub fn get_critical_paths(&mut self) -> Vec<AttackPath> {
+        if !self.is_dirty && !self.cached_critical_paths.is_empty() {
+            return self.cached_critical_paths.clone();
         }
+
+        let analyzer = analyzer::GraphAnalyzer::new(&self.graph);
+        let paths = analyzer.find_paths_from_owned(&self.owned_nodes);
+
+        let mut critical_paths = Vec::new();
+        for path in paths {
+            if let Some(last_node_id) = path.nodes.last() {
+                if let Some(last_node) = self.graph.nodes.get(last_node_id) {
+                    if last_node.core.severity == crate::models::Severity::Critical {
+                        critical_paths.push(path);
+                    }
+                }
+            }
+        }
+
+        self.cached_critical_paths = critical_paths.clone();
+        self.is_dirty = false;
+        critical_paths
     }
 
-    pub fn get_context_summary(&self, finding_id: &str) -> Option<String> {
+    pub fn get_context_summary(&mut self, finding_id: &str) -> Option<String> {
         let paths = self.get_attack_paths();
         let relevant_path = paths.iter().find(|p| p.nodes.contains(&finding_id.to_string()))?;
 
@@ -255,47 +203,6 @@ impl CorrelationEngine {
 
         Some(context_nodes.join(" -> "))
     }
-
-    fn dfs_paths(&self, current: &str, current_path: &mut Vec<String>, all_paths: &mut Vec<AttackPath>, visited: &mut HashSet<String>) {
-        current_path.push(current.to_string());
-        visited.insert(current.to_string());
-
-        let mut is_leaf = true;
-
-        if let Some(neighbors) = self.graph.edges.get(current) {
-            for neighbor in neighbors {
-                if !visited.contains(neighbor) {
-                    is_leaf = false;
-                    self.dfs_paths(neighbor, current_path, all_paths, visited);
-                }
-            }
-        }
-
-        if is_leaf && current_path.len() > 1 {
-            let mut total_cvss = 0.0;
-            let mut desc_parts = Vec::new();
-
-            for id in current_path.iter() {
-                if let Some(node) = self.graph.nodes.get(id) {
-                    total_cvss += node.enrichment.cvss_score.unwrap_or(0.0);
-                    desc_parts.push(format!("{:?}", node.core.category));
-                }
-            }
-            
-            if !current_path.is_empty() {
-                 total_cvss /= current_path.len() as f32;
-            }
-
-            all_paths.push(AttackPath {
-                nodes: current_path.clone(),
-                total_cvss,
-                description: desc_parts.join(" -> "),
-            });
-        }
-
-        visited.remove(current);
-        current_path.pop();
-    }
 }
 
 fn extract_domain(url_str: &str) -> String {
@@ -306,15 +213,6 @@ fn extract_domain(url_str: &str) -> String {
     }
 }
 
-fn is_api_chain_finding(f: &Finding) -> bool {
-    matches!(
-        f.core.id.as_str(),
-        FINDING_GRAPHQL_INTROSPECTION
-            | FINDING_PROTOTYPE_POLLUTION
-            | FINDING_CORS_MISCONFIG
-            | FINDING_WEB_CACHE_DECEPTION
-            | FINDING_SSTI
-            | FINDING_OPEN_REDIRECT
-            | FINDING_WAYMORE_URL
-    )
+fn true_bool() -> bool {
+    true
 }

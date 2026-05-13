@@ -51,8 +51,7 @@ impl DiscoveryPlugin for AlterXScanner {
             exploit_difficulty: crate::plugins::RiskLevel::Low,
             blackarch_category: Some("recon".to_string()),
             is_destructive: false,
-            poc_mode: true,
-        }
+            poc_mode: true, ..Default::default() }
     }
 
     fn capabilities(&self) -> Vec<Capability> {

@@ -67,8 +67,7 @@ impl<M: ExecutorMode> ScannerPlugin for NucleiScanner<M> {
             exploit_difficulty: crate::plugins::RiskLevel::Medium,
             blackarch_category: Some("scanner".to_string()),
             is_destructive: false,
-            poc_mode: true,
-        }
+            poc_mode: true, ..Default::default() }
     }
     fn capabilities(&self) -> Vec<Capability> {
         vec![Capability::VulnerabilityScanning]

@@ -74,8 +74,7 @@ impl<M: ExecutorMode> ScannerPlugin for NmapScanner<M> {
             exploit_difficulty: crate::plugins::RiskLevel::Low,
             blackarch_category: Some("scanner".to_string()),
             is_destructive: false,
-            poc_mode: true,
-        }
+            poc_mode: true, ..Default::default() }
     }
 
     fn capabilities(&self) -> Vec<Capability> {

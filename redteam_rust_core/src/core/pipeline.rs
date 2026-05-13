@@ -41,6 +41,10 @@ pub struct Pipeline<M: ExecutorMode = crate::utils::executor::GhostMode> {
     policy: Arc<dyn crate::core::policy::PolicyProvider>,
     executor: Arc<StealthExecutor<M>>,
     strict_scope: bool,
+    sliver_ca_path: Option<String>,
+    sliver_cert_path: Option<String>,
+    sliver_key_path: Option<String>,
+    sliver_server_addr: Option<String>,
 }
 
 impl<M: ExecutorMode> Pipeline<M> {
@@ -88,6 +92,10 @@ impl<M: ExecutorMode> Pipeline<M> {
                 false,
             )),
             strict_scope: false,
+            sliver_ca_path: None,
+            sliver_cert_path: None,
+            sliver_key_path: None,
+            sliver_server_addr: None,
         }
     }
 
@@ -207,6 +215,7 @@ impl<M: ExecutorMode> Pipeline<M> {
                                     version: 0,
                                     skip_heavy_scan: false,
                                     scan_id: target.scan_id,
+                                    scope_id: String::new(),
                                 }).await;
                             }
                         }
@@ -284,6 +293,10 @@ impl<M: ExecutorMode> Pipeline<M> {
         let ai_router = self.ai_router.clone();
         let max_tokens = self.max_tokens;
         let proxy_manager = self.proxy_manager.clone();
+        let sliver_ca = self.sliver_ca_path.clone();
+        let sliver_cert = self.sliver_cert_path.clone();
+        let sliver_key = self.sliver_key_path.clone();
+        let sliver_addr = self.sliver_server_addr.clone();
         let strict_scope = self.strict_scope;
 
         tokio::spawn(async move {
@@ -301,6 +314,11 @@ impl<M: ExecutorMode> Pipeline<M> {
                 feedback_tx: Some(liveness_tx),
                 db_pool,
                 current_scan_id,
+                inventory: None,
+                sliver_ca_path: sliver_ca,
+                sliver_cert_path: sliver_cert,
+                sliver_key_path: sliver_key,
+                sliver_server_addr: sliver_addr,
             });
             if let (Some(tx), Some(targets)) = (dashboard_tx, dashboard_targets) {
                 orchestrator.with_dashboard_preconfigured(tx, targets);
@@ -426,6 +444,11 @@ impl<M: ExecutorMode> Pipeline<M> {
             feedback_tx: None,
             db_pool: None,
             current_scan_id: None,
+            inventory: None,
+            sliver_ca_path: self.sliver_ca_path.clone(),
+            sliver_cert_path: self.sliver_cert_path.clone(),
+            sliver_key_path: self.sliver_key_path.clone(),
+            sliver_server_addr: self.sliver_server_addr.clone(),
         });
         let token = self.shutdown_token.clone();
         
@@ -465,6 +488,14 @@ impl<M: ExecutorMode> Pipeline<M> {
             .filter_map(|p| p.as_c2_operator())
             .collect()
     }
+
+    pub fn get_plugins_ref(&self) -> &[Box<dyn ScannerPlugin>] {
+        &self.plugins
+    }
+
+    pub fn get_layer_policy(&self) -> &ScanLayerPolicy {
+        &self.layer_policy
+    }
 }
 
 
@@ -491,6 +522,10 @@ pub struct PipelineBuilder<M: ExecutorMode = crate::utils::executor::GhostMode> 
     policy: Option<Arc<dyn crate::core::policy::PolicyProvider>>,
     executor: Option<Arc<crate::utils::executor::StealthExecutor<M>>>,
     strict_scope: bool,
+    sliver_ca_path: Option<String>,
+    sliver_cert_path: Option<String>,
+    sliver_key_path: Option<String>,
+    sliver_server_addr: Option<String>,
 }
 
 impl<M: ExecutorMode> Default for PipelineBuilder<M> { fn default() -> Self { Self::new() } }
@@ -520,6 +555,10 @@ impl<M: ExecutorMode> PipelineBuilder<M> {
             policy: None,
             executor: None,
             strict_scope: false,
+            sliver_ca_path: None,
+            sliver_cert_path: None,
+            sliver_key_path: None,
+            sliver_server_addr: None,
         }
     }
 
@@ -571,6 +610,14 @@ impl<M: ExecutorMode> PipelineBuilder<M> {
     pub fn sandbox(mut self, s: Arc<crate::core::sandbox::SandboxDispatcher>) -> Self { self.sandbox = Some(s); self }
     pub fn strict_scope(mut self, s: bool) -> Self { self.strict_scope = s; self }
 
+    pub fn with_sliver(mut self, ca: Option<String>, cert: Option<String>, key: Option<String>, addr: Option<String>) -> Self {
+        self.sliver_ca_path = ca;
+        self.sliver_cert_path = cert;
+        self.sliver_key_path = key;
+        self.sliver_server_addr = addr;
+        self
+    }
+
     pub fn build(self) -> Result<Pipeline<M>> {
         let sink = self.sink.context("Pipeline requires a configured sink")?;
         let liveness_checker = self.liveness_checker.context("Pipeline requires a configured liveness checker")?;
@@ -604,6 +651,10 @@ impl<M: ExecutorMode> PipelineBuilder<M> {
             policy: self.policy.context("Pipeline requires a policy provider")?,
             executor: self.executor.context("Pipeline requires an executor")?,
             strict_scope: self.strict_scope,
+            sliver_ca_path: self.sliver_ca_path,
+            sliver_cert_path: self.sliver_cert_path,
+            sliver_key_path: self.sliver_key_path,
+            sliver_server_addr: self.sliver_server_addr,
         })
     }
 }

@@ -57,7 +57,16 @@ pub fn show_menu() -> Result<Option<Args>> {
         worker: false,
         node_id: None,
         nats_url: None,
+        scope_id: None,
     };
+
+    let scope_id = Text::new("🆔 Introduce el Scope ID (opcional, para aislamiento):")
+        .with_help_message("Dejar vacío para el scope por defecto")
+        .prompt()?;
+    
+    if !scope_id.trim().is_empty() {
+        args.scope_id = Some(scope_id);
+    }
 
     if is_mobile {
         args.apk = Some(target);

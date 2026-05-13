@@ -203,8 +203,7 @@ impl<M: ExecutorMode> ScannerPlugin for HavocScanner<M> {
             exploit_difficulty: crate::plugins::RiskLevel::High,
             blackarch_category: Some("persistence".to_string()),
             is_destructive: false,
-            poc_mode: false,
-        }
+            poc_mode: false, ..Default::default() }
     }
     fn capabilities(&self) -> Vec<Capability> {
         vec![Capability::VulnerabilityScanning]

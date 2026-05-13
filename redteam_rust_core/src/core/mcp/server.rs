@@ -714,6 +714,7 @@ async fn handle_execute_plugin(state: &Arc<McpServer>, args: serde_json::Value) 
             version: 0,
             skip_heavy_scan: false,
             scan_id: None,
+            scope_id: String::new(),
         };
 
         // 2.1 MOTOR DE RESILIENCIA (Fase 6 Roadmap)

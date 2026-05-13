@@ -29,6 +29,11 @@ pub struct Orchestrator<M: ExecutorMode> {
     strict_scope: bool,
     db_pool: Option<sqlx::PgPool>,
     current_scan_id: Option<i64>,
+    inventory: Arc<crate::core::swarm::inventory::SwarmInventory>,
+    sliver_ca_path: Option<String>,
+    sliver_cert_path: Option<String>,
+    sliver_key_path: Option<String>,
+    sliver_server_addr: Option<String>,
 }
 
 pub struct OrchestratorConfig<M: ExecutorMode> {
@@ -45,6 +50,11 @@ pub struct OrchestratorConfig<M: ExecutorMode> {
     pub feedback_tx: Option<tokio::sync::mpsc::Sender<TargetHost>>,
     pub db_pool: Option<sqlx::PgPool>,
     pub current_scan_id: Option<i64>,
+    pub inventory: Option<Arc<crate::core::swarm::inventory::SwarmInventory>>,
+    pub sliver_ca_path: Option<String>,
+    pub sliver_cert_path: Option<String>,
+    pub sliver_key_path: Option<String>,
+    pub sliver_server_addr: Option<String>,
 }
 
 impl<M: ExecutorMode> Orchestrator<M> {
@@ -78,6 +88,11 @@ impl<M: ExecutorMode> Orchestrator<M> {
             strict_scope: config.strict_scope,
             db_pool: config.db_pool,
             current_scan_id: config.current_scan_id,
+            inventory: config.inventory.unwrap_or_else(|| Arc::new(crate::core::swarm::inventory::SwarmInventory::new())),
+            sliver_ca_path: config.sliver_ca_path,
+            sliver_cert_path: config.sliver_cert_path,
+            sliver_key_path: config.sliver_key_path,
+            sliver_server_addr: config.sliver_server_addr,
         }
     }
 
@@ -101,6 +116,88 @@ impl<M: ExecutorMode> Orchestrator<M> {
         shutdown_token: tokio_util::sync::CancellationToken, 
     ) {
         info!("Orchestrator started. Concurrency: {}", self.concurrency);
+        
+        // --- PHASE 5.1: MONITOR LIFECYCLE ---
+        let plugins_for_monitor = self.plugins.clone();
+        let dashboard_tx_for_monitor = self.dashboard_tx.clone();
+        let shutdown_token_for_monitor = shutdown_token.clone();
+
+        // --- PHASE 5.5: SLIVER FEEDBACK LOOP ---
+        if let Some(addr) = &self.sliver_server_addr {
+            let ca = self.sliver_ca_path.as_ref().and_then(|p| std::fs::read(p).ok());
+            let cert = self.sliver_cert_path.as_ref().and_then(|p| std::fs::read(p).ok());
+            let key = self.sliver_key_path.as_ref().and_then(|p| std::fs::read(p).ok());
+            
+            let feedback_loop = crate::core::c2::sliver_feedback::SliverFeedbackLoop::new(
+                addr.clone(),
+                self.inventory.clone(),
+                ca,
+                cert,
+                key
+            );
+            
+            tokio::spawn(async move {
+                if let Err(e) = feedback_loop.run().await {
+                    error!("🚨 V15.5 C2_FEEDBACK: Sliver feedback loop terminated with error: {}", e);
+                }
+            });
+        }
+        
+        tokio::spawn(async move {
+            info!("🛡️  V15.1 MONITOR: Starting lifecycle watcher loop.");
+            let mut restart_counts = std::collections::HashMap::new();
+            let mut interval = tokio::time::interval(std::time::Duration::from_secs(30));
+            interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
+
+            loop {
+                tokio::select! {
+                    _ = interval.tick() => {
+                        for p in plugins_for_monitor.iter() {
+                            if p.metadata().is_monitor {
+                                match p.poll_status().await {
+                                    Ok(crate::plugins::PluginStatus::Crashed(reason)) => {
+                                        let count = restart_counts.entry(p.name().to_string()).or_insert(0);
+                                        if *count < 3 {
+                                            warn!("🔄 V15.1 MONITOR: Plugin '{}' crashed ({}). Restarting (Attempt {}/3)...", p.name(), reason, *count + 1);
+                                            *count += 1;
+                                            
+                                            // V15.2 FIX: Cleanup before restart to avoid port conflicts (I.e. Responder)
+                                            if let Err(e) = p.stop().await {
+                                                error!("❌ V15.1 MONITOR: Failed to stop/cleanup plugin '{}': {}", p.name(), e);
+                                            }
+                                            
+                                            // Re-scan trigger (Note: Real implementation would depends on how the plugin handles target state)
+                                        } else {
+                                            error!("🚨 V15.1 MONITOR: Plugin '{}' failed 3 times. SUSPENDING.", p.name());
+                                            if let Some(ref tx) = dashboard_tx_for_monitor {
+                                                let _ = tx.send(Finding::new(
+                                                    "MONITOR_FAILURE",
+                                                    Category::Availability,
+                                                    Severity::Critical,
+                                                    &format!("Plugin {} suspended after 3 crashes", p.name()),
+                                                    serde_json::json!({"reason": reason, "plugin": p.name()})
+                                                ));
+                                            }
+                                        }
+                                    }
+                                    Ok(_) => {
+                                        // Reset count on healthy status
+                                        restart_counts.insert(p.name().to_string(), 0);
+                                    }
+                                    Err(e) => {
+                                        error!("❌ V15.1 MONITOR: Error polling status for {}: {}", p.name(), e);
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    _ = shutdown_token_for_monitor.cancelled() => {
+                        info!("🛡️  V15.1 MONITOR: Shutdown signal received. Stopping watcher.");
+                        break;
+                    }
+                }
+            }
+        });
         
         let available_ba_tools: Vec<String> = self.blackarch_bridge.get_available_tools()
             .iter().map(|t| t.name.clone()).collect();
@@ -147,6 +244,7 @@ impl<M: ExecutorMode> Orchestrator<M> {
 
         let dashboard_tx = self.dashboard_tx.clone();
         let dashboard_targets = self.dashboard_targets.clone();
+        let inventory = self.inventory.clone();
 
         match (self.swarm_mode, self.ai_router.clone(), Some(output_tx.clone())) {
             (true, Some(router), Some(out_tx)) => {
@@ -188,6 +286,7 @@ impl<M: ExecutorMode> Orchestrator<M> {
                     let memory_monitor = memory_monitor.clone();
                     let dashboard_tx = dashboard_tx.clone();
                     let dashboard_targets = dashboard_targets.clone();
+                    let inventory = inventory.clone();
                     
                     async move {
                 // V14.2 SCOPE ENFORCEMENT: Fail-Closed Check
@@ -289,6 +388,7 @@ impl<M: ExecutorMode> Orchestrator<M> {
                         version: target_ref.version,
                         skip_heavy_scan: target_ref.skip_heavy_scan,
                         scan_id: target_ref.scan_id,
+                        scope_id: target_ref.scope_id.clone(),
                     };
                     let lp = lp;
                     let approval_gate = Arc::clone(&approval_gate);
@@ -340,6 +440,12 @@ impl<M: ExecutorMode> Orchestrator<M> {
                         Ok((name, res)) => {
                             match res {
                                 Ok(mut findings) => {
+                                    for f in findings.iter_mut() {
+                                        if f.core.source_plugin.is_none() {
+                                            f.core.source_plugin = Some(name.clone());
+                                        }
+                                        f.core.scope_id = target_ref.scope_id.clone();
+                                    }
                                     all_findings.append(&mut findings);
                                 }
                                 Err(e) => {
@@ -384,11 +490,20 @@ impl<M: ExecutorMode> Orchestrator<M> {
                 
                 if !all_findings.is_empty() {
                     let fired_chains: DashSet<String> = DashSet::new();
+
+                    // --- PHASE 5.3: FAST-PATH INGESTION (NTLM TIMING) ---
+                    // We ingest credentials BEFORE evaluating rules to ensure 
+                    // that NetExec/Spray triggers can immediately use fresh hashes.
+                    for f in &all_findings {
+                        inventory.ingest_finding(f.clone(), crate::core::swarm::inventory::TrustLevel::Private);
+                    }
+
                     // --- NEW: REACTIVE RULE ENGINE (CHAINS 1-10) ---
                     let rules = crate::core::reactive_engine::get_all_rules();
                     let mut extra_findings = crate::core::reactive_engine::evaluate(
                         &rules, &all_findings, &target,
                         &plugins, &self.layer_policy, &approval_gate, &fired_chains,
+                        Some(&inventory),
                     ).await;
 
                     // --- REACTIVE TRIGGER: SSRF -> CLOUD METADATA ---
@@ -462,7 +577,7 @@ impl<M: ExecutorMode> Orchestrator<M> {
                         f.core.version = target.version + 1;
                     }
 
-                    // --- NEW: TRIAGE ENGINE DEDUPLICATION ---
+                    // --- TRIAGE ENGINE DEDUPLICATION ---
                     all_findings = crate::plugins::triage::process(all_findings).await;
 
                     Arc::make_mut(&mut target.findings).append(&mut all_findings);

@@ -58,15 +58,33 @@ impl AdIngestor {
         let mut engine = self.engine.lock().await;
         for node in bh_data.data {
             let title = node.properties.get("name").and_then(|v| v.as_str()).unwrap_or(&node.id).to_string();
+            
+            // Phase 6.1 / BUG-1: BloodHound CE emits admincount as integer (0/1), not bool.
+            // as_bool() returns None for integers → always false → DA never Critical.
+            let is_high_value = node.properties.get("highvalue")
+                .and_then(|v| v.as_bool().or_else(|| v.as_i64().map(|n| n > 0)))
+                .unwrap_or(false);
+            let is_admin = node.properties.get("admincount")
+                .and_then(|v| v.as_bool().or_else(|| v.as_i64().map(|n| n > 0)))
+                .unwrap_or(false);
+            
+            let severity = if is_high_value || is_admin {
+                Severity::Critical
+            } else {
+                Severity::Info
+            };
+
             let finding = Finding::new(
                 &format!("AD-NODE-{}", node.id),
                 Category::Windows,
-                Severity::Info,
+                severity,
                 &format!("AD Object discovered: {}", title),
                 serde_json::json!({
                     "SID": node.id,
                     "type": category_str,
-                    "properties": node.properties
+                    "properties": node.properties,
+                    "is_high_value": is_high_value,
+                    "is_admin": is_admin
                 })
             );
             engine.add_finding(finding);

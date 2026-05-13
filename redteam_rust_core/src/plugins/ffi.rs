@@ -144,8 +144,7 @@ impl crate::plugins::ScannerPlugin for FFIPluginWrapper {
             exploit_difficulty: crate::plugins::RiskLevel::Medium,
             blackarch_category: None,
             is_destructive: false,
-            poc_mode: true,
-        }
+            poc_mode: true, ..Default::default() }
     }
 
     fn capabilities(&self) -> Vec<crate::plugins::Capability> {

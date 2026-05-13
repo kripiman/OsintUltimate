@@ -41,8 +41,7 @@ impl ScannerPlugin for PoCVerifier {
             exploit_difficulty: RiskLevel::Low,
             blackarch_category: Some("automation".to_string()),
             is_destructive: false,
-            poc_mode: false,
-        }
+            poc_mode: false, ..Default::default() }
     }
 
     fn capabilities(&self) -> Vec<Capability> {

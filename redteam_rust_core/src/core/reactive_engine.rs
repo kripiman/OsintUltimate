@@ -4,7 +4,7 @@ use crate::core::capability_layer::ScanLayerPolicy;
 use crate::core::approval_gate::ApprovalGate;
 use dashmap::DashSet;
 use std::sync::Arc;
-use tracing::debug;
+use tracing::{debug, info};
 use crate::models::constants::*;
 use std::sync::LazyLock;
 use std::collections::HashMap;
@@ -143,6 +143,12 @@ const BASE_RULES: &[ReactiveRule] = &[
         chain_plugins: &[PLUGIN_SLIVER_AUTOMATOR],
         extractor: ContextExtractor::PassThrough,
     },
+    // 15. Attack Path Found -> Final Lateral Movement (Phase 6)
+    ReactiveRule {
+        trigger: RuleTrigger::StartsWith(FINDING_ATTACK_PATH),
+        chain_plugins: &[PLUGIN_NETEXEC],
+        extractor: ContextExtractor::EvidenceField { source_key: "host", target_key: "host" },
+    },
 ];
 
 #[cfg(feature = "sovereign")]
@@ -215,6 +221,13 @@ pub async fn evaluate(
                         .and_then(|e| e.data.get(*source_key))
                         .cloned() 
                     {
+                        if target_key == &"host" {
+                            if let Some(host_str) = val.as_str() {
+                                reactive_snapshot.host = host_str.to_string();
+                                info!("🔱 REACTIVE PIVOT: Target host updated to {} based on finding evidence.", reactive_snapshot.host);
+                            }
+                        }
+                        
                         Arc::make_mut(&mut reactive_snapshot.extra_data)
                             .as_object_mut()
                             .and_then(|obj| obj.insert(target_key.to_string(), val));

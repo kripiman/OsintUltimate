@@ -244,6 +244,10 @@ pub struct GlobalConfig<M: ExecutorMode = crate::utils::executor::GhostMode> whe
     pub s3scanner_wordlist_path: Option<String>,
     pub shuffledns_path: Option<String>,
     pub massdns_path: Option<String>,
+    pub sliver_ca_path: Option<String>,
+    pub sliver_cert_path: Option<String>,
+    pub sliver_key_path: Option<String>,
+    pub sliver_server_addr: Option<String>,
 }
 
 impl<M: ExecutorMode> Default for GlobalConfig<M>
@@ -322,6 +326,10 @@ impl<M: ExecutorMode> GlobalConfig<M> where M: Clone {
             s3scanner_wordlist_path: None,
             shuffledns_path: None,
             massdns_path: None,
+            sliver_ca_path: None,
+            sliver_cert_path: None,
+            sliver_key_path: None,
+            sliver_server_addr: None,
         }
     }
 }

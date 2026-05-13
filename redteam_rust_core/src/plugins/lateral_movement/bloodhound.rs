@@ -78,8 +78,7 @@ impl<M: ExecutorMode> ScannerPlugin for BloodHoundScanner<M> {
             exploit_difficulty: crate::plugins::RiskLevel::Medium,
             blackarch_category: None,
             is_destructive: false,
-            poc_mode: false,
-        }
+            poc_mode: false, ..Default::default() }
     }
     fn capabilities(&self) -> Vec<Capability> {
         vec![Capability::ActiveDirectory]
@@ -90,10 +89,11 @@ impl<M: ExecutorMode> ScannerPlugin for BloodHoundScanner<M> {
     async fn scan(&self, target: &TargetHost) -> Result<Vec<Finding>> {
         info!("🔱 V14.1 SOVEREIGN: Collecting AD data from {} via StealthExecutor...", target.host);
         
+        // BUG-2: Removed --zip. bloodhound-python defaults to individual JSON files.
+        // --zip produces a ZIP archive; ingest_results() reads .json → zero match → silent fail.
         let args = vec![
             "-d".to_string(), target.host.clone(),
             "-c".to_string(), "All".to_string(),
-            "--zip".to_string(),
         ];
 
         info!("🛡️ V14.1 SOVEREIGN: Dispatching proxied BloodHound collection via StealthExecutor.");

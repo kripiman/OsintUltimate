@@ -14,6 +14,9 @@ use super::budget::{TokenBudget, TokenGuard, TaskPriority};
 use crate::utils::executor::{StealthExecutor, ExecutorMode};
 use crate::core::persistence::PersistenceOrchestrator;
 use crate::models::{EngagementState, Objective, ObjectivePhase};
+use crate::models::constants::FINDING_ATTACK_PATH;
+use crate::plugins::detection_evasion::jitter::EvasionJitter;
+use crate::utils::config::Config;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum AgentRole {
@@ -55,6 +58,7 @@ pub struct AgentTask<'a, M: ExecutorMode> {
     pub adaptive_ctx: &'a mut AdaptiveContext,
     pub sink_tx: &'a mpsc::Sender<TargetHost>,
     pub guard: TokenGuard,
+    pub jitter: Arc<EvasionJitter>,
     pub _marker: std::marker::PhantomData<M>,
 }
 
@@ -106,12 +110,19 @@ impl<M: ExecutorMode> SwarmOrchestrator<M> {
         }
         
         let mut seen_finding_ids = HashSet::new();
+        let fired_chains = Arc::new(dashmap::DashSet::new()); // NEW-3: Persistent across findings
         let adaptive_context = AdaptiveContext::default();
-        let correlation_engine = Arc::new(tokio::sync::Mutex::new(crate::core::correlation::CorrelationEngine::new()));
+        let correlation_engine_inner = crate::core::correlation::CorrelationEngine::load("swarm_ce_state.json")
+            .unwrap_or_else(|_| crate::core::correlation::CorrelationEngine::new());
+        let correlation_engine = Arc::new(tokio::sync::Mutex::new(correlation_engine_inner));
+        let inventory = Arc::new(crate::core::swarm::inventory::SwarmInventory::new());
         
         let (discovery_tx, mut discovery_rx) = mpsc::channel(100);
         let pipeline = self.pipeline.clone();
         let target = initial_target.clone();
+        
+        let config = Config::from_env();
+        let jitter = Arc::new(EvasionJitter::new(config.post_exploit_min_delay_ms, config.post_exploit_max_delay_ms));
         
         let pipeline_clone = pipeline.clone();
         let discovery_tx_clone = discovery_tx.clone();
@@ -147,22 +158,131 @@ impl<M: ExecutorMode> SwarmOrchestrator<M> {
 
             if seen_finding_ids.contains(&finding.core.id) { continue; }
             seen_finding_ids.insert(finding.core.id.clone());
-            {
+            
+            // BUG-3: Collect all work inside lock, drop lock BEFORE sending to channel.
+            let critical_paths_to_emit: Vec<crate::models::Finding> = {
                 let mut ce = correlation_engine.lock().await;
-                ce.add_finding(finding.clone());
+                crate::core::correlation::ingestor::Ingestor::ingest_finding(&mut ce, finding.clone());
+                
+                // Phase 6: Mark owned nodes based on credentials
+                if finding.core.id == crate::models::constants::FINDING_NTLM_HASH_CAPTURED || 
+                   finding.core.id == crate::models::constants::FINDING_CREDENTIALS_FOUND {
+                    let sid = finding.evidence.evidence.as_ref()
+                        .and_then(|e| e.data.get("SID"))
+                        .and_then(|v| v.as_str())
+                        .map(|s| s.to_string());
+                    
+                    let resolved_sid = if sid.is_none() {
+                        finding.evidence.evidence.as_ref()
+                            .and_then(|e| e.data.get("username").or_else(|| e.data.get("user")))
+                            .and_then(|v| v.as_str())
+                            .and_then(|u| ce.find_sid_by_username(u))
+                    } else {
+                        sid
+                    };
+
+                    if let Some(s) = resolved_sid {
+                        ce.mark_node_as_owned(&s);
+                    }
+                }
+                
+                let paths = ce.get_critical_paths();
+                let graph = ce.get_graph(); // Need a getter for ARCH-8 Finding construction
+
+                paths.into_iter()
+                    .filter(|path| !seen_finding_ids.contains(&format!("{}-{}", crate::models::constants::FINDING_ATTACK_PATH, path.pattern_signature())))
+                    .map(|path| {
+                        let signature = path.pattern_signature();
+                        let next_hop_host = path.nodes.iter().skip(1)
+                            .find_map(|node_id| {
+                                let node = graph.nodes.get(node_id)?;
+                                let props = node.evidence.evidence.as_ref()?.data.get("properties")?;
+                                let is_computer = node.evidence.evidence.as_ref()?.data.get("type").and_then(|v| v.as_str()) == Some("Computer");
+                                if is_computer {
+                                    props.get("dNSHostName").or_else(|| props.get("name")).and_then(|v| v.as_str()).map(|s| s.to_string())
+                                } else { None }
+                            });
+
+                        let mut f = Finding::new(
+                            &format!("{}-{}", crate::models::constants::FINDING_ATTACK_PATH, signature),
+                            crate::models::Category::Windows,
+                            crate::models::Severity::High,
+                            &format!("Critical Attack Path detected: {}", path.description),
+                            serde_json::json!({
+                                "nodes": path.nodes,
+                                "description": path.description,
+                                "total_cvss": path.total_cvss,
+                                "signature": signature,
+                                "host": next_hop_host
+                            })
+                        );
+                        f.core.scope_id = initial_target.scope_id.clone();
+                        f
+                    })
+                    .collect()
+            };
+
+            // Send outside lock
+            let mut is_on_critical_path = false;
+            for path_finding in &critical_paths_to_emit {
+                // NEW-1: Do NOT jitter in main loop. Move to emission task or ignore for internal findings.
+                // However, we want the DISCOVERY to be jittered when the agent actually executes.
+                // For internal "ATTACK-PATH-DISCOVERED" findings, we send them immediately to be processed.
+                info!("🔱 V14.1 SOVEREIGN: Critical Attack Path discovered! Injecting finding into swarm.");
+                let _ = discovery_tx.send(path_finding.clone()).await;
+                
+                // BUG-12 Optimization: Check if current finding is part of a critical path we just found
+                if path_finding.evidence.evidence.as_ref()
+                    .and_then(|e| e.data.get("nodes"))
+                    .and_then(|n| n.as_array())
+                    .map(|nodes| nodes.iter().any(|nid| nid.as_str() == Some(&finding.core.id)))
+                    .unwrap_or(false) 
+                {
+                    is_on_critical_path = true;
+                }
             }
+
+            // --- PHASE 5.3: FAST-PATH INGESTION ---
+            inventory.ingest_finding(finding.clone(), crate::core::swarm::inventory::TrustLevel::Private);
+
+            // NEW-2: Async Reactive Engine integration. Do NOT block main loop with plugin scans.
+            let rules = crate::core::reactive_engine::get_all_rules();
+            let fired_chains_spawn = fired_chains.clone();
+            let discovery_tx_spawn = discovery_tx.clone();
+            let inventory_spawn = inventory.clone();
+            let pipeline_spawn = self.pipeline.clone();
+            let initial_target_spawn = initial_target.clone();
+            let finding_spawn = finding.clone();
+            let approval_gate_spawn = self.approval_gate.clone();
+
+            tokio::spawn(async move {
+                let reactive_findings = crate::core::reactive_engine::evaluate(
+                    &rules,
+                    &[finding_spawn],
+                    &initial_target_spawn,
+                    pipeline_spawn.get_plugins_ref(),
+                    pipeline_spawn.get_layer_policy(),
+                    &approval_gate_spawn,
+                    &fired_chains_spawn,
+                    Some(&inventory_spawn),
+                ).await;
+
+                for rf in reactive_findings {
+                    let _ = discovery_tx_spawn.send(rf).await;
+                }
+            });
 
             let mut role = self.plan_next_step(&finding, &initial_target).await?;
             
-            let ce_handle = correlation_engine.lock().await;
-            let paths = ce_handle.get_attack_paths();
-            if let Some(da_path) = paths.iter().find(|p| p.description.contains("Windows") && p.total_cvss > 0.8) {
-                info!("🔱 V14.1 SOVEREIGN: High-value AD path detected! Prioritizing pivot: {}", da_path.description);
-                if da_path.nodes.contains(&finding.core.id) && finding.core.category == Category::Vulnerability {
-                    role = AgentRole::Exploiter;
-                }
+            // BUG-12 Optimization: Reuse critical path calculation result
+            if is_on_critical_path && finding.core.category == Category::Vulnerability {
+                info!("🔱 V14.1 SOVEREIGN: High-value AD path detected! Prioritizing pivot for {}.", finding.core.id);
+                role = AgentRole::Exploiter;
             }
+
+            let mut ce_handle = correlation_engine.lock().await;
             let attack_context = ce_handle.get_context_summary(&finding.core.id);
+            drop(ce_handle);
             debug!("🐝 SWARM [Planner]: Asignando hallazgo {} al agente {:?}", finding.core.id, role);
 
             let orchestrator = Arc::new(self.clone_for_spawn()); 
@@ -173,6 +293,7 @@ impl<M: ExecutorMode> SwarmOrchestrator<M> {
             let ce_clone = correlation_engine.clone();
             let sink_tx_clone = sink_tx.clone();
             let semaphore = agent_semaphore.clone();
+            let jitter_task = jitter.clone();
 
             let priority = match role {
                 AgentRole::Planner => TaskPriority::High,
@@ -211,6 +332,7 @@ impl<M: ExecutorMode> SwarmOrchestrator<M> {
                             adaptive_ctx: &mut ctx_clone,
                             sink_tx: &sink_tx_clone,
                             guard,
+                            jitter: jitter_task.clone(),
                             _marker: std::marker::PhantomData,
                         }).await,
                         AgentRole::Exploiter => orchestrator.execute_exploiter(AgentTask::<M> {
@@ -221,9 +343,17 @@ impl<M: ExecutorMode> SwarmOrchestrator<M> {
                             adaptive_ctx: &mut ctx_clone,
                             sink_tx: &sink_tx_clone,
                             guard,
+                            jitter: jitter_task.clone(),
                             _marker: std::marker::PhantomData,
                         }).await,
-                        AgentRole::C2Operator => orchestrator.execute_c2_operator(finding_clone, &target_clone, &mut ctx_clone, &sink_tx_clone, guard).await,
+                        AgentRole::C2Operator => orchestrator.execute_c2_operator(
+                            finding_clone, 
+                            &target_clone, 
+                            &mut ctx_clone, 
+                            &sink_tx_clone, 
+                            guard,
+                            jitter_task.clone()
+                        ).await,
                         AgentRole::GhostReporter => orchestrator.execute_reporter(finding_clone, &target_clone, &sink_tx_clone, guard).await,
                         AgentRole::Planner => {
                             let mut ce = ce_clone.lock().await;
@@ -259,6 +389,15 @@ impl<M: ExecutorMode> SwarmOrchestrator<M> {
         }
 
         info!("🛑 SWARM: Enjambre finalizado. Consumo total: {} tokens.", self.budget.current_total());
+        
+        // ARCH-9: Persist Correlation Engine state
+        let ce = correlation_engine.lock().await;
+        if let Err(e) = ce.save("swarm_ce_state.json") {
+            warn!("⚠️ SWARM: Failed to persist Correlation Engine state: {}", e);
+        } else {
+            info!("💾 SWARM: Correlation Engine state persisted to swarm_ce_state.json");
+        }
+
         Ok(())
     }
 
@@ -270,6 +409,7 @@ impl<M: ExecutorMode> SwarmOrchestrator<M> {
         
         match finding.core.category {
             Category::Recon | Category::NetworkPort | Category::TechnologyStack => Ok(AgentRole::Scout),
+            Category::Windows if finding.core.id.starts_with(FINDING_ATTACK_PATH) => Ok(AgentRole::Scout),
             Category::Vulnerability | Category::Misconfiguration | Category::CredentialLeak => {
                 let verified = finding.evidence.evidence.as_ref().map(|e| e.verified).unwrap_or(false);
                 if verified && finding.core.severity >= Severity::High {
@@ -286,6 +426,8 @@ impl<M: ExecutorMode> SwarmOrchestrator<M> {
         &self,
         task: AgentTask<'_, M>,
     ) -> Result<()> {
+        // NEW-1: Apply jitter before execution to simulate human timing
+        task.jitter.apply().await;
         info!("🔍 SWARM [Scout]: Profundizando en hallazgo de infraestructura: {}", task.finding.core.title);
         
         let metadata = self.pipeline.get_plugin_metadata();
@@ -319,6 +461,8 @@ impl<M: ExecutorMode> SwarmOrchestrator<M> {
         &self,
         task: AgentTask<'_, M>,
     ) -> Result<()> {
+        // NEW-1: Apply jitter before execution
+        task.jitter.apply().await;
         let mut finding = task.finding;
         info!("💥 SWARM [Exploiter]: Intentando validación/explotación de: {} [Posture: STRIKE]", finding.core.title);
         
@@ -362,7 +506,10 @@ impl<M: ExecutorMode> SwarmOrchestrator<M> {
         adaptive_ctx: &mut AdaptiveContext,
         sink_tx: &mpsc::Sender<TargetHost>,
         guard: TokenGuard,
+        jitter: Arc<EvasionJitter>,
     ) -> Result<()> {
+        // NEW-1: Jitter post-exploitation cadence
+        jitter.apply().await;
         info!("🔱 SWARM [C2Operator]: Orchestrating offensive persistence for {} [Posture: BREACH]", target.host);
         
         adaptive_ctx.posture = crate::core::ai::Posture::Breach;

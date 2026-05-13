@@ -83,6 +83,8 @@ pub struct TargetHost {
     /// Temporal Diff: tracks the scan instance ID for historical comparisons
     #[serde(default)]
     pub scan_id: Option<i64>,
+    #[serde(default)]
+    pub scope_id: String,
 }
 
 impl TargetHost {

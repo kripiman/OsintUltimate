@@ -70,6 +70,10 @@ pub struct EngineConfig {
     pub s3scanner_wordlist_path: Option<String>,
     pub shuffledns_path: Option<String>,
     pub massdns_path: Option<String>,
+    pub sliver_ca_path: Option<String>,
+    pub sliver_cert_path: Option<String>,
+    pub sliver_key_path: Option<String>,
+    pub sliver_server_addr: Option<String>,
     pub workspace_dir: String,
 }
 
@@ -403,6 +407,10 @@ impl<M: ExecutorMode> RedTeamEngine<M> {
             s3scanner_wordlist_path: self.config.s3scanner_wordlist_path.clone(),
             shuffledns_path: self.config.shuffledns_path.clone(),
             massdns_path: self.config.massdns_path.clone(),
+            sliver_ca_path: self.config.sliver_ca_path.clone(),
+            sliver_cert_path: self.config.sliver_cert_path.clone(),
+            sliver_key_path: self.config.sliver_key_path.clone(),
+            sliver_server_addr: self.config.sliver_server_addr.clone(),
             stealth_policy: crate::plugins::detection_evasion::stealth_policy::StealthPolicy::default(),
         };
 

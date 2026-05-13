@@ -58,8 +58,7 @@ impl ScannerPlugin for FfufScanner {
             exploit_difficulty: RiskLevel::Low,
             blackarch_category: Some("webapp".to_string()),
             is_destructive: false,
-            poc_mode: true,
-        }
+            poc_mode: true, ..Default::default() }
     }
     fn capabilities(&self) -> Vec<Capability> {
         vec![Capability::WebFuzzing]

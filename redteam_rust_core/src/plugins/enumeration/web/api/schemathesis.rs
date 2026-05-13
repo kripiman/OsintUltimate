@@ -43,8 +43,7 @@ impl ScannerPlugin for SchemathesisScanner {
             exploit_difficulty: RiskLevel::Medium,
             blackarch_category: Some("webapp".to_string()),
             is_destructive: false,
-            poc_mode: true,
-        }
+            poc_mode: true, ..Default::default() }
     }
 
     async fn check_dependencies(&self) -> Result<bool> {

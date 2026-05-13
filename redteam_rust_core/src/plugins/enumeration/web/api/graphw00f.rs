@@ -48,8 +48,7 @@ impl ScannerPlugin for GraphW00fScanner {
             exploit_difficulty: crate::plugins::RiskLevel::Low,
             blackarch_category: None,
             is_destructive: false,
-            poc_mode: false,
-        }
+            poc_mode: false, ..Default::default() }
     }
 
     fn capabilities(&self) -> Vec<Capability> {

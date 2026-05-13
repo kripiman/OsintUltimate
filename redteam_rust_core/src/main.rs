@@ -93,6 +93,8 @@ pub struct Args {
     pub node_id: Option<String>,
     #[arg(long, help = "NATS server URL for decentralized mesh")]
     pub nats_url: Option<String>,
+    #[arg(long, help = "Scope ID for cross-target isolation and lateral movement grouping")]
+    pub scope_id: Option<String>,
 }
 
 // End of file cleanup
@@ -120,6 +122,7 @@ async fn main() -> Result<()> {
             anyhow::bail!("Operación cancelada por el usuario o configuración vacía.");
         }
     }
+    let cli_scope_id = Arc::new(args.scope_id.clone().unwrap_or_default());
 
     // Initialize Telemetry
     redteam_rust_core::utils::init_telemetry(args.otel_endpoint.clone(), args.json_logs, None).context("Failed to initialize telemetry")?;
@@ -236,6 +239,10 @@ async fn main() -> Result<()> {
         s3scanner_wordlist_path: utils_config.s3scanner_wordlist_path.clone(),
         shuffledns_path: utils_config.shuffledns_path.clone(),
         massdns_path: utils_config.massdns_path.clone(),
+        sliver_ca_path: utils_config.sliver_ca_path.clone(),
+        sliver_cert_path: utils_config.sliver_cert_path.clone(),
+        sliver_key_path: utils_config.sliver_key_path.clone(),
+        sliver_server_addr: utils_config.sliver_server_addr.clone(),
         workspace_dir: utils_config.workspace_dir.clone(),
     };
 
@@ -374,8 +381,10 @@ async fn main() -> Result<()> {
 
         let (mission_tx, mut mission_rx) = tokio::sync::mpsc::channel::<MissionRequest>(32);
         let injection_tx_for_dashboard = injection_tx.clone();
+        let cli_scope_id_mission = cli_scope_id.clone();
 
         tokio::spawn(async move {
+            let cli_scope_id = cli_scope_id_mission;
             while let Some(mission) = mission_rx.recv().await {
                 let target = match mission.target {
                     Some(t) if !t.is_empty() => t,
@@ -413,7 +422,8 @@ async fn main() -> Result<()> {
                     extra_data: Arc::new(serde_json::json!({})),
                     version: 0,
                     skip_heavy_scan: false,
-                    scan_id: None,
+                    scan_id: None, 
+                    scope_id: (*cli_scope_id).clone(),
                 };
 
                 if let Err(e) = injection_tx_for_dashboard.send(host).await {
@@ -444,7 +454,9 @@ async fn main() -> Result<()> {
         None
     };
 
+    let cli_scope_id_stream = cli_scope_id.clone();
     let target_stream: futures::stream::BoxStream<'static, TargetHost> = if let Some(apk_path) = args.apk.clone() {
+        let cli_scope_id = cli_scope_id_stream.clone();
         let package_name = apk_path.split('/').last().unwrap_or("mobile_app").to_string();
         Box::pin(futures::stream::iter(vec![TargetHost {
             host: package_name,
@@ -460,9 +472,10 @@ async fn main() -> Result<()> {
             extra_data: Arc::new(serde_json::json!({})),
             version: 0,
             skip_heavy_scan: false,
-            scan_id: None,
+            scan_id: None, scope_id: (*cli_scope_id).clone(),
         }]))
     } else if let Some(image_ref) = args.image.clone() {
+        let cli_scope_id = cli_scope_id_stream.clone();
         Box::pin(futures::stream::iter(vec![TargetHost {
             host: image_ref,
             ip: None,
@@ -477,9 +490,10 @@ async fn main() -> Result<()> {
             extra_data: Arc::new(serde_json::json!({})),
             version: 0,
             skip_heavy_scan: false,
-            scan_id: None,
+            scan_id: None, scope_id: (*cli_scope_id).clone(),
         }]))
     } else if let Some(input_path) = args.input.clone() {
+        let cli_scope_id = cli_scope_id_stream.clone();
         let file = tokio::fs::File::open(&input_path).await?;
         let reader = tokio::io::BufReader::new(file);
         tokio_stream::wrappers::LinesStream::new(tokio::io::AsyncBufReadExt::lines(reader))
@@ -492,11 +506,11 @@ async fn main() -> Result<()> {
                 if !valid { error!("❌ Skipping invalid target: {}", t_clone); } 
                 async move { valid } 
             })
-            .map(|t: String| {
+            .map(move |t: String| {
                 let target_type = if t.contains("://") || t.contains('.') { redteam_rust_core::models::TargetType::Web }
                 else if t.contains(':') { redteam_rust_core::models::TargetType::Network }
                 else { redteam_rust_core::models::TargetType::Host };
-
+ 
                 TargetHost {
                     host: t, ip: None, resolved_ip: None, status: TargetStatus::Pending, target_type,
                     file_path: None,
@@ -505,11 +519,12 @@ async fn main() -> Result<()> {
                     tactical_context: Arc::new(serde_json::json!({})), extra_data: Arc::new(serde_json::json!({})),
                     version: 0,
                     skip_heavy_scan: false,
-                    scan_id: None,
+                    scan_id: None, scope_id: (*cli_scope_id).clone(),
                 }
             })
             .boxed()
     } else if let Some(target) = args.target.clone() {
+        let cli_scope_id = cli_scope_id_stream.clone();
         let valid = validate_target(&target);
         if !valid {
             anyhow::bail!("Invalid target provided: {}", target);
@@ -526,7 +541,7 @@ async fn main() -> Result<()> {
         } else {
             redteam_rust_core::models::TargetType::Host
         };
-
+ 
         Box::pin(futures::stream::iter(vec![TargetHost {
             host: target,
             ip: None,
@@ -541,7 +556,7 @@ async fn main() -> Result<()> {
             extra_data: Arc::new(serde_json::json!({})),
             version: 0,
             skip_heavy_scan: false,
-            scan_id: None,
+            scan_id: None, scope_id: (*cli_scope_id).clone(),
         }]))
     } else if certstream_rx.is_some() || args.dashboard.is_some() {
         info!("📡 Waiting for targets from CertStream or Dashboard...");
@@ -559,6 +574,7 @@ async fn main() -> Result<()> {
 
     // Merge CertStream if active
     if let Some(rx) = certstream_rx {
+        let cli_scope_id_cs = cli_scope_id.clone();
         info!("📡 CertStream integration active. Real-time targets will be merged.");
         let cs_stream = tokio_stream::wrappers::ReceiverStream::new(rx)
             .filter(|t: &String| { 
@@ -567,7 +583,7 @@ async fn main() -> Result<()> {
                 if !valid { error!("❌ Skipping invalid target: {}", t_clone); } 
                 async move { valid } 
             })
-            .map(|t: String| {
+            .map(move |t: String| {
                 let target_type = if t.contains("://") || t.contains('.') { redteam_rust_core::models::TargetType::Web }
                 else if t.contains(':') { redteam_rust_core::models::TargetType::Network }
                 else { redteam_rust_core::models::TargetType::Host };
@@ -580,7 +596,7 @@ async fn main() -> Result<()> {
                     tactical_context: Arc::new(serde_json::json!({})), extra_data: Arc::new(serde_json::json!({})),
                     version: 0,
                     skip_heavy_scan: false,
-                    scan_id: None,
+                    scan_id: None, scope_id: (*cli_scope_id_cs).clone(),
                 }
             });
         target_hosts = futures::stream::select(target_hosts, cs_stream).boxed();
@@ -602,6 +618,7 @@ async fn main() -> Result<()> {
 }
 
 async fn run_worker_mode(args: &Args) -> Result<()> {
+    let cli_scope_id = std::sync::Arc::new(args.scope_id.clone().unwrap_or_default());
     let db_url = args.postgres_url.as_ref().context("Postgres URL is required for worker mode (--postgres-url)")?;
     let node_id = args.node_id.clone().unwrap_or_else(|| {
         format!("node-{}", std::process::id())
@@ -689,6 +706,10 @@ async fn run_worker_mode(args: &Args) -> Result<()> {
                 s3scanner_wordlist_path: utils_config.s3scanner_wordlist_path.clone(),
                 shuffledns_path: utils_config.shuffledns_path.clone(),
                 massdns_path: utils_config.massdns_path.clone(),
+                sliver_ca_path: utils_config.sliver_ca_path.clone(),
+                sliver_cert_path: utils_config.sliver_cert_path.clone(),
+                sliver_key_path: utils_config.sliver_key_path.clone(),
+                sliver_server_addr: utils_config.sliver_server_addr.clone(),
                 workspace_dir: utils_config.workspace_dir.clone(),
             };
 
@@ -708,7 +729,8 @@ async fn run_worker_mode(args: &Args) -> Result<()> {
                 extra_data: Arc::new(serde_json::json!({})),
                 version: 0,
                 skip_heavy_scan: false,
-                scan_id: None,
+                scan_id: None, 
+                scope_id: (*cli_scope_id).clone(),
             };
 
             let mut multi_sink = MultiSink::new();

@@ -1,8 +1,10 @@
 pub mod budget;
 pub mod orchestrator;
+pub mod inventory;
 
 pub use budget::{TokenBudget, TokenGuard, TaskPriority};
 pub use orchestrator::{SwarmConfig, SwarmOrchestrator, AgentRole};
+pub use inventory::{SwarmInventory, TrustLevel, InventoryItem};
 
 #[cfg(test)]
 mod tests {

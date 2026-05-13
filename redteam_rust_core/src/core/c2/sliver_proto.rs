@@ -1,18 +1,18 @@
 #[cfg(feature = "sovereign")]
 pub mod sliver {
-    pub mod common {
+    pub mod commonpb {
         tonic::include_proto!("commonpb");
     }
-    pub mod client {
+    pub mod clientpb {
         tonic::include_proto!("clientpb");
     }
-    pub mod sliver {
+    pub mod sliverpb {
         tonic::include_proto!("sliverpb");
     }
-    pub mod dns {
+    pub mod dnspb {
         tonic::include_proto!("dnspb");
     }
-    pub mod rpc {
+    pub mod rpcpb {
         tonic::include_proto!("rpcpb");
     }
 }

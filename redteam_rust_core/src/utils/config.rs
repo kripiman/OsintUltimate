@@ -78,6 +78,12 @@ pub struct Config {
     pub s3scanner_wordlist_path: Option<String>,
     pub shuffledns_path: Option<String>,
     pub massdns_path: Option<String>,
+    pub sliver_ca_path: Option<String>,
+    pub sliver_cert_path: Option<String>,
+    pub sliver_key_path: Option<String>,
+    pub sliver_server_addr: Option<String>,
+    pub post_exploit_min_delay_ms: u64,
+    pub post_exploit_max_delay_ms: u64,
     pub workspace_dir: String,
 }
 
@@ -195,6 +201,18 @@ impl Config {
             s3scanner_wordlist_path: env::var("S3SCANNER_WORDLIST").ok(),
             shuffledns_path: env::var("SHUFFLEDNS_PATH").ok(),
             massdns_path: env::var("MASSDNS_PATH").ok(),
+            sliver_ca_path: env::var("SLIVER_CA_PATH").ok(),
+            sliver_cert_path: env::var("SLIVER_CERT_PATH").ok(),
+            sliver_key_path: env::var("SLIVER_KEY_PATH").ok(),
+            sliver_server_addr: env::var("SLIVER_SERVER_ADDR").ok(),
+            post_exploit_min_delay_ms: env::var("POST_EXPLOIT_MIN_DELAY_MS")
+                .ok()
+                .and_then(|s| s.parse().ok())
+                .unwrap_or(5000),
+            post_exploit_max_delay_ms: env::var("POST_EXPLOIT_MAX_DELAY_MS")
+                .ok()
+                .and_then(|s| s.parse().ok())
+                .unwrap_or(30000),
             workspace_dir: env::var("MIMIKRI_WORKSPACE").unwrap_or_else(|_| "workspace".to_string()),
         }
     }

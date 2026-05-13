@@ -118,6 +118,7 @@ impl ScannerPlugin for TlsxScanner {
                                     version: 0,
                                     skip_heavy_scan: false,
                                     scan_id: None,
+                                    scope_id: String::new(),
                                 };
                                 let _ = tx.send(new_target).await;
                             }

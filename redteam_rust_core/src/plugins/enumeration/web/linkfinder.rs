@@ -45,8 +45,7 @@ impl<M: ExecutorMode> ScannerPlugin for LinkFinderScanner<M> {
             exploit_difficulty: RiskLevel::Low,
             blackarch_category: Some("recon".to_string()),
             is_destructive: false,
-            poc_mode: false,
-        }
+            poc_mode: false, ..Default::default() }
     }
 
     fn capabilities(&self) -> Vec<Capability> {

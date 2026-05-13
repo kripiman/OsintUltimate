@@ -48,7 +48,7 @@ tracing-opentelemetry = "0.22"
 opentelemetry = "0.21"
 opentelemetry_sdk = { version = "0.21", features = ["rt-tokio"] }
 opentelemetry-otlp = "0.14"
-tonic = "0.9"
+tonic = { version = "0.9", features = ["tls"] }
 prost = "0.11"
 tower = "0.4"
 anyhow = "1.0"

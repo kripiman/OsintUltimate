@@ -76,6 +76,7 @@ impl OobInteractionManager {
             version: 0,
             skip_heavy_scan: false,
             scan_id: None,
+            scope_id: String::new(),
         };
 
         let client = StealthClientBuilder::build(&dummy_target, &self.proxy_manager)?;
