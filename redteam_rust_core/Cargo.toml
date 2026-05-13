@@ -49,6 +49,7 @@ opentelemetry = "0.21"
 opentelemetry_sdk = { version = "0.21", features = ["rt-tokio"] }
 opentelemetry-otlp = "0.14"
 tonic = "0.9"
+prost = "0.11"
 tower = "0.4"
 anyhow = "1.0"
 thiserror = "1.0"
@@ -118,3 +119,7 @@ strip = true # Strip symbols for smaller binary
 
 [dev-dependencies]
 wiremock = "0.5"
+
+[build-dependencies]
+tonic-build = "0.9"
+prost-build = "0.11"

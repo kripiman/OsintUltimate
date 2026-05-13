@@ -37,6 +37,7 @@ pub enum Category {
     Vulnerability,
     Misconfiguration,
     CredentialLeak,
+    Exploitation,
     TechnologyStack,
     NetworkPort,
     Recon,
@@ -51,6 +52,7 @@ pub enum Category {
     Idor,
     RaceCondition,
     FileUploadVulnerability,
+    AttackPath,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -184,6 +186,12 @@ pub struct CoreFinding {
     pub parent_id: Option<String>,
     #[serde(default)]
     pub version: u64,
+    #[serde(default)]
+    pub source_plugin: Option<String>,
+    #[serde(default)]
+    pub scope_id: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub attack_path: Option<Vec<String>>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
@@ -437,6 +445,9 @@ impl FindingBuilder {
                 tactical_path: None,
                 parent_id: None,
                 version: 0,
+                source_plugin: None,
+                scope_id: String::new(),
+                attack_path: None,
             },
             evidence: FindingEvidence::default(),
             enrichment: FindingEnrichment {
