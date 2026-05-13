@@ -165,6 +165,7 @@ const SOVEREIGN_RULES: &[ReactiveRule] = &[
 ];
 
 pub fn get_all_rules() -> Vec<ReactiveRule> {
+    #[allow(unused_mut)]
     let mut rules = BASE_RULES.to_vec();
     #[cfg(feature = "sovereign")]
     {
