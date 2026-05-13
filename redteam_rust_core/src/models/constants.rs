@@ -54,6 +54,7 @@ pub const FINDING_NOSQL_INJECTION: &str = "NOSQL-INJECTION";
 pub const FINDING_XSS_REFLECTION: &str = "XSS-REFLECTION";
 pub const FINDING_NTLM_HASH_CAPTURED: &str = "NTLM-HASH-CAPTURED";
 pub const FINDING_SMB_SIGNING_DISABLED: &str = "SMB-SIGNING-DISABLED";
+pub const FINDING_SMB_PWNED: &str = "SMB-PWNED";
 
 // API/GraphQL Security
 pub const FINDING_GRAPHQL_SUGGESTIONS: &str = "GRAPHQL-SUGGESTIONS";
@@ -180,6 +181,7 @@ pub const PLUGIN_NOSQLMAP: &str = "NoSqlMapScanner";
 pub const PLUGIN_KXSS: &str = "KxssScanner";
 pub const PLUGIN_S3SCANNER: &str = "S3Scanner";
 pub const PLUGIN_CLOUD_METADATA: &str = "CloudMetadataExtractor";
+pub const PLUGIN_SLIVER_AUTOMATOR: &str = "SliverAutomator";
 
 // OOB Verification Defaults
 pub const OOB_DEFAULT_POLL_INTERVAL_MS: u64 = 5000;

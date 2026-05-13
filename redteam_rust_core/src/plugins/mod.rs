@@ -74,6 +74,14 @@ pub enum RiskLevel {
     Critical,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub enum PluginStatus {
+    Running,
+    Idle,
+    Crashed(String),
+    Suspended,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PluginMetadata {
     pub name: String,
@@ -90,6 +98,7 @@ pub struct PluginMetadata {
     pub blackarch_category: Option<String>, // NUEVO: Categoría oficial de BlackArch
     pub is_destructive: bool, // NUEVO: Indica si la acción puede alterar el estado o causar DoS
     pub poc_mode: bool,       // NUEVO: Indica si el plugin tiene un modo de prueba no intrusivo
+    pub is_monitor: bool,     // NUEVO: Indica si el plugin es de larga duración (I3/I7)
 }
 
 impl Default for PluginMetadata {
@@ -109,6 +118,7 @@ impl Default for PluginMetadata {
             blackarch_category: None,
             is_destructive: false,
             poc_mode: true,
+            is_monitor: false,
         }
     }
 }
@@ -120,6 +130,14 @@ pub trait ScannerPlugin: Send + Sync {
     fn capabilities(&self) -> Vec<Capability>;
     async fn check_dependencies(&self) -> Result<bool>;
     async fn scan(&self, target: &TargetHost) -> Result<Vec<Finding>>;
+
+    async fn poll_status(&self) -> Result<PluginStatus> {
+        Ok(PluginStatus::Running)
+    }
+
+    async fn stop(&self) -> Result<()> {
+        Ok(())
+    }
 
     fn as_c2_operator(&self) -> Option<&dyn crate::core::c2::C2Operator> {
         None
@@ -489,6 +507,8 @@ pub fn get_all_scanners<M: ExecutorMode>(config: GlobalConfig<M>) -> Vec<Box<dyn
         Box::new(BloodHoundScanner::new(config.executor.clone(), config.correlation_engine.clone())), 
         #[cfg(feature = "sovereign")]
         Box::new(ResponderScanner::new()), 
+        #[cfg(feature = "sovereign")]
+        Box::new(crate::plugins::exploitation::network::sliver_automator::SliverAutomator::new()),
         #[cfg(feature = "sovereign")]
         Box::new(ImpacketScanner::new()), 
         #[cfg(feature = "sovereign")]

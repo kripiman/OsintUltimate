@@ -135,7 +135,13 @@ const BASE_RULES: &[ReactiveRule] = &[
     ReactiveRule {
         trigger: RuleTrigger::Single(FINDING_NTLM_HASH_CAPTURED),
         chain_plugins: &[PLUGIN_NETEXEC],
-        extractor: ContextExtractor::PassThrough
+        extractor: ContextExtractor::PassThrough,
+    },
+    // 14. SMB Pwned! -> Sliver Implant Delivery
+    ReactiveRule {
+        trigger: RuleTrigger::Single(FINDING_SMB_PWNED),
+        chain_plugins: &[PLUGIN_SLIVER_AUTOMATOR],
+        extractor: ContextExtractor::PassThrough,
     },
 ];
 
