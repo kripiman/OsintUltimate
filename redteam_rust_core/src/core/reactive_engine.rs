@@ -26,6 +26,7 @@ static COMPILED_REGEXES: LazyLock<HashMap<&'static str, regex::Regex>> = LazyLoc
 pub enum RuleTrigger {
     Single(&'static str),
     AnyOf(&'static [&'static str]),
+    StartsWith(&'static str),
 }
 
 impl RuleTrigger {
@@ -33,6 +34,7 @@ impl RuleTrigger {
         match self {
             RuleTrigger::Single(id) => *id == finding_id,
             RuleTrigger::AnyOf(ids) => ids.iter().any(|&id| id == finding_id),
+            RuleTrigger::StartsWith(prefix) => finding_id.starts_with(prefix),
         }
     }
 }
@@ -107,6 +109,34 @@ const BASE_RULES: &[ReactiveRule] = &[
         chain_plugins: &[PLUGIN_DESERIALIZATION],
         extractor: ContextExtractor::PassThrough 
     },
+    // 11. AD Reactive Triggers (I8)
+    ReactiveRule {
+        trigger: RuleTrigger::StartsWith("PORT:389"), // LDAP
+        chain_plugins: &[PLUGIN_BLOODHOUND],
+        extractor: ContextExtractor::PassThrough
+    },
+    ReactiveRule {
+        trigger: RuleTrigger::StartsWith("PORT:445"), // SMB
+        chain_plugins: &[PLUGIN_NETEXEC],
+        extractor: ContextExtractor::PassThrough
+    },
+    ReactiveRule {
+        trigger: RuleTrigger::StartsWith("PORT:139"), // NetBIOS
+        chain_plugins: &[PLUGIN_RESPONDER],
+        extractor: ContextExtractor::PassThrough
+    },
+    // 12. SMB Relay / Spray Chain (Phase 5.3)
+    ReactiveRule {
+        trigger: RuleTrigger::Single(FINDING_SMB_SIGNING_DISABLED),
+        chain_plugins: &[PLUGIN_NETEXEC],
+        extractor: ContextExtractor::PassThrough // Inventory will provide credentials
+    },
+    // 13. NTLM Hash -> NetExec (Immediate Trigger)
+    ReactiveRule {
+        trigger: RuleTrigger::Single(FINDING_NTLM_HASH_CAPTURED),
+        chain_plugins: &[PLUGIN_NETEXEC],
+        extractor: ContextExtractor::PassThrough
+    },
 ];
 
 #[cfg(feature = "sovereign")]
@@ -151,13 +181,20 @@ pub async fn evaluate(
     layer_policy: &ScanLayerPolicy,
     approval_gate: &ApprovalGate,
     fired_chains: &DashSet<String>,
+    inventory: Option<&crate::core::swarm::inventory::SwarmInventory>,
 ) -> Vec<Finding> {
     let mut extra_findings = Vec::new();
 
     for rule in rules {
         // Find if any existing finding matches the trigger
         let trigger_findings: Vec<&Finding> = findings.iter()
-            .filter(|f| rule.trigger.matches(&f.core.id))
+            .filter(|f| {
+                // V17 HARDENING: Enforce Scope Isolation (I5)
+                if f.core.scope_id != target.scope_id {
+                    return false;
+                }
+                rule.trigger.matches(&f.core.id)
+            })
             .collect();
 
         for f in trigger_findings {
@@ -237,6 +274,48 @@ pub async fn evaluate(
                     }
                 }
             }
+        }
+    }
+    
+    // --- PHASE 5.2: CROSS-TARGET CREDENTIAL SPRAYING ---
+    if let Some(inv) = inventory {
+        let auth_scanners: Vec<&Box<dyn ScannerPlugin>> = plugins.iter()
+            .filter(|p| p.metadata().capabilities.contains(&crate::plugins::Capability::BruteForce))
+            .collect();
+            
+        if !auth_scanners.is_empty() {
+             let authorized_creds = inv.get_authorized_credentials(&target.scope_id);
+             for cred in authorized_creds {
+                  for p in &auth_scanners {
+                      if fired_chains.insert(format!("SPRAY:{}::{}::{}", cred.core.id, p.name(), target.host)) {
+                          debug!("🔱 SWARM INVENTORY: Spraying credential {} using {} on {}", cred.core.id, p.name(), target.host);
+                          
+                          let mut reactive_snapshot = target.clone();
+                           // Inject credential into tactical context
+                           let obj = Arc::make_mut(&mut reactive_snapshot.extra_data).as_object_mut();
+                           if let Some(o) = obj {
+                               o.insert("injected_credential".into(), serde_json::json!(cred));
+                               
+                               // Also inject flat keys for direct access
+                               if let Some(evidence) = cred.evidence.evidence.as_ref() {
+                                   if let Some(u) = evidence.data.get("username").or_else(|| evidence.data.get("user")) {
+                                       o.insert("username".into(), u.clone());
+                                   }
+                                   if let Some(h) = evidence.data.get("hash").or_else(|| evidence.data.get("ntlm")) {
+                                       o.insert("ntlm_hash".into(), h.clone());
+                                   }
+                                   if let Some(p) = evidence.data.get("password").or_else(|| evidence.data.get("pass")) {
+                                       o.insert("password".into(), p.clone());
+                                   }
+                               }
+                           }
+
+                          if let Ok(mut spray_findings) = p.scan(&reactive_snapshot).await {
+                              extra_findings.append(&mut spray_findings);
+                          }
+                      }
+                  }
+             }
         }
     }
 
