@@ -1,7 +1,7 @@
 use crate::models::{TargetHost, Finding, Severity, Category, TargetStatus, FINDING_PLUGIN_ERROR, FINDING_PLUGIN_PANIC};
 use crate::models::constants::*;
 use dashmap::DashSet;
-use crate::plugins::{ScannerPlugin, Capability};
+use crate::plugins::ScannerPlugin;
 use std::sync::Arc;
 use futures::stream::StreamExt;
 use tracing::{info, error, warn};
@@ -123,6 +123,7 @@ impl<M: ExecutorMode> Orchestrator<M> {
         let shutdown_token_for_monitor = shutdown_token.clone();
 
         // --- PHASE 5.5: SLIVER FEEDBACK LOOP ---
+        #[cfg(feature = "sovereign")]
         if let Some(addr) = &self.sliver_server_addr {
             let ca = self.sliver_ca_path.as_ref().and_then(|p| std::fs::read(p).ok());
             let cert = self.sliver_cert_path.as_ref().and_then(|p| std::fs::read(p).ok());
@@ -360,16 +361,13 @@ impl<M: ExecutorMode> Orchestrator<M> {
                         continue;
                     }
 
-                    // CDN GATING (V14.5): Skip heavy tools for targets behind CDN/WAF
-                    if target_ref.skip_heavy_scan {
-                        let meta = p.metadata();
-                        let is_heavy = meta.capabilities.contains(&Capability::VulnerabilityScanning) || 
-                                       meta.capabilities.contains(&Capability::WebFuzzing);
-                        if is_heavy {
-                            info!("🛡️ CDN GATE: Skipping heavy scan tool '{}' for {}", p.name(), target_ref.host);
-                            continue;
-                        }
+                    // [N-4] Filter out monitors in the main scan() dispatch loop.
+                    // Monitors have their own lifecycle loop and shouldn't be polled per-target.
+                    if p.metadata().is_monitor {
+                        continue;
                     }
+
+                    // CDN GATING (V14.5): Skip heavy tools for targets behind CDN/WAF
 
                     let plugins_clone = Arc::clone(&plugins);
                     // Create a scan snapshot to avoid Arc contention on the full TargetHost

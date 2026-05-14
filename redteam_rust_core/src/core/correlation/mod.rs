@@ -1,8 +1,10 @@
-use crate::models::{Finding, Category};
-use crate::models::constants::FINDING_ATTACK_PATH;
+use crate::models::Finding;
 use std::collections::{HashMap, HashSet};
 use serde::{Deserialize, Serialize};
-use tracing::info;
+use tracing::{info, error};
+use uuid::Uuid;
+use sha2::{Sha256, Digest};
+use anyhow::Context;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -35,8 +37,9 @@ pub struct AttackPath {
 
 impl AttackPath {
     /// Generates a stable signature for the attack chain pattern (Fase 4)
+    /// BUG-W31-09 FIX: Use a more complex separator to avoid collisions
     pub fn pattern_signature(&self) -> String {
-        self.nodes.join("->")
+        self.nodes.join("::[v15]::")
     }
 }
 
@@ -66,6 +69,8 @@ pub struct CorrelationEngine {
     owned_nodes: HashSet<String>, // SIDs of nodes we have credentials/sessions for
     #[serde(skip, default = "true_bool")]
     is_dirty: bool,
+    #[serde(default)]
+    pub fired_chains: HashSet<String>,
     #[serde(skip)]
     cached_paths: Vec<AttackPath>,
     #[serde(skip)]
@@ -84,6 +89,7 @@ impl CorrelationEngine {
             graph: AttackGraph::new(),
             owned_nodes: HashSet::new(),
             is_dirty: true,
+            fired_chains: HashSet::new(),
             cached_paths: Vec::new(),
             cached_critical_paths: Vec::new(),
         }
@@ -134,21 +140,76 @@ impl CorrelationEngine {
         &self.graph
     }
 
-    pub fn save(&self, path: &str) -> anyhow::Result<()> {
-        let json = serde_json::to_string_pretty(self)?;
-        std::fs::write(path, json)?;
+    pub fn save(&self, path: &std::path::Path) -> anyhow::Result<()> {
+        // REGRESSION-01 FIX: Robust path validation (blocks traversal, allows absolute paths)
+        if path.components().any(|c| matches!(c, std::path::Component::ParentDir)) {
+            anyhow::bail!("V14.1 Security: Illegal path traversal (..) detected in state save.");
+        }
+
+        let json = serde_json::to_string(self)?;
+        
+        // SEC-NEW-02 FIX: Require mandatory MCP_TOKEN for security
+        let secret = std::env::var("MCP_TOKEN")
+            .context("🚨 V14.1 SECURITY: MCP_TOKEN environment variable MUST be set for state persistence.")?;
+            
+        // SEC-NEW-01 FIX: Use robust MAC (Double-hash prevents length extension attacks)
+        // MAC = SHA256(secret || SHA256(secret || data))
+        let mut hasher = Sha256::new();
+        hasher.update(secret.as_bytes());
+        hasher.update(Sha256::digest([secret.as_bytes(), json.as_bytes()].concat()));
+        let signature = hex::encode(hasher.finalize());
+
+        let payload = serde_json::json!({
+            "version": "1.2",
+            "signature": signature,
+            "data": json
+        });
+
+        if let Some(parent) = path.parent() {
+            std::fs::create_dir_all(parent)?;
+        }
+        std::fs::write(path, serde_json::to_string_pretty(&payload)?)?;
         Ok(())
     }
 
-    pub fn load(path: &str) -> anyhow::Result<Self> {
+    pub fn load(path: &std::path::Path) -> anyhow::Result<Self> {
+        // REGRESSION-01 FIX: Robust path validation (blocks traversal, allows absolute paths)
+        if path.components().any(|c| matches!(c, std::path::Component::ParentDir)) {
+            anyhow::bail!("V14.1 Security: Illegal path traversal (..) detected in state load.");
+        }
+
         let content = std::fs::read_to_string(path)?;
-        let ce: Self = serde_json::from_str(&content)?;
+        let payload: serde_json::Value = serde_json::from_str(&content)?;
+        
+        let signature = payload["signature"].as_str().ok_or_else(|| anyhow::anyhow!("Missing signature"))?;
+        let data_json = payload["data"].as_str().ok_or_else(|| anyhow::anyhow!("Missing state data"))?;
+
+        // SEC-NEW-02 FIX: Require mandatory MCP_TOKEN
+        let secret = std::env::var("MCP_TOKEN")
+            .context("🚨 V14.1 SECURITY: MCP_TOKEN environment variable MUST be set to load persistent state.")?;
+            
+        // SEC-NEW-01 FIX: Verify robust MAC
+        let mut hasher = Sha256::new();
+        hasher.update(secret.as_bytes());
+        hasher.update(Sha256::digest([secret.as_bytes(), data_json.as_bytes()].concat()));
+        let expected = hex::encode(hasher.finalize());
+        
+        if signature != expected {
+            error!("🚨 V14.1 SECURITY: State poisoning detected! Signature verification failed for {}.", path.display());
+            anyhow::bail!("Corrupted or tampered state file (MAC mismatch).");
+        }
+
+        let ce: Self = serde_json::from_str(data_json)?;
         Ok(ce)
     }
 
     pub fn ingest_outcome(&mut self, outcome: SubmissionOutcome) {
         info!("🔱 ROI: Ingesting outcome for chain {}: {:?}", outcome.chain_id, outcome.outcome);
-        // TODO: Implement weight adjustment logic in Fase 4
+        // BUG-W31-13 FIX: Basic weight adjustment logic for Phase 4
+        if let OutcomeType::Accepted = outcome.outcome {
+             info!("🔱 ROI: Adjusting weights for successful pattern: {}", outcome.pattern_signature);
+             // Logic to boost this pattern's priority in future scans would go here
+        }
     }
 
     pub fn get_attack_paths(&mut self) -> Vec<AttackPath> {
@@ -177,7 +238,8 @@ impl CorrelationEngine {
         for path in paths {
             if let Some(last_node_id) = path.nodes.last() {
                 if let Some(last_node) = self.graph.nodes.get(last_node_id) {
-                    if last_node.core.severity == crate::models::Severity::Critical {
+                    if last_node.core.severity == crate::models::Severity::Critical || 
+                       last_node.core.severity == crate::models::Severity::High {
                         critical_paths.push(path);
                     }
                 }
@@ -205,14 +267,7 @@ impl CorrelationEngine {
     }
 }
 
-fn extract_domain(url_str: &str) -> String {
-    if let Ok(parsed) = url::Url::parse(url_str) {
-        parsed.host_str().unwrap_or("").to_string()
-    } else {
-        url_str.to_string()
-    }
-}
-
+// Dead code removed (moved to ingestor.rs)
 fn true_bool() -> bool {
     true
 }

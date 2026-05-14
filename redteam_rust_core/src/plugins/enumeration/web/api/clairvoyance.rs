@@ -1,5 +1,5 @@
 use crate::plugins::{ScannerPlugin, Capability, PluginMetadata, RiskLevel, TargetType, GlobalConfig};
-use crate::models::{TargetHost, Finding, Category, Severity};
+use crate::models::{TargetHost, Finding, Category, Severity, constants::*};
 use crate::utils::tool_detection::detect_tool;
 use crate::utils::executor::ExecutorMode;
 use async_trait::async_trait;
@@ -34,7 +34,7 @@ impl ScannerPlugin for ClairvoyanceScanner {
             description: "clairvoyance: GraphQL schema reconstruction via field suggestions (blind introspection).".to_string(),
             target_type: TargetType::Host,
             risk_level: RiskLevel::Safe,
-            layer: crate::core::capability_layer::ScanLayer::Scanning,
+            layer: crate::core::capability_layer::ScanLayer::Exploitation,
             expected_duration: std::time::Duration::from_secs(300),
             capabilities: vec![Capability::GraphQL],
             cost: 5,
@@ -76,9 +76,9 @@ impl ScannerPlugin for ClairvoyanceScanner {
         if stdout.contains("type Query") || stdout.contains("type Mutation") {
              return Ok(vec![
                 Finding::builder(
-                    "GRAPHQL-SCHEMA-RECONSTRUCTED",
-                    Category::Recon,
-                    Severity::Info,
+                    FINDING_GRAPHQL_SUGGESTIONS,
+                    Category::Vulnerability,
+                    Severity::High,
                     &format!("GraphQL schema successfully reconstructed for {}", url)
                 )
                 .with_evidence(serde_json::json!({"schema": &stdout}))

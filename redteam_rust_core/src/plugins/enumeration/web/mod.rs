@@ -26,3 +26,4 @@ pub mod wcvs;
 pub mod linkfinder;
 pub mod secretfinder;
 pub mod js_deep;
+pub mod jwks_discovery;

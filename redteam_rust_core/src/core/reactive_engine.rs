@@ -79,11 +79,11 @@ const BASE_RULES: &[ReactiveRule] = &[
         chain_plugins: &[PLUGIN_GRYPE, PLUGIN_COSIGN],
         extractor: ContextExtractor::PassThrough 
     },
-    // 3. GraphQL -> GraphW00f/Schemathesis/CrackQL
+    // 3. GraphQL -> GraphW00f/Schemathesis/CrackQL/Clairvoyance
     ReactiveRule { 
         trigger: RuleTrigger::Single(FINDING_GRAPHQL_INTROSPECTION),
-        chain_plugins: &[PLUGIN_GRAPHW00F, PLUGIN_SCHEMATHESIS, PLUGIN_CRACKQL],
-        extractor: ContextExtractor::EvidenceField { source_key: "url", target_key: "api_schema_url" } 
+        chain_plugins: &[PLUGIN_CLAIRVOYANCE, PLUGIN_GRAPHW00F, PLUGIN_SCHEMATHESIS, PLUGIN_CRACKQL],
+        extractor: ContextExtractor::EvidenceField { source_key: "url", target_key: "api_url" } 
     },
     // 4. JS Discovery -> Retire/SourceMapper  
     ReactiveRule { 
@@ -148,6 +148,30 @@ const BASE_RULES: &[ReactiveRule] = &[
         trigger: RuleTrigger::StartsWith(FINDING_ATTACK_PATH),
         chain_plugins: &[PLUGIN_NETEXEC],
         extractor: ContextExtractor::EvidenceField { source_key: "host", target_key: "host" },
+    },
+    // 16. JWKS -> JWT Forge
+    ReactiveRule { 
+        trigger: RuleTrigger::Single(FINDING_JWKS_ENDPOINT), 
+        chain_plugins: &[PLUGIN_JWT_FORGE],
+        extractor: ContextExtractor::EvidenceField { source_key: "url", target_key: "jwks_url" } 
+    },
+    // 17. CORS Misconfig -> Exfiltrator
+    ReactiveRule {
+        trigger: RuleTrigger::Single(FINDING_CORS_MISCONFIG),
+        chain_plugins: &[PLUGIN_CORS_EXFIL],
+        extractor: ContextExtractor::EvidenceField { source_key: "url", target_key: "api_url" }
+    },
+    // 18. Subdomain Takeover -> Verifier
+    ReactiveRule {
+        trigger: RuleTrigger::Single(FINDING_SUBDOMAIN_TAKEOVER),
+        chain_plugins: &[PLUGIN_DNS_VERIFIER],
+        extractor: ContextExtractor::PassThrough
+    },
+    // 19. Exposed Secret -> Validator
+    ReactiveRule {
+        trigger: RuleTrigger::AnyOf(&[FINDING_GITLEAKS_SECRET, FINDING_EXPOSED_SECRET, FINDING_JS_SECRET]),
+        chain_plugins: &[PLUGIN_SECRET_VALIDATOR],
+        extractor: ContextExtractor::EvidenceField { source_key: "secret", target_key: "secret" }
     },
 ];
 

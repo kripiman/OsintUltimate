@@ -87,6 +87,14 @@ impl<M: ExecutorMode> SwarmOrchestrator<M> {
         self.clone()
     }
 
+    /// Returns the absolute path for CE state persistence.
+    fn ce_state_path() -> std::path::PathBuf {
+        dirs::data_local_dir()
+            .unwrap_or_else(|| std::path::PathBuf::from("/tmp"))
+            .join("osint-ultimate")
+            .join("swarm_ce_state.json")
+    }
+
     pub async fn run(&self, initial_target: TargetHost, sink_tx: mpsc::Sender<TargetHost>) -> Result<()> {
         info!("🐝 SWARM: Iniciando enjambre multi-agente para {}", initial_target.host);
         
@@ -110,10 +118,20 @@ impl<M: ExecutorMode> SwarmOrchestrator<M> {
         }
         
         let mut seen_finding_ids = HashSet::new();
-        let fired_chains = Arc::new(dashmap::DashSet::new()); // NEW-3: Persistent across findings
         let adaptive_context = AdaptiveContext::default();
-        let correlation_engine_inner = crate::core::correlation::CorrelationEngine::load("swarm_ce_state.json")
+        
+        // BUG-NEW-03 FIX: Use absolute, OS-specific path for state
+        let ce_state_path = Self::ce_state_path();
+        
+        let correlation_engine_inner = crate::core::correlation::CorrelationEngine::load(&ce_state_path)
             .unwrap_or_else(|_| crate::core::correlation::CorrelationEngine::new());
+            
+        // BUG-W31-05 FIX: Restore fired_chains from persistent state
+        let fired_chains = Arc::new(dashmap::DashSet::new());
+        for chain in &correlation_engine_inner.fired_chains {
+            fired_chains.insert(chain.clone());
+        }
+        
         let correlation_engine = Arc::new(tokio::sync::Mutex::new(correlation_engine_inner));
         let inventory = Arc::new(crate::core::swarm::inventory::SwarmInventory::new());
         
@@ -280,9 +298,11 @@ impl<M: ExecutorMode> SwarmOrchestrator<M> {
                 role = AgentRole::Exploiter;
             }
 
-            let mut ce_handle = correlation_engine.lock().await;
-            let attack_context = ce_handle.get_context_summary(&finding.core.id);
-            drop(ce_handle);
+            // BUG-W31-08 FIX: Capture context summary while holding lock to prevent TOCTOU
+            let attack_context = {
+                let mut ce_handle = correlation_engine.lock().await;
+                ce_handle.get_context_summary(&finding.core.id)
+            };
             debug!("🐝 SWARM [Planner]: Asignando hallazgo {} al agente {:?}", finding.core.id, role);
 
             let orchestrator = Arc::new(self.clone_for_spawn()); 
@@ -357,7 +377,8 @@ impl<M: ExecutorMode> SwarmOrchestrator<M> {
                         AgentRole::GhostReporter => orchestrator.execute_reporter(finding_clone, &target_clone, &sink_tx_clone, guard).await,
                         AgentRole::Planner => {
                             let mut ce = ce_clone.lock().await;
-                            ce.add_finding(finding_clone);
+                            // BUG-W31-01 FIX: Use Ingestor instead of deleted method
+                            crate::core::correlation::ingestor::Ingestor::ingest_finding(&mut ce, finding_clone);
                             guard.commit(0);
                             Ok(())
                         },
@@ -391,11 +412,19 @@ impl<M: ExecutorMode> SwarmOrchestrator<M> {
         info!("🛑 SWARM: Enjambre finalizado. Consumo total: {} tokens.", self.budget.current_total());
         
         // ARCH-9: Persist Correlation Engine state
-        let ce = correlation_engine.lock().await;
-        if let Err(e) = ce.save("swarm_ce_state.json") {
+        let mut ce = correlation_engine.lock().await;
+        
+        // BUG-W31-05 FIX: Sync fired_chains back to CE before persistence
+        ce.fired_chains.clear();
+        for chain in fired_chains.iter() {
+            ce.fired_chains.insert(chain.key().clone());
+        }
+
+        let ce_state_path = Self::ce_state_path();
+        if let Err(e) = ce.save(&ce_state_path) {
             warn!("⚠️ SWARM: Failed to persist Correlation Engine state: {}", e);
         } else {
-            info!("💾 SWARM: Correlation Engine state persisted to swarm_ce_state.json");
+            info!("💾 SWARM: Correlation Engine state persisted to {:?} (HMAC verified)", ce_state_path);
         }
 
         Ok(())

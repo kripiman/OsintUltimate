@@ -5,8 +5,16 @@ use tracing::info;
 
 pub struct Ingestor;
 
+const MAX_NODES: usize = 10000;
+
 impl Ingestor {
     pub fn ingest_finding(ce: &mut CorrelationEngine, finding: Finding) {
+        let node_count = ce.get_graph().nodes.len();
+        if node_count >= MAX_NODES && !ce.get_graph().nodes.contains_key(&finding.core.id) {
+            tracing::warn!("🚨 V14.1 SOVEREIGN: CorrelationEngine node limit hit ({}). Skipping ingestion of {}.", MAX_NODES, finding.core.id);
+            return;
+        }
+
         let is_new = !ce.get_graph().nodes.contains_key(&finding.core.id);
         ce.get_graph_mut().add_node(finding.clone());
         
@@ -59,7 +67,9 @@ impl Ingestor {
                         let url_b = new_finding.evidence.evidence.as_ref().and_then(|e| e.data.get("url")).and_then(|v| v.as_str());
                         
                         if let (Some(ua), Some(ub)) = (url_a, url_b) {
-                            if extract_domain(ua) == extract_domain(ub) {
+                            let dom_a = extract_domain(ua);
+                            let dom_b = extract_domain(ub);
+                            if !dom_a.is_empty() && dom_a == dom_b {
                                 ce.add_edge(&existing.core.id, &new_finding.core.id);
                                 info!("🔱 SOVEREIGN: API Attack Chain link detected: {} <-> {}", existing.core.id, new_finding.core.id);
                             }
@@ -89,7 +99,9 @@ impl Ingestor {
             let is_rce = new_finding.core.id.starts_with("COMMIX-RCE");
             if is_ssti && is_rce {
                  if let (Some(ua), Some(ub)) = (get_url(&existing), get_url(new_finding)) {
-                    if extract_domain(ua) == extract_domain(ub) {
+                    let dom_a = extract_domain(ua);
+                    let dom_b = extract_domain(ub);
+                    if !dom_a.is_empty() && dom_a == dom_b {
                         ce.add_edge(&existing.core.id, &new_finding.core.id);
                     }
                 }
@@ -110,7 +122,7 @@ fn extract_domain(url_str: &str) -> String {
     if let Ok(parsed) = url::Url::parse(url_str) {
         parsed.host_str().unwrap_or("").to_string()
     } else {
-        url_str.to_string()
+        String::new()
     }
 }
 

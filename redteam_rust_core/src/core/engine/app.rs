@@ -86,7 +86,7 @@ pub struct RedTeamEngine<M: ExecutorMode = crate::utils::executor::GhostMode> {
     sandbox: Arc<SandboxDispatcher>,
     approval_gate: Arc<ApprovalGate>,
     proxy_manager: Arc<crate::utils::proxy::ProxyManager>,
-    policy: Arc<dyn crate::core::policy::PolicyProvider>,
+    policy: Arc<crate::core::policy::ReloadablePolicy>,
     executor: Arc<StealthExecutor<M>>,
     correlation_engine: Arc<tokio::sync::Mutex<crate::core::correlation::CorrelationEngine>>,
 }
@@ -96,7 +96,7 @@ impl RedTeamEngine<crate::utils::executor::GhostMode> {
         let shutdown_token = CancellationToken::new();
         let memory_monitor = Arc::new(MemoryMonitor::new(soft_limit as u32, hard_limit as u32));
         let res_mgr = SysResourceManager::new();
-        let policy = Arc::new(crate::core::policy::StaticPolicy::new());
+        let policy = Arc::new(crate::core::policy::ReloadablePolicy::new(None));
         let approval_gate = Arc::new(ApprovalGate::for_red_team());
         let proxy_manager = Arc::new(crate::utils::proxy::ProxyManager::new(
             config.proxies.clone().unwrap_or_default(),
@@ -136,7 +136,7 @@ impl RedTeamEngine<crate::utils::executor::GhostMode> {
             utils_config.hard_memory_limit_mb as u32
         ));
         let res_mgr = SysResourceManager::new();
-        let policy = Arc::new(crate::core::policy::StaticPolicy::from_file(utils_config.policy_file.as_deref()));
+        let policy = Arc::new(crate::core::policy::ReloadablePolicy::new(utils_config.policy_file.as_deref()));
         let approval_gate = Arc::new(ApprovalGate::for_red_team());
         let proxy_manager = Arc::new(crate::utils::proxy::ProxyManager::new(
             config.proxies.clone().unwrap_or_default(),
@@ -469,5 +469,9 @@ impl<M: ExecutorMode> RedTeamEngine<M> {
 
     pub fn proxy_manager(&self) -> Arc<crate::utils::proxy::ProxyManager> {
         self.proxy_manager.clone()
+    }
+
+    pub fn policy(&self) -> Arc<crate::core::policy::ReloadablePolicy> {
+        self.policy.clone()
     }
 }

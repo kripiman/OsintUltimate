@@ -5,3 +5,5 @@ pub mod subzy;
 pub mod cdncheck;
 pub mod asnmap;
 pub mod tlsx;
+pub mod azurehound;
+pub mod roadrecon;

@@ -92,6 +92,7 @@ pub fn init_telemetry(endpoint: Option<String>, json_logs: bool, pm: Option<Arc<
                         let host = parsed.host_str().unwrap_or("localhost");
                         let port = parsed.port_or_known_default().unwrap_or(4317);
                         pm.tcp_connect_proxied(host, port).await
+                            .map(hyper_util::rt::TokioIo::new)
                             .map_err(std::io::Error::other)
                     }
                 }));
@@ -104,7 +105,7 @@ pub fn init_telemetry(endpoint: Option<String>, json_logs: bool, pm: Option<Arc<
                         .with_channel(channel),
                 )
                 .with_trace_config(
-                    trace::config().with_resource(Resource::new(vec![
+                    trace::Config::default().with_resource(Resource::new(vec![
                         KeyValue::new("service.name", "redteam_rust_core"),
                     ])),
                 )
@@ -119,7 +120,7 @@ pub fn init_telemetry(endpoint: Option<String>, json_logs: bool, pm: Option<Arc<
                         .with_endpoint(&endpoint_url),
                 )
                 .with_trace_config(
-                    trace::config().with_resource(Resource::new(vec![
+                    trace::Config::default().with_resource(Resource::new(vec![
                         KeyValue::new("service.name", "redteam_rust_core"),
                     ])),
                 )
@@ -127,7 +128,9 @@ pub fn init_telemetry(endpoint: Option<String>, json_logs: bool, pm: Option<Arc<
         };
 
         match tracer_result {
-            Ok(tracer) => {
+            Ok(provider) => {
+                use opentelemetry::trace::TracerProvider as _;
+                let tracer = provider.tracer("redteam_rust_core");
                 let telemetry = tracing_opentelemetry::layer().with_tracer(tracer);
 
                 let subscriber = Registry::default()

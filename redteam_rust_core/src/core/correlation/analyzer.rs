@@ -8,6 +8,8 @@ pub struct GraphAnalyzer<'a> {
     graph: &'a AttackGraph,
 }
 
+const MAX_DEPTH: usize = 8;
+
 impl<'a> GraphAnalyzer<'a> {
     pub fn new(graph: &'a AttackGraph) -> Self {
         Self { graph }
@@ -19,7 +21,7 @@ impl<'a> GraphAnalyzer<'a> {
 
         for source_id in self.graph.nodes.keys() {
             if self.is_root_node(source_id) {
-                self.dfs_paths(source_id, &mut vec![], &mut paths, &mut visited);
+                self.dfs_paths(source_id, &mut vec![], &mut paths, &mut visited, 0);
             }
         }
 
@@ -34,7 +36,7 @@ impl<'a> GraphAnalyzer<'a> {
         for source_sid in owned_nodes {
             let source_id = format!("AD-NODE-{}", source_sid);
             if self.graph.nodes.contains_key(&source_id) {
-                self.dfs_paths(&source_id, &mut vec![], &mut paths, &mut visited);
+                self.dfs_paths(&source_id, &mut vec![], &mut paths, &mut visited, 0);
             }
         }
         paths
@@ -48,44 +50,54 @@ impl<'a> GraphAnalyzer<'a> {
         }
     }
 
-    fn dfs_paths(&self, current: &str, current_path: &mut Vec<String>, all_paths: &mut Vec<AttackPath>, visited: &mut HashSet<String>) {
+    fn dfs_paths(&self, current: &str, current_path: &mut Vec<String>, all_paths: &mut Vec<AttackPath>, visited: &mut HashSet<String>, depth: usize) {
         current_path.push(current.to_string());
         visited.insert(current.to_string());
 
-        let mut is_leaf = true;
+        if depth >= MAX_DEPTH {
+            self.record_path(current_path, all_paths);
+        } else {
+            let mut is_leaf = true;
 
-        if let Some(neighbors) = self.graph.edges.get(current) {
-            for neighbor in neighbors {
-                if !visited.contains(neighbor) {
-                    is_leaf = false;
-                    self.dfs_paths(neighbor, current_path, all_paths, visited);
+            if let Some(neighbors) = self.graph.edges.get(current) {
+                for neighbor in neighbors {
+                    if !visited.contains(neighbor) {
+                        is_leaf = false;
+                        self.dfs_paths(neighbor, current_path, all_paths, visited, depth + 1);
+                    }
                 }
             }
-        }
 
-        if is_leaf && current_path.len() > 1 {
-            let mut total_cvss = 0.0;
-            let mut desc_parts = Vec::new();
-
-            for id in current_path.iter() {
-                if let Some(node) = self.graph.nodes.get(id) {
-                    total_cvss += node.enrichment.cvss_score.unwrap_or(0.0);
-                    desc_parts.push(format!("{:?}", node.core.category));
-                }
+            if is_leaf && current_path.len() > 1 {
+                self.record_path(current_path, all_paths);
             }
-            
-            if !current_path.is_empty() {
-                 total_cvss /= current_path.len() as f32;
-            }
-
-            all_paths.push(AttackPath {
-                nodes: current_path.clone(),
-                total_cvss,
-                description: desc_parts.join(" -> "),
-            });
         }
 
         visited.remove(current);
         current_path.pop();
+    }
+
+    fn record_path(&self, current_path: &Vec<String>, all_paths: &mut Vec<AttackPath>) {
+        if current_path.is_empty() { return; }
+        
+        let mut total_cvss = 0.0;
+        let mut desc_parts = Vec::new();
+
+        for id in current_path.iter() {
+            if let Some(node) = self.graph.nodes.get(id) {
+                total_cvss += node.enrichment.cvss_score.unwrap_or(0.0);
+                desc_parts.push(format!("{:?}", node.core.category));
+            }
+        }
+        
+        if !current_path.is_empty() {
+             total_cvss /= current_path.len() as f32;
+        }
+
+        all_paths.push(AttackPath {
+            nodes: current_path.clone(),
+            total_cvss,
+            description: desc_parts.join(" -> "),
+        });
     }
 }

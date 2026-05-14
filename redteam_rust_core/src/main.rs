@@ -12,6 +12,8 @@ use redteam_rust_core::core::engine::{RedTeamEngine, app::EngineConfig};
 use redteam_rust_core::core::sink::{MultiSink, JsonlSink, PostgresSink, TacticalWebhookSink, DataSink};
 use redteam_rust_core::core::capability_layer::ScanLayer;
 use redteam_rust_core::utils::config::Config;
+use redteam_rust_core::plugins::reporting::platform_client::PlatformClient;
+use redteam_rust_core::models::ReportPlatform;
 use redteam_rust_core::utils::validate_target;
 use redteam_rust_core::utils::security::is_ssrf_safe_host_async;
 use tracing::{info, error, warn};
@@ -247,6 +249,40 @@ async fn main() -> Result<()> {
     };
 
     let engine = RedTeamEngine::from_config(engine_config.clone(), &utils_config);
+    
+    // --- SCOPE SYNCHRONIZATION (V15.1) ---
+    if std::env::var("SCOPE_SYNC").map(|v| v == "true").unwrap_or(false) {
+        if let Some(ref h1_key) = engine_config.h1_api_key {
+            let policy_file = engine_config.policy_file.clone().unwrap_or_else(|| "policy.json".to_string());
+            let mut syncer = redteam_rust_core::core::policy::scope_syncer::ScopeSyncer::new(
+                engine.policy(),
+                std::path::PathBuf::from(policy_file),
+            );
+            
+            // Register HackerOne client
+            let h1_client = PlatformClient::new(
+                ReportPlatform::HackerOne,
+                h1_key.clone(),
+                engine_config.h1_username.clone(),
+            );
+            syncer.add_client(h1_client, engine_config.h1_username.clone().unwrap_or_default());
+
+            info!("🔱 V15.1 SCOPE: Initializing scope synchronization...");
+            if let Err(e) = syncer.sync().await {
+                error!("❌ V15.1 SCOPE: Initial sync failed: {}", e);
+            }
+            
+            // Periodic sync every 4 hours
+            let syncer_loop = Arc::new(syncer);
+            tokio::spawn(async move {
+                let mut interval = tokio::time::interval(Duration::from_secs(14400));
+                loop {
+                    interval.tick().await;
+                    let _ = syncer_loop.sync().await;
+                }
+            });
+        }
+    }
 
     // --- STEALTH INFRASTRUCTURE SETUP (V14.1) ---
     if let Ok(token) = utils_config.require_do_token() {

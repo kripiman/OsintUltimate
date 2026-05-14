@@ -56,6 +56,12 @@ pub const FINDING_NTLM_HASH_CAPTURED: &str = "NTLM-HASH-CAPTURED";
 pub const FINDING_SMB_SIGNING_DISABLED: &str = "SMB-SIGNING-DISABLED";
 pub const FINDING_SMB_PWNED: &str = "SMB-PWNED";
 pub const FINDING_ATTACK_PATH: &str = "ATTACK-PATH-DISCOVERED";
+pub const FINDING_AZURE_HIGH_PRIVILEGE: &str = "AZURE-HIGH-PRIVILEGE";
+pub const FINDING_AZURE_RECON_COMPLETE: &str = "AZURE-RECON-COMPLETE";
+pub const FINDING_AZURE_POLICIES_DUMPED: &str = "AZURE-POLICIES-DUMPED";
+pub const FINDING_NEW_CVE_DISCOVERED: &str = "NEW-CVE-DISCOVERED";
+pub const FINDING_JWKS_ENDPOINT: &str = "JWKS-ENDPOINT";
+pub const FINDING_EXPOSED_SECRET: &str = "EXPOSED-SECRET";
 
 // API/GraphQL Security
 pub const FINDING_GRAPHQL_SUGGESTIONS: &str = "GRAPHQL-SUGGESTIONS";
@@ -119,6 +125,8 @@ pub const PLUGIN_GITLEAKS: &str = "GitleaksScanner";
 pub const PLUGIN_TSUNAMI: &str = "TsunamiScanner";
 pub const PLUGIN_CHECKOV: &str = "CheckovScanner";
 pub const PLUGIN_JWT_TOOL: &str = "JwtToolScanner";
+pub const PLUGIN_JWT_FORGE: &str = "JwtForgeScanner";
+pub const PLUGIN_JWKS_DISCOVERY: &str = "JwksDiscoveryScanner";
 pub const PLUGIN_KITERUNNER: &str = "KiterunnerScanner";
 pub const PLUGIN_KUBESCAPE: &str = "KubescapeScanner";
 pub const PLUGIN_WAYBACK: &str = "WaybackScanner";
@@ -183,6 +191,12 @@ pub const PLUGIN_KXSS: &str = "KxssScanner";
 pub const PLUGIN_S3SCANNER: &str = "S3Scanner";
 pub const PLUGIN_CLOUD_METADATA: &str = "CloudMetadataExtractor";
 pub const PLUGIN_SLIVER_AUTOMATOR: &str = "SliverAutomator";
+pub const PLUGIN_AZUREHOUND: &str = "AzureHoundScanner";
+pub const PLUGIN_ROADRECON: &str = "RoadReconScanner";
+pub const PLUGIN_NVD_MONITOR: &str = "NvdMonitor";
+pub const PLUGIN_CORS_EXFIL: &str = "CorsTokenExfiltrator";
+pub const PLUGIN_DNS_VERIFIER: &str = "DnsHijackVerifier";
+pub const PLUGIN_SECRET_VALIDATOR: &str = "SecretValidator";
 
 // OOB Verification Defaults
 pub const OOB_DEFAULT_POLL_INTERVAL_MS: u64 = 5000;

@@ -97,6 +97,7 @@ impl<M: ExecutorMode> ScannerPlugin for SecretFinderScanner<M> {
                         serde_json::json!({
                             "source": js_url,
                             "match": line,
+                            "secret": line.to_string(),
                             "tool": "SecretFinder"
                         })
                     ).with_blackarch_category("recon"));

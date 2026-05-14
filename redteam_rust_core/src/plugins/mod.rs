@@ -453,6 +453,14 @@ pub fn get_all_scanners<M: ExecutorMode>(config: GlobalConfig<M>) -> Vec<Box<dyn
     use crate::plugins::exploitation::web::nosqlmap::NoSqlMapScanner;
     use crate::plugins::exploitation::web::gopherus::GopherusScanner;
     use crate::plugins::exploitation::web::cloud_metadata::CloudMetadataExtractor;
+    use crate::plugins::reconnaissance::active::azurehound::AzureHoundScanner;
+    use crate::plugins::reconnaissance::active::roadrecon::RoadReconScanner;
+    use crate::plugins::exploitation::web::jwt_forge::JwtForgeScanner;
+    use crate::plugins::enumeration::web::jwks_discovery::JwksDiscoveryScanner;
+    use crate::core::swarm::nvd_monitor::NvdMonitor;
+    use crate::plugins::exploitation::web::cors_exfil::CorsTokenExfiltrator;
+    use crate::plugins::verification::dns_verifier::DnsHijackVerifier;
+    use crate::plugins::verification::secret_validator::SecretValidator;
 
     #[cfg(feature = "ai-redteam")]
     use crate::plugins::exploitation::ai_llm::garak::GarakScanner;
@@ -542,7 +550,7 @@ pub fn get_all_scanners<M: ExecutorMode>(config: GlobalConfig<M>) -> Vec<Box<dyn
         Box::new(GitleaksScanner::new()), 
         Box::new(TsunamiScanner::new()), 
         Box::new(CheckovScanner::new()), 
-        Box::new(JwtToolScanner::new()), 
+        Box::new(JwtToolScanner::new(config.insecure)), 
         Box::new(GoWitnessScanner::new()), 
         Box::new(SearchsploitScanner::new()), 
         Box::new(TrivyScanner::new()), 
@@ -570,7 +578,7 @@ pub fn get_all_scanners<M: ExecutorMode>(config: GlobalConfig<M>) -> Vec<Box<dyn
         Box::new(CaidoScanner::new(&crate::utils::config::Config::from_env(), config.proxy_manager.clone())), 
         Box::new(JsluiceScanner::new()),
         Box::new(SubzyScanner::new()),
-        Box::new(NoMore403Scanner::new()),
+        Box::new(NoMore403Scanner::new(config.insecure)),
         Box::new(SmugglerScanner::new()),
         Box::new(GreyNoiseScanner::new()),
         Box::new(X8Scanner::new()),
@@ -610,6 +618,16 @@ pub fn get_all_scanners<M: ExecutorMode>(config: GlobalConfig<M>) -> Vec<Box<dyn
         Box::new(KxssScanner::new(&config)),
         Box::new(crate::plugins::enumeration::cloud::s3scanner::S3BucketScanner::new(&config)),
         Box::new(CloudMetadataExtractor::new()),
+        #[cfg(feature = "sovereign")]
+        Box::new(AzureHoundScanner::new()),
+        #[cfg(feature = "sovereign")]
+        Box::new(RoadReconScanner::new()),
+        Box::new(NvdMonitor::new(std::env::var("NVD_API_KEY").ok())), 
+        Box::new(JwtForgeScanner::new()),
+        Box::new(JwksDiscoveryScanner::new()),
+        Box::new(CorsTokenExfiltrator::new()),
+        Box::new(DnsHijackVerifier::new()),
+        Box::new(SecretValidator::new()),
     ];
 
     #[cfg(feature = "ai-redteam")]

@@ -98,6 +98,7 @@ impl ScannerPlugin for GitleaksScanner {
                                "rule_id": leak_obj.rule_id,
                                "file": leak_obj.file,
                                "line": leak_obj.line,
+                               "secret": leak_obj.secret.clone(),
                                "secret_preview": format!("{}...", &leak_obj.secret[..std::cmp::min(leak_obj.secret.len(), 10)])
                            })
                        ).with_tactical_path("Revoke the exposed secret and remove it from the source history."));

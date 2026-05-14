@@ -1,4 +1,5 @@
 use anyhow::Result;
+pub mod scope_syncer;
 use chrono::Timelike;
 use once_cell::sync::Lazy;
 use regex::Regex;
@@ -66,7 +67,59 @@ pub trait PolicyProvider: Send + Sync {
     fn is_within_testing_window(&self) -> bool;
 
     /// Returns the formal Rules of Engagement if defined.
-    fn get_roe(&self) -> Option<&RoE>;
+    fn get_roe(&self) -> Option<RoE>;
+}
+
+/// V14.6 Decepticon: Hot-reloadable policy wrapper.
+pub struct ReloadablePolicy {
+    inner: std::sync::RwLock<StaticPolicy>,
+    policy_path: Option<std::path::PathBuf>,
+}
+
+impl ReloadablePolicy {
+    pub fn new(path: Option<&str>) -> Self {
+        let policy_path = path.map(|p| std::path::Path::new(p).to_path_buf());
+        let initial = StaticPolicy::from_file(path);
+        Self {
+            inner: std::sync::RwLock::new(initial),
+            policy_path,
+        }
+    }
+
+    pub fn reload(&self) {
+        tracing::info!("🛡️ V14.6 POLICY: Reloading policy from file...");
+        let path_str = self.policy_path.as_deref().and_then(|p| p.to_str());
+        let new_policy = StaticPolicy::from_file(path_str);
+        match self.inner.write() {
+            Ok(mut lock) => {
+                *lock = new_policy;
+                tracing::info!("🛡️ V14.6 POLICY: Reload successful.");
+            }
+            Err(e) => tracing::error!("❌ V14.6 POLICY: Failed to acquire write lock for reload: {}", e),
+        }
+    }
+}
+
+impl PolicyProvider for ReloadablePolicy {
+    fn validate_command(&self, binary: &str, args: &[String]) -> Result<()> {
+        self.inner.read().map_err(|e| anyhow::anyhow!("Poisoned lock: {}", e))?.validate_command(binary, args)
+    }
+
+    fn is_path_safe(&self, path: &str) -> bool {
+        self.inner.read().map(|p| p.is_path_safe(path)).unwrap_or(false)
+    }
+
+    fn is_target_allowed(&self, target: &str) -> bool {
+        self.inner.read().map(|p| p.is_target_allowed(target)).unwrap_or(false)
+    }
+
+    fn is_within_testing_window(&self) -> bool {
+        self.inner.read().map(|p| p.is_within_testing_window()).unwrap_or(true)
+    }
+
+    fn get_roe(&self) -> Option<RoE> {
+        self.inner.read().ok().and_then(|p| p.get_roe())
+    }
 }
 
 /// Static implementation of the Sovereign Policy (V14.1 initial consolidation).
@@ -294,7 +347,7 @@ impl PolicyProvider for StaticPolicy {
         true
     }
 
-    fn get_roe(&self) -> Option<&RoE> {
-        self.roe.as_ref()
+    fn get_roe(&self) -> Option<RoE> {
+        self.roe.clone()
     }
 }

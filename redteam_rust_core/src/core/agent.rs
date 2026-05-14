@@ -71,7 +71,7 @@ impl<M: ExecutorMode> AutonomousAgent<M> {
                 let _ = log.log(crate::utils::activity_log::EventKind::AgentStep, crate::utils::activity_log::Actor::Sentinel, &format!("Processing finding: {}", finding.core.title), Some(&initial_target.host), serde_json::json!({"finding_id": finding.core.id})).await;
             }
 
-            correlation_engine.add_finding(finding.clone());
+            crate::core::correlation::ingestor::Ingestor::ingest_finding(&mut correlation_engine, finding.clone());
             let attack_context = correlation_engine.get_context_summary(&finding.core.id);
             
             let analysis = self.router.analyze(&finding, &initial_target, attack_context.as_deref()).await?;

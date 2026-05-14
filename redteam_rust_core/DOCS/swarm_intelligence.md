@@ -1,6 +1,6 @@
 # Swarm Intelligence & Multi-Agent System
 
-> Source-verified from `src/core/swarm/orchestrator.rs` and `src/core/swarm/budget.rs`. Last verified: 2026-05-08.
+> Source-verified from `src/core/swarm/orchestrator.rs` and `src/core/swarm/budget.rs`. Last verified: 2026-05-13 (V15.1 Hardened).
 
 ---
 
@@ -32,7 +32,7 @@ flowchart TD
 
 | Role | `TaskPriority` | Behavior |
 |---|---|---|
-| `Planner` | High | Adds finding to `CorrelationEngine`. No tool execution, costs 0 tokens. |
+| `Planner` | High | Ingests finding via `Ingestor::ingest_finding`. No tool execution, costs 0 tokens. |
 | `Exploiter` | Normal | Runs exploitation plugins against the finding. Generates PoC. |
 | `Scout` | Low | Runs discovery/enumeration plugins. Feeds new assets back to discovery channel. |
 | `C2Operator` | Low | Activates `PersistenceOrchestrator`. Requires `sovereign` feature. |
@@ -168,8 +168,9 @@ flowchart TD
     READY --> DISC["pipeline.run_discovery to discovery_rx"]
     DISC --> LOOP{"finding from rx"}
     LOOP --> DEDUP["seen_finding_ids dedup"]
-    DEDUP --> CORR["CorrelationEngine.add_finding"]
-    CORR --> AD{"AD path detected<br/>CVSS gt 0.8?"}
+    LOOP --> DEDUP["seen_finding_ids dedup"]
+    DEDUP --> CORR["Ingestor::ingest_finding"]
+    CORR --> AD{"AD path detected<br/>(DFS MAX_DEPTH 8)?"}
     AD -- yes --> FORCE["force role = Exploiter"]
     AD -- no --> PLAN["plan_next_step<br/>router Premium/Mid"]
     PLAN & FORCE --> BUDGET{"budget.is_exhausted?"}
@@ -182,4 +183,29 @@ flowchart TD
     CHECK -- no --> ROLE["execute role agent"]
     ROLE --> COMMIT["guard.commit actual_tokens"]
     COMMIT --> LOOP
+    LOOP -- empty --> DRAIN["join_set drain all pending"]
+    DRAIN --> SYNC["ce.fired_chains.clear()\nfor chain in dashset: insert"]
+    SYNC --> SAVE["CE::save(absolute_path)\nDouble-Hash MAC signed"]
 ```
+
+---
+
+## 8. ARCH-9: CE State Persistence & fired_chains Sync
+
+At the end of `run()`, after the `JoinSet` is fully drained:
+
+```
+1. Lock CE (tokio::Mutex)
+2. ce.fired_chains.clear()
+3. for chain in fired_chains: Arc<dashmap::DashSet> → ce.fired_chains.insert(chain)
+4. ce.save(&Self::ce_state_path())   ← Double-Hash MAC + MCP_TOKEN
+```
+
+On next `run()` startup:
+
+```
+1. ce = CorrelationEngine::load(&ce_state_path) or ::new()
+2. fired_chains: Arc<dashmap::DashSet> = ce.fired_chains.iter().cloned().collect()
+```
+
+**Why two structures?** `dashmap::DashSet` is lockfree for concurrent agent writes during the run. `HashSet<String>` is `Serialize`-friendly for JSON persistence. The sync at shutdown bridges them.

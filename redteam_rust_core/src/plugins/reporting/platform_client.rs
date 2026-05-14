@@ -35,6 +35,14 @@ impl PlatformClient {
         }
     }
 
+    pub async fn fetch_in_scope(&self, program_handle: &str) -> Result<Vec<String>> {
+        match self.platform {
+            ReportPlatform::HackerOne => self.fetch_h1_scope(program_handle).await,
+            ReportPlatform::BugCrowd => self.fetch_bugcrowd_scope(program_handle).await,
+            ReportPlatform::Intigriti => self.fetch_intigriti_scope(program_handle).await,
+        }
+    }
+
     async fn submit_h1(
         &self,
         report_md: &str,
@@ -150,5 +158,90 @@ impl PlatformClient {
         }
 
         Ok("Submission successful (check Intigriti dashboard)".to_string())
+    }
+
+    async fn fetch_h1_scope(&self, program_handle: &str) -> Result<Vec<String>> {
+        let username = self.username.as_ref().ok_or_else(|| anyhow!("H1_USERNAME is required for HackerOne"))?;
+        let auth = general_purpose::STANDARD.encode(format!("{}:{}", username, self.api_key));
+
+        let url = format!("https://api.hackerone.com/v1/programs/{}/structured_scopes", program_handle);
+        let resp = self.client
+            .get(&url)
+            .header("Authorization", format!("Basic {}", auth))
+            .send()
+            .await?;
+
+        if !resp.status().is_success() {
+            return Err(anyhow!("HackerOne Scope API error: {}", resp.status()));
+        }
+
+        let body: serde_json::Value = resp.json().await?;
+        let mut scopes = Vec::new();
+
+        if let Some(data) = body["data"].as_array() {
+            for entry in data {
+                let attr = &entry["attributes"];
+                let asset_type = attr["asset_type"].as_str().unwrap_or("");
+                if asset_type == "URL" || asset_type == "WILDCARD" {
+                    if let Some(identifier) = attr["asset_identifier"].as_str() {
+                        scopes.push(identifier.to_string());
+                    }
+                }
+            }
+        }
+
+        Ok(scopes)
+    }
+
+    async fn fetch_bugcrowd_scope(&self, program_handle: &str) -> Result<Vec<String>> {
+        let url = format!("https://tracker.bugcrowd.com/programs/{}/scope.json", program_handle);
+        let resp = self.client
+            .get(&url)
+            .header("Authorization", format!("Token token={}", self.api_key))
+            .send()
+            .await?;
+
+        if !resp.status().is_success() {
+            return Err(anyhow!("Bugcrowd Scope API error: {}", resp.status()));
+        }
+
+        let body: serde_json::Value = resp.json().await?;
+        let mut scopes = Vec::new();
+
+        if let Some(scope_array) = body["scope"].as_array() {
+            for entry in scope_array {
+                if let Some(target) = entry["target"].as_str() {
+                    scopes.push(target.to_string());
+                }
+            }
+        }
+
+        Ok(scopes)
+    }
+
+    async fn fetch_intigriti_scope(&self, program_handle: &str) -> Result<Vec<String>> {
+        let url = format!("https://api.intigriti.com/external/researcher/v1/programs/{}", program_handle);
+        let resp = self.client
+            .get(&url)
+            .header("Authorization", format!("Bearer {}", self.api_key))
+            .send()
+            .await?;
+
+        if !resp.status().is_success() {
+            return Err(anyhow!("Intigriti Scope API error: {}", resp.status()));
+        }
+
+        let body: serde_json::Value = resp.json().await?;
+        let mut scopes = Vec::new();
+
+        if let Some(in_scope) = body["inScope"].as_array() {
+            for entry in in_scope {
+                if let Some(endpoint) = entry["endpoint"].as_str() {
+                    scopes.push(endpoint.to_string());
+                }
+            }
+        }
+
+        Ok(scopes)
     }
 }

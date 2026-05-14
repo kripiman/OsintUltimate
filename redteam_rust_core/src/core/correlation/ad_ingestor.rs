@@ -87,7 +87,7 @@ impl AdIngestor {
                     "is_admin": is_admin
                 })
             );
-            engine.add_finding(finding);
+            crate::core::correlation::ingestor::Ingestor::ingest_finding(&mut engine, finding);
         }
         
         Ok(())

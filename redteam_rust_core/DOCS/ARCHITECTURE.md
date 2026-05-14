@@ -1,6 +1,6 @@
 # Mimikri Core — System Architecture Reference
 
-> Derived from source code (`src/`). Authoritative. Last verified: 2026-05-10.
+> Derived from source code (`src/`). Authoritative. Last verified: 2026-05-13 (V15.1 Hardened).
 
 ---
 
@@ -202,17 +202,10 @@ flowchart TD
 
 ```mermaid
 sequenceDiagram
-    participant TGT as Initial Target
-    participant PIPE as pipeline.run_discovery
-    participant CORR as CorrelationEngine
-    participant ROUTER as TieredAIRouter
-    participant POC as PocValidator
-    participant SINK as sink_tx
-
     TGT->>PIPE: spawn discovery
     loop per finding
-        PIPE-->>CORR: add_finding
-        CORR-->>ROUTER: get_context_summary
+        PIPE-->>CORR: Ingestor::ingest_finding
+        CORR-->>ROUTER: get_context_summary (inside CE lock)
         ROUTER-->>ROUTER: analyze (AIAnalysis)
         alt risk_score ≥ 8 OR High/Critical
             ROUTER->>POC: validate finding
@@ -222,6 +215,7 @@ sequenceDiagram
         ROUTER->>ROUTER: decide_action → next plugin
         Note over ROUTER: loop continues with new findings
     end
+    Note over CORR: On shutdown: CE::save(absolute_path) + Double-Hash MAC
 ```
 
 All steps logged to `ActivityLog` → `workspace/logs/timeline.jsonl` (JSONL append-only). `AdaptiveContext` tracks current posture (Ghost/Strike/Breach) and `CavemanLevel` for prompt compression.
@@ -360,3 +354,7 @@ flowchart LR
 | `ProxyManager::wait_for_readiness` | Engine startup | Blocks scan until stealth infra is ready |
 | `CancellationToken` | All stages | Graceful drain on Ctrl-C; no finding loss |
 | `SSRF-safe C2_URL` | TacticalWebhookSink | `https`-only + SSRF guard before registration |
+| `ParentDir traversal check` | CorrelationEngine `save`/`load` | Rejects any path with `..` components via `Component::ParentDir` match |
+| `Double-Hash MAC` | CorrelationEngine | `SHA256(K \|\| SHA256(K \|\| D))` prevents length-extension attacks + state poisoning |
+| `Mandatory Secret` | CorrelationEngine | `MCP_TOKEN` required for persistence; bails if missing |
+| `Absolute Path` | SwarmOrchestrator | `dirs::data_local_dir` prevents CWD dependency issues |
