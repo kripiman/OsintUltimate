@@ -82,7 +82,7 @@ impl ScannerPlugin for CorsyScanner {
 
         // Also add interesting subdomains/endpoints found earlier that look like APIs
         for f in target.findings.iter() {
-             if let Some(ev) = &f.evidence.evidence {
+             if let Some(ev) = &f.evidence.primary {
                  for key in ["url", "endpoint", "path"] {
                     if let Some(val) = ev.data.get(key).and_then(|v| v.as_str()) {
                         if val.contains("api") || val.contains("v1") || val.contains("v2") {

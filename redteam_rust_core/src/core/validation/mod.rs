@@ -112,7 +112,7 @@ impl<M: ExecutorMode> PocValidator<M> {
                 let s = output.contains(&poc.expected_pattern);
                 if s {
                     info!("🎯 SENTINEL: ¡PoC EXITOSO! Hallazgo verificado: {}", finding.core.title);
-                    if let Some(ref mut ev) = finding.evidence.evidence {
+                    if let Some(ref mut ev) = finding.evidence.primary {
                         ev.verified = true;
                     }
                     #[cfg(feature = "sovereign")]
@@ -147,7 +147,7 @@ impl<M: ExecutorMode> PocValidator<M> {
                 if val.status == ValidationStatus::PseudoFalse {
                     info!("🛑 SENTINEL: Pipeline marcó hallazgo como PseudoFalse. Sobrescribiendo éxito.");
                     success = false;
-                    if let Some(ref mut ev) = finding.evidence.evidence {
+                    if let Some(ref mut ev) = finding.evidence.primary {
                         ev.verified = false;
                     }
                 }

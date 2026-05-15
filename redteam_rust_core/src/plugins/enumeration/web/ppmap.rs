@@ -82,7 +82,7 @@ impl ScannerPlugin for PpmapScanner {
         urls_to_test.insert(base_url);
 
         for f in target.findings.iter() {
-             if let Some(ev) = &f.evidence.evidence {
+             if let Some(ev) = &f.evidence.primary {
                  for key in ["urls", "discovered_endpoints", "url", "uri", "endpoint"] {
                     if let Some(val) = ev.data.get(key) {
                         if let Some(s) = val.as_str() {

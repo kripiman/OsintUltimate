@@ -1,7 +1,9 @@
 use std::env;
 use anyhow::{Result, anyhow};
 
-#[derive(Debug, Clone, Copy, PartialEq)]
+use serde::{Serialize, Deserialize};
+
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
 pub enum ProxyMode {
     None,
     Dante,

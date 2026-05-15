@@ -88,7 +88,7 @@ impl ScannerPlugin for WcdScanner {
         ];
 
         for f in target.findings.iter() {
-             if let Some(ev) = &f.evidence.evidence {
+             if let Some(ev) = &f.evidence.primary {
                  if let Some(path) = ev.data.get("path").and_then(|v| v.as_str()) {
                      if !path.contains(".") && path.len() > 1 { paths_to_probe.push(path.to_string()); }
                  }

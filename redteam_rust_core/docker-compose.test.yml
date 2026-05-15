@@ -1,0 +1,31 @@
+version: '3.8'
+
+services:
+  # Vulnerable Web App for HTTP baseline
+  dvwa:
+    image: vulnerables/web-dvwa
+    ports:
+      - "8081:80"
+    networks:
+      - test-net
+
+  # SMB service for binary protocol baseline
+  samba:
+    image: dperson/samba
+    ports:
+      - "445:445"
+    command: -u "operator;password" -s "public;/tmp;yes;no;yes;all;none;operator"
+    networks:
+      - test-net
+
+  # NATS for spillover baseline
+  nats:
+    image: nats:latest
+    ports:
+      - "4222:4222"
+    networks:
+      - test-net
+
+networks:
+  test-net:
+    driver: bridge

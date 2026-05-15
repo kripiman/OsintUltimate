@@ -60,11 +60,16 @@ impl AdIngestor {
             let title = node.properties.get("name").and_then(|v| v.as_str()).unwrap_or(&node.id).to_string();
             
             // Phase 6.1 / BUG-1: BloodHound CE emits admincount as integer (0/1), not bool.
-            // as_bool() returns None for integers → always false → DA never Critical.
+            // SharpHound 2.0 / CE: Properties may be nested or flat.
+            let _props = node.properties.as_object();
+            
             let is_high_value = node.properties.get("highvalue")
+                .or_else(|| node.properties.get("HighValue"))
                 .and_then(|v| v.as_bool().or_else(|| v.as_i64().map(|n| n > 0)))
                 .unwrap_or(false);
+            
             let is_admin = node.properties.get("admincount")
+                .or_else(|| node.properties.get("AdminCount"))
                 .and_then(|v| v.as_bool().or_else(|| v.as_i64().map(|n| n > 0)))
                 .unwrap_or(false);
             

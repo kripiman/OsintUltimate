@@ -751,7 +751,7 @@ async fn handle_execute_plugin(state: &Arc<McpServer>, args: serde_json::Value) 
                     let mut f_filtered = f.clone();
                     
                     // Prefix Trust (F4.2)
-                    let verified = f.evidence.evidence.as_ref().map(|e| e.verified).unwrap_or(false);
+                    let verified = f.evidence.primary.as_ref().map(|e| e.verified).unwrap_or(false);
                     let prefix = if verified { "[VERIFIED]" } else { "[POTENTIAL]" };
                     f_filtered.core.description = format!("{} {}", prefix, f.core.description);
                     f_filtered.core.title = format!("{} {}", prefix, f.core.title);
@@ -759,7 +759,7 @@ async fn handle_execute_plugin(state: &Arc<McpServer>, args: serde_json::Value) 
                     // Semantic Filter (F1.1)
                     f_filtered.core.description = state.sanitizer.filter_tool_output(plugin_name, &f_filtered.core.description);
                     
-                    if let Some(ref mut evidence) = f_filtered.evidence.evidence {
+                    if let Some(ref mut evidence) = f_filtered.evidence.primary {
                         if let Some(obj) = evidence.data.as_object_mut() {
                             if let Some(body) = obj.get_mut("body") {
                                 if let Some(s) = body.as_str() {

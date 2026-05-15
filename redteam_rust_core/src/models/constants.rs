@@ -62,12 +62,16 @@ pub const FINDING_AZURE_POLICIES_DUMPED: &str = "AZURE-POLICIES-DUMPED";
 pub const FINDING_NEW_CVE_DISCOVERED: &str = "NEW-CVE-DISCOVERED";
 pub const FINDING_JWKS_ENDPOINT: &str = "JWKS-ENDPOINT";
 pub const FINDING_EXPOSED_SECRET: &str = "EXPOSED-SECRET";
+pub const FINDING_IMDS_EXPOSED: &str = "IMDS-EXPOSED";
+pub const FINDING_IMDS_BYPASS: &str = "IMDS-BYPASS-SUCCESS";
 
 // API/GraphQL Security
 pub const FINDING_GRAPHQL_SUGGESTIONS: &str = "GRAPHQL-SUGGESTIONS";
 pub const FINDING_GRAPHQL_FINGERPRINT: &str = "GRAPHQL-FINGERPRINT";
 pub const FINDING_API_SCHEMA_VULN: &str = "API-SCHEMA-VULN";
 pub const FINDING_GRAPHQL_DOS: &str = "GRAPHQL-DOS";
+pub const FINDING_GRAPHQL_DEPTH: &str = "GRAPHQL-DEPTH-LIMIT";
+pub const FINDING_IMDS_TOKEN: &str = "IMDS-TOKEN-ACQUIRED";
 pub const FINDING_API_SCAN_FAILED: &str = "API-SCAN-FAILED";
 pub const FINDING_GRAPHQL_BRUTE_FAILED: &str = "GRAPHQL-BRUTE-FAILED";
 pub const FINDING_API_SCAN_INHIBITED: &str = "API-SCAN-INHIBITED";
@@ -197,6 +201,9 @@ pub const PLUGIN_NVD_MONITOR: &str = "NvdMonitor";
 pub const PLUGIN_CORS_EXFIL: &str = "CorsTokenExfiltrator";
 pub const PLUGIN_DNS_VERIFIER: &str = "DnsHijackVerifier";
 pub const PLUGIN_SECRET_VALIDATOR: &str = "SecretValidator";
+pub const PLUGIN_IMDS_BYPASS: &str = "ImdsBypassScanner";
+pub const PLUGIN_GRAPHQL_EXPLOITER: &str = "GraphqlExploiter";
+pub const FINDING_IMDS_CREDENTIALS: &str = "IMDS-CREDENTIALS-EXFIL";
 
 // OOB Verification Defaults
 pub const OOB_DEFAULT_POLL_INTERVAL_MS: u64 = 5000;

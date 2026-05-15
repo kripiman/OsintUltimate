@@ -140,6 +140,115 @@ impl BkTree {
     }
 }
 
+// ─── SimHash BK-Tree (Sprint 3) ──────────────────────────────────────────────
+
+use crate::plugins::triage::similarity_engine::hamming_distance;
+
+pub struct SimHashBkTree {
+    root: Option<SimHashBkNode>,
+    len: usize,
+}
+
+struct SimHashBkNode {
+    hash: u64,
+    _finding_idx: usize,
+    children: std::collections::HashMap<u32, SimHashBkNode>,
+}
+
+impl SimHashBkTree {
+    pub fn new() -> Self {
+        Self { root: None, len: 0 }
+    }
+
+    pub fn len(&self) -> usize {
+        self.len
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.len == 0
+    }
+
+    pub fn insert(&mut self, hash: u64, idx: usize) -> bool {
+        match &mut self.root {
+            None => {
+                self.root = Some(SimHashBkNode {
+                    hash,
+                    _finding_idx: idx,
+                    children: std::collections::HashMap::new(),
+                });
+                self.len += 1;
+                true
+            }
+            Some(root) => {
+                if Self::insert_node(root, hash, idx, 0) {
+                    self.len += 1;
+                    true
+                } else {
+                    false
+                }
+            }
+        }
+    }
+
+    fn insert_node(node: &mut SimHashBkNode, hash: u64, idx: usize, depth: usize) -> bool {
+        if depth > MAX_DEPTH {
+            return false;
+        }
+
+        let d = hamming_distance(hash, node.hash);
+
+        if d == 0 {
+            return false;
+        }
+
+        match node.children.get_mut(&d) {
+            Some(child) => Self::insert_node(child, hash, idx, depth + 1),
+            None => {
+                node.children.insert(
+                    d,
+                    SimHashBkNode {
+                        hash,
+                        _finding_idx: idx,
+                        children: std::collections::HashMap::new(),
+                    },
+                );
+                true
+            }
+        }
+    }
+
+    pub fn find_similar_within(&self, query: u64, threshold: u32) -> Option<usize> {
+        match &self.root {
+            None => None,
+            Some(root) => Self::find_similar_node(root, query, threshold, 0),
+        }
+    }
+
+    fn find_similar_node(node: &SimHashBkNode, query: u64, threshold: u32, depth: usize) -> Option<usize> {
+        if depth > MAX_DEPTH {
+            return None;
+        }
+
+        let d = hamming_distance(query, node.hash);
+
+        if d <= threshold {
+            return Some(node._finding_idx);
+        }
+
+        let lo = d.saturating_sub(threshold);
+        let hi = d.saturating_add(threshold);
+
+        for (k, child) in &node.children {
+            if *k >= lo && *k <= hi {
+                if let Some(idx) = Self::find_similar_node(child, query, threshold, depth + 1) {
+                    return Some(idx);
+                }
+            }
+        }
+        None
+    }
+}
+
 // ─── Unit Tests (E3) ──────────────────────────────────────────────────────────
 
 #[cfg(test)]
@@ -227,5 +336,21 @@ mod tests {
         let threshold: u32 = 30;
         let lo = d.saturating_sub(threshold);
         assert_eq!(lo, 0); // should saturate at 0, not wrap
+    }
+
+    #[test]
+    fn simhash_tree_insert_and_find() {
+        let mut tree = SimHashBkTree::new();
+        let h1 = 0b10101010u64;
+        let h2 = 0b10101011u64; // distance 1
+        let h3 = 0b11111111u64; // distance 4 from h1
+        
+        tree.insert(h1, 42); // Use 42 as finding index
+        
+        assert_eq!(tree.find_similar_within(h1, 0), Some(42));
+        assert_eq!(tree.find_similar_within(h2, 1), Some(42));
+        assert!(tree.find_similar_within(h2, 0).is_none());
+        assert_eq!(tree.find_similar_within(h3, 4), Some(42));
+        assert!(tree.find_similar_within(h3, 3).is_none());
     }
 }

@@ -185,13 +185,13 @@ impl<M: ExecutorMode> SwarmOrchestrator<M> {
                 // Phase 6: Mark owned nodes based on credentials
                 if finding.core.id == crate::models::constants::FINDING_NTLM_HASH_CAPTURED || 
                    finding.core.id == crate::models::constants::FINDING_CREDENTIALS_FOUND {
-                    let sid = finding.evidence.evidence.as_ref()
+                    let sid = finding.evidence.primary.as_ref()
                         .and_then(|e| e.data.get("SID"))
                         .and_then(|v| v.as_str())
                         .map(|s| s.to_string());
                     
                     let resolved_sid = if sid.is_none() {
-                        finding.evidence.evidence.as_ref()
+                        finding.evidence.primary.as_ref()
                             .and_then(|e| e.data.get("username").or_else(|| e.data.get("user")))
                             .and_then(|v| v.as_str())
                             .and_then(|u| ce.find_sid_by_username(u))
@@ -214,8 +214,8 @@ impl<M: ExecutorMode> SwarmOrchestrator<M> {
                         let next_hop_host = path.nodes.iter().skip(1)
                             .find_map(|node_id| {
                                 let node = graph.nodes.get(node_id)?;
-                                let props = node.evidence.evidence.as_ref()?.data.get("properties")?;
-                                let is_computer = node.evidence.evidence.as_ref()?.data.get("type").and_then(|v| v.as_str()) == Some("Computer");
+                                let props = node.evidence.primary.as_ref()?.data.get("properties")?;
+                                let is_computer = node.evidence.primary.as_ref()?.data.get("type").and_then(|v| v.as_str()) == Some("Computer");
                                 if is_computer {
                                     props.get("dNSHostName").or_else(|| props.get("name")).and_then(|v| v.as_str()).map(|s| s.to_string())
                                 } else { None }
@@ -250,7 +250,7 @@ impl<M: ExecutorMode> SwarmOrchestrator<M> {
                 let _ = discovery_tx.send(path_finding.clone()).await;
                 
                 // BUG-12 Optimization: Check if current finding is part of a critical path we just found
-                if path_finding.evidence.evidence.as_ref()
+                if path_finding.evidence.primary.as_ref()
                     .and_then(|e| e.data.get("nodes"))
                     .and_then(|n| n.as_array())
                     .map(|nodes| nodes.iter().any(|nid| nid.as_str() == Some(&finding.core.id)))
@@ -440,7 +440,7 @@ impl<M: ExecutorMode> SwarmOrchestrator<M> {
             Category::Recon | Category::NetworkPort | Category::TechnologyStack => Ok(AgentRole::Scout),
             Category::Windows if finding.core.id.starts_with(FINDING_ATTACK_PATH) => Ok(AgentRole::Scout),
             Category::Vulnerability | Category::Misconfiguration | Category::CredentialLeak => {
-                let verified = finding.evidence.evidence.as_ref().map(|e| e.verified).unwrap_or(false);
+                let verified = finding.evidence.primary.as_ref().map(|e| e.verified).unwrap_or(false);
                 if verified && finding.core.severity >= Severity::High {
                     Ok(AgentRole::C2Operator)
                 } else {

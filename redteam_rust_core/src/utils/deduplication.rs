@@ -55,7 +55,7 @@ impl DeduplicationEngine {
     /// Returns true if this finding was already seen this session or recorded in DB.
     /// MUST be called from within a Tokio async context (uses tokio::spawn internally).
     pub fn is_duplicate(finding: &Finding) -> bool {
-        let matched_at = finding.evidence.evidence.as_ref()
+        let matched_at = finding.evidence.primary.as_ref()
             .and_then(|e| e.data.get("matched_at"))
             .map(|v| v.to_string())
             .unwrap_or_default();

@@ -1,0 +1,38 @@
+name: ARCH-11 Parity Check
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main, develop ]
+
+jobs:
+  parity:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+        with:
+          lfs: true
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y nmap libpcap-dev
+
+      - name: Set up Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Start Test Lab
+        run: docker compose -f docker-compose.test.yml up -d
+
+      - name: Capture Baseline (New Code)
+        run: |
+          # We'll compare the output of the current code against the stored golden baseline
+          cargo run --bin capture_baseline
+          mv tests/fixtures/golden_baseline.json target/current_scan.json
+          
+      - name: Verify Parity
+        run: |
+          # checkout the real golden baseline from the repo for comparison
+          git checkout main -- tests/fixtures/golden_baseline.json
+          cargo run --bin verify_parity

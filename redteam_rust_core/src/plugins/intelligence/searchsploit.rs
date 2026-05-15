@@ -59,7 +59,7 @@ impl ScannerPlugin for SearchsploitScanner {
             if finding.category == Category::TechnologyStack || finding.category == Category::Vulnerability {
                 // Try to extract software name from description or evidence
                 // This is a simplified heuristic
-                let query: String = if let Some(product) = finding.evidence.evidence
+                let query: String = if let Some(product) = finding.evidence.primary
                     .as_ref()
                     .and_then(|e| e.data.get("product"))
                 {

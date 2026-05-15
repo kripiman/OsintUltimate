@@ -173,6 +173,18 @@ const BASE_RULES: &[ReactiveRule] = &[
         chain_plugins: &[PLUGIN_SECRET_VALIDATOR],
         extractor: ContextExtractor::EvidenceField { source_key: "secret", target_key: "secret" }
     },
+    // 20. SSRF -> AWS IMDSv2 Bypass
+    ReactiveRule {
+        trigger: RuleTrigger::Single(FINDING_SSRF),
+        chain_plugins: &[PLUGIN_IMDS_BYPASS],
+        extractor: ContextExtractor::EvidenceField { source_key: "url", target_key: "url" }
+    },
+    // 21. GraphQL Introspection -> Exploiter
+    ReactiveRule {
+        trigger: RuleTrigger::Single(FINDING_GRAPHQL_INTROSPECTION),
+        chain_plugins: &[PLUGIN_GRAPHQL_EXPLOITER],
+        extractor: ContextExtractor::EvidenceField { source_key: "url", target_key: "graphql_endpoint" }
+    },
 ];
 
 #[cfg(feature = "sovereign")]
@@ -210,6 +222,46 @@ pub fn get_all_rules() -> Vec<ReactiveRule> {
     rules
 }
 
+pub struct ReactiveEngine {
+    rules: Vec<ReactiveRule>,
+}
+
+impl Default for ReactiveEngine {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl ReactiveEngine {
+    pub fn new() -> Self {
+        Self {
+            rules: get_all_rules(),
+        }
+    }
+
+    pub async fn evaluate(
+        &self,
+        findings: &[Finding],
+        target: &TargetHost,
+        plugins: &[Box<dyn ScannerPlugin>],
+        layer_policy: &ScanLayerPolicy,
+        approval_gate: &ApprovalGate,
+        fired_chains: &DashSet<String>,
+        inventory: Option<&crate::core::swarm::inventory::SwarmInventory>,
+    ) -> Vec<Finding> {
+        evaluate(
+            &self.rules,
+            findings,
+            target,
+            plugins,
+            layer_policy,
+            approval_gate,
+            fired_chains,
+            inventory
+        ).await
+    }
+}
+
 pub async fn evaluate(
     rules: &[ReactiveRule],
     findings: &[Finding],
@@ -235,13 +287,21 @@ pub async fn evaluate(
             .collect();
 
         for f in trigger_findings {
+            // V15.1: Enforce Reactive Chain Depth Limit (Safety Gate)
+            let chain_depth = f.core.reactive_depth;
+                
+            if chain_depth >= 5 {
+                tracing::warn!("🔱 REACTIVE ENGINE: Chain depth limit (5) reached for finding {}. Aborting chain.", f.core.id);
+                continue;
+            }
+
             // Apply extractor and check if we should fire
             let mut reactive_snapshot = target.clone();
             let mut should_fire = false;
 
             match &rule.extractor {
                 ContextExtractor::EvidenceField { source_key, target_key } => {
-                    if let Some(val) = f.evidence.evidence.as_ref()
+                    if let Some(val) = f.evidence.primary.as_ref()
                         .and_then(|e| e.data.get(*source_key))
                         .cloned() 
                     {
@@ -259,7 +319,7 @@ pub async fn evaluate(
                     }
                 }
                 ContextExtractor::EvidenceArray { source_key, target_key } => {
-                    if let Some(params) = f.evidence.evidence.as_ref()
+                    if let Some(params) = f.evidence.primary.as_ref()
                         .and_then(|e| e.data.get(*source_key))
                         .and_then(|p| p.as_array()) 
                     {
@@ -273,7 +333,7 @@ pub async fn evaluate(
                     should_fire = true;
                 }
                 ContextExtractor::KeywordMatch { keywords } => {
-                    if let Some(evidence) = f.evidence.evidence.as_ref() {
+                    if let Some(evidence) = f.evidence.primary.as_ref() {
                         let content = evidence.data.to_string().to_lowercase();
                         if keywords.iter().any(|&k| content.contains(k)) {
                             should_fire = true;
@@ -282,7 +342,7 @@ pub async fn evaluate(
                 }
                 ContextExtractor::RegexMatch { pattern } => {
                     if let Some(re) = COMPILED_REGEXES.get(*pattern) {
-                        if let Some(evidence) = f.evidence.evidence.as_ref() {
+                        if let Some(evidence) = f.evidence.primary.as_ref() {
                             let content = evidence.data.to_string();
                             if re.is_match(&content) {
                                 should_fire = true;
@@ -293,7 +353,7 @@ pub async fn evaluate(
                     }
                 }
                 ContextExtractor::KeywordAndEndpoint { keywords, endpoints } => {
-                    if let Some(evidence) = f.evidence.evidence.as_ref() {
+                    if let Some(evidence) = f.evidence.primary.as_ref() {
                         let content = evidence.data.to_string().to_lowercase();
                         let has_keyword = keywords.iter().any(|&k| content.contains(k));
                         let has_endpoint = endpoints.iter().any(|&e| content.contains(e));
@@ -311,6 +371,10 @@ pub async fn evaluate(
                             if !layer_policy.needs_approval(plugin.metadata().layer) || approval_gate.is_approved(plugin.name()).await {
                                 debug!("🔱 REACTIVE ENGINE: Triggering {} for finding {} on {}", plugin_name, f.core.id, target.host);
                                 if let Ok(mut chain_findings) = plugin.scan(&reactive_snapshot).await {
+                                    // V15.1: Propagate and increment chain depth
+                                    for cf in &mut chain_findings {
+                                        cf.core.reactive_depth = chain_depth + 1;
+                                    }
                                     extra_findings.append(&mut chain_findings);
                                 }
                             }
@@ -341,7 +405,7 @@ pub async fn evaluate(
                                o.insert("injected_credential".into(), serde_json::json!(cred));
                                
                                // Also inject flat keys for direct access
-                               if let Some(evidence) = cred.evidence.evidence.as_ref() {
+                               if let Some(evidence) = cred.evidence.primary.as_ref() {
                                    if let Some(u) = evidence.data.get("username").or_else(|| evidence.data.get("user")) {
                                        o.insert("username".into(), u.clone());
                                    }

@@ -105,7 +105,7 @@ impl CorrelationEngine {
     pub fn find_sid_by_username(&self, username: &str) -> Option<String> {
         let normalized_user = username.to_uppercase();
         for (id, node) in &self.graph.nodes {
-            if let Some(props) = node.evidence.evidence.as_ref().and_then(|e| e.data.get("properties")) {
+            if let Some(props) = node.evidence.primary.as_ref().and_then(|e| e.data.get("properties")) {
                 if let Some(name) = props.get("name").and_then(|v| v.as_str()) {
                     let name_upper = name.to_uppercase();
                     let is_match = name_upper == normalized_user || 

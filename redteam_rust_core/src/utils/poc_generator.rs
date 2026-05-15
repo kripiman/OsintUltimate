@@ -9,7 +9,7 @@ impl PocGenerator {
         let id = finding.core.id.to_lowercase();
         
         // Extract URL if available in evidence
-        let url = finding.evidence.evidence.as_ref()
+        let url = finding.evidence.primary.as_ref()
             .and_then(|e| e.data.get("url").or_else(|| e.data.get("uri")))
             .and_then(|u| u.as_str());
 

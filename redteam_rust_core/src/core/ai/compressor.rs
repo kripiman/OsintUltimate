@@ -8,7 +8,7 @@ pub struct ContextCompressor;
 
 impl ContextCompressor {
     pub fn compress_finding(finding: &Finding, _route_level: RouteLevel) -> serde_json::Value {
-        let mut ev = finding.evidence.evidence.as_ref().map(|e| e.data.clone()).unwrap_or_else(|| serde_json::json!({}));
+        let mut ev = finding.evidence.primary.as_ref().map(|e| e.data.clone()).unwrap_or_else(|| serde_json::json!({}));
         
         // 1. Mandatory scrubbing
         if let Ok(sanitized) = serde_json::to_string(&ev).map(|s| SCRUBBER.scrub(&s)) {
@@ -22,7 +22,7 @@ impl ContextCompressor {
             Self::minify_evidence_object(obj, 300, false); // Reduced from 512 to 300
         }
 
-        let verified = finding.evidence.evidence.as_ref().map(|e| e.verified).unwrap_or(false);
+        let verified = finding.evidence.primary.as_ref().map(|e| e.verified).unwrap_or(false);
 
         // Dense Encoding: Use single-letter keys and values where possible
         serde_json::json!({
@@ -49,7 +49,7 @@ impl ContextCompressor {
     pub fn compress_target(target: &TargetHost) -> serde_json::value::Value {
         let tech_stack: Vec<String> = target.findings.iter()
             .filter(|f| f.core.category == Category::TechnologyStack)
-            .filter_map(|f| f.evidence.evidence.as_ref()?.data.get("plugins")?.as_object())
+            .filter_map(|f| f.evidence.primary.as_ref()?.data.get("plugins")?.as_object())
             .flat_map(|obj| obj.keys().cloned())
             .collect();
 
@@ -91,7 +91,7 @@ impl ContextCompressor {
             "d": finding.core.description,
         });
 
-        if let Some(ref evidence) = finding.evidence.evidence {
+        if let Some(ref evidence) = finding.evidence.primary {
             if let (Some(obj), Some(ev)) = (base.as_object_mut(), evidence.data.as_object()) {
                 let mut compressed_ev = ev.clone();
                 if let Some(val) = compressed_ev.get_mut("snippet") {

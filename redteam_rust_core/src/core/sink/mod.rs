@@ -13,6 +13,9 @@ use crate::models::{Finding, Severity, ReportPlatform};
 use crate::plugins::reporting::platform_client::PlatformClient;
 use crate::utils::bounty_exporter::BountyExporter;
 pub mod nats_sink;
+pub mod buffered;
+
+pub use buffered::BufferedSink;
 
 /// Trait for defining where scan results should be written.
 #[async_trait]

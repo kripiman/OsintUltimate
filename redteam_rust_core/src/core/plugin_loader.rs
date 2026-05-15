@@ -89,6 +89,16 @@ impl DynamicPluginLoader {
                                 error!("Failed to load plugin from {:?}: {}", path, e);
                             }
                         }
+                    } else if ext_str == "wasm" {
+                        match self.load_wasm_plugin(&path) {
+                            Ok(plugin) => {
+                                info!("🦀 Successfully loaded WASM plugin: {}", plugin.name());
+                                loaded_plugins.push(plugin);
+                            }
+                            Err(e) => {
+                                error!("Failed to load WASM plugin from {:?}: {}", path, e);
+                            }
+                        }
                     }
                 }
             }
@@ -256,5 +266,54 @@ impl DynamicPluginLoader {
             })?;
             
         Ok(())
+    }
+
+    fn load_wasm_plugin(&self, path: &Path) -> Result<Box<dyn ScannerPlugin>> {
+        let bytes = std::fs::read(path).context("Failed to read WASM plugin")?;
+        
+        // V13 Signature Verification (WASM plugins also need .sig)
+        Self::verify_signature_from_bytes(path, &bytes)?;
+
+        Ok(Box::new(WasmPlugin {
+            name: path.file_stem().unwrap_or_default().to_string_lossy().into_owned(),
+            bytes,
+            rt: crate::core::sandbox::wasm::WasmRuntime::new(),
+        }))
+    }
+}
+
+pub struct WasmPlugin {
+    name: String,
+    bytes: Vec<u8>,
+    rt: crate::core::sandbox::wasm::WasmRuntime,
+}
+
+#[async_trait::async_trait]
+impl ScannerPlugin for WasmPlugin {
+    fn name(&self) -> &'static str {
+        Box::leak(self.name.clone().into_boxed_str())
+    }
+
+    fn metadata(&self) -> crate::plugins::PluginMetadata {
+        crate::plugins::PluginMetadata {
+            name: self.name.clone(),
+            description: "WASM Sandboxed Plugin".to_string(),
+            ..Default::default()
+        }
+    }
+
+    fn capabilities(&self) -> Vec<crate::plugins::Capability> {
+        vec![crate::plugins::Capability::VulnerabilityScanning]
+    }
+
+    async fn check_dependencies(&self) -> Result<bool> {
+        Ok(true)
+    }
+
+    async fn scan(&self, target: &TargetHost) -> Result<Vec<Finding>> {
+        let input = serde_json::to_string(target)?;
+        let output = self.rt.execute_plugin(&self.bytes, &input)?;
+        let findings = serde_json::from_str(&output)?;
+        Ok(findings)
     }
 }

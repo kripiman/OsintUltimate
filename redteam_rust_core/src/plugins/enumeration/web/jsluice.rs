@@ -75,7 +75,7 @@ impl ScannerPlugin for JsluiceScanner {
         let mut js_urls = std::collections::HashSet::new();
         
         for f in target.findings.iter() {
-            if let Some(ev) = &f.evidence.evidence {
+            if let Some(ev) = &f.evidence.primary {
                 // Katana/Gauplus format: "urls" array
                 if let Some(urls) = ev.data.get("urls").and_then(|u| u.as_array()) {
                     for u in urls {

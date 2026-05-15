@@ -66,7 +66,7 @@ impl<M: ExecutorMode> PocValidator<M> {
                         let output = self.execute_raw_payload(payload, target).await?;
                         let success = output.contains(&poc.expected_pattern) || output.to_lowercase().contains("success");
                         if success {
-                            if let Some(ref mut ev) = finding.evidence.evidence {
+                            if let Some(ref mut ev) = finding.evidence.primary {
                                 ev.verified = true;
                             }
                         }

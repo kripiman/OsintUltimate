@@ -5,12 +5,14 @@ use anyhow::{Result, Context};
 use tokio::process::{Command, Child};
 use tracing::{info, error};
 #[cfg(unix)]
+pub mod wasm;
 
 
 #[derive(Debug, PartialEq)]
 pub enum ExecutionTier {
     StrictDocker, // Aislamiento Total en Contenedor Efímero
     FluidLocal,   // Fallback: Ejecución nativa con aislamiento PGID
+    Wasm,         // [NEW] Aislamiento ligero vía wasmi
 }
 
 pub struct SandboxDispatcher {
@@ -18,6 +20,7 @@ pub struct SandboxDispatcher {
     pub(crate) middleware: crate::core::middleware::MiddlewareRegistry,
     pub(crate) policy: Option<std::sync::Arc<dyn crate::core::policy::PolicyProvider>>,
     pub(crate) proxy_manager: Option<std::sync::Arc<crate::utils::proxy::ProxyManager>>,
+    pub(crate) wasm_rt: wasm::WasmRuntime,
 }
 
 impl SandboxDispatcher {
@@ -27,6 +30,7 @@ impl SandboxDispatcher {
             middleware: crate::core::middleware::MiddlewareRegistry::default(),
             policy: None,
             proxy_manager: None,
+            wasm_rt: wasm::WasmRuntime::new(),
         }
     }
 
@@ -284,8 +288,15 @@ impl SandboxDispatcher {
                     });
                 }
                 cmd.spawn().context("Fallo al spawnear herramienta nativa")
+            },
+            ExecutionTier::Wasm => {
+                anyhow::bail!("Wasm tier cannot be executed via streaming process (use execute_wasm instead)");
             }
         }
+    }
+
+    pub async fn execute_wasm(&self, wasm_bytes: &[u8], input_json: &str) -> Result<String> {
+        self.wasm_rt.execute_plugin(wasm_bytes, input_json)
     }
 
     pub async fn execute_tool(&self, tool: &BlackArchTool, args: &[String]) -> Result<String> {

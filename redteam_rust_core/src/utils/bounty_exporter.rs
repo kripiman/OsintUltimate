@@ -25,7 +25,7 @@ impl BountyExporter {
     }
 
     fn compress_evidence(finding: &Finding) -> String {
-        let raw = finding.evidence.evidence.as_ref()
+        let raw = finding.evidence.primary.as_ref()
             .map(|e| serde_json::to_string_pretty(&e.data).unwrap_or_default())
             .unwrap_or_default();
 
@@ -43,7 +43,7 @@ impl BountyExporter {
                 return ai.exploit_path.clone();
             }
         }
-        if let Some(url) = finding.evidence.evidence.as_ref().and_then(|e| e.data.get("url")).and_then(|v| v.as_str()) {
+        if let Some(url) = finding.evidence.primary.as_ref().and_then(|e| e.data.get("url")).and_then(|v| v.as_str()) {
             return format!("1. Navigate to: `{}`\n2. Observe the response headers and body for vulnerability indicators.", url);
         }
         "1. Capture the raw HTTP request from the 'Proof of Concept' section below.\n2. Replay the request in Burp Suite Repeater.\n3. Verify the impact in the response.".to_string()
@@ -92,7 +92,7 @@ impl BountyExporter {
 
         out.push_str("## Vulnerability Details\n");
         out.push_str(&format!("- **Type:** {:?}\n", f.core.category));
-        if let Some(url) = f.evidence.evidence.as_ref().and_then(|e| e.data.get("url")).and_then(|v| v.as_str()) {
+        if let Some(url) = f.evidence.primary.as_ref().and_then(|e| e.data.get("url")).and_then(|v| v.as_str()) {
             out.push_str(&format!("- **Affected Endpoint:** {}\n", url));
         }
         if !f.enrichment.cwe.is_empty() {

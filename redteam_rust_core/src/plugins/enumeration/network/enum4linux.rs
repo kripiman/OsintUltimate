@@ -62,7 +62,7 @@ impl ScannerPlugin for Enum4LinuxScanner {
         // Trigger: AD/Windows target or port 139/445 open
         let has_smb_port = target.findings.iter().any(|f| {
             f.category == Category::NetworkPort 
-            && f.evidence.evidence.as_ref().map_or(false, |ev| {
+            && f.evidence.primary.as_ref().map_or(false, |ev| {
                 let port = ev.data.get("port").and_then(|p| p.as_u64());
                 port == Some(139) || port == Some(445)
             })

@@ -1,257 +1,15 @@
 use serde::{Deserialize, Serialize};
-use std::fmt;
 use std::ops::Deref;
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, PartialOrd, Ord, Hash)]
-#[serde(rename_all = "snake_case")]
-pub enum Severity {
-    Info,
-    Low,
-    Medium,
-    High,
-    Critical,
-}
+pub mod classification;
+pub mod core_fields;
+pub mod enrichment;
+pub mod evidence;
 
-impl Severity {
-    pub fn as_char(&self) -> char {
-        match self {
-            Severity::Info => 'I',
-            Severity::Low => 'L',
-            Severity::Medium => 'M',
-            Severity::High => 'H',
-            Severity::Critical => 'C',
-        }
-    }
-}
-
-impl fmt::Display for Severity {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "{:?}", self)
-    }
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Hash)]
-#[serde(rename_all = "snake_case")]
-pub enum Category {
-    ExposedAsset,
-    Vulnerability,
-    Misconfiguration,
-    CredentialLeak,
-    Exploitation,
-    TechnologyStack,
-    NetworkPort,
-    Recon,
-    Scanning,
-    Availability,
-    SCA,
-    PostureAudit,
-    Windows,
-    Linux,
-    Compliance,
-    BusinessLogicFlaw,
-    Idor,
-    RaceCondition,
-    FileUploadVulnerability,
-    AttackPath,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
-#[serde(rename_all = "snake_case")]
-pub enum ConsolidationUrgency {
-    Immediate,   // 0-7 days
-    ShortTerm,   // 30 days
-    LongTerm,    // 90+ days
-}
-
-#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Default)]
-#[serde(rename_all = "snake_case")]
-pub enum ValidationStatus {
-    #[default]
-    Unverified,
-    Verified,
-    Suspicious,
-    PseudoFalse,
-    Rejected,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, Default)]
-pub struct ValidationMetadata {
-    pub status: ValidationStatus,
-    pub confidence_score: f32, // 0.0 - 1.0
-    pub judge_notes: String,
-    pub negative_control_passed: bool,
-    pub proof_of_execution: Option<String>,
-    pub validated_at: Option<chrono::DateTime<chrono::Utc>>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct EvidenceFile {
-    pub evidence_type: String,  // screenshot, http-request, terminal-log, scan-output
-    pub path: String,           // path relativo al workspace
-    pub description: String,
-    pub sha256: String,         // chain-of-custody
-    pub collected_at: chrono::DateTime<chrono::Utc>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct Evidence {
-    #[serde(flatten)]
-    pub data: serde_json::Value,
-    #[serde(default = "default_confidence")]
-    pub confidence: f32,
-    #[serde(default)]
-    pub verified: bool,
-}
-
-fn default_confidence() -> f32 { 0.5 }
-
-#[non_exhaustive]
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
-#[serde(rename_all = "snake_case")]
-pub enum PocStrategy {
-    SafeCommand,
-    HttpPayload,
-    TcpCheck,
-    IcmpPing,
-    NucleiTemplate,
-    HumanVerified,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(tag = "type", rename_all = "snake_case")]
-pub enum ValidatedPoc {
-    Nmap { 
-        port: u16, 
-        flags: Vec<String> 
-    },
-    Curl { 
-        path: String, 
-        headers: Vec<(String, String)> 
-    },
-    Ping,
-    Dig,
-    TcpConnect { 
-        port: u16 
-    },
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct PocDefinition {
-    pub strategy: PocStrategy,
-    pub payload: String,
-    pub expected_pattern: String,
-    #[serde(default)]
-    pub is_intrusive: bool,
-    #[serde(default)]
-    pub complexity_score: u8, // 0-100 rating
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, Default)]
-pub struct TokenUsage {
-    pub prompt_tokens: u32,
-    pub completion_tokens: u32,
-    pub total_tokens: u32,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct AIAnalysis {
-    pub summary: String,
-    pub impact: String,
-    pub stealth_notes: String,
-    pub risk_score: u8,
-    pub confidence: f32,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub mitre_attack: Option<Vec<String>>,
-    pub exploit_path: String,
-    pub model: String,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub poc: Option<PocDefinition>,
-    #[serde(default)]
-    pub usage: TokenUsage,
-}
-
-// --- MODULAR COMPONENTS ---
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct CoreFinding {
-    pub id: String,
-    pub category: Category,
-    pub severity: Severity,
-    pub title: String,
-    pub description: String,
-    pub timestamps: chrono::DateTime<chrono::Utc>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub tactical_path: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub parent_id: Option<String>,
-    #[serde(default)]
-    pub version: u64,
-    #[serde(default)]
-    pub source_plugin: Option<String>,
-    #[serde(default)]
-    pub scope_id: String,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub attack_path: Option<Vec<String>>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, Default)]
-pub struct FindingEvidence {
-    pub evidence: Option<Evidence>,
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub files: Vec<EvidenceFile>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, Default)]
-pub struct FindingEnrichment {
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub ai_analysis: Option<AIAnalysis>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub mitre_attack: Option<Vec<String>>,
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub mitre_tags: Vec<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub cvss_score: Option<f32>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub cvss_vector: Option<String>,
-    #[serde(default)]
-    pub cvss_version: String,
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub cwe: Vec<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub blackarch_category: Option<String>,
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub references: Vec<String>,
-    /// Target urgency for report consolidation. 
-    /// MIGRATION NOTE (v10): Moved from ExecutionContext. Data in old JSON files under 
-    /// context.consolidation_urgency will be lost unless aliased or migrated.
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub consolidation_urgency: Option<ConsolidationUrgency>,
-    #[serde(default)]
-    #[serde(skip_serializing_if = "std::ops::Not::not")]
-    pub is_new: bool,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub similarity_hash: Option<String>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, Default)]
-pub struct ExecutionContext {
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub tactical_path: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub parent_id: Option<String>,
-    #[serde(default, skip_serializing_if = "String::is_empty")]
-    pub objective_id: String,
-    #[serde(default, skip_serializing_if = "String::is_empty")]
-    pub agent: String,
-    #[serde(default)]
-    pub iteration: u32,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub detected: Option<bool>,
-    #[serde(default, skip_serializing_if = "String::is_empty")]
-    pub detection_notes: String,
-    #[serde(default)]
-    pub validation: ValidationMetadata,
-}
+pub use classification::{Severity, Category, ConsolidationUrgency};
+pub use core_fields::{CoreFinding, ExecutionContext};
+pub use enrichment::{AIAnalysis, FindingEnrichment, PocStrategy, ValidatedPoc, PocDefinition, TokenUsage};
+pub use evidence::{Evidence, EvidenceFile, FindingEvidence, ValidationMetadata, ValidationStatus};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Finding {
@@ -276,7 +34,6 @@ impl Finding {
         FindingBuilder::new(id, category, severity, description)
     }
 
-    /// Generates a stable signature for the vulnerability pattern (Fase 4)
     pub fn pattern_signature(&self) -> String {
         format!("{:?}:{:?}:{}", self.core.category, self.core.severity, self.core.id)
     }
@@ -322,7 +79,7 @@ impl Finding {
         self
     }
 
-    pub fn with_consolidation_urgency(mut self, urgency: crate::models::ConsolidationUrgency) -> Self {
+    pub fn with_consolidation_urgency(mut self, urgency: ConsolidationUrgency) -> Self {
         self.enrichment.consolidation_urgency = Some(urgency);
         self
     }
@@ -352,7 +109,6 @@ impl Finding {
             self.enrichment.cvss_version = "3.1".to_string();
         }
     }
-
 
     pub fn to_markdown(&self) -> String {
         let mut md = String::new();
@@ -392,7 +148,7 @@ impl Finding {
             md.push('\n');
         }
 
-        if let Some(ref ev) = self.evidence.evidence {
+        if let Some(ref ev) = self.evidence.primary {
             md.push_str("## Evidence\n\n");
             md.push_str("```json\n");
             md.push_str(&serde_json::to_string_pretty(&ev.data).unwrap_or_default());
@@ -445,8 +201,10 @@ impl FindingBuilder {
                 tactical_path: None,
                 parent_id: None,
                 version: 0,
+                target: None,
                 source_plugin: None,
                 scope_id: String::new(),
+                reactive_depth: 0,
                 attack_path: None,
             },
             evidence: FindingEvidence::default(),
@@ -460,7 +218,7 @@ impl FindingBuilder {
     }
 
     pub fn with_evidence(mut self, data: serde_json::Value) -> Self {
-        self.evidence.evidence = Some(Evidence {
+        self.evidence.primary = Some(Evidence {
             data,
             confidence: 0.5,
             verified: false,

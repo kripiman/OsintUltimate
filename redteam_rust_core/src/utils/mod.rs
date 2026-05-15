@@ -24,6 +24,7 @@ pub mod cve_cache;
 pub mod activity_log;
 pub mod transport;
 pub mod poc_generator;
+pub mod ja4;
 
 pub use security::{validate_target, is_ssrf_safe_host};
 pub use executor::StealthExecutor;

@@ -59,12 +59,12 @@ impl WebFuzzer {
         if let Some(ref pm) = self.proxy_manager {
             let port = if is_https { 443 } else { 80 };
             if let Ok(ip) = target_ip.parse::<IpAddr>() {
-                if let Some((url, client)) = pm.get_client_pinned(target_host, ip, port) {
+                if let Some((url, client)) = pm.get_stealth_client_pinned(target_host, ip, port) {
                     return (Some(url), client);
                 }
             } else {
                 warn!("WebFuzzer: Failed to parse target IP {} for pinning", target_ip);
-                if let Some((url, client)) = pm.get_client(target_host) {
+                if let Some((url, client)) = pm.get_stealth_client(target_host) {
                     return (Some(url), client);
                 }
             }

@@ -30,8 +30,8 @@ impl Ingestor {
         for existing in existing_nodes {
             if existing.core.id == new_finding.core.id { continue; }
 
-            let evidence_new = new_finding.evidence.evidence.as_ref();
-            let evidence_existing = existing.evidence.evidence.as_ref();
+            let evidence_new = new_finding.evidence.primary.as_ref();
+            let evidence_existing = existing.evidence.primary.as_ref();
 
             // Rule 1: Category-based correlation
             match (&existing.core.category, &new_finding.core.category) {
@@ -63,8 +63,8 @@ impl Ingestor {
                 _ => {
                     // API Attack Chain
                     if is_api_chain_finding(&existing) && is_api_chain_finding(new_finding) {
-                        let url_a = existing.evidence.evidence.as_ref().and_then(|e| e.data.get("url")).and_then(|v| v.as_str());
-                        let url_b = new_finding.evidence.evidence.as_ref().and_then(|e| e.data.get("url")).and_then(|v| v.as_str());
+                        let url_a = existing.evidence.primary.as_ref().and_then(|e| e.data.get("url")).and_then(|v| v.as_str());
+                        let url_b = new_finding.evidence.primary.as_ref().and_then(|e| e.data.get("url")).and_then(|v| v.as_str());
                         
                         if let (Some(ua), Some(ub)) = (url_a, url_b) {
                             let dom_a = extract_domain(ua);
@@ -127,7 +127,7 @@ fn extract_domain(url_str: &str) -> String {
 }
 
 fn get_url(f: &Finding) -> Option<&str> {
-    f.evidence.evidence.as_ref().and_then(|e| e.data.get("url")).and_then(|v| v.as_str())
+    f.evidence.primary.as_ref().and_then(|e| e.data.get("url")).and_then(|v| v.as_str())
 }
 
 fn is_api_chain_finding(f: &Finding) -> bool {

@@ -14,11 +14,11 @@ pub(crate) fn triage_readiness_score(finding: &Finding) -> u8 {
     let mut score: u16 = 0;
 
     // Evidence quality (40 pts)
-    if finding.evidence.evidence.as_ref()
+    if finding.evidence.primary.as_ref()
         .and_then(|e| e.data.get("request")).is_some() { score += 15; }
-    if finding.evidence.evidence.as_ref()
+    if finding.evidence.primary.as_ref()
         .and_then(|e| e.data.get("response")).is_some() { score += 10; }
-    if finding.evidence.evidence.as_ref()
+    if finding.evidence.primary.as_ref()
         .map(|e| e.verified).unwrap_or(false) { score += 15; }
 
     // AI enrichment (30 pts)
@@ -87,7 +87,7 @@ fn build_report(target: &TargetHost, finding: &Finding) -> BugBountyReport {
         let _ = writeln!(md, "| **MITRE ATT&CK** | {} |", mitre.join(", "));
     }
     // Validation status
-    let validated = finding.evidence.evidence.as_ref().map(|e| e.verified).unwrap_or(false);
+    let validated = finding.evidence.primary.as_ref().map(|e| e.verified).unwrap_or(false);
     let _ = writeln!(md, "| **Validation** | {} |",
         if validated { "Verified ✅" } else { "Potential 🔍" });
 
@@ -121,7 +121,7 @@ fn build_report(target: &TargetHost, finding: &Finding) -> BugBountyReport {
     let _ = writeln!(md, "## Steps to Reproduce");
     let _ = writeln!(md);
 
-    let evidence_data = finding.evidence.evidence.as_ref();
+    let evidence_data = finding.evidence.primary.as_ref();
     let evidence = http_evidence_view(finding);
     let curl_cmd = evidence.raw_request.and_then(|r| build_curl_from_raw(r, &target.host));
 
@@ -325,7 +325,7 @@ struct HttpEvidence<'a> {
 }
 
 fn http_evidence_view(finding: &Finding) -> HttpEvidence<'_> {
-    let data = finding.evidence.evidence.as_ref().map(|e| &e.data);
+    let data = finding.evidence.primary.as_ref().map(|e| &e.data);
     HttpEvidence {
         raw_request: data.and_then(|d| d.get("raw_request")).and_then(|v| v.as_str()),
         raw_response: data.and_then(|d| d.get("raw_response")).and_then(|v| v.as_str()),
@@ -475,7 +475,7 @@ mod tests {
     fn test_triage_score_full_is_100() {
         let mut f = Finding::new("TEST_FULL", Category::Recon, Severity::Critical, "full",
             json!({"request": "GET / HTTP/1.1", "response": "HTTP/1.1 200 OK"}));
-        f.evidence.evidence.as_mut().unwrap().verified = true;
+        f.evidence.primary.as_mut().unwrap().verified = true;
         f.enrichment.ai_analysis = Some(AIAnalysis {
             summary: "".into(),
             impact: "".into(),

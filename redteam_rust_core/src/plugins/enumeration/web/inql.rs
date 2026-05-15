@@ -76,7 +76,7 @@ impl ScannerPlugin for InQLScanner {
         let mut endpoints = vec!["/graphql".to_string(), "/gql".to_string(), "/api/graphql".to_string()];
         
         for f in target.findings.iter() {
-             if let Some(ev) = &f.evidence.evidence {
+             if let Some(ev) = &f.evidence.primary {
                  // Check common keys from Katana, Jsluice, etc.
                  for key in ["urls", "discovered_endpoints", "url", "uri", "endpoint", "path"] {
                     if let Some(val) = ev.data.get(key) {

@@ -612,7 +612,7 @@ mod tests {
     fn test_punctuation_pruner_ultra_only() {
         let opt = PromptOptimizer::new();
         let input = "audit complete, security verified; no issues!";
-        let full = opt.optimize(input, OptimizationLevel::Full);
+        let _full = opt.optimize(input, OptimizationLevel::Full);
         // Comma/semicolon may survive at Full (PunctuationPruner inactive)
         let ultra = opt.optimize(input, OptimizationLevel::Ultra);
         // At Ultra the punctuation pruner fires — commas/semicolons replaced by space

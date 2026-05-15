@@ -36,19 +36,20 @@ impl<M: ExecutorMode> BloodHoundScanner<M> {
             if let Some(ext) = path.extension() {
                 if ext == "json" {
                     let path_str = path.to_string_lossy();
-                    if path_str.contains("users.json") {
+                    let lower_path = path_str.to_lowercase();
+                    if lower_path.contains("users.json") {
                         ingestor.ingest_nodes(&path_str, "User").await?;
-                    } else if path_str.contains("computers.json") {
+                    } else if lower_path.contains("computers.json") {
                         ingestor.ingest_nodes(&path_str, "Computer").await?;
-                    } else if path_str.contains("groups.json") {
+                    } else if lower_path.contains("groups.json") {
                         ingestor.ingest_nodes(&path_str, "Group").await?;
-                    } else if path_str.contains("containers.json") {
+                    } else if lower_path.contains("containers.json") {
                         ingestor.ingest_nodes(&path_str, "Container").await?;
-                    } else if path_str.contains("ous.json") {
+                    } else if lower_path.contains("ous.json") {
                         ingestor.ingest_nodes(&path_str, "OU").await?;
-                    } else if path_str.contains("domains.json") {
+                    } else if lower_path.contains("domains.json") {
                         ingestor.ingest_nodes(&path_str, "Domain").await?;
-                    } else if path_str.contains("edges.json") || path_str.contains("relationships.json") {
+                    } else if lower_path.contains("edges.json") || lower_path.contains("relationships.json") {
                         ingestor.ingest_edges(&path_str).await?;
                     }
                 }

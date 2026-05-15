@@ -1,0 +1,36 @@
+- [x] Consolidate JA4 Engine
+    - [x] Implement JA4H (HTTP) in `utils/ja4.rs`
+    - [x] Implement JA4S (Server) calculation logic
+    - [x] Implement JA4S caching in `ProxyManager`
+- [x] Advanced Lateral Movement
+    - [x] Update `AdIngestor` for SharpHound 2.0 schema
+    - [x] Update `bloodhound.rs` for SharpHound 2.0 filenames
+    - [x] Verify `FINDING_ATTACK_PATH` -> `NetExec` reactive rule
+- [x] Stealth HTTP & rquest
+    - [x] Rename `configure_rquest_builder` to `configure_stealth_builder`
+    - [x] Implement `tls-impersonation` feature flag (Registered in Cargo.toml)
+    - [ ] Resolve `rquest` version stability (Blocked: upstream yanked versions)
+- [x] Audit Refinements (V16.1 Final)
+    - [x] Register `tls-impersonation` feature flag in `Cargo.toml`
+    - [x] Implement `ReactiveEngine` struct for high-level API access
+    - [x] Refactor `reactive_integration_test.rs` to use real API + Depth Assertion
+    - [x] JA4S Prober Placeholder + Warning (Deferred to Sprint 4.2)
+    - [x] Fix build warnings (unused imports + dead code)
+- [x] Infrastructure Refactoring (ARCH-10)
+    - [x] Refactor `proxy.rs` (756 lines) into `infrastructure/proxy/` module
+    - [x] Refactor `orchestrator.rs` (661 lines) into `core/orchestrator/` module
+    - [x] Refactor `models/findings.rs` (503 lines) into `models/findings/` module
+    - [x] Refactor `pipeline.rs` (694 lines) into `core/pipeline/` module
+    - [x] Verify build integrity (`cargo check`) and ensure zero warnings
+    - [x] Delete redundant legacy monolithic files
+- [x] Documentation Sync
+    - [x] Update root `CLAUDE.md` with Sprint 4 progress and known issues (JA4S placeholder)
+    - [x] Update `HISTORIAL.md` with explicit deferrals
+
+- [/] ARCH-11: Deep Architectural Hardening (Phase 0 Baseline)
+    - [ ] Setup Docker-Compose lab environment (DVWA, SMB, NATS)
+    - [ ] Implement `cargo xtask record-fixtures` (HTTP + SMB PoC)
+    - [ ] Mandatory: Define NDJSON spill serialization with `schema_version`
+    - [ ] Mandatory: Configure CI parity gate (Golden Scan)
+    - [ ] Capture Golden Scan baseline on monolithic code
+    - [ ] Finalize v6 Audit gate requirements (FFI async lifetime, SecretStore)

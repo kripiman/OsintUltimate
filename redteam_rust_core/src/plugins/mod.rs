@@ -453,7 +453,9 @@ pub fn get_all_scanners<M: ExecutorMode>(config: GlobalConfig<M>) -> Vec<Box<dyn
     use crate::plugins::exploitation::web::nosqlmap::NoSqlMapScanner;
     use crate::plugins::exploitation::web::gopherus::GopherusScanner;
     use crate::plugins::exploitation::web::cloud_metadata::CloudMetadataExtractor;
+    #[cfg(feature = "sovereign")]
     use crate::plugins::reconnaissance::active::azurehound::AzureHoundScanner;
+    #[cfg(feature = "sovereign")]
     use crate::plugins::reconnaissance::active::roadrecon::RoadReconScanner;
     use crate::plugins::exploitation::web::jwt_forge::JwtForgeScanner;
     use crate::plugins::enumeration::web::jwks_discovery::JwksDiscoveryScanner;

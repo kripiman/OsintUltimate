@@ -120,7 +120,17 @@ impl ScannerPlugin for TlsxScanner {
                                     scan_id: None,
                                     scope_id: String::new(),
                                 };
-                                let _ = tx.send(new_target).await;
+                                
+                                // ARCH-11 Fix: Avoid blocking orchestrator/reactive loop deadlocks
+                                // We use a timeout to prevent infinite blocking if the channel is full.
+                                let tx = tx.clone();
+                                tokio::spawn(async move {
+                                    if let Err(e) = tokio::time::timeout(std::time::Duration::from_secs(5), tx.send(new_target)).await {
+                                        tracing::warn!("⚠️ FEEDBACK DEADLOCK AVOIDED: Dropping recon target {} due to 5s timeout.", host);
+                                    } else if let Err(_) = e {
+                                        // Send error (channel closed)
+                                    }
+                                });
                             }
                         }
                     }

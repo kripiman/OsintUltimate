@@ -30,7 +30,7 @@ impl FalsePositiveFilter {
         let mut score = 0.0;
 
         // 1. Evidence Confidence (Inverse relationship)
-        let confidence = finding.evidence.evidence.as_ref().map(|e| e.confidence).unwrap_or(0.5);
+        let confidence = finding.evidence.primary.as_ref().map(|e| e.confidence).unwrap_or(0.5);
         let conf_factor = 1.0 - confidence.clamp(0.0, 1.0);
         score += conf_factor * 0.4; // 40% weight
 
@@ -60,7 +60,7 @@ impl FalsePositiveFilter {
         }
 
         // 4. Evidence Verification
-        let verified = finding.evidence.evidence.as_ref().map(|e| e.verified).unwrap_or(false);
+        let verified = finding.evidence.primary.as_ref().map(|e| e.verified).unwrap_or(false);
         if verified {
             score -= 0.3; // Verified findings are heavily discounted as noise
         }

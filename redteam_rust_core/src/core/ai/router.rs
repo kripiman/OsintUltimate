@@ -139,7 +139,7 @@ impl TieredAIRouter {
         }
 
         // Source-aware findings prefer Local Code-Models (Tier 0) 
-        if let Some(ref evidence) = finding.evidence.evidence {
+        if let Some(ref evidence) = finding.evidence.primary {
             if evidence.data.get("type").and_then(|v| v.as_str()) == Some("source_aware") {
                 return RouteLevel::Local;
             }

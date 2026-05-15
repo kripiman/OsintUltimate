@@ -12,7 +12,7 @@ pub fn build_fingerprint(finding: &Finding) -> String {
     parts.push(finding.core.title.clone());
     parts.push(finding.core.description.clone());
 
-    if let Some(ref ev) = finding.evidence.evidence {
+    if let Some(ref ev) = finding.evidence.primary {
         parts.push(canonicalize_json(&ev.data));
     }
 

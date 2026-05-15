@@ -124,7 +124,7 @@ impl SkillManager {
                         if actual_cvss < min_cvss { continue; }
                     }
                     if let Some(req_ver) = pre.requires_verified {
-                        let verified = finding.evidence.evidence.as_ref().map(|e| e.verified).unwrap_or(false);
+                        let verified = finding.evidence.primary.as_ref().map(|e| e.verified).unwrap_or(false);
                         if req_ver && !verified { continue; }
                     }
                     if let Some(req_tag) = &pre.requires_tag {

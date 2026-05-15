@@ -20,7 +20,7 @@ impl ValidationPipeline {
         target: &TargetHost,
         proxy_manager: &ProxyManager,
     ) -> Result<bool> {
-        let evidence_data = finding.evidence.evidence.as_ref();
+        let evidence_data = finding.evidence.primary.as_ref();
         let evidence = match evidence_data {
             Some(e) => &e.data,
             None => {
@@ -76,7 +76,7 @@ impl ValidationPipeline {
         }
 
         let category = format!("{:?}", finding.core.category).to_lowercase();
-        let evidence_data = finding.evidence.evidence.as_ref();
+        let evidence_data = finding.evidence.primary.as_ref();
         let evidence = match evidence_data {
             Some(e) => &e.data,
             None => return Ok(None),
@@ -150,7 +150,7 @@ impl ValidationPipeline {
     ) -> Result<Option<String>> {
         let category = format!("{:?}", finding.core.category).to_lowercase();
         let title = finding.core.title.to_lowercase();
-        let evidence_data = finding.evidence.evidence.as_ref();
+        let evidence_data = finding.evidence.primary.as_ref();
         let evidence = match evidence_data {
             Some(e) => &e.data,
             None => return Ok(None),
@@ -250,7 +250,7 @@ impl ValidationPipeline {
         } else if finding.core.severity >= Severity::High {
             info!("🧠 [Validation] Layer 3: Escalating to Premium AI Judge for {} finding (No proof found).", finding.core.severity);
             
-            let evidence_data = finding.evidence.evidence.as_ref().map(|e| &e.data);
+            let evidence_data = finding.evidence.primary.as_ref().map(|e| &e.data);
             let context = format!(
                 "NegControlPassed: {}\nTechnicalProof: {:?}\nOOBProof: {:?}\nFindingTitle: {}\nEvidence: {:?}",
                 neg_control, proof, oob_proof, finding.core.title, evidence_data
