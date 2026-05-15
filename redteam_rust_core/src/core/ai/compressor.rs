@@ -19,7 +19,7 @@ impl ContextCompressor {
 
         // 2. Reduce size for tokens
         if let Some(obj) = ev.as_object_mut() {
-            Self::minify_evidence_object(obj, 300, false); // Reduced from 512 to 300
+            Self::minify_evidence_object(obj, 300); // Reduced from 512 to 300
         }
 
         let verified = finding.evidence.primary.as_ref().map(|e| e.verified).unwrap_or(false);
@@ -109,7 +109,7 @@ impl ContextCompressor {
 
     // --- INTERNAL HELPERS TO PREVENT ARROW PATTERN ---
 
-    fn minify_evidence_object(obj: &mut serde_json::Map<String, serde_json::Value>, body_limit: usize, planner_only: bool) {
+    fn minify_evidence_object(obj: &mut serde_json::Map<String, serde_json::Value>, body_limit: usize) {
         // Truncate bodies
         if let Some(val) = obj.get_mut("body") {
             if let Some(s) = val.as_str() {
@@ -120,13 +120,10 @@ impl ContextCompressor {
         }
 
         // Hardening: Stripping noisy headers to save tokens
-        let whitelist = if planner_only {
-            vec![]
-        } else {
-            vec![
-                "location", "www-authenticate", "x-content-type-options", "server", "x-powered-by"
-            ]
-        };
+        // V15.1 Fix (AIP 2.1): Tactical headers MUST be preserved.
+        let whitelist = vec![
+            "location", "www-authenticate", "x-content-type-options", "server", "x-powered-by"
+        ];
 
         Self::minify_headers(obj, &whitelist);
     }
