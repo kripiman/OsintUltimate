@@ -133,11 +133,6 @@ impl ContextCompressor {
             h_obj.retain(|k, _| {
                 let key = k.to_lowercase();
                 
-                // V15.1 (AIP 2.1) FIX: Tactical fingerprinting headers MUST be preserved
-                if key == "server" || key == "x-powered-by" {
-                    return true;
-                }
-
                 // Strip session/auth noise
                 if key.contains("cookie") || key.contains("auth") || key == "user-agent" {
                     return false;
