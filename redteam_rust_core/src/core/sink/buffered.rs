@@ -1,5 +1,6 @@
 use crate::models::{TargetHost, ScanMetadata, Finding};
 use crate::core::sink::DataSink;
+use crate::models::spill::NdjsonSpillWriter;
 use anyhow::Result;
 use async_trait::async_trait;
 use std::sync::{Arc, Mutex};
@@ -8,19 +9,19 @@ use std::sync::{Arc, Mutex};
 #[derive(Clone, Default)]
 pub struct BufferedSink {
     findings: Arc<Mutex<Vec<Finding>>>,
-    spill_path: Option<String>,
+    spill_writer: Option<Arc<NdjsonSpillWriter>>,
 }
 
 impl BufferedSink {
     pub fn new() -> Self {
         Self {
             findings: Arc::new(Mutex::new(Vec::new())),
-            spill_path: None,
+            spill_writer: None,
         }
     }
 
     pub fn with_spill(mut self, path: &str) -> Self {
-        self.spill_path = Some(path.to_string());
+        self.spill_writer = Some(Arc::new(NdjsonSpillWriter::new(path)));
         self
     }
 
@@ -34,19 +35,15 @@ impl DataSink for BufferedSink {
     async fn write(&mut self, target: &TargetHost) -> Result<()> {
         let mut lock = self.findings.lock().unwrap();
         println!("📥 BufferedSink: Received {} findings from {}", target.findings.len(), target.host);
+        
         for mut finding in target.findings.iter().cloned() {
             finding.core.target = Some(target.host.clone());
             
-            // ARCH-11: Spill to NDJSON for audit durability
-            if let Some(ref path) = self.spill_path {
-                if let Ok(file) = std::fs::OpenOptions::new().create(true).append(true).open(path) {
-                    let record = crate::models::spill::SpilledEvent::from_finding(finding.clone());
-                    let mut writer = std::io::BufWriter::new(file);
-                    let _ = serde_json::to_writer(&mut writer, &record);
-                    let _ = std::io::Write::write_all(&mut writer, b"\n");
-                }
+            // ARCH-11: Spill to NDJSON if writer is configured
+            if let Some(ref writer) = self.spill_writer {
+                let _ = writer.write(&finding).await;
             }
-
+            
             lock.push(finding);
         }
         Ok(())

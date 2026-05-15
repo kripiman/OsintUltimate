@@ -11,25 +11,31 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
       
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
         
-      - name: Install Docker Compose
-        run: sudo apt-get update && sudo apt-get install -y docker-compose
-        
       - name: Start Test Containers
         run: docker compose -f redteam_rust_core/docker-compose.test.yml up -d
         
-      - name: Run Baseline Capture (Head)
+      - name: Generate Base Baseline (Main)
         run: |
+          git checkout main
           cd redteam_rust_core
           cargo run --bin capture_baseline
-          mv tests/fixtures/golden_baseline.json target/current_scan.json
+          mkdir -p /tmp/fixtures
+          cp tests/fixtures/golden_baseline.json /tmp/fixtures/golden_baseline_base.json
           
-      - name: Checkout Base Baseline
+      - name: Generate PR Baseline
         run: |
-          git checkout ${{ github.base_ref }} -- redteam_rust_core/tests/fixtures/golden_baseline.json
+          git checkout ${{ github.head_ref }}
+          cd redteam_rust_core
+          cargo run --bin capture_baseline
+          cp tests/fixtures/golden_baseline.json target/current_scan.json
+          # Use the base baseline generated from main for parity check
+          cp /tmp/fixtures/golden_baseline_base.json tests/fixtures/golden_baseline.json
           
       - name: Verify Parity
         run: |
