@@ -107,7 +107,7 @@ fn check_l3(baseline: &[Finding], current: &[Finding]) -> bool {
 }
 
 fn main() -> Result<()> {
-    let report = verify_parity("tests/fixtures/golden_baseline.json", "target/current_scan.json")?;
+    let report = verify_parity("tests/baselines/golden_baseline.json", "target/current_scan.json")?;
     if report.l1_passed && report.l2_passed && report.l3_passed {
         println!("✅ Parity Verified!");
         Ok(())

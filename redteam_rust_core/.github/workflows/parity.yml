@@ -4,7 +4,7 @@ on:
   pull_request:
     paths:
       - 'redteam_rust_core/src/**'
-      - 'redteam_rust_core/tests/fixtures/**'
+      - 'redteam_rust_core/tests/baselines/**'
 
 jobs:
   parity:
@@ -26,16 +26,16 @@ jobs:
           cd redteam_rust_core
           cargo run --bin capture_baseline
           mkdir -p /tmp/fixtures
-          cp tests/fixtures/golden_baseline.json /tmp/fixtures/golden_baseline_base.json
+          cp tests/baselines/golden_baseline.json /tmp/fixtures/golden_baseline_base.json
           
       - name: Generate PR Baseline
         run: |
           git checkout ${{ github.head_ref }}
           cd redteam_rust_core
           cargo run --bin capture_baseline
-          cp tests/fixtures/golden_baseline.json target/current_scan.json
+          cp tests/baselines/golden_baseline.json target/current_scan.json
           # Use the base baseline generated from main for parity check
-          cp /tmp/fixtures/golden_baseline_base.json tests/fixtures/golden_baseline.json
+          cp /tmp/fixtures/golden_baseline_base.json tests/baselines/golden_baseline.json
           
       - name: Verify Parity
         run: |
