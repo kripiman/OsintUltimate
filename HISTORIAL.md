@@ -20,3 +20,6 @@
 
 ### [2026-05-13] Atomic Strike
 - Phase 6.3: Architectural Hardening (Wave 3). Decoupled `GraphAnalyzer` and added ARCH-9/10 optimizations.
+
+### [2026-05-15 11:17:51] Atomic Strike
+2026-05-15: ARCH-11 Phase 0 Hardened. Real 6-finding baseline captured (non-LFS). Mutex Send-trait bug in BufferedSink fixed. Orchestrator deadlock fix (5s timeout) verified. Parity CI logic corrected. RECOVERY COMPLETE.
