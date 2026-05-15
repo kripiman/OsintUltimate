@@ -1,7 +1,7 @@
 use redteam_rust_core::models::Finding;
 use serde_json::Value;
 use std::fs;
-use anyhow::{Result, anyhow};
+use anyhow::Result;
 use std::collections::{HashMap, HashSet};
 use sha2::{Sha256, Digest};
 use hex;

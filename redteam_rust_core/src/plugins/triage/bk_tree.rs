@@ -18,6 +18,15 @@ impl BkTree {
     pub fn new() -> Self {
         Self { root: None, len: 0 }
     }
+}
+
+impl Default for BkTree {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl BkTree {
 
     pub fn len(&self) -> usize {
         self.len
@@ -130,10 +139,8 @@ impl BkTree {
         let hi = d.saturating_add(threshold);
 
         for (k, child) in &node.children {
-            if *k >= lo && *k <= hi {
-                if Self::find_any_node(child, query, threshold, depth + 1) {
-                    return true; // C5: propagate short-circuit upward
-                }
+            if *k >= lo && *k <= hi && Self::find_any_node(child, query, threshold, depth + 1) {
+                return true; // C5: propagate short-circuit upward
             }
         }
         false
@@ -159,6 +166,15 @@ impl SimHashBkTree {
     pub fn new() -> Self {
         Self { root: None, len: 0 }
     }
+}
+
+impl Default for SimHashBkTree {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl SimHashBkTree {
 
     pub fn len(&self) -> usize {
         self.len
