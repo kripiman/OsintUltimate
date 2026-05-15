@@ -133,7 +133,7 @@ impl<M: ExecutorMode> SwarmOrchestrator<M> {
         }
         
         let correlation_engine = Arc::new(tokio::sync::Mutex::new(correlation_engine_inner));
-        let inventory = Arc::new(crate::core::swarm::inventory::SwarmInventory::new());
+        let inventory = Arc::new(crate::core::orchestrator::swarm::inventory::SwarmInventory::new());
         
         let (discovery_tx, mut discovery_rx) = mpsc::channel(100);
         let pipeline = self.pipeline.clone();
@@ -261,7 +261,7 @@ impl<M: ExecutorMode> SwarmOrchestrator<M> {
             }
 
             // --- PHASE 5.3: FAST-PATH INGESTION ---
-            inventory.ingest_finding(finding.clone(), crate::core::swarm::inventory::TrustLevel::Private);
+            inventory.ingest_finding(finding.clone(), crate::core::orchestrator::swarm::inventory::TrustLevel::Private);
 
             // NEW-2: Async Reactive Engine integration. Do NOT block main loop with plugin scans.
             let rules = crate::core::reactive_engine::get_all_rules();
@@ -566,7 +566,7 @@ impl<M: ExecutorMode> SwarmOrchestrator<M> {
         for c2 in operators {
             match c2.verify_session(target).await {
                 Ok(state) => {
-                    use crate::core::c2::SessionState;
+                    use crate::core::orchestrator::c2::SessionState;
                     if state == SessionState::Sovereign || state == SessionState::Established {
                         info!("🎯 SWARM [C2Operator]: Sesión activa detectada. Omitiendo despliegue.");
                         return Ok(());

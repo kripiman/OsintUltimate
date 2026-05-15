@@ -1,8 +1,8 @@
-use crate::core::c2::sliver_proto::sliver::rpcpb::sliver_rpc_client::SliverRpcClient;
-use crate::core::c2::sliver_proto::sliver::commonpb::{Empty, Request as CommonRequest};
-use crate::core::c2::sliver_proto::sliver::sliverpb::{CallExtensionReq, CallExtension};
+use crate::core::orchestrator::c2::sliver_proto::sliver::rpcpb::sliver_rpc_client::SliverRpcClient;
+use crate::core::orchestrator::c2::sliver_proto::sliver::commonpb::{Empty, Request as CommonRequest};
+use crate::core::orchestrator::c2::sliver_proto::sliver::sliverpb::{CallExtensionReq, CallExtension};
 use crate::models::{Finding, Category, Severity};
-use crate::core::swarm::inventory::SwarmInventory;
+use crate::core::orchestrator::swarm::inventory::SwarmInventory;
 use std::sync::Arc;
 use tracing::{info, error};
 use tokio_stream::StreamExt;
@@ -170,7 +170,7 @@ impl SliverFeedbackLoop {
                 }),
             );
             f.core.scope_id = "Auto-Inferred".to_string();
-            inventory.ingest_finding(f, crate::core::swarm::inventory::TrustLevel::Private);
+            inventory.ingest_finding(f, crate::core::orchestrator::swarm::inventory::TrustLevel::Private);
         }
 
         Ok(())

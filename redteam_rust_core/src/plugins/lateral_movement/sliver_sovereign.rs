@@ -1,6 +1,6 @@
 use crate::plugins::{ScannerPlugin, Capability};
 use crate::models::{TargetHost, Finding, Severity, Category};
-use crate::core::c2::{C2Operator, C2Session, SessionState};
+use crate::core::orchestrator::c2::{C2Operator, C2Session, SessionState};
 use crate::utils::executor::{StealthExecutor, ExecutorMode};
 use async_trait::async_trait;
 use anyhow::{Result, Context};
@@ -200,7 +200,7 @@ impl<M: ExecutorMode> C2Operator for SovereignSliverOperator<M> {
                     if let Some(expected_fp) = target.tactical_context.get("c2_fingerprint").and_then(|v| v.as_str()) {
                         let actual_fp = session.get("CertificateFingerprint").and_then(|v| v.as_str()).unwrap_or("");
                         
-                        let op = crate::core::c2::typestate::SliverOperator::<crate::core::c2::typestate::Established>::new()
+                        let op = crate::core::orchestrator::c2::typestate::SliverOperator::<crate::core::orchestrator::c2::typestate::Established>::new()
                             .with_fingerprint(expected_fp.to_string());
                         
                         if op.promote(actual_fp).is_err() {

@@ -1,5 +1,5 @@
 use redteam_rust_core::models::{Finding, Category, Severity};
-use redteam_rust_core::core::swarm::inventory::{SwarmInventory, TrustLevel};
+use redteam_rust_core::core::orchestrator::swarm::inventory::{SwarmInventory, TrustLevel};
 
 #[test]
 fn test_swarm_acl_isolation() {

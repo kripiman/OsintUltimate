@@ -4,7 +4,7 @@ use tracing::{info, warn};
 use std::time::Duration;
 use crate::models::{TargetHost, Finding};
 use crate::models::findings::PocDefinition;
-use crate::core::c2::C2Operator;
+use crate::core::orchestrator::c2::C2Operator;
 use crate::core::approval_gate::ApprovalStatus::Approved;
 use crate::utils::executor::ExecutorMode;
 
@@ -16,7 +16,7 @@ impl<M: ExecutorMode> PocValidator<M> {
             Ok(payload_path) => {
                 info!("🔱 V14.1 SOVEREIGN: Autonomous C2 payload staged at {}. Deploying...", payload_path);
                 
-                use crate::core::c2::SessionState;
+                use crate::core::orchestrator::c2::SessionState;
                 match sovereign_operator.verify_session(target).await? {
                     SessionState::Sovereign => {
                         info!("🎯 V14.1 SOVEREIGN: C2 SESSION ALREADY ESTABLISHED for {}", target.host);

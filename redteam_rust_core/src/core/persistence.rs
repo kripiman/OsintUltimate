@@ -41,7 +41,7 @@ pub struct TacticalPlan {
 
 pub struct PersistenceOrchestrator<M: ExecutorMode> {
     pub router: Arc<crate::core::ai::TieredAIRouter>,
-    pub c2_manager: Option<Arc<dyn crate::core::c2::C2Operator>>,
+    pub c2_manager: Option<Arc<dyn crate::core::orchestrator::c2::C2Operator>>,
     pub executor: Arc<StealthExecutor<M>>,
 }
 
@@ -50,7 +50,7 @@ impl<M: ExecutorMode> PersistenceOrchestrator<M> {
         Self { router, c2_manager: None, executor }
     }
 
-    pub fn with_c2(mut self, c2: Arc<dyn crate::core::c2::C2Operator>) -> Self {
+    pub fn with_c2(mut self, c2: Arc<dyn crate::core::orchestrator::c2::C2Operator>) -> Self {
         self.c2_manager = Some(c2);
         self
     }

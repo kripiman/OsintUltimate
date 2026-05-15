@@ -6,7 +6,7 @@ use crate::models::constants::{FINDING_SSRF, PLUGIN_CLOUD_METADATA};
 use crate::plugins::ScannerPlugin;
 use crate::core::capability_layer::ScanLayerPolicy;
 use crate::core::approval_gate::ApprovalGate;
-use crate::core::swarm::inventory::SwarmInventory;
+use crate::core::orchestrator::swarm::inventory::SwarmInventory;
 
 pub async fn run_reactive_logic(
     target: &TargetHost,

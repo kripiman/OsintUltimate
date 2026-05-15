@@ -247,7 +247,7 @@ impl ReactiveEngine {
         layer_policy: &ScanLayerPolicy,
         approval_gate: &ApprovalGate,
         fired_chains: &DashSet<String>,
-        inventory: Option<&crate::core::swarm::inventory::SwarmInventory>,
+        inventory: Option<&crate::core::orchestrator::swarm::inventory::SwarmInventory>,
     ) -> Vec<Finding> {
         evaluate(
             &self.rules,
@@ -270,7 +270,7 @@ pub async fn evaluate(
     layer_policy: &ScanLayerPolicy,
     approval_gate: &ApprovalGate,
     fired_chains: &DashSet<String>,
-    inventory: Option<&crate::core::swarm::inventory::SwarmInventory>,
+    inventory: Option<&crate::core::orchestrator::swarm::inventory::SwarmInventory>,
 ) -> Vec<Finding> {
     let mut extra_findings = Vec::new();
 

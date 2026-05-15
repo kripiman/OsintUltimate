@@ -15,7 +15,7 @@ pub struct DashboardState {
     pub findings_tx: broadcast::Sender<Finding>,
     pub ram_limit_mb: u64,
     pub approval_gate: Option<Arc<crate::core::approval_gate::ApprovalGate>>,
-    pub budget: Option<Arc<crate::core::swarm::TokenBudget>>,
+    pub budget: Option<Arc<crate::core::orchestrator::swarm::TokenBudget>>,
     pub auth: Arc<DashboardAuth>,
     pub mission_tx: Option<Arc<mpsc::Sender<MissionRequest>>>,
     pub discord_webhook_url: Option<String>,

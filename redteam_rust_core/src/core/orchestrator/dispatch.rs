@@ -155,7 +155,7 @@ pub async fn process_target(
     memory_monitor: Arc<crate::utils::memory_monitor::MemoryMonitor>,
     dashboard_tx: Option<tokio::sync::broadcast::Sender<Finding>>,
     dashboard_targets: Arc<dashmap::DashMap<String, TargetHost>>,
-    inventory: Arc<crate::core::swarm::inventory::SwarmInventory>,
+    inventory: Arc<crate::core::orchestrator::swarm::inventory::SwarmInventory>,
 ) -> TargetHost {
     // Scope check
     if !scope_guard::check_scope(&mut target, &policy, strict_scope) {
@@ -200,7 +200,7 @@ pub async fn process_target(
     if !all_findings.is_empty() {
         // Ingest findings
         for f in &all_findings {
-            inventory.ingest_finding(f.clone(), crate::core::swarm::inventory::TrustLevel::Private);
+            inventory.ingest_finding(f.clone(), crate::core::orchestrator::swarm::inventory::TrustLevel::Private);
         }
 
         // Reactive logic

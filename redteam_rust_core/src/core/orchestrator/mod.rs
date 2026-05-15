@@ -36,7 +36,7 @@ pub struct Orchestrator<M: ExecutorMode> {
     strict_scope: bool,
     db_pool: Option<sqlx::PgPool>,
     current_scan_id: Option<i64>,
-    inventory: Arc<crate::core::swarm::inventory::SwarmInventory>,
+    inventory: Arc<crate::core::orchestrator::swarm::inventory::SwarmInventory>,
     #[cfg(feature = "sovereign")]
     sliver_ca_path: Option<String>,
     #[cfg(feature = "sovereign")]
@@ -61,7 +61,7 @@ pub struct OrchestratorConfig<M: ExecutorMode> {
     pub feedback_tx: Option<tokio::sync::mpsc::Sender<TargetHost>>,
     pub db_pool: Option<sqlx::PgPool>,
     pub current_scan_id: Option<i64>,
-    pub inventory: Option<Arc<crate::core::swarm::inventory::SwarmInventory>>,
+    pub inventory: Option<Arc<crate::core::orchestrator::swarm::inventory::SwarmInventory>>,
     #[cfg(feature = "sovereign")]
     pub sliver_ca_path: Option<String>,
     #[cfg(feature = "sovereign")]
@@ -103,7 +103,7 @@ impl<M: ExecutorMode> Orchestrator<M> {
             strict_scope: config.strict_scope,
             db_pool: config.db_pool,
             current_scan_id: config.current_scan_id,
-            inventory: config.inventory.unwrap_or_else(|| Arc::new(crate::core::swarm::inventory::SwarmInventory::new())),
+            inventory: config.inventory.unwrap_or_else(|| Arc::new(crate::core::orchestrator::swarm::inventory::SwarmInventory::new())),
             #[cfg(feature = "sovereign")]
             sliver_ca_path: config.sliver_ca_path,
             #[cfg(feature = "sovereign")]
@@ -150,7 +150,7 @@ impl<M: ExecutorMode> Orchestrator<M> {
             let cert = self.sliver_cert_path.as_ref().and_then(|p| std::fs::read(p).ok());
             let key = self.sliver_key_path.as_ref().and_then(|p| std::fs::read(p).ok());
             
-            let feedback_loop = crate::core::c2::sliver_feedback::SliverFeedbackLoop::new(
+            let feedback_loop = crate::core::orchestrator::c2::sliver_feedback::SliverFeedbackLoop::new(
                 addr.clone(),
                 self.inventory.clone(),
                 ca, cert, key
@@ -196,7 +196,7 @@ impl<M: ExecutorMode> Orchestrator<M> {
             (true, Some(router), Some(out_tx)) => {
                 info!("🐝 ORCHESTRATOR: Entering Swarm Mode (Max Tokens: {})", self.max_tokens);
                 let pipeline = Arc::new(crate::core::pipeline::Pipeline::new_minimal(self.plugins.clone(), self.sandbox.clone(), None, None));
-                let swarm = crate::core::swarm::SwarmOrchestrator::new(crate::core::swarm::SwarmConfig {
+                let swarm = crate::core::orchestrator::swarm::SwarmOrchestrator::new(crate::core::orchestrator::swarm::SwarmConfig {
                     router,
                     pipeline,
                     approval_gate: self.approval_gate.clone(),

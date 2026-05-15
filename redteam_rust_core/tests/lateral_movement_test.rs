@@ -2,7 +2,7 @@ use async_trait::async_trait;
 use redteam_rust_core::plugins::{ScannerPlugin, PluginMetadata, Capability};
 use redteam_rust_core::models::{TargetHost, Finding, Severity, Category};
 use redteam_rust_core::models::constants::*;
-use redteam_rust_core::core::swarm::inventory::{SwarmInventory, TrustLevel};
+use redteam_rust_core::core::orchestrator::swarm::inventory::{SwarmInventory, TrustLevel};
 use redteam_rust_core::core::reactive_engine;
 use redteam_rust_core::core::capability_layer::ScanLayerPolicy;
 use redteam_rust_core::core::approval_gate::ApprovalGate;
@@ -176,7 +176,7 @@ fn test_responder_parser_empty_and_malformed() {
 // ============================================================
 // Phase 5.5: Mimikatz Parser Tests
 // ============================================================
-use redteam_rust_core::core::c2::sliver_feedback::{C2Client, SliverFeedbackLoop};
+use redteam_rust_core::core::orchestrator::c2::sliver_feedback::{C2Client, SliverFeedbackLoop};
 
 /// PASS: Standard Mimikatz SAM output is correctly parsed.
 #[test]
@@ -214,7 +214,7 @@ fn test_mimikatz_parser_multi_block() {
 // ============================================================================
 
 // C2Client + SliverFeedbackLoop already imported above at line 179.
-use redteam_rust_core::core::c2::sliver_proto::sliver::sliverpb::{CallExtensionReq, CallExtension};
+use redteam_rust_core::core::orchestrator::c2::sliver_proto::sliver::sliverpb::{CallExtensionReq, CallExtension};
 use std::sync::Mutex;
 
 /// Captures every CallExtensionReq it receives for later assertion.

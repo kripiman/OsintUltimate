@@ -46,7 +46,7 @@ impl ScannerPlugin for MockPlugin {
     async fn stop(&self) -> Result<()> {
         Ok(())
     }
-    fn as_c2_operator(&self) -> Option<&dyn redteam_rust_core::core::c2::C2Operator> {
+    fn as_c2_operator(&self) -> Option<&dyn redteam_rust_core::core::orchestrator::c2::C2Operator> {
         None
     }
     fn set_feedback_channel(&self, _tx: tokio::sync::mpsc::Sender<TargetHost>) {}

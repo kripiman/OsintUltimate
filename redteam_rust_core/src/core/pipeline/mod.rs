@@ -235,7 +235,7 @@ impl<M: ExecutorMode> Pipeline<M> {
         }
     }
 
-    pub fn get_c2_operators(&self) -> Vec<&dyn crate::core::c2::C2Operator> {
+    pub fn get_c2_operators(&self) -> Vec<&dyn crate::core::orchestrator::c2::C2Operator> {
         self.plugins.iter().filter_map(|p| p.as_c2_operator()).collect()
     }
 

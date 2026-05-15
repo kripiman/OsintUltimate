@@ -139,7 +139,7 @@ pub trait ScannerPlugin: Send + Sync {
         Ok(())
     }
 
-    fn as_c2_operator(&self) -> Option<&dyn crate::core::c2::C2Operator> {
+    fn as_c2_operator(&self) -> Option<&dyn crate::core::orchestrator::c2::C2Operator> {
         None
     }
 
@@ -210,7 +210,7 @@ pub struct GlobalConfig<M: ExecutorMode = crate::utils::executor::GhostMode> whe
     pub sandbox: std::sync::Arc<crate::core::sandbox::SandboxDispatcher>,
     pub policy: std::sync::Arc<dyn crate::core::policy::PolicyProvider>,
     pub executor: std::sync::Arc<StealthExecutor<M>>,
-    pub budget: std::sync::Arc<crate::core::swarm::budget::TokenBudget>,
+    pub budget: std::sync::Arc<crate::core::orchestrator::swarm::budget::TokenBudget>,
     pub correlation_engine: std::sync::Arc<tokio::sync::Mutex<crate::core::correlation::CorrelationEngine>>,
     pub stealth_policy: crate::plugins::detection_evasion::stealth_policy::StealthPolicy,
     pub mcp_token: Option<String>,
@@ -292,7 +292,7 @@ impl<M: ExecutorMode> GlobalConfig<M> where M: Clone {
             sandbox,
             policy: policy.clone(),
             executor,
-            budget: std::sync::Arc::new(crate::core::swarm::budget::TokenBudget::new(50000)),
+            budget: std::sync::Arc::new(crate::core::orchestrator::swarm::budget::TokenBudget::new(50000)),
             correlation_engine: std::sync::Arc::new(tokio::sync::Mutex::new(crate::core::correlation::CorrelationEngine::new())),
             stealth_policy: crate::plugins::detection_evasion::stealth_policy::StealthPolicy::default(),
             mcp_token: None,
@@ -459,7 +459,7 @@ pub fn get_all_scanners<M: ExecutorMode>(config: GlobalConfig<M>) -> Vec<Box<dyn
     use crate::plugins::reconnaissance::active::roadrecon::RoadReconScanner;
     use crate::plugins::exploitation::web::jwt_forge::JwtForgeScanner;
     use crate::plugins::enumeration::web::jwks_discovery::JwksDiscoveryScanner;
-    use crate::core::swarm::nvd_monitor::NvdMonitor;
+    use crate::core::orchestrator::swarm::nvd_monitor::NvdMonitor;
     use crate::plugins::exploitation::web::cors_exfil::CorsTokenExfiltrator;
     use crate::plugins::verification::dns_verifier::DnsHijackVerifier;
     use crate::plugins::verification::secret_validator::SecretValidator;

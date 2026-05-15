@@ -422,7 +422,7 @@ mod tests {
     fn test_triage_score_request_response_verified_is_40() {
         let mut f = bare_finding();
         f.evidence = FindingEvidence {
-            evidence: Some(Evidence {
+            primary: Some(Evidence {
                 data: json!({"request": "GET / HTTP/1.1", "response": "HTTP/1.1 200 OK"}),
                 confidence: 0.9,
                 verified: true,
@@ -505,7 +505,7 @@ mod tests {
         // Minimum combination to reach 70: verified evidence (40) + AI exploit+risk (25) + cvss_score (10) = 75
         let mut f = bare_finding();
         f.evidence = FindingEvidence {
-            evidence: Some(Evidence {
+            primary: Some(Evidence {
                 data: json!({"request": "GET /", "response": "HTTP/1.1 200 OK"}),
                 confidence: 0.8,
                 verified: true,

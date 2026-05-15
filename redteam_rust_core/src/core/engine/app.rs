@@ -374,7 +374,7 @@ impl<M: ExecutorMode> RedTeamEngine<M> {
             sandbox: self.sandbox.clone(),
             policy: self.policy.clone(),
             executor: self.executor.clone(),
-            budget: Arc::new(crate::core::swarm::budget::TokenBudget::new(self.config.max_tokens)),
+            budget: Arc::new(crate::core::orchestrator::swarm::budget::TokenBudget::new(self.config.max_tokens)),
             correlation_engine: self.correlation_engine.clone(),
             mcp_token: self.config.mcp_token.clone(),
             nuclei_tags: crate::utils::config::Config::from_env().nuclei_tags,

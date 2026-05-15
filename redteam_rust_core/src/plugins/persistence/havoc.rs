@@ -1,7 +1,7 @@
 use crate::plugins::{ScannerPlugin, Capability};
 use crate::models::{TargetHost, Finding, Severity, Category};
 use crate::utils::tool_detection::detect_tool;
-use crate::core::c2::{C2Operator, C2Session, SessionState};
+use crate::core::orchestrator::c2::{C2Operator, C2Session, SessionState};
 use async_trait::async_trait;
 use anyhow::{Result, Context};
 use tracing::{info, warn};
@@ -118,7 +118,7 @@ impl<M: ExecutorMode> C2Operator for HavocScanner<M> {
                 if let Some(expected_fp) = target.tactical_context.get("c2_fingerprint").and_then(|v| v.as_str()) {
                     let actual_fp = sess.fingerprint.as_deref().unwrap_or("");
                     
-                    let op = crate::core::c2::typestate::HavocOperator::<crate::core::c2::typestate::Established>::new()
+                    let op = crate::core::orchestrator::c2::typestate::HavocOperator::<crate::core::orchestrator::c2::typestate::Established>::new()
                         .with_fingerprint(expected_fp.to_string());
                     
                     if op.promote(actual_fp).is_ok() {
