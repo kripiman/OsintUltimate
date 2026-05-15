@@ -1,1 +1,1 @@
-V15.5 Hardened (2026-05-15). ARCH-11 Phase 0 (Baseline Integrity: 6 real findings, tests/baselines/ ground-truth, Parity Gate active). ARCH-8/9/10 stable. Spill Writer (NDJSON) operational. Current Posture: GHOST (ARCH-11 READY).
+ARCH-11 Stage 2 (C2) COMPLETE. Swarm and C2 logic now reside in core/orchestrator/ domains. Integrity Gate G1/G2 satisfied. AIP 2.1 fix verified. Ready for Stage 3 (Logic Extraction).

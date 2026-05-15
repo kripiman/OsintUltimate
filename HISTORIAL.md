@@ -23,3 +23,6 @@
 
 ### [2026-05-15 11:17:51] Atomic Strike
 2026-05-15: ARCH-11 Phase 0 Hardened. Real 6-finding baseline captured (non-LFS). Mutex Send-trait bug in BufferedSink fixed. Orchestrator deadlock fix (5s timeout) verified. Parity CI logic corrected. RECOVERY COMPLETE.
+
+### [2026-05-15 12:53:45] Atomic Strike
+Executed ARCH-11 Stage 2 (C2): Full domain migration of core/swarm and core/c2 to core/orchestrator domain paths. Implemented InfrastructureConfig with backward compatibility aliases. Fixed workspace-wide import redirections (35 files). Build and parity tests passed. HEAD: 2d2a832.
