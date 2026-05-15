@@ -1,0 +1,188 @@
+[
+  {
+    "id": "PLUGIN_ERROR",
+    "category": "misconfiguration",
+    "severity": "info",
+    "title": "Plugin NucleiScanner failed",
+    "description": "Plugin NucleiScanner failed",
+    "timestamps": "2026-05-15T15:15:10.450465952Z",
+    "version": 0,
+    "source_plugin": null,
+    "scope_id": "",
+    "reactive_depth": 0,
+    "evidence": {
+      "error": "DNS Pinning Violation: Nuclei requires a resolved and pinned IP to prevent Rebinding.",
+      "confidence": 0.5,
+      "verified": false
+    },
+    "enrichment": {
+      "cvss_version": "4.0"
+    },
+    "context": {
+      "iteration": 0,
+      "validation": {
+        "status": "unverified",
+        "confidence_score": 0.0,
+        "judge_notes": "",
+        "negative_control_passed": false,
+        "proof_of_execution": null,
+        "validated_at": null
+      }
+    }
+  },
+  {
+    "id": "PLUGIN_ERROR",
+    "category": "misconfiguration",
+    "severity": "info",
+    "title": "Plugin kiterunner failed",
+    "description": "Plugin kiterunner failed",
+    "timestamps": "2026-05-15T15:15:10.462989887Z",
+    "version": 0,
+    "source_plugin": null,
+    "scope_id": "",
+    "reactive_depth": 0,
+    "evidence": {
+      "error": "DNS Pinning Violation: Kiterunner requires a resolved and pinned IP.",
+      "confidence": 0.5,
+      "verified": false
+    },
+    "enrichment": {
+      "cvss_version": "4.0"
+    },
+    "context": {
+      "iteration": 0,
+      "validation": {
+        "status": "unverified",
+        "confidence_score": 0.0,
+        "judge_notes": "",
+        "negative_control_passed": false,
+        "proof_of_execution": null,
+        "validated_at": null
+      }
+    }
+  },
+  {
+    "id": "PLUGIN_ERROR",
+    "category": "misconfiguration",
+    "severity": "info",
+    "title": "Plugin dnsx failed",
+    "description": "Plugin dnsx failed",
+    "timestamps": "2026-05-15T15:15:10.695440969Z",
+    "version": 0,
+    "source_plugin": null,
+    "scope_id": "",
+    "reactive_depth": 0,
+    "evidence": {
+      "error": "V14.1 Security Block: Command failed policy validation.",
+      "confidence": 0.5,
+      "verified": false
+    },
+    "enrichment": {
+      "cvss_version": "4.0"
+    },
+    "context": {
+      "iteration": 0,
+      "validation": {
+        "status": "unverified",
+        "confidence_score": 0.0,
+        "judge_notes": "",
+        "negative_control_passed": false,
+        "proof_of_execution": null,
+        "validated_at": null
+      }
+    }
+  },
+  {
+    "id": "PLUGIN_ERROR",
+    "category": "misconfiguration",
+    "severity": "info",
+    "title": "Plugin NucleiScanner failed",
+    "description": "Plugin NucleiScanner failed",
+    "timestamps": "2026-05-15T15:15:10.781590837Z",
+    "version": 0,
+    "source_plugin": null,
+    "scope_id": "",
+    "reactive_depth": 0,
+    "evidence": {
+      "error": "DNS Pinning Violation: Nuclei requires a resolved and pinned IP to prevent Rebinding.",
+      "confidence": 0.5,
+      "verified": false
+    },
+    "enrichment": {
+      "cvss_version": "4.0"
+    },
+    "context": {
+      "iteration": 0,
+      "validation": {
+        "status": "unverified",
+        "confidence_score": 0.0,
+        "judge_notes": "",
+        "negative_control_passed": false,
+        "proof_of_execution": null,
+        "validated_at": null
+      }
+    }
+  },
+  {
+    "id": "PLUGIN_ERROR",
+    "category": "misconfiguration",
+    "severity": "info",
+    "title": "Plugin kiterunner failed",
+    "description": "Plugin kiterunner failed",
+    "timestamps": "2026-05-15T15:15:10.783599171Z",
+    "version": 0,
+    "source_plugin": null,
+    "scope_id": "",
+    "reactive_depth": 0,
+    "evidence": {
+      "error": "DNS Pinning Violation: Kiterunner requires a resolved and pinned IP.",
+      "confidence": 0.5,
+      "verified": false
+    },
+    "enrichment": {
+      "cvss_version": "4.0"
+    },
+    "context": {
+      "iteration": 0,
+      "validation": {
+        "status": "unverified",
+        "confidence_score": 0.0,
+        "judge_notes": "",
+        "negative_control_passed": false,
+        "proof_of_execution": null,
+        "validated_at": null
+      }
+    }
+  },
+  {
+    "id": "PLUGIN_ERROR",
+    "category": "misconfiguration",
+    "severity": "info",
+    "title": "Plugin dnsx failed",
+    "description": "Plugin dnsx failed",
+    "timestamps": "2026-05-15T15:15:10.839473334Z",
+    "version": 0,
+    "source_plugin": null,
+    "scope_id": "",
+    "reactive_depth": 0,
+    "evidence": {
+      "error": "V14.1 Security Block: Command failed policy validation.",
+      "confidence": 0.5,
+      "verified": false
+    },
+    "enrichment": {
+      "cvss_version": "4.0"
+    },
+    "context": {
+      "iteration": 0,
+      "validation": {
+        "status": "unverified",
+        "confidence_score": 0.0,
+        "judge_notes": "",
+        "negative_control_passed": false,
+        "proof_of_execution": null,
+        "validated_at": null
+      }
+    }
+  }
+]

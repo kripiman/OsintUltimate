@@ -33,19 +33,26 @@ impl BufferedSink {
 #[async_trait]
 impl DataSink for BufferedSink {
     async fn write(&mut self, target: &TargetHost) -> Result<()> {
-        let mut lock = self.findings.lock().unwrap();
         println!("📥 BufferedSink: Received {} findings from {}", target.findings.len(), target.host);
         
+        let mut processed_findings = Vec::new();
         for mut finding in target.findings.iter().cloned() {
             finding.core.target = Some(target.host.clone());
             
             // ARCH-11: Spill to NDJSON if writer is configured
             if let Some(ref writer) = self.spill_writer {
+                // We await here, but we DON'T hold the MutexGuard yet.
                 let _ = writer.write(&finding).await;
             }
-            
-            lock.push(finding);
+            processed_findings.push(finding);
         }
+
+        // Now acquire the lock only for the memory push
+        {
+            let mut lock = self.findings.lock().unwrap();
+            lock.extend(processed_findings);
+        }
+        
         Ok(())
     }
 

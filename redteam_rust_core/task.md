@@ -27,10 +27,18 @@
     - [x] Update root `CLAUDE.md` with Sprint 4 progress and known issues (JA4S placeholder)
     - [x] Update `HISTORIAL.md` with explicit deferrals
 
-- [/] ARCH-11: Deep Architectural Hardening (Phase 0 Baseline)
-    - [ ] Setup Docker-Compose lab environment (DVWA, SMB, NATS)
-    - [ ] Implement `cargo xtask record-fixtures` (HTTP + SMB PoC)
-    - [ ] Mandatory: Define NDJSON spill serialization with `schema_version`
-    - [ ] Mandatory: Configure CI parity gate (Golden Scan)
-    - [ ] Capture Golden Scan baseline on monolithic code
-    - [ ] Finalize v6 Audit gate requirements (FFI async lifetime, SecretStore)
+- [x] ARCH-11: Deep Architectural Hardening (Phase 0 Baseline)
+    - [x] Setup Docker-Compose lab environment (DVWA, SMB, NATS)
+    - [x] Implement `cargo xtask record-fixtures` (HTTP + SMB PoC)
+    - [x] Mandatory: Define NDJSON spill serialization with `schema_version`
+    - [x] Mandatory: Configure CI parity gate (Golden Scan)
+    - [x] Capture Golden Scan baseline on monolithic code
+    - [x] Finalize v6 Audit gate requirements (FFI async lifetime, SecretStore)
+
+- [/] ARCH-11 Phase 1: Orchestrator Domain Decomposition
+    - [ ] Create domain-specific submodules (Inventory, Dispatcher, SwarmManager, Monitor)
+    - [ ] Extract Target lifecycle management from Orchestrator
+    - [ ] Decouple Swarm logic into a standalone component
+    - [ ] Decouple Dashboard and Telemetry sinks
+    - [ ] Implement Domain-specific state synchronization
+    - [ ] Verify parity with Golden Baseline
