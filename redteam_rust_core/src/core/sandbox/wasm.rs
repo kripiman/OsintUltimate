@@ -11,6 +11,15 @@ impl WasmRuntime {
             engine: Engine::default(),
         }
     }
+}
+
+impl Default for WasmRuntime {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl WasmRuntime {
 
     /// Executes a WASM plugin in a strictly isolated environment.
     /// ABI: The guest must export a function `scan` that takes and returns pointers to shared memory.

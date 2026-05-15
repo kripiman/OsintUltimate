@@ -84,6 +84,12 @@ pub mod typestate {
         }
     }
 
+    impl Default for SliverOperator<Staged> {
+        fn default() -> Self {
+            Self::new()
+        }
+    }
+
     impl SliverOperator<Deployed> {
         pub fn new() -> Self {
             Self { state: PhantomData, expected_fingerprint: None }
@@ -91,6 +97,12 @@ pub mod typestate {
 
         pub fn establish(self) -> SliverOperator<Established> {
             SliverOperator { state: PhantomData, expected_fingerprint: self.expected_fingerprint }
+        }
+    }
+
+    impl Default for SliverOperator<Deployed> {
+        fn default() -> Self {
+            Self::new()
         }
     }
 
@@ -112,9 +124,21 @@ pub mod typestate {
         }
     }
 
+    impl Default for SliverOperator<Established> {
+        fn default() -> Self {
+            Self::new()
+        }
+    }
+
     impl SliverOperator<Sovereign> {
         pub fn new() -> Self {
             Self { state: PhantomData, expected_fingerprint: None }
+        }
+    }
+
+    impl Default for SliverOperator<Sovereign> {
+        fn default() -> Self {
+            Self::new()
         }
     }
 
@@ -128,6 +152,12 @@ pub mod typestate {
         }
     }
 
+    impl Default for HavocOperator<Staged> {
+        fn default() -> Self {
+            Self::new()
+        }
+    }
+
     impl HavocOperator<Deployed> {
         pub fn new() -> Self {
             Self { state: PhantomData, expected_fingerprint: None }
@@ -135,6 +165,12 @@ pub mod typestate {
 
         pub fn establish(self) -> HavocOperator<Established> {
             HavocOperator { state: PhantomData, expected_fingerprint: self.expected_fingerprint }
+        }
+    }
+
+    impl Default for HavocOperator<Deployed> {
+        fn default() -> Self {
+            Self::new()
         }
     }
 
@@ -157,9 +193,21 @@ pub mod typestate {
         }
     }
 
+    impl Default for HavocOperator<Established> {
+        fn default() -> Self {
+            Self::new()
+        }
+    }
+
     impl HavocOperator<Sovereign> {
         pub fn new() -> Self {
             Self { state: PhantomData, expected_fingerprint: None }
+        }
+    }
+
+    impl Default for HavocOperator<Sovereign> {
+        fn default() -> Self {
+            Self::new()
         }
     }
 }
