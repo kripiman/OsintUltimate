@@ -132,10 +132,17 @@ impl ContextCompressor {
         if let Some(h_obj) = obj.get_mut("headers").and_then(|h| h.as_object_mut()) {
             h_obj.retain(|k, _| {
                 let key = k.to_lowercase();
-                // Explicitly strip sensitive or noisy headers if they somehow bypass whitelist logic
+                
+                // V15.1 (AIP 2.1) FIX: Tactical fingerprinting headers MUST be preserved
+                if key == "server" || key == "x-powered-by" {
+                    return true;
+                }
+
+                // Strip session/auth noise
                 if key.contains("cookie") || key.contains("auth") || key == "user-agent" {
                     return false;
                 }
+
                 whitelist.contains(&key.as_str())
             });
         }
