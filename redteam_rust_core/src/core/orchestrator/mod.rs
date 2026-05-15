@@ -12,6 +12,9 @@ pub mod dispatch;
 pub mod reactive;
 pub mod enrichment;
 pub mod scope_guard;
+pub mod lifecycle;
+pub mod swarm;
+pub mod c2;
 
 pub struct Orchestrator<M: ExecutorMode> {
     plugins: Arc<Vec<Box<dyn ScannerPlugin>>>,
