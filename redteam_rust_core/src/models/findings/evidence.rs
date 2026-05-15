@@ -44,7 +44,7 @@ fn default_confidence() -> f32 { 0.5 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct FindingEvidence {
-    #[serde(rename = "primary", skip_serializing_if = "Option::is_none")]
+    #[serde(flatten, skip_serializing_if = "Option::is_none")]
     pub primary: Option<Evidence>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub files: Vec<EvidenceFile>,

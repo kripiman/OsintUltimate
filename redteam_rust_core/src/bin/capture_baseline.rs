@@ -96,7 +96,7 @@ async fn main() -> Result<()> {
     ];
     
     let target_stream = futures::stream::iter(targets).boxed();
-    let sink = Arc::new(BufferedSink::new());
+    let sink = Arc::new(BufferedSink::new().with_spill("target/audit_spill.ndjson"));
     
     engine.run_pipeline(target_stream, Box::new((*sink).clone()), false).await?;
     
@@ -137,7 +137,9 @@ async fn main() -> Result<()> {
     
     let json = serde_json::to_string_pretty(&findings)?;
     fs::create_dir_all("tests/fixtures")?;
-    fs::write("tests/fixtures/golden_baseline.json", json)?;
+    let path = std::env::current_dir()?.join("tests/fixtures/golden_baseline.json");
+    println!("📝 Writing to: {:?}", path);
+    fs::write(&path, json)?;
     
     println!("✅ Golden Scan Baseline saved to tests/fixtures/golden_baseline.json.");
     Ok(())

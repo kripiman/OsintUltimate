@@ -1,33 +1,22 @@
-use serde::{Serialize, Deserialize};
-use chrono::{DateTime, Utc};
-use crate::models::findings::Finding;
+use serde::{Deserialize, Serialize};
+use crate::models::Finding;
 
-/// Schema for findings spilled to disk or persistent queue during backpressure.
-#[derive(Debug, Serialize, Deserialize, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SpilledEvent {
-    /// Schema version for forward/backward compatibility (e.g., 1 for V16.1)
-    pub schema_version: u32,
-    
-    /// Precision timestamp of the event
-    pub timestamp: DateTime<Utc>,
-    
-    /// Unique identifier for the multi-tenant scope
-    pub scope_id: String,
-    
-    /// The finding itself (will be serialized as part of the NDJSON line)
+    pub timestamp: chrono::DateTime<chrono::Utc>,
+    pub severity: String,
+    pub finding_id: String,
+    #[serde(flatten)]
     pub finding: Finding,
 }
 
 impl SpilledEvent {
-    pub fn new(scope_id: String, finding: Finding) -> Self {
+    pub fn from_finding(finding: Finding) -> Self {
         Self {
-            schema_version: 1,
-            timestamp: Utc::now(),
-            scope_id,
+            timestamp: chrono::Utc::now(),
+            severity: format!("{:?}", finding.core.severity),
+            finding_id: finding.core.id.clone(),
             finding,
         }
     }
 }
-
-// Logic for NDJSON (Newline Delimited JSON) handling will be implemented in Phase 2.
-// This file serves as the SSOT for the serialization schema.
