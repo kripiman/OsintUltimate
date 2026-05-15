@@ -1,12 +1,10 @@
 pub mod budget;
 pub mod orchestrator;
 pub mod inventory;
-pub mod nvd_monitor;
 
 pub use budget::{TokenBudget, TokenGuard, TaskPriority};
 pub use orchestrator::{SwarmConfig, SwarmOrchestrator, AgentRole};
 pub use inventory::{SwarmInventory, TrustLevel, InventoryItem};
-pub use nvd_monitor::NvdMonitor;
 
 #[cfg(test)]
 mod tests {

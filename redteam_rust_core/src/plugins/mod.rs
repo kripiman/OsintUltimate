@@ -459,7 +459,7 @@ pub fn get_all_scanners<M: ExecutorMode>(config: GlobalConfig<M>) -> Vec<Box<dyn
     use crate::plugins::reconnaissance::active::roadrecon::RoadReconScanner;
     use crate::plugins::exploitation::web::jwt_forge::JwtForgeScanner;
     use crate::plugins::enumeration::web::jwks_discovery::JwksDiscoveryScanner;
-    use crate::core::orchestrator::swarm::nvd_monitor::NvdMonitor;
+    use crate::plugins::intelligence::nvd_monitor::NvdMonitor;
     use crate::plugins::exploitation::web::cors_exfil::CorsTokenExfiltrator;
     use crate::plugins::verification::dns_verifier::DnsHijackVerifier;
     use crate::plugins::verification::secret_validator::SecretValidator;
