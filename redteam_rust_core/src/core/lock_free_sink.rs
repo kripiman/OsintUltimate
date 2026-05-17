@@ -87,7 +87,7 @@ mod tests {
     use super::*;
     use anyhow::Result;
     use crate::core::sink::DataSink;
-    use crate::models::{TargetHost, TargetStatus, TargetType};
+    use crate::models::TargetHost;
     use std::sync::Mutex;
     use std::time::Duration;
 

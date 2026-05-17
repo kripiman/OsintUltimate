@@ -1,5 +1,5 @@
 use crate::core::sink::{DataSink, MultiSink};
-use crate::models::{TargetHost, TargetType, TargetStatus, Finding, Category, Severity};
+use crate::models::{TargetHost, TargetType, Finding, Category, Severity};
 use crate::core::ai::{TieredAIRouter, RouteLevel};
 use anyhow::Result;
 use std::sync::Arc;

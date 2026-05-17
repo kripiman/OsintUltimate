@@ -1,7 +1,6 @@
 use super::*;
 use crate::plugins::GlobalConfig;
 use crate::utils::executor::GhostMode;
-use std::sync::Arc;
 use tempfile::tempdir;
 
 #[tokio::test]

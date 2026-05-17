@@ -4,7 +4,6 @@ use redteam_rust_core::models::{TargetHost, Finding};
 use anyhow::Result;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicU32, Ordering};
-use tokio::time::{sleep, Duration};
 
 struct MockMonitor {
     status: Arc<tokio::sync::Mutex<PluginStatus>>,

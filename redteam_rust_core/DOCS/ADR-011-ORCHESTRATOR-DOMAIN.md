@@ -17,7 +17,7 @@ The project is refactoring the monolithic `Orchestrator` and `SwarmOrchestrator`
 
 3. **Infrastructure Config Compatibility**:
    - `InfrastructureConfig` will maintain backward compatibility with legacy CLI flags (`--sliver-*`) using `#[serde(alias = "...")]`.
-   - A dedicated parity test will ensure that old configurations still deserialize correctly.
+   - A dedicated JSON-only parity test will ensure that old configurations still deserialize correctly without requiring external YAML engines.
 
 4. **Lint & Build Integrity**:
    - The project enforces a "Zero Warnings" (G1) and "Clippy Clean" (G3) policy for all NEW code and modified areas.

@@ -307,7 +307,7 @@ async fn test_contract_credential_ingested_to_inventory() {
     // Finding title matches the NTLM_HASH_CAPTURED constant (verified via Deref to CoreFinding)
     assert_eq!(first.core.id, redteam_rust_core::models::constants::FINDING_NTLM_HASH_CAPTURED);
     // JSON evidence is stored in finding.evidence.evidence.data
-    let data = &first.evidence.evidence.as_ref().unwrap().data;
+    let data = &first.evidence.primary.as_ref().unwrap().data;
     assert_eq!(data["ntlm"], "aabbccddeeff00112233445566778899");
     assert_eq!(data["username"], "jdoe");
 }
