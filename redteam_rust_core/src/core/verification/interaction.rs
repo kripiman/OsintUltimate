@@ -81,12 +81,13 @@ impl OobInteractionManager {
 
         let client = StealthClientBuilder::build(&dummy_target, &self.proxy_manager)?;
         
-        let res = client.get(&poll_url).send().await?;
-        if res.status().is_success() {
-            let data: InteractshPollResponse = res.json().await?;
-            Ok(data.interactions)
-        } else {
-            Ok(Vec::new())
+        let res_val: Result<reqwest::Response, reqwest::Error> = client.get(&poll_url).send().await;
+        match res_val {
+            Ok(res) if res.status().is_success() => {
+                let data: InteractshPollResponse = res.json().await?;
+                Ok(data.interactions)
+            }
+            _ => Ok(Vec::new()),
         }
     }
 

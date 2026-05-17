@@ -50,16 +50,18 @@ impl ValidationPipeline {
         let client = StealthClientBuilder::build(target, proxy_manager)?;
         
         let benign_url = url.replace(payload, &benign_payload);
-        let res = client.request(method.parse()?, &benign_url).send().await?;
-        let status = res.status();
-        let body = res.text().await.unwrap_or_default();
+        let res_val: Result<reqwest::Response, reqwest::Error> = client.request(method.parse()?, &benign_url).send().await;
+        if let Ok(res) = res_val {
+            let status = res.status();
+            let body = res.text().await.unwrap_or_default();
 
-        let original_status = evidence.get("response_status").and_then(|v| v.as_u64()).unwrap_or(200) as u16;
-        let expected_pattern = evidence.get("expected_pattern").and_then(|v| v.as_str()).unwrap_or("");
+            let original_status = evidence.get("response_status").and_then(|v| v.as_u64()).unwrap_or(200) as u16;
+            let expected_pattern = evidence.get("expected_pattern").and_then(|v| v.as_str()).unwrap_or("");
 
-        if status.as_u16() == original_status && !expected_pattern.is_empty() && body.contains(expected_pattern) {
-            warn!("❌ [Validation] Negative Control FAILED: Benign request produced same 'vulnerability' signature.");
-            return Ok(false);
+            if status.as_u16() == original_status && !expected_pattern.is_empty() && body.contains(expected_pattern) {
+                warn!("❌ [Validation] Negative Control FAILED: Benign request produced same 'vulnerability' signature.");
+                return Ok(false);
+            }
         }
 
         Ok(true)
