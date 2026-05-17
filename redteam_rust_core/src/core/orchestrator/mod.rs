@@ -1,11 +1,8 @@
 use crate::models::{TargetHost, Finding, Severity, TargetStatus};
-use crate::plugins::ScannerPlugin;
 use std::sync::Arc;
 use futures::stream::StreamExt;
-use tracing::info;
-use crate::core::capability_layer::ScanLayerPolicy;
-use crate::core::approval_gate::ApprovalGate;
-use crate::utils::executor::{StealthExecutor, ExecutorMode};
+use tracing::{info, error};
+use crate::utils::executor::ExecutorMode;
 
 pub mod monitor;
 pub mod dispatch;
@@ -16,61 +13,7 @@ pub mod lifecycle;
 pub mod swarm;
 pub mod c2;
 
-pub struct Orchestrator<M: ExecutorMode> {
-    plugins: Arc<Vec<Box<dyn ScannerPlugin>>>,
-    concurrency: usize,
-    layer_policy: ScanLayerPolicy,
-    approval_gate: Arc<ApprovalGate>,
-    blackarch_bridge: Arc<crate::core::blackarch::BlackArchBridge>,
-    memory_semaphore: Arc<tokio::sync::Semaphore>,
-    memory_monitor: Arc<crate::utils::memory_monitor::MemoryMonitor>,
-    dashboard_tx: Option<tokio::sync::broadcast::Sender<Finding>>,
-    dashboard_targets: Arc<dashmap::DashMap<String, TargetHost>>,
-    swarm_mode: bool,
-    max_tokens: u32,
-    ai_router: Option<Arc<crate::core::ai::TieredAIRouter>>,
-    sandbox: Arc<crate::core::sandbox::SandboxDispatcher>,
-    proxy_manager: Option<Arc<crate::utils::proxy::ProxyManager>>,
-    policy: Arc<dyn crate::core::policy::PolicyProvider>,
-    executor: Arc<StealthExecutor<M>>,
-    strict_scope: bool,
-    db_pool: Option<sqlx::PgPool>,
-    current_scan_id: Option<i64>,
-    inventory: Arc<crate::core::orchestrator::swarm::inventory::SwarmInventory>,
-    #[cfg(feature = "sovereign")]
-    sliver_ca_path: Option<String>,
-    #[cfg(feature = "sovereign")]
-    sliver_cert_path: Option<String>,
-    #[cfg(feature = "sovereign")]
-    sliver_key_path: Option<String>,
-    #[cfg(feature = "sovereign")]
-    sliver_server_addr: Option<String>,
-}
-
-pub struct OrchestratorConfig<M: ExecutorMode> {
-    pub plugins: Arc<Vec<Box<dyn ScannerPlugin>>>,
-    pub concurrency: usize,
-    pub layer_policy: ScanLayerPolicy,
-    pub approval_gate: Arc<ApprovalGate>,
-    pub blackarch_bridge: Arc<crate::core::blackarch::BlackArchBridge>,
-    pub memory_monitor: Arc<crate::utils::memory_monitor::MemoryMonitor>,
-    pub sandbox: Arc<crate::core::sandbox::SandboxDispatcher>,
-    pub policy: Arc<dyn crate::core::policy::PolicyProvider>,
-    pub executor: Arc<StealthExecutor<M>>,
-    pub strict_scope: bool,
-    pub feedback_tx: Option<tokio::sync::mpsc::Sender<TargetHost>>,
-    pub db_pool: Option<sqlx::PgPool>,
-    pub current_scan_id: Option<i64>,
-    pub inventory: Option<Arc<crate::core::orchestrator::swarm::inventory::SwarmInventory>>,
-    #[cfg(feature = "sovereign")]
-    pub sliver_ca_path: Option<String>,
-    #[cfg(feature = "sovereign")]
-    pub sliver_cert_path: Option<String>,
-    #[cfg(feature = "sovereign")]
-    pub sliver_key_path: Option<String>,
-    #[cfg(feature = "sovereign")]
-    pub sliver_server_addr: Option<String>,
-}
+pub use lifecycle::{Orchestrator, OrchestratorConfig};
 
 impl<M: ExecutorMode> Orchestrator<M> {
     pub fn new(config: OrchestratorConfig<M>) -> Self {

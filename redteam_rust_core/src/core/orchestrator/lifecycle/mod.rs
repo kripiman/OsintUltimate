@@ -1,1 +1,5 @@
-//! Lifecycle domain for orchestrator (shutdown, monitoring, state-save).
+pub mod state;
+pub mod shutdown;
+
+pub use state::{Orchestrator, OrchestratorConfig};
+pub use shutdown::ShutdownManager;
