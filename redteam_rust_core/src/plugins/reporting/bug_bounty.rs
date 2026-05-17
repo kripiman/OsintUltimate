@@ -398,7 +398,7 @@ fn build_curl_from_raw(raw: &str, default_host: &str) -> Option<String> {
 mod tests {
     use super::*;
     use crate::models::{Evidence, Finding, Category, Severity, AIAnalysis};
-    use crate::models::findings::{FindingEvidence, FindingEnrichment, PocDefinition, PocStrategy, TokenUsage};
+    use crate::models::findings::{FindingEvidence, PocDefinition, PocStrategy, TokenUsage};
     use serde_json::json;
 
     fn bare_finding() -> Finding {

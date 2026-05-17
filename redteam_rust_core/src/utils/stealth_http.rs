@@ -3,9 +3,10 @@ use crate::models::TargetHost;
 use anyhow::{Result, Context};
 use std::time::Duration;
 use crate::utils::proxy::ProxyManager;
+use tracing::warn;
 
 #[cfg(feature = "tls-impersonation")]
-use rquest::impersonate::Impersonate;
+// use rquest::impersonate::Impersonate;
 
 pub struct StealthClientBuilder;
 

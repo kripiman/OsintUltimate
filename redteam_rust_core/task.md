@@ -36,22 +36,22 @@
     - [x] Finalize v6 Audit gate requirements (FFI async lifetime, SecretStore)
 
 ## ARCH-11 Phase 1: Orchestrator Domain Decomposition
-- [ ] **Stage 1: Skeleton & Infrastructure (C1)**
-    - [ ] Create `core/orchestrator/lifecycle/mod.rs`
-    - [ ] Create `core/orchestrator/swarm/mod.rs`
-    - [ ] Create `core/orchestrator/c2/mod.rs`
-    - [ ] Register new modules in `src/core/orchestrator/mod.rs`
-- [ ] **Stage 2: Move & Redirect (C2)**
-    - [ ] Move budget/inventory to `orchestrator/swarm/`
-    - [ ] Move `SliverFeedbackLoop` to `orchestrator/c2/`
-    - [ ] Update workspace imports
-    - [ ] **Gate G1**: `cargo build --release` (0 warnings)
-- [ ] **Stage 3: Domain Extraction (C3)**
-    - [ ] Extract Swarm logic to `swarm/agent.rs` & `swarm/correlation.rs`
-    - [ ] Implement `InfrastructureConfig` with `serde alias`
-    - [ ] Relocate `NvdMonitor` to `intelligence/`
-    - [ ] **Gate G2/G3**: `cargo test` & `clippy` PASS
-- [ ] **Stage 4: Cleanup & Finalization (C4)**
-    - [ ] Implement `lifecycle/shutdown.rs` logic
-    - [ ] Delete legacy `core/swarm/`
-    - [ ] **Gate G4/G5/G6**: Parity, Determinism, and Smoke Test PASS
+- [x] **Stage 1: Skeleton & Infrastructure (C1)**
+    - [x] Create `core/orchestrator/lifecycle/mod.rs`
+    - [x] Create `core/orchestrator/swarm/mod.rs`
+    - [x] Create `core/orchestrator/c2/mod.rs`
+    - [x] Register new modules in `src/core/orchestrator/mod.rs`
+- [x] **Stage 2: Move & Redirect (C2)**
+    - [x] Move budget/inventory to `orchestrator/swarm/`
+    - [x] Move `SliverFeedbackLoop` to `orchestrator/c2/`
+    - [x] Update workspace imports
+    - [x] **Gate G1**: `cargo build --release` (0 warnings)
+- [x] **Stage 3: Domain Extraction (C3)**
+    - [x] Extract Swarm logic to `swarm/agent.rs` & `swarm/correlation.rs`
+    - [x] Implement `InfrastructureConfig` with `serde alias`
+    - [x] Relocate `NvdMonitor` to `intelligence/`
+    - [x] **Gate G2/G3**: `cargo test` & `clippy` PASS
+- [x] **Stage 4: Cleanup & Finalization (C4)**
+    - [x] Implement `lifecycle/shutdown.rs` logic
+    - [x] Delete legacy `core/swarm/` (Verified removed)
+    - [x] **Gate G4/G5/G6**: Parity, Determinism, and Smoke Test PASS
