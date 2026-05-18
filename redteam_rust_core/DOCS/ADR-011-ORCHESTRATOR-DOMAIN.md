@@ -27,3 +27,7 @@ The project is refactoring the monolithic `Orchestrator` and `SwarmOrchestrator`
 - Requires workspace-wide import updates.
 - Temporary duplication of some traits during migration.
 - Improved SRP (Single Responsibility Principle) and maintainability.
+
+## RFC: Formal De-gating of StealthClientBuilder
+To prevent type-inference breakage and compilation cascades across multiple modules (such as out-of-band validation and negative control loops) under default builds, the `StealthClientBuilder` is formally de-gated from the `tls-impersonation` feature. It is compiled unconditionally. Active spoofing configurations inside `stealth_http.rs` remain gated to avoid dependency blocks.
+
