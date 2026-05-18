@@ -3,7 +3,6 @@ use crate::models::TargetHost;
 use anyhow::{Result, Context};
 use std::time::Duration;
 use crate::utils::proxy::ProxyManager;
-use tracing::warn;
 
 pub struct StealthClientBuilder;
 
