@@ -78,9 +78,9 @@ fn check_l2(baseline: &[Finding], current: &[Finding]) -> bool {
 fn check_l3(baseline: &[Finding], current: &[Finding]) -> bool {
     // Structural check: Compare the "shape" of findings
     for (b, c) in baseline.iter().zip(current.iter()) {
-        // 1. Target presence
-        if b.core.target.is_none() || c.core.target.is_none() {
-             println!("L3 Fail: Missing target for {}", b.core.title);
+        // 1. Target presence (strict Option<String> equality check)
+        if b.core.target != c.core.target {
+             println!("L3 Fail: Target mismatch for {}", b.core.title);
              return false;
         }
         
