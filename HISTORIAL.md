@@ -33,3 +33,9 @@ Executed ARCH-11 Stage 2 (C2): Full domain migration of core/swarm and core/c2 t
 - **COMPILATION**: Resolved E0282 type inference errors in HTTP state machine and negative control loops under default build configurations. Gated all sovereign test dependencies in `lateral_movement_test.rs` to guarantee a 100% warning-free and error-free build across both default and `--all-features` profiles.
 - **PARITY**: Restored authentic Phase 0 golden baseline JSON and strict target verification check. Validated 100% genuine parity check against live container scan (DVWA + Samba).
 
+### [2026-05-18] ARCH-12 Phase 2: AI Context Hardening & Dense context serialization
+- **STAGE 1**: Fixed swarm path minify_headers regression (preserved both `server` and `x-powered-by`). Added test_header_strip_retention.
+- **STAGE 2**: Implemented ultra-dense compress_finding_dense() in compressor.rs (150-char body limit, 100-char desc limit, raw_response complete stripping). Integrated across Local/Mid routing tiers in router.rs, gemini.rs, and openai.rs using compress_target_lean. Added test_dense_finding_encoding unit test.
+- **TECHNICAL DEBT REGISTER**: Recorded 41 legacy Needless Range Loop and Unwrap-or-Default Clippy lints located entirely in plugins crates (triage, verification) to be formally remediated in Sprint 4.2.
+
+

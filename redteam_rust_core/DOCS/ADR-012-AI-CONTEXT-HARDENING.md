@@ -1,7 +1,7 @@
 # ADR-012: AI Context Pipeline Hardening & Dense Serialization
 
 ## Status
-Proposed / Under Review
+Accepted
 
 ## Context
 As the autonomous red team engine scales (multi-agent swarms running against large target surfaces), LLM token consumption in context-rich loops becomes a significant latency and economic bottleneck. We have identified two major inefficiencies in the current pipeline:
