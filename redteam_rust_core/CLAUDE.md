@@ -339,3 +339,10 @@ Dashboard allows live mission injection (new targets added mid-scan).
 - **Policy rules** — `src/core/policy.rs::PolicyProvider` trait
 - **Engine config** — `src/core/engine/app.rs::EngineConfig` struct
 - **Sink interface** — `src/core/sink.rs::DataSink` trait for output backends
+
+## Active Audit Status
+- **Status**: Rehabilitation & Recovery Complete (Stage 3 & Stage 4 Verified)
+- **Checklist**: 15/15 items fully completed and validated against raw cargo exit codes.
+- **Authority**: Stage admission verdict is issued solely by the auditor; coder has no authority to self-attest admission.
+- **MCP ownership**: `osint-ultimate` custom development automation server maintained by the Architecture team.
+
