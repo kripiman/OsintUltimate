@@ -11,4 +11,7 @@
 - **STAGE 1**: Fixed swarm path `minify_headers` to preserve `server` and `x-powered-by` (test_header_strip_retention).
 - **STAGE 2**: Developed compress_finding_dense() in compressor.rs (150-char body, 100-char desc, raw_response strip) and integrated compress_target_lean in openai.rs/gemini.rs local/mid tiers.
 - **STAGE 3 & VERIFICATION**: Ratified ADR-012 as Accepted. Fixed verify_parity G4 check to match target existence consistency. Patched test assertions for test_finding_to_markdown and test_python_analysis.
-- **TECHNICAL DEBT REGISTER**: Recorded 41 legacy plugin lints + 2 environment-dependent tests (db pool timeout, sovereign cache mismatch) and target value-equality verification for Sprint 4.2.
+
+## SPRINT 4.2 REMEDIATION (IN PROGRESS)
+- **STAGE A (D4 Target Value Equality)**: Successfully resolved technical debt D4. Replaced simple target presence check with rigorous string value equality matching (`bt == ct` with shadow protection) in `verify_parity.rs`. Implemented comprehensive positive/negative unit tests `test_l3_target_value_match_accepted` and `test_l3_target_value_mismatch_detected`. Verified zero regression, 100% build pass, and exact golden baseline SHA256 preservation.
+- **TECHNICAL DEBT REGISTER**: Recorded 41 legacy plugin lints + 2 environment-dependent tests (db pool timeout, sovereign cache mismatch) for Sprint 4.2 Stage B & C remediation.

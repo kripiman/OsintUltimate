@@ -78,10 +78,14 @@ fn check_l2(baseline: &[Finding], current: &[Finding]) -> bool {
 fn check_l3(baseline: &[Finding], current: &[Finding]) -> bool {
     // Structural check: Compare the "shape" of findings
     for (b, c) in baseline.iter().zip(current.iter()) {
-        // 1. Target presence mismatch
-        if b.core.target.is_some() != c.core.target.is_some() {
-             println!("L3 Fail: Target presence mismatch for {}", b.core.title);
-             return false;
+        // 1. Target presence & value equality match
+        match (&b.core.target, &c.core.target) {
+            (None, None) => {} // OK Phase 0 PLUGIN_ERROR
+            (Some(bt), Some(ct)) if bt == ct => {} // String value equality
+            (a, b_) => {
+                println!("L3 Fail: target divergence baseline={a:?} current={b_:?}");
+                return false;
+            }
         }
         
         // 2. Evidence shape
@@ -112,5 +116,84 @@ fn main() -> Result<()> {
         Ok(())
     } else {
         std::process::exit(1);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn create_dummy_finding(target: Option<&str>) -> Finding {
+        let target_json = match target {
+            Some(t) => format!("\"{}\"", t),
+            None => "null".to_string(),
+        };
+        let raw = format!(
+            r#"{{
+              "id": "PLUGIN_ERROR",
+              "category": "misconfiguration",
+              "severity": "info",
+              "title": "Plugin NucleiScanner failed",
+              "description": "Plugin NucleiScanner failed",
+              "timestamps": "2026-05-15T15:15:10.450465952Z",
+              "version": 0,
+              "source_plugin": null,
+              "scope_id": "",
+              "reactive_depth": 0,
+              "target": {},
+              "evidence": {{
+                "error": "DNS Pinning Violation",
+                "confidence": 0.5,
+                "verified": false
+              }},
+              "enrichment": {{
+                "cvss_version": "4.0"
+              }},
+              "context": {{
+                "iteration": 0,
+                "validation": {{
+                  "status": "unverified",
+                  "confidence_score": 0.0,
+                  "judge_notes": "",
+                  "negative_control_passed": false,
+                  "proof_of_execution": null,
+                  "validated_at": null
+                }}
+              }}
+            }}"#,
+            target_json
+        );
+        serde_json::from_str(&raw).unwrap()
+    }
+
+    #[test]
+    fn test_l3_target_value_match_accepted() {
+        // Case 1: Both None
+        let b1 = vec![create_dummy_finding(None)];
+        let c1 = vec![create_dummy_finding(None)];
+        assert!(check_l3(&b1, &c1));
+
+        // Case 2: Both Some and equal
+        let b2 = vec![create_dummy_finding(Some("127.0.0.1"))];
+        let c2 = vec![create_dummy_finding(Some("127.0.0.1"))];
+        assert!(check_l3(&b2, &c2));
+    }
+
+    #[test]
+    fn test_l3_target_value_mismatch_detected() {
+        // Case 1: None vs Some
+        let b1 = vec![create_dummy_finding(None)];
+        let c1 = vec![create_dummy_finding(Some("127.0.0.1"))];
+        assert!(!check_l3(&b1, &c1));
+
+        // Case 2: Some vs None
+        let b2 = vec![create_dummy_finding(Some("127.0.0.1"))];
+        let c2 = vec![create_dummy_finding(None)];
+        assert!(!check_l3(&b2, &c2));
+
+        // Case 3: Some vs Some but different
+        let b3 = vec![create_dummy_finding(Some("127.0.0.1"))];
+        let c3 = vec![create_dummy_finding(Some("10.0.0.1"))];
+        assert!(!check_l3(&b3, &c3));
     }
 }
