@@ -7,7 +7,11 @@ use super::scrubber::SCRUBBER;
 pub struct ContextCompressor;
 
 impl ContextCompressor {
-    pub fn compress_finding(finding: &Finding, _route_level: RouteLevel) -> serde_json::Value {
+    pub fn compress_finding(finding: &Finding, route_level: RouteLevel) -> serde_json::Value {
+        if route_level == RouteLevel::Local || route_level == RouteLevel::Mid {
+            return Self::compress_finding_dense(finding);
+        }
+
         let mut ev = finding.evidence.primary.as_ref().map(|e| e.data.clone()).unwrap_or_else(|| serde_json::json!({}));
         
         // 1. Mandatory scrubbing
@@ -35,6 +39,35 @@ impl ContextCompressor {
             "ev": ev,
         })
     }
+
+    /// Dense context compression for findings to achieve maximum token savings.
+    pub fn compress_finding_dense(finding: &Finding) -> serde_json::Value {
+        let mut ev = finding.evidence.primary.as_ref().map(|e| e.data.clone()).unwrap_or_else(|| serde_json::json!({}));
+        
+        if let Ok(sanitized) = serde_json::to_string(&ev).map(|s| SCRUBBER.scrub(&s)) {
+            if let Ok(json) = serde_json::from_str(&sanitized) {
+                ev = json;
+            }
+        }
+
+        if let Some(obj) = ev.as_object_mut() {
+            Self::minify_evidence_object(obj, 150); // Aggressive body limit (150 chars)
+            obj.remove("raw_response"); // Remove raw_response completely to save tokens
+        }
+
+        let verified = finding.evidence.primary.as_ref().map(|e| e.verified).unwrap_or(false);
+
+        serde_json::json!({
+            "id": finding.core.id,
+            "s": finding.core.severity.as_char(),
+            "cat": finding.core.category,
+            "cvss": finding.enrichment.cvss_score,
+            "cf": if verified { "V" } else { "P" }, // V=Verified, P=Potential
+            "d": finding.core.description.chars().take(100).collect::<String>(), // 100 char limit
+            "ev": ev,
+        })
+    }
+
 
     pub fn compress_plugins(plugins: &[PluginMetadata]) -> Vec<serde_json::value::Value> {
         plugins.iter().map(|p| {

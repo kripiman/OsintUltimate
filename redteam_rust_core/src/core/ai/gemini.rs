@@ -37,7 +37,7 @@ impl LlmClient for GeminiClient {
     async fn analyze(&self, config: crate::core::ai::traits::InferenceConfig<'_>) -> Result<AIAnalysis> {
         let compressed = ContextCompressor::compress_finding(config.finding, config.route_level);
         let ctx_header = config.attack_context.map(|c| format!("Tactical Path: {}\n", c)).unwrap_or_default();
-        let prompt_raw = format!("### PROFESSIONAL RED TEAM ENGINE ###\n{}Analyze this Red Team finding: {}. Target: {}. You must return a JSON object with 'summary', 'impact', 'stealth_notes', 'risk_score', 'confidence', 'mitre_attack', 'exploit_path' (DO NOT provide remediation/blue team fixes, only how to exploit), 'model'.", ctx_header, serde_json::to_string(&compressed)?, config.target.host);
+        let prompt_raw = format!("### PROFESSIONAL RED TEAM ENGINE ###\n{}Analyze this Red Team finding: {}. Target: {}. You must return a JSON object with 'summary', 'impact', 'stealth_notes', 'risk_score', 'confidence', 'mitre_attack', 'exploit_path' (DO NOT provide remediation/blue team fixes, only how to exploit), 'model'.", ctx_header, serde_json::to_string(&compressed)?, serde_json::to_string(&ContextCompressor::compress_target_lean(config.target)).unwrap_or_default());
         let prompt = crate::core::ai::caveman::CavemanOptimizer::optimize_prompt(&prompt_raw, config.caveman);
         
         let mut last_error = None;
@@ -70,7 +70,7 @@ impl LlmClient for GeminiClient {
     async fn decide_action(&self, config: crate::core::ai::traits::DecisionConfig<'_>) -> Result<Option<(String, serde_json::Value)>> {
         let _ = ContextCompressor::compress_finding(config.finding, config.route_level);
         let ctx_header = config.attack_context.map(|c| format!("Tactical Path: {}\n", c)).unwrap_or_default();
-        let prompt_raw = format!("### SENTINEL ORCHESTRATOR ###\n{}Decide next step for {}. History: {:?}. Finding: {}. Plugins: {}. Focus on WAF bypass.", ctx_header, config.target.host, config.adaptive_context, config.finding.id, config.plugins.len());
+        let prompt_raw = format!("### SENTINEL ORCHESTRATOR ###\n{}Decide next step for {}. History: {:?}. Finding: {}. Plugins: {}. Focus on WAF bypass.", ctx_header, serde_json::to_string(&ContextCompressor::compress_target_lean(config.target)).unwrap_or_default(), config.adaptive_context, config.finding.id, config.plugins.len());
         let prompt = crate::core::ai::caveman::CavemanOptimizer::optimize_prompt(&prompt_raw, config.caveman);
         
         let client = self.base.get_client("generativelanguage.googleapis.com").await?;

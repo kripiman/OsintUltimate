@@ -27,7 +27,7 @@ impl LlmClient for OpenAIClient {
     async fn analyze(&self, config: crate::core::ai::traits::InferenceConfig<'_>) -> Result<AIAnalysis> {
         let compressed = ContextCompressor::compress_finding(config.finding, config.route_level);
         let ctx = config.attack_context.map(|c| format!(" Tactical Path: {}.", c)).unwrap_or_default();
-        let prompt_raw = format!("Analyze this: {}. Target: {}.{}", serde_json::to_string(&compressed)?, config.target.host, ctx);
+        let prompt_raw = format!("Analyze this: {}. Target: {}.{}", serde_json::to_string(&compressed)?, serde_json::to_string(&ContextCompressor::compress_target_lean(config.target)).unwrap_or_default(), ctx);
         let prompt = crate::core::ai::caveman::CavemanOptimizer::optimize_prompt(&prompt_raw, config.caveman);
         
         let client = self.base.get_client("api.openai.com").await?;

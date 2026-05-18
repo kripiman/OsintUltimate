@@ -201,4 +201,46 @@ mod tests {
         assert!(!swarm_headers.contains_key("cookie"));
         assert!(!swarm_headers.contains_key("user-agent"));
     }
+
+    #[test]
+    fn test_dense_finding_encoding() {
+        use crate::core::ai::ContextCompressor;
+
+        // Long body to trigger 150-char truncation
+        let long_body = "A".repeat(200);
+        let long_description = "B".repeat(150);
+
+        let finding = Finding::new(
+            "FIND-DENSE-01",
+            Category::Vulnerability,
+            Severity::High,
+            &long_description,
+            serde_json::json!({
+                "body": long_body,
+                "raw_response": "HTTP/1.1 200 OK\r\nConnection: close\r\n\r\nSensitive data here..."
+            })
+        );
+
+        let compressed = ContextCompressor::compress_finding_dense(&finding);
+
+        // Check required dense keys
+        assert_eq!(compressed.get("id").unwrap().as_str().unwrap(), "FIND-DENSE-01");
+        assert_eq!(compressed.get("s").unwrap().as_str().unwrap(), "H");
+        assert_eq!(compressed.get("cat").unwrap().as_str().unwrap(), "vulnerability");
+        assert!(compressed.get("cvss").is_some());
+        assert_eq!(compressed.get("cf").unwrap().as_str().unwrap(), "P"); // Default to potential
+
+        // Assert description truncation (limit is 100 characters in dense route)
+        let desc = compressed.get("d").unwrap().as_str().unwrap();
+        assert!(desc.len() <= 100);
+        assert_eq!(desc, "B".repeat(100));
+
+        // Assert evidence minification and stripping
+        let ev = compressed.get("ev").unwrap().as_object().unwrap();
+        assert!(!ev.contains_key("raw_response")); // MUST be stripped in dense
+        
+        let body = ev.get("body").unwrap().as_str().unwrap();
+        assert!(body.len() <= 153); // 150 + "..."
+        assert!(body.contains("..."));
+    }
 }
