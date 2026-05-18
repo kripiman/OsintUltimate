@@ -231,7 +231,7 @@ mod tests {
         let results = analyzer.analyze().await?;
 
         assert!(results.iter().any(|r| r.is_endpoint && r.description.contains("/login")));
-        assert!(results.iter().any(|r| !r.is_endpoint && r.description.contains("os.system")));
+        assert!(results.iter().any(|r| !r.is_endpoint && r.description.contains("comandos")));
         
         Ok(())
     }

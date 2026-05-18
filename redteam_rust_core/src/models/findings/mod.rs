@@ -127,6 +127,15 @@ impl Finding {
         if let Some(det) = self.context.detected {
             md.push_str(&format!("**Status**: {}  \n", if det { "🔴 Detected" } else { "🟢 Not Detected" }));
         }
+
+        if let Some(ref urgency) = self.enrichment.consolidation_urgency {
+            let emoji = match urgency {
+                ConsolidationUrgency::Immediate => "🚨 Immediate",
+                ConsolidationUrgency::ShortTerm => "⚠️ ShortTerm",
+                ConsolidationUrgency::LongTerm => "📅 LongTerm",
+            };
+            md.push_str(&format!("**Consolidation Urgency**: {}  \n", emoji));
+        }
         
         md.push_str("\n## Description\n\n");
         md.push_str(&self.core.description);

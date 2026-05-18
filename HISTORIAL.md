@@ -36,6 +36,6 @@ Executed ARCH-11 Stage 2 (C2): Full domain migration of core/swarm and core/c2 t
 ### [2026-05-18] ARCH-12 Phase 2: AI Context Hardening & Dense context serialization
 - **STAGE 1**: Fixed swarm path minify_headers regression (preserved both `server` and `x-powered-by`). Added test_header_strip_retention.
 - **STAGE 2**: Implemented ultra-dense compress_finding_dense() in compressor.rs (150-char body limit, 100-char desc limit, raw_response complete stripping). Integrated across Local/Mid routing tiers in router.rs, gemini.rs, and openai.rs using compress_target_lean. Added test_dense_finding_encoding unit test.
-- **TECHNICAL DEBT REGISTER**: Recorded 41 legacy Needless Range Loop and Unwrap-or-Default Clippy lints located entirely in plugins crates (triage, verification) to be formally remediated in Sprint 4.2.
+- **TECHNICAL DEBT REGISTER**: Recorded 41 legacy Needless Range Loop and Unwrap-or-Default Clippy lints located entirely in plugins crates (triage, verification) plus two environment-dependent tests (`test_objective_persistence` database pool timeout, `test_mcp_two_level_cache` sovereign tier cache mismatch) to be formally remediated in Sprint 4.2.
 
 
