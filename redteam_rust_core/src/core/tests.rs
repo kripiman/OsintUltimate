@@ -143,4 +143,62 @@ mod tests {
 
         Ok(())
     }
+
+    #[test]
+    fn test_header_strip_retention() {
+        use crate::core::ai::ContextCompressor;
+
+        let headers = serde_json::json!({
+            "server": "nginx/1.18.0",
+            "x-powered-by": "PHP/7.4.3",
+            "location": "https://example.com/login",
+            "cookie": "session_id=abcdef123456",
+            "user-agent": "Mozilla/5.0",
+            "content-type": "text/html"
+        });
+
+        let finding = Finding::new(
+            "FIND-001",
+            Category::Vulnerability,
+            Severity::High,
+            "Test Finding",
+            serde_json::json!({
+                "headers": headers,
+                "body": "A very long response body that might exceed limits",
+                "raw_response": "HTTP/1.1 200 OK\r\n..."
+            })
+        );
+
+        let target = TargetHost {
+            host: "example.com".to_string(),
+            ..Default::default()
+        };
+
+        // 1. Test standard compression route
+        let base_compressed = ContextCompressor::compress_finding(&finding, RouteLevel::Local);
+        let ev = base_compressed.get("ev").unwrap().as_object().unwrap();
+        let compressed_headers = ev.get("headers").unwrap().as_object().unwrap();
+
+        assert!(compressed_headers.contains_key("server"));
+        assert!(compressed_headers.contains_key("x-powered-by"));
+        assert!(compressed_headers.contains_key("location"));
+        assert!(!compressed_headers.contains_key("cookie"));
+        assert!(!compressed_headers.contains_key("user-agent"));
+        assert!(!compressed_headers.contains_key("content-type")); // Stripped because not whitelisted
+
+        // 2. Test swarm compression route
+        let swarm_compressed = ContextCompressor::compress_swarm_context(&finding, &target);
+        let ev_swarm = swarm_compressed.get("ev").unwrap().as_object().unwrap();
+        
+        // Assert body and raw_response are removed in swarm
+        assert!(!ev_swarm.contains_key("body"));
+        assert!(!ev_swarm.contains_key("raw_response"));
+        
+        let swarm_headers = ev_swarm.get("headers").unwrap().as_object().unwrap();
+        assert!(swarm_headers.contains_key("server"));
+        assert!(swarm_headers.contains_key("x-powered-by"));
+        assert!(!swarm_headers.contains_key("location")); // Stripped because not in swarm whitelist
+        assert!(!swarm_headers.contains_key("cookie"));
+        assert!(!swarm_headers.contains_key("user-agent"));
+    }
 }

@@ -1,57 +1,17 @@
-- [x] Consolidate JA4 Engine
-    - [x] Implement JA4H (HTTP) in `utils/ja4.rs`
-    - [x] Implement JA4S (Server) calculation logic
-    - [x] Implement JA4S caching in `ProxyManager`
-- [x] Advanced Lateral Movement
-    - [x] Update `AdIngestor` for SharpHound 2.0 schema
-    - [x] Update `bloodhound.rs` for SharpHound 2.0 filenames
-    - [x] Verify `FINDING_ATTACK_PATH` -> `NetExec` reactive rule
-- [x] Stealth HTTP & rquest
-    - [x] Rename `configure_rquest_builder` to `configure_stealth_builder`
-    - [x] Implement `tls-impersonation` feature flag (Registered in Cargo.toml)
-    - [ ] Resolve `rquest` version stability (Blocked: upstream yanked versions)
-- [x] Audit Refinements (V16.1 Final)
-    - [x] Register `tls-impersonation` feature flag in `Cargo.toml`
-    - [x] Implement `ReactiveEngine` struct for high-level API access
-    - [x] Refactor `reactive_integration_test.rs` to use real API + Depth Assertion
-    - [x] JA4S Prober Placeholder + Warning (Deferred to Sprint 4.2)
-    - [x] Fix build warnings (unused imports + dead code)
-- [x] Infrastructure Refactoring (ARCH-10)
-    - [x] Refactor `proxy.rs` (756 lines) into `infrastructure/proxy/` module
-    - [x] Refactor `orchestrator.rs` (661 lines) into `core/orchestrator/` module
-    - [x] Refactor `models/findings.rs` (503 lines) into `models/findings/` module
-    - [x] Refactor `pipeline.rs` (694 lines) into `core/pipeline/` module
-    - [x] Verify build integrity (`cargo check`) and ensure zero warnings
-    - [x] Delete redundant legacy monolithic files
-- [x] Documentation Sync
-    - [x] Update root `CLAUDE.md` with Sprint 4 progress and known issues (JA4S placeholder)
-    - [x] Update `HISTORIAL.md` with explicit deferrals
+# ARCH-12 Tasks: AI Context Pipeline Hardening
 
-- [x] ARCH-11: Deep Architectural Hardening (Phase 0 Baseline)
-    - [x] Setup Docker-Compose lab environment (DVWA, SMB, NATS)
-    - [x] Implement `cargo xtask record-fixtures` (HTTP + SMB PoC)
-    - [x] Mandatory: Define NDJSON spill serialization with `schema_version`
-    - [x] Mandatory: Configure CI parity gate (Golden Scan)
-    - [x] Capture Golden Scan baseline on monolithic code
-    - [x] Finalize v6 Audit gate requirements (FFI async lifetime, SecretStore)
-
-## ARCH-11 Phase 1: Orchestrator Domain Decomposition
-- [x] **Stage 1: Skeleton & Infrastructure (C1)**
-    - [x] Create `core/orchestrator/lifecycle/mod.rs`
-    - [x] Create `core/orchestrator/swarm/mod.rs`
-    - [x] Create `core/orchestrator/c2/mod.rs`
-    - [x] Register new modules in `src/core/orchestrator/mod.rs`
-- [x] **Stage 2: Move & Redirect (C2)**
-    - [x] Move budget/inventory to `orchestrator/swarm/`
-    - [x] Move `SliverFeedbackLoop` to `orchestrator/c2/`
-    - [x] Update workspace imports
-    - [x] **Gate G1**: `cargo build --release` (0 warnings)
-- [x] **Stage 3: Domain Extraction (C3)**
-    - [x] Extract Swarm logic to `swarm/agent.rs` & `swarm/correlation.rs`
-    - [x] Implement `InfrastructureConfig` with `serde alias`
-    - [x] Relocate `NvdMonitor` to `intelligence/`
-    - [x] **Gate G2/G3**: `cargo test` & `clippy` PASS
-- [x] **Stage 4: Cleanup & Finalization (C4)**
-    - [x] Implement `lifecycle/shutdown.rs` logic
-    - [x] Delete legacy `core/swarm/` (Verified removed)
-    - [x] **Gate G4/G5/G6**: Parity, Determinism, and Smoke Test PASS
+- `[x]` **Stage 1: Fix Header Strip Regression (P0)**
+    - `[x]` Modify `compress_swarm_context` in `compressor.rs` to retain both `server` and `x-powered-by` in its whitelist parameter.
+    - `[x]` Verify that `minify_evidence_object` whitelists and retains both `server` and `x-powered-by` headers on the main pipeline path.
+    - `[x]` Add a comprehensive unit test `test_header_strip_retention` in `compressor.rs` validating both paths.
+- `[ ]` **Stage 2: Dense Encoding & Target Lean Integration**
+    - `[ ]` Build and test `compress_finding_dense` in `compressor.rs`.
+    - `[ ]` Integrate dense encoding across `router.rs` classification and analysis stages to reduce token bloat.
+    - `[ ]` Ensure local LLM clients (e.g. `OllamaClient`, `OpenAIClient`) utilize `compress_target_lean` instead of general `compress_target` where appropriate.
+- `[ ]` **Stage 3: StealthClientBuilder Decision (ADR-012)**
+    - `[ ]` Formally ratify `ADR-012-AI-CONTEXT-HARDENING.md` by committing and pushing it to git.
+- `[ ]` **Verification & Validation**
+    - `[ ]` Verify G1 (Build Parity: 0 warnings)
+    - `[ ]` Verify G2 (Tests PASS)
+    - `[ ]` Verify G3 (Clippy Clean)
+    - `[ ]` Verify G4 (Verify Parity / Zero Drift)

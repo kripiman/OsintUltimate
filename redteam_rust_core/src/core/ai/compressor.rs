@@ -77,7 +77,7 @@ impl ContextCompressor {
         if let Some(ev) = base.get_mut("ev").and_then(|e| e.as_object_mut()) {
             ev.remove("body");
             ev.remove("raw_response");
-            Self::minify_headers(ev, &["server"]); // Only keep server in swarm context
+            Self::minify_headers(ev, &["server", "x-powered-by"]); // Keep server and x-powered-by in swarm context
         }
         base
     }
