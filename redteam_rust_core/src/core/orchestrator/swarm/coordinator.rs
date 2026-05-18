@@ -6,26 +6,18 @@ use anyhow::{Result, Context};
 use std::sync::Arc;
 use tokio::sync::mpsc;
 use tracing::{info, warn, error, debug};
-use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
 
 use super::budget::{TokenBudget, TokenGuard, TaskPriority};
 
 use crate::utils::executor::{StealthExecutor, ExecutorMode};
-use crate::core::persistence::PersistenceOrchestrator;
 use crate::models::{EngagementState, Objective, ObjectivePhase};
 use crate::models::constants::FINDING_ATTACK_PATH;
 use crate::plugins::detection_evasion::jitter::EvasionJitter;
 use crate::utils::config::Config;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-pub enum AgentRole {
-    Planner,
-    Scout,
-    Exploiter,
-    C2Operator,
-    GhostReporter,
-}
+use super::agent::{AgentRole, AgentTask};
+use super::correlation::ce_state_path;
 
 #[derive(Clone)]
 pub struct SwarmOrchestrator<M: ExecutorMode = crate::utils::executor::GhostMode> where M: Clone {
@@ -48,18 +40,6 @@ pub struct SwarmConfig<M: ExecutorMode> {
     pub proxy_manager: Option<Arc<crate::utils::proxy::ProxyManager>>,
     pub executor: Arc<StealthExecutor<M>>,
     pub policy: Arc<dyn crate::core::policy::PolicyProvider>,
-}
-
-pub struct AgentTask<'a, M: ExecutorMode> {
-    pub finding: Finding,
-    pub target: &'a TargetHost,
-    pub attack_context: Option<String>,
-    pub tx: &'a mut mpsc::Sender<Finding>,
-    pub adaptive_ctx: &'a mut AdaptiveContext,
-    pub sink_tx: &'a mpsc::Sender<TargetHost>,
-    pub guard: TokenGuard,
-    pub jitter: Arc<EvasionJitter>,
-    pub _marker: std::marker::PhantomData<M>,
 }
 
 impl<M: ExecutorMode> SwarmOrchestrator<M> {
@@ -87,13 +67,6 @@ impl<M: ExecutorMode> SwarmOrchestrator<M> {
         self.clone()
     }
 
-    /// Returns the absolute path for CE state persistence.
-    fn ce_state_path() -> std::path::PathBuf {
-        dirs::data_local_dir()
-            .unwrap_or_else(|| std::path::PathBuf::from("/tmp"))
-            .join("osint-ultimate")
-            .join("swarm_ce_state.json")
-    }
 
     pub async fn run(&self, initial_target: TargetHost, sink_tx: mpsc::Sender<TargetHost>) -> Result<()> {
         info!("🐝 SWARM: Iniciando enjambre multi-agente para {}", initial_target.host);
@@ -121,9 +94,9 @@ impl<M: ExecutorMode> SwarmOrchestrator<M> {
         let adaptive_context = AdaptiveContext::default();
         
         // BUG-NEW-03 FIX: Use absolute, OS-specific path for state
-        let ce_state_path = Self::ce_state_path();
+        let state_path = ce_state_path();
         
-        let correlation_engine_inner = crate::core::correlation::CorrelationEngine::load(&ce_state_path)
+        let correlation_engine_inner = crate::core::correlation::CorrelationEngine::load(&state_path)
             .unwrap_or_else(|_| crate::core::correlation::CorrelationEngine::new());
             
         // BUG-W31-05 FIX: Restore fired_chains from persistent state
@@ -180,64 +153,7 @@ impl<M: ExecutorMode> SwarmOrchestrator<M> {
             // BUG-3: Collect all work inside lock, drop lock BEFORE sending to channel.
             let critical_paths_to_emit: Vec<crate::models::Finding> = {
                 let mut ce = correlation_engine.lock().await;
-                crate::core::correlation::ingestor::Ingestor::ingest_finding(&mut ce, finding.clone());
-                
-                // Phase 6: Mark owned nodes based on credentials
-                if finding.core.id == crate::models::constants::FINDING_NTLM_HASH_CAPTURED || 
-                   finding.core.id == crate::models::constants::FINDING_CREDENTIALS_FOUND {
-                    let sid = finding.evidence.primary.as_ref()
-                        .and_then(|e| e.data.get("SID"))
-                        .and_then(|v| v.as_str())
-                        .map(|s| s.to_string());
-                    
-                    let resolved_sid = if sid.is_none() {
-                        finding.evidence.primary.as_ref()
-                            .and_then(|e| e.data.get("username").or_else(|| e.data.get("user")))
-                            .and_then(|v| v.as_str())
-                            .and_then(|u| ce.find_sid_by_username(u))
-                    } else {
-                        sid
-                    };
-
-                    if let Some(s) = resolved_sid {
-                        ce.mark_node_as_owned(&s);
-                    }
-                }
-                
-                let paths = ce.get_critical_paths();
-                let graph = ce.get_graph(); // Need a getter for ARCH-8 Finding construction
-
-                paths.into_iter()
-                    .filter(|path| !seen_finding_ids.contains(&format!("{}-{}", crate::models::constants::FINDING_ATTACK_PATH, path.pattern_signature())))
-                    .map(|path| {
-                        let signature = path.pattern_signature();
-                        let next_hop_host = path.nodes.iter().skip(1)
-                            .find_map(|node_id| {
-                                let node = graph.nodes.get(node_id)?;
-                                let props = node.evidence.primary.as_ref()?.data.get("properties")?;
-                                let is_computer = node.evidence.primary.as_ref()?.data.get("type").and_then(|v| v.as_str()) == Some("Computer");
-                                if is_computer {
-                                    props.get("dNSHostName").or_else(|| props.get("name")).and_then(|v| v.as_str()).map(|s| s.to_string())
-                                } else { None }
-                            });
-
-                        let mut f = Finding::new(
-                            &format!("{}-{}", crate::models::constants::FINDING_ATTACK_PATH, signature),
-                            crate::models::Category::Windows,
-                            crate::models::Severity::High,
-                            &format!("Critical Attack Path detected: {}", path.description),
-                            serde_json::json!({
-                                "nodes": path.nodes,
-                                "description": path.description,
-                                "total_cvss": path.total_cvss,
-                                "signature": signature,
-                                "host": next_hop_host
-                            })
-                        );
-                        f.core.scope_id = initial_target.scope_id.clone();
-                        f
-                    })
-                    .collect()
+                super::correlation::process_correlation(&mut ce, &finding, &initial_target.scope_id, &seen_finding_ids)
             };
 
             // Send outside lock
@@ -420,11 +336,11 @@ impl<M: ExecutorMode> SwarmOrchestrator<M> {
             ce.fired_chains.insert(chain.key().clone());
         }
 
-        let ce_state_path = Self::ce_state_path();
-        if let Err(e) = ce.save(&ce_state_path) {
+        let state_path = ce_state_path();
+        if let Err(e) = ce.save(&state_path) {
             warn!("⚠️ SWARM: Failed to persist Correlation Engine state: {}", e);
         } else {
-            info!("💾 SWARM: Correlation Engine state persisted to {:?} (HMAC verified)", ce_state_path);
+            info!("💾 SWARM: Correlation Engine state persisted to {:?} (HMAC verified)", state_path);
         }
 
         Ok(())
@@ -455,150 +371,26 @@ impl<M: ExecutorMode> SwarmOrchestrator<M> {
         &self,
         task: AgentTask<'_, M>,
     ) -> Result<()> {
-        // NEW-1: Apply jitter before execution to simulate human timing
-        task.jitter.apply().await;
-        info!("🔍 SWARM [Scout]: Profundizando en hallazgo de infraestructura: {}", task.finding.core.title);
-        
-        let metadata = self.pipeline.get_plugin_metadata();
-        match self.router.decide_action(&task.finding, task.target, &metadata, task.attack_context.as_deref(), Some(task.adaptive_ctx)).await {
-            Ok(Some((action, tactical))) => {
-                task.guard.commit(200); 
-
-                let mut task_target = task.target.clone();
-                task_target.tactical_context = Arc::new(tactical);
-                
-                let results = self.pipeline.run_specific_plugin(&action, &task_target).await?;
-                for nf in results {
-                    let _ = task.tx.send(nf).await;
-                }
-            }
-            Ok(None) => {
-            }
-            Err(e) => {
-                return Err(e);
-            }
-        }
-        
-        let mut sink_target = task.target.clone();
-        sink_target.findings = Arc::new(vec![task.finding]);
-        let _ = task.sink_tx.send(sink_target).await;
-        
-        Ok(())
+        super::agent::execute_scout(self, task).await
     }
 
     async fn execute_exploiter(
         &self,
         task: AgentTask<'_, M>,
     ) -> Result<()> {
-        // NEW-1: Apply jitter before execution
-        task.jitter.apply().await;
-        let mut finding = task.finding;
-        info!("💥 SWARM [Exploiter]: Intentando validación/explotación de: {} [Posture: STRIKE]", finding.core.title);
-        
-        task.adaptive_ctx.posture = crate::core::ai::Posture::Strike;
-        
-        match self.router.analyze(&finding, task.target, task.attack_context.as_deref()).await {
-            Ok(analysis) => {
-                let usage = analysis.usage.total_tokens;
-                task.guard.commit(usage); 
-                finding = finding.with_ai_analysis(analysis.clone());
-                
-                let poc_validator = crate::core::validation::PocValidator::new(
-                    self.router.clone(),
-                    self.approval_gate.clone(),
-                    self.operator.clone(),
-                    self.executor.clone(),
-                    self.policy.clone(),
-                    self.proxy_manager.clone(),
-                );
-                
-                if analysis.risk_score >= 7 {
-                    let _ = poc_validator.validate(&mut finding, task.target, task.attack_context.as_deref()).await;
-                }
-            }
-            Err(e) => {
-                warn!("⚠️ SWARM [Exploiter]: Error en análisis de explotación: {}", e);
-            }
-        }
-
-        let mut sink_target = task.target.clone();
-        sink_target.findings = Arc::new(vec![finding]);
-        let _ = task.sink_tx.send(sink_target).await;
-
-        Ok(())
+        super::agent::execute_exploiter(self, task).await
     }
 
     async fn execute_c2_operator(
         &self,
         finding: Finding,
         target: &TargetHost,
-        adaptive_ctx: &mut AdaptiveContext,
+        adaptive_ctx: &mut crate::core::ai::AdaptiveContext,
         sink_tx: &mpsc::Sender<TargetHost>,
         guard: TokenGuard,
         jitter: Arc<EvasionJitter>,
     ) -> Result<()> {
-        // NEW-1: Jitter post-exploitation cadence
-        jitter.apply().await;
-        info!("🔱 SWARM [C2Operator]: Orchestrating offensive persistence for {} [Posture: BREACH]", target.host);
-        
-        adaptive_ctx.posture = crate::core::ai::Posture::Breach;
-        guard.commit(500);
-
-        let orchestrator = PersistenceOrchestrator::new(self.router.clone(), self.executor.clone());
-        if let Ok(plan) = orchestrator.generate_plan(&finding).await {
-            info!("🎯 SWARM [C2Operator]: Tactical plan generated. Consolidating access...");
-            if let Err(e) = orchestrator.consolidate(&plan, target).await {
-                warn!("⚠️ SWARM [C2Operator]: Consolidation failed: {}", e);
-            } else {
-                if let Ok(true) = orchestrator.verify_access(&plan, target).await {
-                    info!("🛡️ SWARM [C2Operator]: Persistence Verified (APT-Level). Posture maintained.");
-                } else {
-                    warn!("⚠️ SWARM [C2Operator]: Persistence verification failed. Payload might have been detected or blocked.");
-                }
-            }
-        }
-
-        let operators = self.pipeline.get_c2_operators();
-        if operators.is_empty() {
-             warn!("⚠️ SWARM [C2Operator]: No se encontraron operadores C2 cargados en la pipeline.");
-        }
-
-        for c2 in operators {
-            match c2.verify_session(target).await {
-                Ok(state) => {
-                    use crate::core::orchestrator::c2::SessionState;
-                    if state == SessionState::Sovereign || state == SessionState::Established {
-                        info!("🎯 SWARM [C2Operator]: Sesión activa detectada. Omitiendo despliegue.");
-                        return Ok(());
-                    }
-
-                    if let Ok(payload_path) = c2.prepare_payload(target).await {
-                        info!("🚀 SWARM [C2Operator]: Payload preparado en {}. Iniciando despliegue...", payload_path);
-                        let _ = c2.deploy_payload(target, &payload_path).await;
-                        
-                        let mut sink_target = target.clone();
-                        let mut final_findings = vec![finding.clone()];
-                        final_findings.push(Finding::new(
-                            "C2-PERSISTENCE-DEPLOYED",
-                            Category::Vulnerability,
-                            Severity::High,
-                            &format!("Persistence payload deployed via C2 Operator: {}", payload_path),
-                            serde_json::json!({ "path": payload_path, "target": target.host })
-                        ));
-                        sink_target.findings = Arc::new(final_findings);
-                        let _ = sink_tx.send(sink_target).await;
-                        return Ok(());
-                    }
-                }
-                Err(e) => debug!("🐝 SWARM [C2Operator]: Operador falló verificación: {}", e),
-            }
-        }
-
-        warn!("⚠️ SWARM [C2Operator]: No se pudo establecer persistencia con ningún operador disponible.");
-        let mut sink_target = target.clone();
-        sink_target.findings = Arc::new(vec![finding]);
-        let _ = sink_tx.send(sink_target).await;
-        Ok(())
+        super::agent::execute_c2_operator(self, finding, target, adaptive_ctx, sink_tx, guard, jitter).await
     }
 
     async fn execute_reporter(
@@ -608,11 +400,6 @@ impl<M: ExecutorMode> SwarmOrchestrator<M> {
         sink_tx: &mpsc::Sender<TargetHost>,
         guard: TokenGuard,
     ) -> Result<()> {
-        debug!("📝 SWARM [Reporter]: Archivando hallazgo informativo: {}", finding.core.title);
-        guard.commit(0);
-        let mut sink_target = target.clone();
-        sink_target.findings = Arc::new(vec![finding]);
-        let _ = sink_tx.send(sink_target).await;
-        Ok(())
+        super::agent::execute_reporter(finding, target, sink_tx, guard).await
     }
 }
