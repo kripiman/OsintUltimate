@@ -1,6 +1,7 @@
 use redteam_rust_core::models::Finding;
+use serde_json::Value;
 use std::fs;
-use anyhow::Result;
+use anyhow::{Result, anyhow};
 use std::collections::{HashMap, HashSet};
 use sha2::{Sha256, Digest};
 use hex;
@@ -78,9 +79,9 @@ fn check_l2(baseline: &[Finding], current: &[Finding]) -> bool {
 fn check_l3(baseline: &[Finding], current: &[Finding]) -> bool {
     // Structural check: Compare the "shape" of findings
     for (b, c) in baseline.iter().zip(current.iter()) {
-        // 1. Target presence mismatch
-        if b.core.target.is_some() != c.core.target.is_some() {
-             println!("L3 Fail: Target presence mismatch for {}", b.core.title);
+        // 1. Target presence
+        if b.core.target.is_none() || c.core.target.is_none() {
+             println!("L3 Fail: Missing target for {}", b.core.title);
              return false;
         }
         
