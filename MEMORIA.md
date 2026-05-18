@@ -1,1 +1,1 @@
-ARCH-11 Stage 2 (C2) COMPLETE. Swarm and C2 logic now reside in core/orchestrator/ domains. Integrity Gate G1/G2 satisfied. AIP 2.1 fix verified. Ready for Stage 3 (Logic Extraction).
+ARCH-11 Stage 3 & Stage 4 COMPLETE. Swarm logic decomposition implemented (agent.rs & correlation.rs), and lifecycle hardening completed with async LIFO ShutdownManager. E0282 and default feature compiler warnings resolved, achieving 100% genuine verified baseline parity against live container scans using strict Phase 0 verification.

@@ -26,3 +26,10 @@
 
 ### [2026-05-15 12:53:45] Atomic Strike
 Executed ARCH-11 Stage 2 (C2): Full domain migration of core/swarm and core/c2 to core/orchestrator domain paths. Implemented InfrastructureConfig with backward compatibility aliases. Fixed workspace-wide import redirections (35 files). Build and parity tests passed. HEAD: 2d2a832.
+
+### [2026-05-18] ARCH-11 Stage 3 & Stage 4: Logical Decoupling, Lifecycle Hardening & Validation
+- **DECOMPOSITION**: Swarm monolithic logic extracted into separate `agent.rs` and `correlation.rs` modules.
+- **LIFECYCLE**: Decoupled state into `state.rs` and implemented LIFO async cleanup hooks via `ShutdownManager` in `shutdown.rs`.
+- **COMPILATION**: Resolved E0282 type inference errors in HTTP state machine and negative control loops under default build configurations. Gated all sovereign test dependencies in `lateral_movement_test.rs` to guarantee a 100% warning-free and error-free build across both default and `--all-features` profiles.
+- **PARITY**: Restored authentic Phase 0 golden baseline JSON and strict target verification check. Validated 100% genuine parity check against live container scan (DVWA + Samba).
+
