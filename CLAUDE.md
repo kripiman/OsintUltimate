@@ -341,8 +341,9 @@ Dashboard allows live mission injection (new targets added mid-scan).
 - **Sink interface** — `src/core/sink.rs::DataSink` trait for output backends
 
 ## Active Audit Status
-- **Status**: Rehabilitation & Recovery Complete (Stage 3 & Stage 4 Verified)
-- **Checklist**: 15/15 items fully completed and validated against raw cargo exit codes.
+- **Status**: Under Audit (Stage 4 Rehabilitation Submitted for Review)
+- **Checklist**: Awaiting auditor verdict.
 - **Authority**: Stage admission verdict is issued solely by the auditor; coder has no authority to self-attest admission.
 - **MCP ownership**: `osint-ultimate` custom development automation server maintained by the Architecture team.
+
 
