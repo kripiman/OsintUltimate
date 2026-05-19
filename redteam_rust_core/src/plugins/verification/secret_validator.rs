@@ -10,6 +10,12 @@ pub struct SecretValidator {
     client: reqwest::Client,
 }
 
+impl Default for SecretValidator {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl SecretValidator {
     pub fn new() -> Self {
         Self {

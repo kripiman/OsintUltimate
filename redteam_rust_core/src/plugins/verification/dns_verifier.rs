@@ -11,6 +11,12 @@ pub struct DnsHijackVerifier {
     client: reqwest::Client,
 }
 
+impl Default for DnsHijackVerifier {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl DnsHijackVerifier {
     pub fn new() -> Self {
         Self {
