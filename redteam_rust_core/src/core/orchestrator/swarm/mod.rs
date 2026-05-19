@@ -4,8 +4,24 @@ pub mod inventory;
 pub mod agent;
 pub mod correlation;
 
+use std::sync::Arc;
+use crate::core::ai::TieredAIRouter;
+use crate::core::pipeline::Pipeline;
+use crate::core::approval_gate::ApprovalGate;
+use crate::utils::executor::{StealthExecutor, ExecutorMode};
+
+pub struct SwarmConfig<M: ExecutorMode> {
+    pub router: Arc<TieredAIRouter>,
+    pub pipeline: Arc<Pipeline<M>>,
+    pub approval_gate: Arc<ApprovalGate>,
+    pub max_tokens: u32,
+    pub proxy_manager: Option<Arc<crate::utils::proxy::ProxyManager>>,
+    pub executor: Arc<StealthExecutor<M>>,
+    pub policy: Arc<dyn crate::core::policy::PolicyProvider>,
+}
+
 pub use budget::{TokenBudget, TokenGuard, TaskPriority};
-pub use coordinator::{SwarmConfig, SwarmOrchestrator};
+pub use coordinator::SwarmOrchestrator;
 pub use agent::{AgentRole, AgentTask};
 pub use inventory::{SwarmInventory, TrustLevel, InventoryItem};
 
