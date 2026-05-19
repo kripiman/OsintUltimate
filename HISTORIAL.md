@@ -14,4 +14,6 @@
 
 ## SPRINT 4.2 REMEDIATION (IN PROGRESS)
 - **STAGE A (D4 Target Value Equality)**: Successfully resolved technical debt D4. Replaced simple target presence check with rigorous string value equality matching (`bt == ct` with shadow protection) in `verify_parity.rs`. Implemented comprehensive positive/negative unit tests `test_l3_target_value_match_accepted` and `test_l3_target_value_mismatch_detected`. Verified zero regression, 100% build pass, and exact golden baseline SHA256 preservation.
+- **[2026-05-18] Sprint 4.2 Stage B (D2+D3 Test Hermeticity)**: Admitted test hermeticity (Commit 336372b). Added sandbox-grade Postgres gating for persistence and cache unit tests.
 - **TECHNICAL DEBT REGISTER**: Recorded 41 legacy plugin lints + 2 environment-dependent tests (db pool timeout, sovereign cache mismatch) for Sprint 4.2 Stage B & C remediation.
+

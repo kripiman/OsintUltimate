@@ -15,3 +15,11 @@
     - `[x]` Verify G2 (Tests PASS - environment-dependent tests registered as debt)
     - `[x]` Verify G3 (Clippy Clean - registered clippy technical debt lints)
     - `[x]` Verify G4 (Verify Parity / Zero Drift)
+
+# Sprint 4.2 Remediation
+- `[x]` **Stage A (D4 Target Value Equality)**
+    - `[x]` Replace simple presence check with strict value equality in `verify_parity.rs`
+    - `[x]` Add unit tests `test_l3_target_value_match_accepted` and `test_l3_target_value_mismatch_detected`
+- `[x]` **Stage B (D2+D3 Test Hermeticity)**
+    - `[x]` Harden cache tests (`test_mcp_two_level_cache`) with sandbox-grade postgres gating
+    - `[x]` Harden persistence tests (`test_objective_persistence`) with tempdir isolation
