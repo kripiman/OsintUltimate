@@ -275,7 +275,6 @@ mod tests {
     /// We use fixed TLSH strings computed from known inputs.
     /// For unit tests, we need a controlled distance function.
     /// Strategy: use the real calculate_distance with known near-identical strings.
-
     fn test_tree_with_mock() -> BkTree {
         BkTree::new()
     }

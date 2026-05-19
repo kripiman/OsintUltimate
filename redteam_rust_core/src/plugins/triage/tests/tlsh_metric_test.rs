@@ -3,6 +3,7 @@ use crate::plugins::triage::similarity_engine::{compute_tlsh, calculate_distance
 /// D4 FIX: Strings con entropía realista (contenido de security finding).
 /// ASCII puro para evitar problemas de UTF-8 en mutate() (E2 preventivo).
 fn make_finding_text(variant: u8) -> String {
+    let ev_hash_str = format!("{:08x}", (variant as u32).wrapping_mul(0xDEADBEEFu32));
     format!(
         "SQL Injection detected at endpoint /api/v{v}/users?id={id} \
          with parameter 'id'. Payload: ' OR '1'='{v2}' UNION SELECT \
@@ -16,7 +17,7 @@ fn make_finding_text(variant: u8) -> String {
         sv = variant as u32 * 7 + 5,
         sd = variant as u32 * 3 + 2,
         port = 8000u32 + variant as u32,
-        ev_hash = format!("{:08x}", (variant as u32).wrapping_mul(0xDEADBEEFu32)),
+        ev_hash = ev_hash_str,
     )
 }
 
@@ -65,8 +66,8 @@ fn tlsh_triangle_inequality_near_duplicates() {
                     if d_ac > d_ab + d_bc {
                         violations += 1;
                         eprintln!(
-                            "Triangle violation: d({},{})={} > d({},{})={} + d({},{})={}",
-                            "a", "c", d_ac, "a", "b", d_ab, "b", "c", d_bc
+                            "Triangle violation: d(a,c)={} > d(a,b)={} + d(b,c)={}",
+                            d_ac, d_ab, d_bc
                         );
                     }
                 }

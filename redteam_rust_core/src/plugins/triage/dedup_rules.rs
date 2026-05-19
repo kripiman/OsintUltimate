@@ -59,7 +59,7 @@ impl TriageEngine {
                 finding.enrichment.similarity_hash = Some(hash.clone());
 
                 // C6: No &dyn Fn — BkTree calls calculate_distance directly (zero vtable overhead)
-                let shard = self.shards.entry(key).or_insert_with(BkTree::new);
+                let shard = self.shards.entry(key).or_default();
 
                 // C5: find_any_within short-circuits on first hit
                 // A7: find FIRST, then decide, then insert (borrow separation)

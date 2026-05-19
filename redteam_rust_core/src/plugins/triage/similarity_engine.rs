@@ -10,6 +10,12 @@ pub struct SimilarityEngine {
     threshold_simhash: u32,
 }
 
+impl Default for SimilarityEngine {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl SimilarityEngine {
     pub fn new() -> Self {
         Self {
@@ -99,11 +105,11 @@ pub fn compute_simhash(input: &str) -> u64 {
             shingle.hash(&mut hasher);
             let hash = hasher.finish();
             
-            for i in 0..64 {
+            for (i, item) in v.iter_mut().enumerate() {
                 if (hash >> i) & 1 == 1 {
-                    v[i] += 1;
+                    *item += 1;
                 } else {
-                    v[i] -= 1;
+                    *item -= 1;
                 }
             }
         }
@@ -111,14 +117,14 @@ pub fn compute_simhash(input: &str) -> u64 {
         let mut hasher = SipHasher13::new();
         input.hash(&mut hasher);
         let hash = hasher.finish();
-        for i in 0..64 {
-            if (hash >> i) & 1 == 1 { v[i] += 1; } else { v[i] -= 1; }
+        for (i, item) in v.iter_mut().enumerate() {
+            if (hash >> i) & 1 == 1 { *item += 1; } else { *item -= 1; }
         }
     }
     
     let mut simhash = 0u64;
-    for i in 0..64 {
-        if v[i] > 0 {
+    for (i, &item) in v.iter().enumerate() {
+        if item > 0 {
             simhash |= 1 << i;
         }
     }
