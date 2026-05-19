@@ -1,5 +1,5 @@
 use crate::models::{TargetHost, ScanMetadata, Finding};
-use crate::core::sink::DataSink;
+use super::DataSink;
 use crate::models::spill::NdjsonSpillWriter;
 use anyhow::Result;
 use async_trait::async_trait;

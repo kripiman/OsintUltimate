@@ -1,5 +1,5 @@
 use crate::models::{TargetHost, ScanMetadata};
-use crate::core::sink::DataSink;
+use super::DataSink;
 use async_trait::async_trait;
 use anyhow::{Result, Context};
 use tracing::info;
