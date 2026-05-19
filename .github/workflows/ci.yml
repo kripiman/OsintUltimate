@@ -66,6 +66,16 @@ jobs:
         working-directory: ${{ env.CRATE_DIR }}
         run: cargo fmt --all -- --check
 
+      - name: "SQLx prepare check (forward-compat)"
+        working-directory: ${{ env.CRATE_DIR }}
+        run: |
+          if [ -d ".sqlx" ]; then
+            cargo install sqlx-cli --no-default-features --features rustls,postgres --locked
+            cargo sqlx prepare --check
+          else
+            echo "No .sqlx directory found. Skipping prepare check."
+          fi
+
   # ── Job 2: Tests unitarios e integración ──────────────────────────────────────
   test:
     name: "Tests (stable + MSRV)"
