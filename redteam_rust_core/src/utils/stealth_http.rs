@@ -3,7 +3,6 @@ use crate::models::TargetHost;
 use anyhow::{Result, Context};
 use std::time::Duration;
 use crate::utils::proxy::ProxyManager;
-use tracing::warn;
 
 pub struct StealthClientBuilder;
 
@@ -68,6 +67,7 @@ impl StealthClientBuilder {
 
         #[cfg(feature = "tls-impersonation")]
         {
+            use tracing::warn;
             if policy.ja3_spoofing {
                 // Note: We use rquest only for the final build if needed, 
                 // but currently the return type is reqwest::Client.
