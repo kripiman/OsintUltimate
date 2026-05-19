@@ -340,6 +340,11 @@ Dashboard allows live mission injection (new targets added mid-scan).
 - **Engine config** — `src/core/engine/app.rs::EngineConfig` struct
 - **Sink interface** — `src/core/sink.rs::DataSink` trait for output backends
 
+## Sprint Workflow Discipline (Post-Sprint 6)
+- **1-Stage-Per-Turn**: Strict limit of 1 stage per turn containing source changes; Auditor verdict must be issued between stages.
+- **Temp Generators & Audit Tools**: All temporary tools/scripts must reside in `redteam_rust_core/examples/audit_tools/`.
+- **Git Hygiene**: `redteam_rust_core/examples/audit_tools/` is added to `.gitignore` (no generator code committed).
+
 ## Active Audit Status
 - **Status**: Sprint 7 in progress (Stage 7.B complete)
 - **Next**: Stage 7.C (Remediate plugin metadata gaps)

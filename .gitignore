@@ -182,3 +182,5 @@ redteam_rust_core/urls.txt
 
 redteam_rust_core/src/scratch.rs
 *.original.md
+redteam_rust_core/examples/audit_tools/
+
