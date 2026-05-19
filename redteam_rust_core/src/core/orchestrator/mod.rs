@@ -2,6 +2,8 @@ use crate::models::{TargetHost, Finding, Severity, TargetStatus};
 use std::sync::Arc;
 use futures::stream::StreamExt;
 use tracing::info;
+#[cfg(feature = "sovereign")]
+use tracing::error;
 use crate::utils::executor::ExecutorMode;
 
 pub mod monitor;
