@@ -33,3 +33,7 @@ Stage 5.A Complete. main.rs Boot Extraction executed. 127/127 tests passed. Clip
 ### [2026-05-19 01:39:25] Atomic Strike
 ### [2026-05-19 01:39:15] Stage 5.C Complete
 Decoupled monolithic mcp/server.rs (1015 LOC) into high-cohesion submodules handlers.rs, tools.rs, and execute.rs under src/core/mcp/server/. Zero warnings, 127/127 tests passing, exact LOC parity (995 LOC, -1.9% delta), clean linear commit b8d547b.
+
+### [2026-05-19 02:22:56] Atomic Strike
+### [2026-05-19 06:22:00] Stage 5.D Complete
+Decoupled monolithic plugins/mod.rs (718 LOC) into config.rs, registry.rs, scanner_factory.rs, and discovery_factory.rs under src/plugins/. Conditionally imported tracing::error in orchestrator/mod.rs. Zero warnings, all tests passing, exact LOC parity (737 LOC, +2.6% delta), clean linear commit dd6a551.
