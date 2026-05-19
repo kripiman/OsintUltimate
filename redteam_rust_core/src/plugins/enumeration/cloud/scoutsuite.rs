@@ -35,12 +35,13 @@ impl ScannerPlugin for ScoutSuiteScanner {
             layer: crate::core::capability_layer::ScanLayer::Scanning,
             cost: 8,
             category: "Cloud".to_string(),
+            capabilities: self.capabilities(),
             ..Default::default()
         }
     }
 
     fn capabilities(&self) -> Vec<Capability> {
-        vec![Capability::ServiceDiscovery]
+        vec![Capability::CloudAudit, Capability::IAMAssessment, Capability::ConfigAudit]
     }
 
     async fn check_dependencies(&self) -> Result<bool> {

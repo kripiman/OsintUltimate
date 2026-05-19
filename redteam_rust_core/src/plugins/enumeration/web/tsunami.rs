@@ -61,11 +61,12 @@ impl ScannerPlugin for TsunamiScanner {
             name: self.name().to_string(),
             description: "Automated network security analysis using Tsunami.".to_string(),
             category: "Enumeration".to_string(),
+            capabilities: self.capabilities(),
             ..crate::plugins::PluginMetadata::default()
         }
     }
     fn capabilities(&self) -> Vec<Capability> {
-        vec![Capability::VulnerabilityScanning]
+        vec![Capability::VulnerabilityScanning, Capability::PortScanning]
     }
 
     async fn check_dependencies(&self) -> Result<bool> {

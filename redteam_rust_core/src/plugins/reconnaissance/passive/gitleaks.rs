@@ -53,6 +53,7 @@ impl ScannerPlugin for GitleaksScanner {
             name: self.name().to_string(),
             description: "Automated secret scanning using Gitleaks.".to_string(),
             category: "Reconnaissance".to_string(),
+            capabilities: self.capabilities(),
             ..crate::plugins::PluginMetadata::default()
         }
     }

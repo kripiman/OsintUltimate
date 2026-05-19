@@ -35,12 +35,13 @@ impl ScannerPlugin for PrivescHunterScanner {
             name: self.name().to_string(),
             description: "Windows privilege escalation enumeration (native Rust).".to_string(),
             category: "PrivEsc".to_string(),
+            capabilities: self.capabilities(),
             ..crate::plugins::PluginMetadata::default()
         }
     }
 
     fn capabilities(&self) -> Vec<crate::plugins::Capability> {
-        vec![crate::plugins::Capability::InfrastructureAudit, crate::plugins::Capability::ConfigAudit]
+        vec![crate::plugins::Capability::PrivilegeEscalation, crate::plugins::Capability::InformationGathering]
     }
 
     async fn check_dependencies(&self) -> Result<bool> {
