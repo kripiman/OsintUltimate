@@ -45,3 +45,12 @@ Operator gabriel selected Option D. Sprint 5 is closed at Stage 5.D admission (H
 ### [2026-05-19 14:54:45] Atomic Strike
 ### [2026-05-19 14:50:00] Stage 6.E Complete
 Refactored prepare_pipeline_builder (119 LOC) in core/engine/app.rs into private helper methods build_global_config and build_pipeline_builder_from. 127/127 tests passing, clippy clean, commit 7ca94df.
+
+### [2026-05-19 16:15:00] Stage 6.F Complete
+Decoupled monolithic core/blackarch.rs (539 LOC) into blackarch/mod.rs (188 LOC), blackarch/schema.rs (40 LOC), and blackarch/sources.rs (321 LOC). 127/127 tests passing, clippy clean, commit be418c1.
+
+### [2026-05-19 16:25:00] Stage 6.G Complete
+Decoupled monolithic plugins/reconnaissance/osint/sovereign_recon.rs (570 LOC) into sovereign_recon/mod.rs (182 LOC), sovereign_recon/credit.rs (40 LOC), and sovereign_recon/sources.rs (347 LOC). 127/127 tests passing, clippy clean, commit 1ed6a82.
+
+### [2026-05-19 16:44:00] Stage 6.H Complete
+Decoupled monolithic plugins/reporting/bug_bounty.rs (549 LOC) into bug_bounty/mod.rs (267 LOC), bug_bounty/score.rs (30 LOC), bug_bounty/helpers.rs (106 LOC), and bug_bounty/tests.rs (150 LOC). 127/127 tests passing, clippy clean, commit 79964c0.
