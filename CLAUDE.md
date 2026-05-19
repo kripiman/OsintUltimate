@@ -341,9 +341,9 @@ Dashboard allows live mission injection (new targets added mid-scan).
 - **Sink interface** — `src/core/sink.rs::DataSink` trait for output backends
 
 ## Active Audit Status
-- **Status**: Sprint 7 in progress (Stage 7.A complete)
-- **Next**: Stage 7.B (Audit plugin metadata coverage)
-- **HEAD**: e734ab7
+- **Status**: Sprint 7 in progress (Stage 7.B complete)
+- **Next**: Stage 7.C (Remediate plugin metadata gaps)
+- **HEAD**: de254d7
 - **Baseline SHA256**: f65085dc14e274afb071dec17774ed49bc5c58b92cdf739dec87f256445da058
 - **Authority**: Stage admission verdict is issued solely by the auditor; coder has no authority to self-attest admission.
 - **MCP ownership**: `osint-ultimate` custom development automation server maintained by the Architecture team.
