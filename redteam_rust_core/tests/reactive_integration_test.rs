@@ -82,15 +82,16 @@ async fn test_attack_path_triggers_netexec_with_depth() {
     let fired_chains = DashSet::new();
     
     // 3. Evaluate
-    let result = engine.evaluate(
-        &findings,
-        &target,
-        &plugins,
-        &layer_policy,
-        &approval_gate,
-        &fired_chains,
-        None
-    ).await;
+    let ctx = redteam_rust_core::core::reactive_engine::ReactiveContext {
+        findings: &findings,
+        target: &target,
+        plugins: &plugins,
+        layer_policy: &layer_policy,
+        approval_gate: &approval_gate,
+        fired_chains: &fired_chains,
+        inventory: None,
+    };
+    let result = engine.evaluate(ctx).await;
     
     // 4. Verify Depth
     assert!(!result.is_empty());

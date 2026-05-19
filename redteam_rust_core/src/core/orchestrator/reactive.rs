@@ -19,10 +19,19 @@ pub async fn run_reactive_logic(
     let fired_chains: DashSet<String> = DashSet::new();
     let rules = crate::core::reactive_engine::get_all_rules();
     
+    let ctx = crate::core::reactive_engine::ReactiveContext {
+        findings: all_findings,
+        target,
+        plugins,
+        layer_policy,
+        approval_gate,
+        fired_chains: &fired_chains,
+        inventory: Some(inventory),
+    };
+
     let mut extra_findings = crate::core::reactive_engine::evaluate(
-        &rules, all_findings, target,
-        plugins, layer_policy, approval_gate, &fired_chains,
-        Some(inventory),
+        &rules,
+        ctx,
     ).await;
 
     // SSRF -> Cloud Metadata Trigger

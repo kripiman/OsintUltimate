@@ -33,7 +33,7 @@ impl RuleTrigger {
     pub fn matches(&self, finding_id: &str) -> bool {
         match self {
             RuleTrigger::Single(id) => *id == finding_id,
-            RuleTrigger::AnyOf(ids) => ids.iter().any(|&id| id == finding_id),
+            RuleTrigger::AnyOf(ids) => ids.contains(&finding_id),
             RuleTrigger::StartsWith(prefix) => finding_id.starts_with(prefix),
         }
     }
@@ -222,6 +222,16 @@ pub fn get_all_rules() -> Vec<ReactiveRule> {
     rules
 }
 
+pub struct ReactiveContext<'a> {
+    pub findings: &'a [Finding],
+    pub target: &'a TargetHost,
+    pub plugins: &'a [Box<dyn ScannerPlugin>],
+    pub layer_policy: &'a ScanLayerPolicy,
+    pub approval_gate: &'a ApprovalGate,
+    pub fired_chains: &'a DashSet<String>,
+    pub inventory: Option<&'a crate::core::orchestrator::swarm::inventory::SwarmInventory>,
+}
+
 pub struct ReactiveEngine {
     rules: Vec<ReactiveRule>,
 }
@@ -241,45 +251,24 @@ impl ReactiveEngine {
 
     pub async fn evaluate(
         &self,
-        findings: &[Finding],
-        target: &TargetHost,
-        plugins: &[Box<dyn ScannerPlugin>],
-        layer_policy: &ScanLayerPolicy,
-        approval_gate: &ApprovalGate,
-        fired_chains: &DashSet<String>,
-        inventory: Option<&crate::core::orchestrator::swarm::inventory::SwarmInventory>,
+        ctx: ReactiveContext<'_>,
     ) -> Vec<Finding> {
-        evaluate(
-            &self.rules,
-            findings,
-            target,
-            plugins,
-            layer_policy,
-            approval_gate,
-            fired_chains,
-            inventory
-        ).await
+        evaluate(&self.rules, ctx).await
     }
 }
 
 pub async fn evaluate(
     rules: &[ReactiveRule],
-    findings: &[Finding],
-    target: &TargetHost,
-    plugins: &[Box<dyn ScannerPlugin>],
-    layer_policy: &ScanLayerPolicy,
-    approval_gate: &ApprovalGate,
-    fired_chains: &DashSet<String>,
-    inventory: Option<&crate::core::orchestrator::swarm::inventory::SwarmInventory>,
+    ctx: ReactiveContext<'_>,
 ) -> Vec<Finding> {
     let mut extra_findings = Vec::new();
 
     for rule in rules {
         // Find if any existing finding matches the trigger
-        let trigger_findings: Vec<&Finding> = findings.iter()
+        let trigger_findings: Vec<&Finding> = ctx.findings.iter()
             .filter(|f| {
                 // V17 HARDENING: Enforce Scope Isolation (I5)
-                if f.core.scope_id != target.scope_id {
+                if f.core.scope_id != ctx.target.scope_id {
                     return false;
                 }
                 rule.trigger.matches(&f.core.id)
@@ -296,7 +285,7 @@ pub async fn evaluate(
             }
 
             // Apply extractor and check if we should fire
-            let mut reactive_snapshot = target.clone();
+            let mut reactive_snapshot = ctx.target.clone();
             let mut should_fire = false;
 
             match &rule.extractor {
@@ -366,10 +355,10 @@ pub async fn evaluate(
 
             if should_fire {
                 for &plugin_name in rule.chain_plugins {
-                    if fired_chains.insert(format!("{}::{}", f.core.id, plugin_name)) {
-                        if let Some(plugin) = plugins.iter().find(|p| p.name() == plugin_name) {
-                            if !layer_policy.needs_approval(plugin.metadata().layer) || approval_gate.is_approved(plugin.name()).await {
-                                debug!("🔱 REACTIVE ENGINE: Triggering {} for finding {} on {}", plugin_name, f.core.id, target.host);
+                    if ctx.fired_chains.insert(format!("{}::{}", f.core.id, plugin_name)) {
+                        if let Some(plugin) = ctx.plugins.iter().find(|p| p.name() == plugin_name) {
+                            if !ctx.layer_policy.needs_approval(plugin.metadata().layer) || ctx.approval_gate.is_approved(plugin.name()).await {
+                                debug!("🔱 REACTIVE ENGINE: Triggering {} for finding {} on {}", plugin_name, f.core.id, ctx.target.host);
                                 if let Ok(mut chain_findings) = plugin.scan(&reactive_snapshot).await {
                                     // V15.1: Propagate and increment chain depth
                                     for cf in &mut chain_findings {
@@ -386,19 +375,19 @@ pub async fn evaluate(
     }
     
     // --- PHASE 5.2: CROSS-TARGET CREDENTIAL SPRAYING ---
-    if let Some(inv) = inventory {
-        let auth_scanners: Vec<&Box<dyn ScannerPlugin>> = plugins.iter()
+    if let Some(inv) = ctx.inventory {
+        let auth_scanners: Vec<&Box<dyn ScannerPlugin>> = ctx.plugins.iter()
             .filter(|p| p.metadata().capabilities.contains(&crate::plugins::Capability::BruteForce))
             .collect();
             
         if !auth_scanners.is_empty() {
-             let authorized_creds = inv.get_authorized_credentials(&target.scope_id);
+             let authorized_creds = inv.get_authorized_credentials(&ctx.target.scope_id);
              for cred in authorized_creds {
                   for p in &auth_scanners {
-                      if fired_chains.insert(format!("SPRAY:{}::{}::{}", cred.core.id, p.name(), target.host)) {
-                          debug!("🔱 SWARM INVENTORY: Spraying credential {} using {} on {}", cred.core.id, p.name(), target.host);
+                      if ctx.fired_chains.insert(format!("SPRAY:{}::{}::{}", cred.core.id, p.name(), ctx.target.host)) {
+                          debug!("🔱 SWARM INVENTORY: Spraying credential {} using {} on {}", cred.core.id, p.name(), ctx.target.host);
                           
-                          let mut reactive_snapshot = target.clone();
+                          let mut reactive_snapshot = ctx.target.clone();
                            // Inject credential into tactical context
                            let obj = Arc::make_mut(&mut reactive_snapshot.extra_data).as_object_mut();
                            if let Some(o) = obj {

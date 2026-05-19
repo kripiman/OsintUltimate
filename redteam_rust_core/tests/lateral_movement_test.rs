@@ -62,16 +62,18 @@ async fn test_lateral_movement_positive() {
 
     let rules = reactive_engine::get_all_rules();
     
-    // Evaluate
+    let ctx = reactive_engine::ReactiveContext {
+        findings: &[f],
+        target: &target,
+        plugins: &plugins,
+        layer_policy: &ScanLayerPolicy::preset_audit(),
+        approval_gate: &ApprovalGate::new(50),
+        fired_chains: &fired_chains,
+        inventory: Some(&inventory),
+    };
     reactive_engine::evaluate(
         &rules,
-        &[f],
-        &target,
-        &plugins,
-        &ScanLayerPolicy::preset_audit(),
-        &ApprovalGate::new(50),
-        &fired_chains,
-        Some(&inventory)
+        ctx,
     ).await;
 
     let injected = last_cred.lock().await;
@@ -101,16 +103,19 @@ async fn test_lateral_movement_negative_scope() {
     };
 
     let rules = reactive_engine::get_all_rules();
+    let ctx = reactive_engine::ReactiveContext {
+        findings: &[f],
+        target: &target,
+        plugins: &plugins,
+        layer_policy: &ScanLayerPolicy::preset_audit(),
+        approval_gate: &ApprovalGate::new(50),
+        fired_chains: &fired_chains,
+        inventory: Some(&inventory),
+    };
     
     reactive_engine::evaluate(
         &rules,
-        &[f],
-        &target,
-        &plugins,
-        &ScanLayerPolicy::preset_audit(),
-        &ApprovalGate::new(50),
-        &fired_chains,
-        Some(&inventory)
+        ctx,
     ).await;
 
     let injected = last_cred.lock().await;

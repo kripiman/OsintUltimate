@@ -190,15 +190,18 @@ impl<M: ExecutorMode> SwarmOrchestrator<M> {
             let approval_gate_spawn = self.approval_gate.clone();
 
             tokio::spawn(async move {
+                let ctx = crate::core::reactive_engine::ReactiveContext {
+                    findings: &[finding_spawn],
+                    target: &initial_target_spawn,
+                    plugins: pipeline_spawn.get_plugins_ref(),
+                    layer_policy: pipeline_spawn.get_layer_policy(),
+                    approval_gate: &approval_gate_spawn,
+                    fired_chains: &fired_chains_spawn,
+                    inventory: Some(&inventory_spawn),
+                };
                 let reactive_findings = crate::core::reactive_engine::evaluate(
                     &rules,
-                    &[finding_spawn],
-                    &initial_target_spawn,
-                    pipeline_spawn.get_plugins_ref(),
-                    pipeline_spawn.get_layer_policy(),
-                    &approval_gate_spawn,
-                    &fired_chains_spawn,
-                    Some(&inventory_spawn),
+                    ctx,
                 ).await;
 
                 for rf in reactive_findings {
