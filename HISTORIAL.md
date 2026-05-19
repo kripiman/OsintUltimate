@@ -41,3 +41,7 @@ Decoupled monolithic plugins/mod.rs (718 LOC) into config.rs, registry.rs, scann
 ### [2026-05-19 02:51:04] Atomic Strike
 ### [2026-05-19 02:51:00] Option D Selected
 Operator gabriel selected Option D. Sprint 5 is closed at Stage 5.D admission (HEAD 0c71b34). 5.E and polish are deferred to Sprint 6.
+
+### [2026-05-19 14:54:45] Atomic Strike
+### [2026-05-19 14:50:00] Stage 6.E Complete
+Refactored prepare_pipeline_builder (119 LOC) in core/engine/app.rs into private helper methods build_global_config and build_pipeline_builder_from. 127/127 tests passing, clippy clean, commit 7ca94df.
