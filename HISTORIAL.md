@@ -61,4 +61,8 @@ Added a conditional `cargo sqlx prepare --check` validation step to the CI pipel
 ### [2026-05-19 17:07:00] Stage 7.B Complete
 Developed an automated async metadata generator test (`redteam_rust_core/tests/metadata_audit_generator.rs`) and executed it under `--all-features` to produce a comprehensive audit report of all 142 plugins (`redteam_rust_core/DOCS/PLUGIN_METADATA_AUDIT.md`). Verified that 7 plugins have empty capabilities and that all plugins default `is_destructive` to false. 127/127 tests passing, clippy clean, commit de254d7.
 
+### [2026-05-19 17:35:00] Stage 7.C Complete
+Remediated capabilities for the 7 plugins identified with gaps (SqlMap, ScoutSuite, Gitleaks, Tsunami, PrivescHunter, JwtForge, and APKLeaks). Configured consistent mappings between their `capabilities()` trait methods and `metadata().capabilities` fields, explicitly setting `is_destructive: true` for the active exploitation scanners. Updated workflow hygiene rules in CLAUDE.md and .gitignore to route future temporary audit scripts to examples/audit_tools/ (gitignored). 127/127 tests passing, clippy clean, commit c1ef21b.
+
+
 
