@@ -334,32 +334,10 @@ impl<M: ExecutorMode> RedTeamEngine<M> {
 
         Ok(())
     }
-    fn prepare_pipeline_builder(&self, sink: Box<dyn DataSink>) -> PipelineBuilder<M> {
-        let liveness_checker = LivenessChecker::new_with_proxy(
-            self.config.dns_servers.clone(), 
-            self.config.doh, 
-            Some(self.proxy_manager.clone())
-        );
-        let jitter = Arc::new(crate::utils::common::HumanJitter::new(100, 1500));
-        
-        let _proxy_manager = Some(self.proxy_manager.clone());
-
-        let stealth_jitter = if self.config.stealth {
-            Some(JitterSleep::for_stealth())
-        } else {
-            None
-        };
-
-        let policy = ScanLayerPolicy {
-            max_layer: self.config.max_layer,
-            require_approval_for_layer_3_plus: true, 
-            require_approval_for_layer_4_plus: true,
-            require_approval_for_layer_5: true,
-        };
-
-        let global_config = GlobalConfig {
+    fn build_global_config(&self, jitter: Arc<crate::utils::common::HumanJitter>) -> GlobalConfig<M> {
+        GlobalConfig {
             insecure: self.config.insecure,
-            jitter: jitter.clone(),
+            jitter,
             proxy_manager: self.proxy_manager.clone(),
             nmap_options: crate::plugins::NmapOptions {
                 scripts: self.config.scripts.clone(),
@@ -412,9 +390,17 @@ impl<M: ExecutorMode> RedTeamEngine<M> {
             sliver_key_path: self.config.sliver_key_path.clone(),
             sliver_server_addr: self.config.sliver_server_addr.clone(),
             stealth_policy: crate::plugins::detection_evasion::stealth_policy::StealthPolicy::default(),
-        };
+        }
+    }
 
-        let mut builder = Pipeline::builder()
+    fn build_pipeline_builder_from(
+        &self,
+        liveness_checker: LivenessChecker,
+        stealth_jitter: Option<JitterSleep>,
+        policy: ScanLayerPolicy,
+        sink: Box<dyn DataSink>,
+    ) -> PipelineBuilder<M> {
+        Pipeline::builder()
             .concurrency(self.config.concurrency)
             .shutdown_token(self.shutdown_token.clone())
             .liveness_checker(liveness_checker)
@@ -426,7 +412,32 @@ impl<M: ExecutorMode> RedTeamEngine<M> {
             .approval_gate(self.approval_gate.clone())
             .with_policy(self.policy.clone())
             .with_executor(self.executor.clone())
-            .strict_scope(self.config.strict_scope);
+            .strict_scope(self.config.strict_scope)
+    }
+
+    fn prepare_pipeline_builder(&self, sink: Box<dyn DataSink>) -> PipelineBuilder<M> {
+        let liveness_checker = LivenessChecker::new_with_proxy(
+            self.config.dns_servers.clone(), 
+            self.config.doh, 
+            Some(self.proxy_manager.clone())
+        );
+        let jitter = Arc::new(crate::utils::common::HumanJitter::new(100, 1500));
+        
+        let stealth_jitter = if self.config.stealth {
+            Some(JitterSleep::for_stealth())
+        } else {
+            None
+        };
+
+        let policy = ScanLayerPolicy {
+            max_layer: self.config.max_layer,
+            require_approval_for_layer_3_plus: true, 
+            require_approval_for_layer_4_plus: true,
+            require_approval_for_layer_5: true,
+        };
+
+        let global_config = self.build_global_config(jitter);
+        let mut builder = self.build_pipeline_builder_from(liveness_checker, stealth_jitter, policy, sink);
 
         // Add discovery plugins
         for p in crate::plugins::get_all_discovery(global_config.clone()) {
