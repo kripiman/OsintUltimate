@@ -29,3 +29,7 @@ Sprint 5 Plan rejected by Auditor. Coder V6 Procedural Violation (UNAUTHORIZED P
 
 ### [2026-05-19 00:22:30] Atomic Strike
 Stage 5.A Complete. main.rs Boot Extraction executed. 127/127 tests passed. Clippy clean. Walkthrough artifact submitted. Awaiting Auditor admission for Stage 5.B.
+
+### [2026-05-19 01:39:25] Atomic Strike
+### [2026-05-19 01:39:15] Stage 5.C Complete
+Decoupled monolithic mcp/server.rs (1015 LOC) into high-cohesion submodules handlers.rs, tools.rs, and execute.rs under src/core/mcp/server/. Zero warnings, 127/127 tests passing, exact LOC parity (995 LOC, -1.9% delta), clean linear commit b8d547b.
