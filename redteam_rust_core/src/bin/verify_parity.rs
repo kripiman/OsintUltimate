@@ -3,7 +3,6 @@ use std::fs;
 use anyhow::Result;
 use std::collections::{HashMap, HashSet};
 use sha2::{Sha256, Digest};
-use hex;
 
 pub struct ParityReport {
     pub l1_passed: bool,

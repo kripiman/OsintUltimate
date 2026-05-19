@@ -4,9 +4,7 @@ use crate::core::ai::{TieredAIRouter, RouteLevel};
 use anyhow::Result;
 use std::sync::Arc;
 
-#[cfg(test)]
-mod tests {
-    use super::*;
+
 
     struct MockSink;
 
@@ -281,4 +279,4 @@ mod tests {
         assert!(body.len() <= 153); // 150 + "..."
         assert!(body.contains("..."));
     }
-}
+

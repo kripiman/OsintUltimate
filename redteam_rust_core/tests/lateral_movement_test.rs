@@ -53,10 +53,12 @@ async fn test_lateral_movement_positive() {
     inventory.ingest_finding(f.clone(), TrustLevel::Private);
 
     // Target in Scope-A
-    let mut target = TargetHost::default();
-    target.host = "127.0.0.1".to_string();
-    target.scope_id = "Scope-A".to_string();
-    target.extra_data = Arc::new(serde_json::json!({}));
+    let target = TargetHost {
+        host: "127.0.0.1".to_string(),
+        scope_id: "Scope-A".to_string(),
+        extra_data: Arc::new(serde_json::json!({})),
+        ..Default::default()
+    };
 
     let rules = reactive_engine::get_all_rules();
     
@@ -91,10 +93,12 @@ async fn test_lateral_movement_negative_scope() {
     inventory.ingest_finding(f.clone(), TrustLevel::Private);
 
     // Target in Scope-B (DIFFERENT SCOPE)
-    let mut target = TargetHost::default();
-    target.host = "192.168.1.1".to_string();
-    target.scope_id = "Scope-B".to_string();
-    target.extra_data = Arc::new(serde_json::json!({}));
+    let target = TargetHost {
+        host: "192.168.1.1".to_string(),
+        scope_id: "Scope-B".to_string(),
+        extra_data: Arc::new(serde_json::json!({})),
+        ..Default::default()
+    };
 
     let rules = reactive_engine::get_all_rules();
     

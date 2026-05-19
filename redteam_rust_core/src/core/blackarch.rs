@@ -489,7 +489,7 @@ OUTPUT:
         let tools = ctx["blackarch_tools"].as_array().unwrap();
         assert_eq!(tools.len(), 1);
         assert_eq!(tools[0]["tool"], "nmap");
-        assert!(tools[0]["flags"].as_array().unwrap().len() > 0);
+        assert!(!tools[0]["flags"].as_array().unwrap().is_empty());
     }
 
     #[test]

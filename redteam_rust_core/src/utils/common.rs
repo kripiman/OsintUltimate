@@ -175,19 +175,6 @@ impl Drop for PgidKillGuard {
     }
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[tokio::test]
-    async fn test_jitter_range() {
-        let jitter = HumanJitter::new(10, 20);
-        // We can't easily test duration without mocking time or statistical analysis.
-        // But we can ensure it doesn't panic.
-        jitter.sleep().await;
-        // Pass
-    }
-}
 pub fn extract_json(text: &str) -> &str {
     let start_curly = text.find('{');
     let start_bracket = text.find('[');
@@ -217,4 +204,18 @@ pub fn extract_json(text: &str) -> &str {
         (None, None) => {}
     }
     text
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[tokio::test]
+    async fn test_jitter_range() {
+        let jitter = HumanJitter::new(10, 20);
+        // We can't easily test duration without mocking time or statistical analysis.
+        // But we can ensure it doesn't panic.
+        jitter.sleep().await;
+        // Pass
+    }
 }

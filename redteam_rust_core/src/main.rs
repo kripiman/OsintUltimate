@@ -19,7 +19,7 @@ use redteam_rust_core::utils::security::is_ssrf_safe_host_async;
 use tracing::{info, error, warn};
 use anyhow::{Context, Result};
 use futures::StreamExt;
-use tokio;
+
 
 #[derive(Parser, Debug, Clone)]
 #[command(author, version, about, long_about = None)]
@@ -499,7 +499,7 @@ async fn main() -> Result<()> {
     let cli_scope_id_stream = cli_scope_id.clone();
     let target_stream: futures::stream::BoxStream<'static, TargetHost> = if let Some(apk_path) = args.apk.clone() {
         let cli_scope_id = cli_scope_id_stream.clone();
-        let package_name = apk_path.split('/').last().unwrap_or("mobile_app").to_string();
+        let package_name = apk_path.split('/').next_back().unwrap_or("mobile_app").to_string();
         Box::pin(futures::stream::iter(vec![TargetHost {
             host: package_name,
             ip: None,

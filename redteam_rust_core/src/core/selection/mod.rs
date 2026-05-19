@@ -51,6 +51,7 @@ impl ProgramMetrics {
 /// NOTE: Currently stateless. In future phases, this will maintain:
 /// - Cache of program metrics to avoid redundant file I/O.
 /// - Dynamic weights from `CorrelationEngine` (Fase 4 feedback loop).
+#[derive(Default)]
 pub struct ProgramAnalyzer;
 
 impl ProgramAnalyzer {
