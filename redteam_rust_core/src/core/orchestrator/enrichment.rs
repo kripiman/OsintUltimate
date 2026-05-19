@@ -1,6 +1,6 @@
 use crate::models::{Finding, Severity, AIAnalysis, Category};
 
-pub fn enrich_findings(all_findings: &mut Vec<Finding>) {
+pub fn enrich_findings(all_findings: &mut [Finding]) {
     for f in all_findings.iter_mut() {
         f.enrich_with_cvss();
         if f.enrichment.ai_analysis.is_none() {

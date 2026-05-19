@@ -13,6 +13,7 @@ use crate::core::approval_gate::ApprovalGate;
 use crate::core::filter::FalsePositiveFilter;
 use crate::utils::{LivenessChecker, JitterSleep};
 use crate::utils::executor::{StealthExecutor, ExecutorMode};
+use crate::core::orchestrator::OrchestratorConfig;
 
 pub mod builder;
 pub mod stages;
@@ -132,17 +133,50 @@ impl<M: ExecutorMode> Pipeline<M> {
         let current_scan_id = sink.get_scan_id();
 
         // Scanning
+        let orchestrator_config = OrchestratorConfig {
+            plugins: self.plugins.clone(),
+            concurrency: self.concurrency,
+            layer_policy: self.layer_policy,
+            approval_gate: self.approval_gate.clone(),
+            blackarch_bridge: self.blackarch_bridge.clone(),
+            memory_monitor: self.memory_monitor.clone(),
+            sandbox: self.sandbox.clone(),
+            policy: self.policy.clone(),
+            executor: self.executor.clone(),
+            strict_scope: self.strict_scope,
+            feedback_tx: Some(liveness_tx.clone()),
+            db_pool,
+            current_scan_id,
+            inventory: None,
+            #[cfg(feature = "sovereign")]
+            sliver_ca_path: self.sliver_ca_path.clone(),
+            #[cfg(feature = "sovereign")]
+            sliver_cert_path: self.sliver_cert_path.clone(),
+            #[cfg(feature = "sovereign")]
+            sliver_key_path: self.sliver_key_path.clone(),
+            #[cfg(feature = "sovereign")]
+            sliver_server_addr: self.sliver_server_addr.clone(),
+        };
+
+        let swarm_config = stages::scanning::ScanningStageSwarm {
+            swarm_mode: self.swarm_mode,
+            ai_router: self.ai_router.clone(),
+            max_tokens: self.max_tokens,
+            proxy_manager: self.proxy_manager.clone(),
+        };
+
+        let dashboard_config = stages::scanning::ScanningStageDashboard {
+            dashboard_tx: self.dashboard_tx.clone(),
+            dashboard_targets: self.dashboard_targets.clone(),
+        };
+
         stages::scanning::spawn_scanning_stage(
-            scan_rx, sink_tx.clone(), liveness_tx.clone(), self.plugins.clone(), self.concurrency,
-            self.layer_policy, self.approval_gate.clone(), self.blackarch_bridge.clone(),
-            self.memory_monitor.clone(), self.sandbox.clone(), self.policy.clone(), self.executor.clone(),
-            self.strict_scope, db_pool, current_scan_id, self.swarm_mode, self.ai_router.clone(), self.max_tokens,
-            self.proxy_manager.clone(), self.shutdown_token.clone(),
-            self.dashboard_tx.clone(), self.dashboard_targets.clone(),
-            #[cfg(feature = "sovereign")] self.sliver_ca_path.clone(),
-            #[cfg(feature = "sovereign")] self.sliver_cert_path.clone(),
-            #[cfg(feature = "sovereign")] self.sliver_key_path.clone(),
-            #[cfg(feature = "sovereign")] self.sliver_server_addr.clone(),
+            scan_rx,
+            sink_tx.clone(),
+            self.shutdown_token.clone(),
+            orchestrator_config,
+            swarm_config,
+            dashboard_config,
         );
         drop(sink_tx);
         drop(liveness_tx);

@@ -95,7 +95,7 @@ impl<'a> GraphAnalyzer<'a> {
         }
 
         all_paths.push(AttackPath {
-            nodes: current_path.clone(),
+            nodes: current_path.to_owned(),
             total_cvss,
             description: desc_parts.join(" -> "),
         });

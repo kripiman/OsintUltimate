@@ -143,36 +143,40 @@ pub async fn dispatch_scan(
     (all_findings, plugin_error)
 }
 
+pub struct TargetProcessContext {
+    pub plugins: Arc<Vec<Box<dyn ScannerPlugin>>>,
+    pub lp: ScanLayerPolicy,
+    pub policy: Arc<dyn crate::core::policy::PolicyProvider>,
+    pub strict_scope: bool,
+    pub approval_gate: Arc<ApprovalGate>,
+    pub blackarch_bridge: Arc<crate::core::blackarch::BlackArchBridge>,
+    pub memory_semaphore: Arc<tokio::sync::Semaphore>,
+    pub memory_monitor: Arc<crate::utils::memory_monitor::MemoryMonitor>,
+    pub dashboard_tx: Option<tokio::sync::broadcast::Sender<Finding>>,
+    pub dashboard_targets: Arc<dashmap::DashMap<String, TargetHost>>,
+    pub inventory: Arc<crate::core::orchestrator::swarm::inventory::SwarmInventory>,
+}
+
 pub async fn process_target(
     mut target: TargetHost,
-    plugins: Arc<Vec<Box<dyn ScannerPlugin>>>,
-    lp: ScanLayerPolicy,
-    policy: Arc<dyn crate::core::policy::PolicyProvider>,
-    strict_scope: bool,
-    approval_gate: Arc<ApprovalGate>,
-    blackarch_bridge: Arc<crate::core::blackarch::BlackArchBridge>,
-    memory_semaphore: Arc<tokio::sync::Semaphore>,
-    memory_monitor: Arc<crate::utils::memory_monitor::MemoryMonitor>,
-    dashboard_tx: Option<tokio::sync::broadcast::Sender<Finding>>,
-    dashboard_targets: Arc<dashmap::DashMap<String, TargetHost>>,
-    inventory: Arc<crate::core::orchestrator::swarm::inventory::SwarmInventory>,
+    ctx: TargetProcessContext,
 ) -> TargetHost {
     // Scope check
-    if !scope_guard::check_scope(&mut target, &policy, strict_scope) {
+    if !scope_guard::check_scope(&mut target, &ctx.policy, ctx.strict_scope) {
         return target;
     }
 
     // Memory backpressure
-    if memory_monitor.is_critical() {
-        while memory_monitor.is_critical() {
+    if ctx.memory_monitor.is_critical() {
+        while ctx.memory_monitor.is_critical() {
             tokio::time::sleep(std::time::Duration::from_secs(2)).await;
         }
-    } else if memory_monitor.should_trigger_backpressure() {
+    } else if ctx.memory_monitor.should_trigger_backpressure() {
         tokio::time::sleep(std::time::Duration::from_millis(500)).await;
     }
 
-    dashboard_targets.insert(target.host.clone(), target.clone());
-    if let Some(ref tx) = dashboard_tx {
+    ctx.dashboard_targets.insert(target.host.clone(), target.clone());
+    if let Some(ref tx) = ctx.dashboard_tx {
         for f in target.findings.iter() {
             let _ = tx.send(f.clone());
         }
@@ -180,32 +184,32 @@ pub async fn process_target(
 
     target.status = TargetStatus::Scanning;
     target.version += 1;
-    dashboard_targets.insert(target.host.clone(), target.clone());
+    ctx.dashboard_targets.insert(target.host.clone(), target.clone());
     
     let target_arc = Arc::new(target);
     
     // Dispatch scan
     let (mut all_findings, plugin_error) = dispatch_scan(
         target_arc.clone(),
-        plugins.clone(),
-        lp,
-        approval_gate.clone(),
-        memory_semaphore,
-        memory_monitor
+        ctx.plugins.clone(),
+        ctx.lp,
+        ctx.approval_gate.clone(),
+        ctx.memory_semaphore,
+        ctx.memory_monitor
     ).await;
 
-    dashboard_targets.remove(&target_arc.host);
+    ctx.dashboard_targets.remove(&target_arc.host);
     let mut target = Arc::try_unwrap(target_arc).unwrap_or_else(|arc| (*arc).clone());
 
     if !all_findings.is_empty() {
         // Ingest findings
         for f in &all_findings {
-            inventory.ingest_finding(f.clone(), crate::core::orchestrator::swarm::inventory::TrustLevel::Private);
+            ctx.inventory.ingest_finding(f.clone(), crate::core::orchestrator::swarm::inventory::TrustLevel::Private);
         }
 
         // Reactive logic
         let mut extra = reactive::run_reactive_logic(
-            &target, &all_findings, &plugins, &lp, &approval_gate, &inventory
+            &target, &all_findings, &ctx.plugins, &ctx.lp, &ctx.approval_gate, &ctx.inventory
         ).await;
         all_findings.append(&mut extra);
 
@@ -224,7 +228,7 @@ pub async fn process_target(
     }
 
     // BlackArch suggestions
-    let suggestions = enrichment::suggest_blackarch_tools(&target.findings, &blackarch_bridge);
+    let suggestions = enrichment::suggest_blackarch_tools(&target.findings, &ctx.blackarch_bridge);
     if !suggestions.is_empty() {
         Arc::make_mut(&mut target.tool_suggestions).extend(suggestions);
     }
@@ -236,12 +240,12 @@ pub async fn process_target(
     }
     target.version += 1;
 
-    if let Some(ref tx) = dashboard_tx {
+    if let Some(ref tx) = ctx.dashboard_tx {
         for f in target.findings.iter() {
             let _ = tx.send(f.clone());
         }
     }
-    dashboard_targets.insert(target.host.clone(), target.clone());
+    ctx.dashboard_targets.insert(target.host.clone(), target.clone());
 
     target
 }

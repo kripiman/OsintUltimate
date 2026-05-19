@@ -175,12 +175,22 @@ impl<M: ExecutorMode> Orchestrator<M> {
                     let dashboard_targets = self.dashboard_targets.clone();
                     let inventory = self.inventory.clone();
                     
+                    let ctx = dispatch::TargetProcessContext {
+                        plugins,
+                        lp,
+                        policy,
+                        strict_scope,
+                        approval_gate,
+                        blackarch_bridge,
+                        memory_semaphore,
+                        memory_monitor,
+                        dashboard_tx,
+                        dashboard_targets,
+                        inventory,
+                    };
+                    
                     async move {
-                        dispatch::process_target(
-                            target, plugins, lp, policy, strict_scope, approval_gate,
-                            blackarch_bridge, memory_semaphore, memory_monitor,
-                            dashboard_tx, dashboard_targets, inventory
-                        ).await
+                        dispatch::process_target(target, ctx).await
                     }
                 }).buffer_unordered(self.concurrency);
 

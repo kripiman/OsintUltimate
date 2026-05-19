@@ -331,7 +331,7 @@ pub async fn submit_mobile_scan(
             let temp_dir = std::path::PathBuf::from("/tmp/osint_scans").join(uuid.to_string());
             
             // Fix 3: Async I/O (tokio::fs)
-            if let Err(_) = tokio::fs::create_dir_all(&temp_dir).await {
+            if tokio::fs::create_dir_all(&temp_dir).await.is_err() {
                 return (StatusCode::INTERNAL_SERVER_ERROR, "Error creando sandbox").into_response();
             }
 
@@ -366,12 +366,12 @@ pub async fn submit_mobile_scan(
                     return (StatusCode::PAYLOAD_TOO_LARGE, "Archivo excede límite de 500MB").into_response();
                 }
 
-                if let Err(_) = file.write_all(&chunk).await {
+                if file.write_all(&chunk).await.is_err() {
                     return (StatusCode::INTERNAL_SERVER_ERROR, "Error escribiendo archivo").into_response();
                 }
             }
 
-            if let Err(_) = file.flush().await {
+            if file.flush().await.is_err() {
                 return (StatusCode::INTERNAL_SERVER_ERROR, "Error sincronizando archivo").into_response();
             }
 
