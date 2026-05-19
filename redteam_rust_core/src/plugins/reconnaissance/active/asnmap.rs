@@ -10,6 +10,12 @@ pub struct AsnmapScanner {
     binary_path: String,
 }
 
+impl Default for AsnmapScanner {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl AsnmapScanner {
     pub fn new() -> Self {
         let path = detect_tool("asnmap");

@@ -11,6 +11,12 @@ pub struct JwksDiscoveryScanner {
     client: reqwest::Client,
 }
 
+impl Default for JwksDiscoveryScanner {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl JwksDiscoveryScanner {
     pub fn new() -> Self {
         Self {

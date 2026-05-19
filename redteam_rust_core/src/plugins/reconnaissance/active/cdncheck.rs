@@ -9,6 +9,12 @@ pub struct CdnCheckScanner {
     binary_path: String,
 }
 
+impl Default for CdnCheckScanner {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl CdnCheckScanner {
     pub fn new() -> Self {
         let path = detect_tool("cdncheck");

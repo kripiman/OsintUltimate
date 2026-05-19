@@ -144,7 +144,7 @@ impl<M: ExecutorMode> C2Operator for SliverScanner<M> {
                                 let op = crate::core::orchestrator::c2::typestate::SliverOperator::<crate::core::orchestrator::c2::typestate::Established>::new()
                                     .with_fingerprint(expected_fp.to_string());
                                 
-                                if let Ok(_) = op.promote(actual_fp) {
+                                if op.promote(actual_fp).is_ok() {
                                     info!("✅ V14.2 SOVEREIGN: mTLS fingerprint verified for {}", target.host);
                                     return Ok(SessionState::Sovereign);
                                 } else {

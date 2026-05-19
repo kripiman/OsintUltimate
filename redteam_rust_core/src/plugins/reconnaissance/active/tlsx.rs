@@ -14,6 +14,12 @@ pub struct TlsxScanner {
     feedback_tx: Arc<RwLock<Option<Sender<TargetHost>>>>,
 }
 
+impl Default for TlsxScanner {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl TlsxScanner {
     pub fn new() -> Self {
         let path = detect_tool("tlsx");

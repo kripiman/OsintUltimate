@@ -84,11 +84,9 @@ impl<M: ExecutorMode> ScannerPlugin for NucleiScanner<M> {
             // For now, we'll check a flag if we can access it, or just use a placeholder.
             // Since check_dependencies doesn't have access to the full config easily without modifying the trait,
             // we'll assume it's controlled by an environment variable for now or we update the struct.
-            if self.auto_update {
-                if !UPDATED.swap(true, std::sync::atomic::Ordering::SeqCst) {
-                    info!("🔄 NUCLEI: Updating templates...");
-                    let _ = self.executor.execute_and_wait(&self.binary_path, vec!["-update-templates".to_string()]).await;
-                }
+            if self.auto_update && !UPDATED.swap(true, std::sync::atomic::Ordering::SeqCst) {
+                info!("🔄 NUCLEI: Updating templates...");
+                let _ = self.executor.execute_and_wait(&self.binary_path, vec!["-update-templates".to_string()]).await;
             }
         }
         Ok(available)

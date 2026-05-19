@@ -62,7 +62,7 @@ impl ScannerPlugin for KerbruteScanner {
         // Validation: Must be AD target or have port 88 open
         let has_port_88 = target.findings.iter().any(|f| {
             f.category == Category::NetworkPort 
-            && f.evidence.primary.as_ref().map_or(false, |ev| {
+            && f.evidence.primary.as_ref().is_some_and(|ev| {
                 ev.data.get("port").and_then(|p| p.as_u64()) == Some(88)
             })
         });

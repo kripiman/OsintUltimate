@@ -330,7 +330,7 @@ impl SovereignReconScanner {
                                     
                                     // G2: Use 'total' for precise bounds
                                     let total = data.total.unwrap_or(0);
-                                    let total_pages = (total + page_size - 1) / page_size;
+                                    let total_pages = total.div_ceil(page_size);
                                     
                                     if count < page_size || page >= total_pages || page >= max_pages {
                                         break;
@@ -402,7 +402,7 @@ impl SovereignReconScanner {
                                     
                                     // G4: Use 'total' for precise bounds
                                     let total = data.total.unwrap_or(0);
-                                    let total_pages = (total + page_size - 1) / page_size;
+                                    let total_pages = total.div_ceil(page_size);
 
                                     if count < page_size || page >= total_pages || page >= max_pages {
                                         break;

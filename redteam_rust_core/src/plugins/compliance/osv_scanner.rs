@@ -180,7 +180,7 @@ impl ScannerPlugin for OSVScanner {
                     if let Ok(v) = serde_json::from_str::<serde_json::Value>(&content) {
                         if let Some(deps) = v.get("dependencies").and_then(|d| d.as_object()) {
                             for (name, version_req) in deps {
-                                let version = version_req.as_str().unwrap_or("").trim_start_matches(|c| c == '^' || c == '~');
+                                let version = version_req.as_str().unwrap_or("").trim_start_matches(['^', '~']);
                                 if !version.is_empty() {
                                     if let Ok(mut api_findings) = self.scan_api(name, version, "npm").await {
                                         findings.append(&mut api_findings);

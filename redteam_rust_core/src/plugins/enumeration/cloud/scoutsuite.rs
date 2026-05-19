@@ -10,6 +10,12 @@ pub struct ScoutSuiteScanner {
     binary_path: String,
 }
 
+impl Default for ScoutSuiteScanner {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl ScoutSuiteScanner {
     pub fn new() -> Self {
         let binary_path = detect_tool("scoutsuite");
