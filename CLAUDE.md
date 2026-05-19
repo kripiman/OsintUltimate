@@ -341,8 +341,10 @@ Dashboard allows live mission injection (new targets added mid-scan).
 - **Sink interface** — `src/core/sink.rs::DataSink` trait for output backends
 
 ## Active Audit Status
-- **Status**: Under Audit (ARCH-12 Phase 2 Rehabilitation Submitted for Review)
-- **Checklist**: Awaiting auditor verdict on full Phase 2 (ARCH-12) admission.
+- **Status**: Sprint 4.2 CLOSED (Stages A, B, C.1-C.3 admitted)
+- **Next**: Stage D charter pending (core/utils/bin/tests scope)
+- **HEAD**: a1f0296 
+- **Baseline SHA256**: f65085dc14e274afb071dec17774ed49bc5c58b92cdf739dec87f256445da058
 - **Authority**: Stage admission verdict is issued solely by the auditor; coder has no authority to self-attest admission.
 - **MCP ownership**: `osint-ultimate` custom development automation server maintained by the Architecture team.
 
