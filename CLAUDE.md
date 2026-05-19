@@ -341,9 +341,9 @@ Dashboard allows live mission injection (new targets added mid-scan).
 - **Sink interface** — `src/core/sink.rs::DataSink` trait for output backends
 
 ## Active Audit Status
-- **Status**: Sprint 5 - Stage 5.D SUBMITTED FOR AUDIT
-- **Next**: Stage 5.E (Final checks and polish)
-- **HEAD**: dd6a551
+- **Status**: Sprint 5 CLOSED (Stage 5.D Admitted via Option D)
+- **Next**: Sprint 6 Charter Definition
+- **HEAD**: 0c71b34
 - **Baseline SHA256**: f65085dc14e274afb071dec17774ed49bc5c58b92cdf739dec87f256445da058
 - **Authority**: Stage admission verdict is issued solely by the auditor; coder has no authority to self-attest admission.
 - **MCP ownership**: `osint-ultimate` custom development automation server maintained by the Architecture team.
