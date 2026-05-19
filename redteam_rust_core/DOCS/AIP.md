@@ -1,6 +1,6 @@
 # AIP — Architect Improvement Plan
 
-> Source-verified audit. Status column updated against actual `src/`. Last verified: 2026-05-08 (pass 2).
+> Source-verified audit. Status column updated against actual `src/`. Last verified: 2026-05-18 (pass 3).
 > Format: **PROBLEM → FIX → IMPACT → STATUS**
 
 ---
@@ -118,7 +118,9 @@ if let Some(p) = params {
 
 ## [2] TOKENS: DATA-GUT
 
-### 2.1 🔴 Unified Header Strip — Tactical Headers Stripped (REGRESSION)
+### 2.1 ✅ Unified Header Strip — Tactical Headers Stripped (REGRESSION)
+
+**Status: RESOLVED** in ARCH-12 Phase 2 Stage 1 (commit `7f9ecf3`). Whitelist whitelists `"server"` and `"x-powered-by"` and properly retains them.
 
 **Problem (REGRESSION):** `compressor.rs::minify_headers()` at line 131 explicitly strips `server` and `x-powered-by` via hardcoded exclusion — exactly the two tactical headers that should be preserved. Current whitelist for non-planner mode: `["location", "www-authenticate", "x-content-type-options"]`. The intent was to KEEP `server`+`x-powered-by` and drop the rest. Implementation inverted the logic.
 
@@ -165,7 +167,9 @@ pub fn compress_target_lean(target: &TargetHost) -> serde_json::Value {
 
 ---
 
-### 2.3 🟡 Dense Finding Encoding (P2)
+### 2.3 ✅ Dense Finding Encoding (P2)
+
+**Status: RESOLVED** in ARCH-12 Phase 2 Stage 2 (commit `61884a5`). Implemented as `ContextCompressor::compress_finding_dense`.
 
 **Problem:** `compress_finding()` emits `"conf": "POTENTIAL"/"VERIFIED"`, `"sev": "Critical"` as full strings. Low-entropy tokens for LLM consumption.
 
@@ -291,9 +295,9 @@ pub fn parse_nmap_output(raw: &[u8]) -> Result<Vec<Finding>> { ... }
 
 | # | Item | Status | Impact | Priority |
 |---|------|--------|--------|----------|
-| 2.1 | Header strip regression — server+x-powered-by stripped | 🔴 Regression | MED | P0 |
+| 2.1 | Header strip regression — server+x-powered-by stripped | ✅ Done | MED | — |
 | 2.2 | compress_target_lean for Tier 0 (O(n) iter gap) | ✅ Done | MED | — |
-| 2.3 | Dense finding encoding | 🟡 Pending | LOW | P2 |
+| 2.3 | Dense finding encoding | ✅ Done | LOW | — |
 | 3.3b | Zero-copy Bytes payloads | 🟢 Pending | MED | P3 |
 | 1.1 | ReactiveChainGuard — kill re-scan | ✅ Done (`fired_chains` DashSet) | HIGH | — |
 | 1.2 | SOURCE_LEAK→Semgrep / SERIAL→Deserialization | ✅ Done (orchestrator.rs:615,631) | HIGH | — |
