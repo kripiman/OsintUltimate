@@ -23,3 +23,6 @@
 - `[x]` **Stage B (D2+D3 Test Hermeticity)**
     - `[x]` Harden cache tests (`test_mcp_two_level_cache`) with sandbox-grade postgres gating
     - `[x]` Harden persistence tests (`test_objective_persistence`) with tempdir isolation
+- `[x]` **Stage C.1 (triage plugins clippy)**
+- `[x]` **Stage C.2 (verification plugins clippy)**
+- `[x]` **Stage C.3 (residual plugins clippy + import contain)**
