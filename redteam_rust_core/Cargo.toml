@@ -128,6 +128,11 @@ strip = true # Strip symbols for smaller binary
 
 [dev-dependencies]
 wiremock = "0.5"
+criterion = { version = "0.5", features = ["html_reports"] }
+
+[[bench]]
+name = "sprint_7_5"
+harness = false
 
 [build-dependencies]
 tonic-build = "0.12"
