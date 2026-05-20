@@ -11,7 +11,7 @@ static KEYRING: OnceLock<ShodanKeyring> = OnceLock::new();
 
 impl ShodanKeyring {
     pub fn init(config: &Config) {
-        let student_key = config.shodan_student_api_key.clone();
+        let student_key = std::env::var("SHODAN_STUDENT_API_KEY").ok();
         let paid_key = config.shodan_api_key.clone();
 
         let keyring = Self { student_key, paid_key };

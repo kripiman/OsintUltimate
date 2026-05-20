@@ -99,7 +99,7 @@ impl SovereignReconScanner {
             _ => return subdomains,
         };
 
-        if !ApiBudgetRegistry::get().can_spend("chaos", 1) {
+        if !ApiBudgetRegistry::get().can_spend("chaos", 1).await {
             return subdomains;
         }
 
@@ -142,7 +142,7 @@ impl SovereignReconScanner {
             _ => return subdomains,
         };
 
-        if !ApiBudgetRegistry::get().can_spend("securitytrails", 1) {
+        if !ApiBudgetRegistry::get().can_spend("securitytrails", 1).await {
             return subdomains;
         }
 
@@ -185,7 +185,7 @@ impl SovereignReconScanner {
             _ => return subdomains,
         };
 
-        if !ApiBudgetRegistry::get().can_spend("netlas", 1) {
+        if !ApiBudgetRegistry::get().can_spend("netlas", 1).await {
             return subdomains;
         }
 
@@ -238,7 +238,7 @@ impl SovereignReconScanner {
             _ => return results,
         };
 
-        if !ApiBudgetRegistry::get().can_spend(slot, 1) {
+        if !ApiBudgetRegistry::get().can_spend(slot, 1).await {
             return results;
         }
 
@@ -281,7 +281,7 @@ impl SovereignReconScanner {
             _ => return findings,
         };
 
-        if !ApiBudgetRegistry::get().can_spend("criminalip", 1) {
+        if !ApiBudgetRegistry::get().can_spend("criminalip", 1).await {
             return findings;
         }
 
@@ -333,7 +333,7 @@ impl SovereignReconScanner {
             _ => return subdomains,
         };
 
-        if !ApiBudgetRegistry::get().can_spend("fofa", 1) {
+        if !ApiBudgetRegistry::get().can_spend("fofa", 1).await {
             return subdomains;
         }
 
@@ -423,7 +423,7 @@ impl SovereignReconScanner {
             _ => return subdomains,
         };
 
-        if !ApiBudgetRegistry::get().can_spend("zoomeye", 1) {
+        if !ApiBudgetRegistry::get().can_spend("zoomeye", 1).await {
             return subdomains;
         }
 
