@@ -40,10 +40,15 @@ pub async fn build_multi_sink(
         redteam_rust_core::utils::api_budget::ApiBudgetRegistry::init(utils_config, Some(sink.pool().clone()));
         redteam_rust_core::utils::api_cache::ApiCache::init(sink.pool().clone());
         redteam_rust_core::utils::shodan_keyring::ShodanKeyring::init(utils_config);
+        info!("🛡️ [Boot] ApiBudgetRegistry initialized (DB-backed).");
+        info!("🛡️ [Boot] ApiCache initialized (DB-backed).");
+        info!("🛡️ [Boot] ShodanKeyring initialized.");
         multi_sink.add(Box::new(sink));
     } else {
         redteam_rust_core::utils::api_budget::ApiBudgetRegistry::init(utils_config, None);
         redteam_rust_core::utils::shodan_keyring::ShodanKeyring::init(utils_config);
+        info!("🛡️ [Boot] ApiBudgetRegistry initialized (mem-only fallback).");
+        info!("🛡️ [Boot] ShodanKeyring initialized.");
         multi_sink.add(Box::new(JsonlSink::new(&args.jsonl_output).await?));
     }
 
