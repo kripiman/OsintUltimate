@@ -23,6 +23,10 @@ pub struct SovereignReconScanner {
     fofa_email: Option<String>,
     fofa_key: Option<String>,
     zoomeye_key: Option<String>,
+    pub shodan_paid_max_hosts: usize,
+    pub shodan_host_ip_max_hosts: usize,
+    pub fofa_max_hosts: usize,
+    pub securitytrails_max_hosts: usize,
 }
 impl SovereignReconScanner {
     pub fn new(config: &crate::utils::config::Config, pm: Arc<ProxyManager>) -> Self {
@@ -38,6 +42,10 @@ impl SovereignReconScanner {
             fofa_email: config.fofa_email.clone(),
             fofa_key: config.fofa_api_key.clone(),
             zoomeye_key: config.zoomeye_api_key.clone(),
+            shodan_paid_max_hosts: config.shodan_paid_max_hosts_per_scan,
+            shodan_host_ip_max_hosts: config.shodan_host_ip_max_hosts_per_scan,
+            fofa_max_hosts: config.fofa_max_hosts_per_scan,
+            securitytrails_max_hosts: config.securitytrails_max_hosts_per_scan,
         }
     }
     pub(super) async fn get_client(&self, host: &str) -> Result<Client> {

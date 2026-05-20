@@ -7,6 +7,12 @@ use tracing::{debug, warn};
 use crate::utils::api_budget::ApiBudgetRegistry;
 use crate::utils::shodan_keyring::ShodanKeyring;
 
+fn apply_cap(set: HashSet<String>, limit: usize) -> HashSet<String> {
+    if limit == 0 { return HashSet::new(); }
+    if set.len() > limit { set.into_iter().take(limit).collect() }
+    else { set }
+}
+
 impl SovereignReconScanner {
     // --- Phase 0: Wayback Machine (URL History) ---
     pub(super) async fn query_wayback(&self, domain: &str) -> HashSet<String> {
@@ -130,9 +136,14 @@ impl SovereignReconScanner {
 
     // --- Phase 2: SecurityTrails ---
     pub(super) async fn query_securitytrails(&self, domain: &str) -> HashSet<String> {
+        let limit = self.securitytrails_max_hosts;
+        if limit == 0 {
+            return HashSet::new();
+        }
+
         if let Some(cache) = crate::utils::api_cache::ApiCache::global() {
             if let Some(hit) = cache.get::<HashSet<String>>("securitytrails", domain, "subdomains", Duration::from_secs(86400)).await {
-                return hit;
+                return apply_cap(hit, limit);
             }
         }
 
@@ -168,7 +179,7 @@ impl SovereignReconScanner {
                 cache.put("securitytrails", domain, "subdomains", &subdomains).await;
             }
         }
-        subdomains
+        apply_cap(subdomains, limit)
     }
 
     // --- Phase 3: Netlas (Paid & Optimized) ---
@@ -226,9 +237,15 @@ impl SovereignReconScanner {
 
     // --- Phase 4: Shodan (Enrichment) ---
     pub(super) async fn query_shodan(&self, domain: &str) -> HashSet<String> {
+        // min防止paid search與host enrichment兩路合計超出單次掃描預算
+        let limit = std::cmp::min(self.shodan_paid_max_hosts, self.shodan_host_ip_max_hosts);
+        if limit == 0 {
+            return HashSet::new();
+        }
+
         if let Some(cache) = crate::utils::api_cache::ApiCache::global() {
             if let Some(hit) = cache.get::<HashSet<String>>("shodan", domain, "subdomains", Duration::from_secs(86400)).await {
-                return hit;
+                return apply_cap(hit, limit);
             }
         }
 
@@ -264,7 +281,7 @@ impl SovereignReconScanner {
                 cache.put("shodan", domain, "subdomains", &results).await;
             }
         }
-        results
+        apply_cap(results, limit)
     }
 
     // --- Phase 5: Crimina    // --- Phase 5: Criminal IP (Reputation) ---
@@ -321,9 +338,14 @@ impl SovereignReconScanner {
 
     // --- Phase 6: FOFA (High Coverage) ---
     pub(super) async fn query_fofa(&self, domain: &str) -> HashSet<String> {
+        let limit = self.fofa_max_hosts;
+        if limit == 0 {
+            return HashSet::new();
+        }
+
         if let Some(cache) = crate::utils::api_cache::ApiCache::global() {
             if let Some(hit) = cache.get::<HashSet<String>>("fofa", domain, "subdomains", Duration::from_secs(86400)).await {
-                return hit;
+                return apply_cap(hit, limit);
             }
         }
 
@@ -406,7 +428,7 @@ impl SovereignReconScanner {
                 cache.put("fofa", domain, "subdomains", &subdomains).await;
             }
         }
-        subdomains
+        apply_cap(subdomains, limit)
     }
 
     // --- Phase 7: ZoomEye (Network Context) ---
@@ -496,5 +518,23 @@ impl SovereignReconScanner {
             }
         }
         subdomains
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::apply_cap;
+    use std::collections::HashSet;
+
+    #[test]
+    fn test_per_api_cap_truncates_at_limit() {
+        let input: HashSet<String> = (0..10).map(|i| i.to_string()).collect();
+        assert_eq!(apply_cap(input, 3).len(), 3);
+    }
+
+    #[test]
+    fn test_per_api_cap_respects_zero_disables() {
+        let input: HashSet<String> = ["x".to_string()].into();
+        assert!(apply_cap(input, 0).is_empty());
     }
 }

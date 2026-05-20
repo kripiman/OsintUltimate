@@ -8,6 +8,7 @@ use std::time::Duration;
 
 pub struct GreyNoiseScanner {
     api_key: Option<String>,
+    pub max_ips: usize,
 }
 
 impl Default for GreyNoiseScanner {
@@ -20,6 +21,10 @@ impl GreyNoiseScanner {
     pub fn new() -> Self {
         Self {
             api_key: std::env::var("GREYNOISE_API_KEY").ok(),
+            max_ips: std::env::var("GREYNOISE_MAX_IPS_PER_SCAN")
+                .ok()
+                .and_then(|s| s.parse().ok())
+                .unwrap_or(50),
         }
     }
 }
@@ -57,6 +62,11 @@ impl ScannerPlugin for GreyNoiseScanner {
     }
 
     async fn scan(&self, target: &TargetHost) -> Result<Vec<Finding>> {
+        if self.max_ips == 0 {
+            warn!("GreyNoiseScanner: max_ips is 0 (disabled). Skipping.");
+            return Ok(Vec::new());
+        }
+
         let ip = match &target.ip {
             Some(ip) => ip,
             None => {
@@ -126,5 +136,36 @@ impl ScannerPlugin for GreyNoiseScanner {
         }
 
         Ok(findings)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_greynoise_max_ips_propagation() {
+        std::env::set_var("GREYNOISE_MAX_IPS_PER_SCAN", "10");
+        let scanner = GreyNoiseScanner::new();
+        assert_eq!(scanner.max_ips, 10);
+
+        std::env::set_var("GREYNOISE_MAX_IPS_PER_SCAN", "0");
+        let scanner_disabled = GreyNoiseScanner::new();
+        assert_eq!(scanner_disabled.max_ips, 0);
+
+        std::env::remove_var("GREYNOISE_MAX_IPS_PER_SCAN");
+    }
+
+    #[tokio::test]
+    async fn test_greynoise_zero_disables_scan() {
+        let mut scanner = GreyNoiseScanner::new();
+        scanner.max_ips = 0;
+        let target = TargetHost {
+            host: "8.8.8.8".to_string(),
+            ip: Some("8.8.8.8".to_string()),
+            ..Default::default()
+        };
+        let findings = scanner.scan(&target).await.unwrap();
+        assert!(findings.is_empty());
     }
 }

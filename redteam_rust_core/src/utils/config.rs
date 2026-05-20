@@ -87,6 +87,11 @@ pub struct Config {
     pub post_exploit_min_delay_ms: u64,
     pub post_exploit_max_delay_ms: u64,
     pub workspace_dir: String,
+    pub shodan_paid_max_hosts_per_scan: usize,
+    pub shodan_host_ip_max_hosts_per_scan: usize,
+    pub fofa_max_hosts_per_scan: usize,
+    pub greynoise_max_ips_per_scan: usize,
+    pub securitytrails_max_hosts_per_scan: usize,
 }
 
 impl Config {
@@ -216,6 +221,26 @@ impl Config {
                 .and_then(|s| s.parse().ok())
                 .unwrap_or(30000),
             workspace_dir: env::var("MIMIKRI_WORKSPACE").unwrap_or_else(|_| "workspace".to_string()),
+            shodan_paid_max_hosts_per_scan: env::var("SHODAN_PAID_MAX_HOSTS_PER_SCAN")
+                .ok()
+                .and_then(|s| s.parse().ok())
+                .unwrap_or(20),
+            shodan_host_ip_max_hosts_per_scan: env::var("SHODAN_HOST_IP_MAX_HOSTS_PER_SCAN")
+                .ok()
+                .and_then(|s| s.parse().ok())
+                .unwrap_or(10),
+            fofa_max_hosts_per_scan: env::var("FOFA_MAX_HOSTS_PER_SCAN")
+                .ok()
+                .and_then(|s| s.parse().ok())
+                .unwrap_or(100),
+            greynoise_max_ips_per_scan: env::var("GREYNOISE_MAX_IPS_PER_SCAN")
+                .ok()
+                .and_then(|s| s.parse().ok())
+                .unwrap_or(50),
+            securitytrails_max_hosts_per_scan: env::var("SECURITYTRAILS_MAX_HOSTS_PER_SCAN")
+                .ok()
+                .and_then(|s| s.parse().ok())
+                .unwrap_or(20),
         }
     }
 
