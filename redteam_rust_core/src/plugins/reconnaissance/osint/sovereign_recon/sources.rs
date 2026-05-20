@@ -7,6 +7,9 @@ use tracing::{debug, warn};
 use crate::utils::api_budget::ApiBudgetRegistry;
 use crate::utils::shodan_keyring::ShodanKeyring;
 
+const CACHE_TTL_SHORT_SECS: u64 = 43_200; // 12h: free/rate-limited APIs
+const CACHE_TTL_LONG_SECS: u64  = 86_400; // 24h: paid APIs with quota cost
+
 fn apply_cap(set: HashSet<String>, limit: usize) -> HashSet<String> {
     if limit == 0 { return HashSet::new(); }
     if set.len() > limit { set.into_iter().take(limit).collect() }
@@ -17,7 +20,7 @@ impl SovereignReconScanner {
     // --- Phase 0: Wayback Machine (URL History) ---
     pub(super) async fn query_wayback(&self, domain: &str) -> HashSet<String> {
         if let Some(cache) = crate::utils::api_cache::ApiCache::global() {
-            if let Some(hit) = cache.get::<HashSet<String>>("wayback", domain, "subdomains", Duration::from_secs(43200)).await {
+            if let Some(hit) = cache.get::<HashSet<String>>("wayback", domain, "subdomains", Duration::from_secs(CACHE_TTL_SHORT_SECS)).await {
                 return hit;
             }
         }
@@ -57,7 +60,7 @@ impl SovereignReconScanner {
     // --- Phase 0.5: HackerTarget ---
     pub(super) async fn query_hackertarget(&self, domain: &str) -> HashSet<String> {
         if let Some(cache) = crate::utils::api_cache::ApiCache::global() {
-            if let Some(hit) = cache.get::<HashSet<String>>("hackertarget", domain, "subdomains", Duration::from_secs(43200)).await {
+            if let Some(hit) = cache.get::<HashSet<String>>("hackertarget", domain, "subdomains", Duration::from_secs(CACHE_TTL_SHORT_SECS)).await {
                 return hit;
             }
         }
@@ -94,7 +97,7 @@ impl SovereignReconScanner {
     // --- Phase 1: Chaos (PD) ---
     pub(super) async fn query_chaos(&self, domain: &str) -> HashSet<String> {
         if let Some(cache) = crate::utils::api_cache::ApiCache::global() {
-            if let Some(hit) = cache.get::<HashSet<String>>("chaos", domain, "subdomains", Duration::from_secs(43200)).await {
+            if let Some(hit) = cache.get::<HashSet<String>>("chaos", domain, "subdomains", Duration::from_secs(CACHE_TTL_SHORT_SECS)).await {
                 return hit;
             }
         }
@@ -142,7 +145,7 @@ impl SovereignReconScanner {
         }
 
         if let Some(cache) = crate::utils::api_cache::ApiCache::global() {
-            if let Some(hit) = cache.get::<HashSet<String>>("securitytrails", domain, "subdomains", Duration::from_secs(86400)).await {
+            if let Some(hit) = cache.get::<HashSet<String>>("securitytrails", domain, "subdomains", Duration::from_secs(CACHE_TTL_LONG_SECS)).await {
                 return apply_cap(hit, limit);
             }
         }
@@ -185,7 +188,7 @@ impl SovereignReconScanner {
     // --- Phase 3: Netlas (Paid & Optimized) ---
     pub(super) async fn query_netlas(&self, domain: &str) -> HashSet<String> {
         if let Some(cache) = crate::utils::api_cache::ApiCache::global() {
-            if let Some(hit) = cache.get::<HashSet<String>>("netlas", domain, "subdomains", Duration::from_secs(86400)).await {
+            if let Some(hit) = cache.get::<HashSet<String>>("netlas", domain, "subdomains", Duration::from_secs(CACHE_TTL_LONG_SECS)).await {
                 return hit;
             }
         }
@@ -244,7 +247,7 @@ impl SovereignReconScanner {
         }
 
         if let Some(cache) = crate::utils::api_cache::ApiCache::global() {
-            if let Some(hit) = cache.get::<HashSet<String>>("shodan", domain, "subdomains", Duration::from_secs(86400)).await {
+            if let Some(hit) = cache.get::<HashSet<String>>("shodan", domain, "subdomains", Duration::from_secs(CACHE_TTL_LONG_SECS)).await {
                 return apply_cap(hit, limit);
             }
         }
@@ -287,7 +290,7 @@ impl SovereignReconScanner {
     // --- Phase 5: Crimina    // --- Phase 5: Criminal IP (Reputation) ---
     pub(super) async fn query_criminalip(&self, host: &str) -> Vec<String> {
         if let Some(cache) = crate::utils::api_cache::ApiCache::global() {
-            if let Some(hit) = cache.get::<Vec<String>>("criminalip", host, "reputation", Duration::from_secs(86400)).await {
+            if let Some(hit) = cache.get::<Vec<String>>("criminalip", host, "reputation", Duration::from_secs(CACHE_TTL_LONG_SECS)).await {
                 return hit;
             }
         }
@@ -344,7 +347,7 @@ impl SovereignReconScanner {
         }
 
         if let Some(cache) = crate::utils::api_cache::ApiCache::global() {
-            if let Some(hit) = cache.get::<HashSet<String>>("fofa", domain, "subdomains", Duration::from_secs(86400)).await {
+            if let Some(hit) = cache.get::<HashSet<String>>("fofa", domain, "subdomains", Duration::from_secs(CACHE_TTL_LONG_SECS)).await {
                 return apply_cap(hit, limit);
             }
         }
@@ -434,7 +437,7 @@ impl SovereignReconScanner {
     // --- Phase 7: ZoomEye (Network Context) ---
     pub(super) async fn query_zoomeye(&self, domain: &str) -> HashSet<String> {
         if let Some(cache) = crate::utils::api_cache::ApiCache::global() {
-            if let Some(hit) = cache.get::<HashSet<String>>("zoomeye", domain, "subdomains", Duration::from_secs(86400)).await {
+            if let Some(hit) = cache.get::<HashSet<String>>("zoomeye", domain, "subdomains", Duration::from_secs(CACHE_TTL_LONG_SECS)).await {
                 return hit;
             }
         }
