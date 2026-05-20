@@ -88,3 +88,7 @@ Sprint 7 closeout completed. Retrospective log:
 
 
 
+
+### [2026-05-20 12:21:20] Atomic Strike
+### [2026-05-20] Stage 1.5.A Complete
+Implemented async database-synchronized budget tracking (d6f3506). Modified `ApiBudgetRegistry::can_spend` to be `async fn`. Integrated atomic constraint updates on the `mcp_stats` table in Postgres, with memory-backed AtomicU32 CAS fallbacks for offline execution. Decoupled student keyring configs via env variables. All 3 unit tests (lost increment panic safety, concurrent startup, and DB sync) passed successfully.

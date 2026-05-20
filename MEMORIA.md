@@ -1,7 +1,7 @@
 # MEMORIA
 
-## Sprint 7 (CLOSED 2026-05-20)
-- Track 1 SQLx CI: closed
-- Track 2 plugin metadata: closed (2 destructive plugins gated: sqlmap, jwt_forge)
-- Track 3 TLS impersonation: closed (wreq v5.3.0 + Chrome126 emulation)
-- Open items: Phase B (pre-commit hook + branch protection)
+## Sprint 7.5 — Inter-sprint stabilization (IN PROGRESS)
+- Stage 1.5.A: Closed. Implemented async DB budget sync (d6f3506).
+- Stage 1.5.B: Pending. Per-API Caps in Config.
+- Stage 1.5.D: Pending. Canonical Params in Cache.
+- Stage 1.5.S: Pending. Smoke Test & Benchmarks.
