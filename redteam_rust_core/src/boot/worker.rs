@@ -27,6 +27,11 @@ pub async fn run_worker_mode(args: &Args) -> Result<()> {
         .await?;
 
     let utils_config = Config::from_env();
+
+    // Initialize global singletons once per worker node
+    redteam_rust_core::utils::api_budget::ApiBudgetRegistry::init(&utils_config, Some(pool.clone()));
+    redteam_rust_core::utils::api_cache::ApiCache::init(pool.clone());
+    redteam_rust_core::utils::shodan_keyring::ShodanKeyring::init(&utils_config);
     
     loop {
         // Poll for a job
