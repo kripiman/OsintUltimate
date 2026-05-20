@@ -184,3 +184,4 @@ redteam_rust_core/src/scratch.rs
 *.original.md
 redteam_rust_core/examples/audit_tools/
 
+rust_context.txt

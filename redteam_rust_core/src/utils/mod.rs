@@ -40,3 +40,6 @@ pub use process_guard::ExternalToolGuard;
 pub use tool_detection::{detect_tool, detect_tool_system, check_tool_availability, verify_tool_version};
 pub mod hardware_detection;
 pub use hardware_detection::{InfrastructureType, HardwareInfo, detect_infrastructure};
+pub mod api_cache;
+pub mod api_budget;
+pub mod shodan_keyring;
