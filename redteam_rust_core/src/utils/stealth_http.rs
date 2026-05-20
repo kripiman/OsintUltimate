@@ -4,6 +4,9 @@ use anyhow::{Result, Context};
 use std::time::Duration;
 use crate::utils::proxy::ProxyManager;
 
+#[cfg(feature = "tls-impersonation")]
+use wreq_util::Emulation;
+
 pub struct StealthClientBuilder;
 
 impl StealthClientBuilder {
@@ -67,14 +70,8 @@ impl StealthClientBuilder {
 
         #[cfg(feature = "tls-impersonation")]
         {
-            use tracing::warn;
-            if policy.ja3_spoofing {
-                // Note: We use rquest only for the final build if needed, 
-                // but currently the return type is reqwest::Client.
-                // Professional Fix: Impersonation requires rquest::Client.
-                // For now, we keep the hook but warn if it cannot be applied to reqwest.
-                warn!("⚠️ JA3 Spoofing requested but reqwest backend doesn't support impersonation directly. Use rquest backend.");
-            }
+            // Note: For high-fidelity TLS impersonation, use build_impersonated() which returns a wreq::Client.
+            // reqwest::ClientBuilder does not support JA3/JA4 spoofing natively.
         }
         
         if !policy.follow_redirects {
@@ -82,5 +79,32 @@ impl StealthClientBuilder {
         }
 
         pm.configure_stealth_builder(builder)
+    }
+
+    /// Build a wreq::Client configured for TLS fingerprint impersonation.
+    /// Proxy routing is inherited from the ProxyManager (SOCKS5 path).
+    /// Only available with the `tls-impersonation` feature.
+    #[cfg(feature = "tls-impersonation")]
+    pub fn build_impersonated(
+        pm: &ProxyManager,
+        emulation: Emulation,
+    ) -> Result<wreq::Client> {
+        let mut builder = wreq::Client::builder().emulation(emulation);
+        if let Some(proxy_url) = pm.pick_best_proxy() {
+            let proxy = wreq::Proxy::all(&proxy_url)
+                .context("Invalid proxy URL for wreq impersonation client")?;
+            builder = builder.proxy(proxy);
+        }
+        builder
+            .timeout(Duration::from_secs(30))
+            .build()
+            .context("Failed to build wreq impersonation client")
+    }
+
+    /// Convenience builder: Chrome126 TLS fingerprint profile.
+    #[cfg(feature = "tls-impersonation")]
+    pub fn build_impersonated_chrome(pm: &ProxyManager) -> Result<wreq::Client> {
+        // Emulation::Chrome126 verified against wreq-util v2.2.6 at compile time.
+        Self::build_impersonated(pm, Emulation::Chrome126)
     }
 }
