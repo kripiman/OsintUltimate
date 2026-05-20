@@ -34,7 +34,7 @@ dirs = "5.0.1"
 addr = "0.15"
 
 # Network
-reqwest = { version = "0.11", features = ["json", "rustls-tls", "gzip", "stream", "socks", "multipart"] }
+reqwest = { version = "0.11", default-features = false, features = ["json", "rustls-tls", "gzip", "stream", "socks", "multipart"] }
 hyper-util = { version = "0.1", features = ["tokio"] }
 
 # CLI & Interface
@@ -64,8 +64,8 @@ tlsh-fixed = "0.1"
 rsa = "0.9"
 x509-parser = "0.15"
 wasmi = "0.31"
-# rquest = { version = "0.21.0", optional = true, features = ["impersonate"] }
-# rquest = { version = "0.21.0", optional = true, features = ["impersonate"] }
+wreq = { version = "5.3.0", optional = true }
+wreq-util = { version = "2.2.6", optional = true }
 tls-parser = "0.11"
 
 
@@ -118,7 +118,7 @@ bug-bounty = []
 ai-redteam = ["bug-bounty"]
 mobile = ["bug-bounty"]
 sovereign = ["bug-bounty", "mobile", "ai-redteam"]
-tls-impersonation = [] # Placeholder until rquest stability is resolved
+tls-impersonation = ["wreq", "wreq-util"]
 
 [profile.release]
 opt-level = 3
