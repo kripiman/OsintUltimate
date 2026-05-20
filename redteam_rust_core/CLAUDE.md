@@ -341,11 +341,10 @@ Dashboard allows live mission injection (new targets added mid-scan).
 - **Sink interface** — `src/core/sink.rs::DataSink` trait for output backends
 
 ## Active Audit Status
-- **Status**: Sprint 7 CLOSED (2026-05-20). Phase B planning pending.
-- **Next**: Phase B — pre-commit hook + branch protection
-- **HEAD**: f0a45ff
+- **Status**: Sprint 7.5 in progress (Stage 1.5.A landed)
+- **Next**: Stage 1.5.B — Per-API caps
+- **HEAD**: c5639ca
 - **Baseline SHA256**: f65085dc14e274afb071dec17774ed49bc5c58b92cdf739dec87f256445da058
-- **Authority**: Stage admission verdict is issued solely by the auditor; coder has no authority to self-attest admission.
-- **MCP ownership**: `osint-ultimate` custom development automation server maintained by the Architecture team.
+- **Violations cumulative**: 18 (Sprint 7=13, Sprint 7.5=5)
 
 

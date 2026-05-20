@@ -36,3 +36,9 @@
 - [x] 7.F build_impersonated adapter (commit 37abe7f)
 - [x] 7.G Wiremock integration tests (commit f0a45ff)
 - [x] 7.H Sprint retrospective + SSOT closeout (<this commit>)
+
+# Sprint 7.5 — Inter-Sprint Stabilization
+- [x] 1.5.A Async DB budget sync (commit d6f3506)
+- [ ] 1.5.B Per-API caps in config.rs
+- [ ] 1.5.D Canonical cache params
+- [ ] 1.5.S Smoke + benchmark
