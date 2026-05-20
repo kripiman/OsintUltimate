@@ -26,3 +26,13 @@
 - `[x]` **Stage C.1 (triage plugins clippy)**
 - `[x]` **Stage C.2 (verification plugins clippy)**
 - `[x]` **Stage C.3 (residual plugins clippy + import contain)**
+
+# Sprint 7 (CLOSED — 2026-05-20)
+- [x] 7.A SQLx Prepare CI (commit e734ab7)
+- [x] 7.B Plugin metadata audit (commit de254d7)
+- [x] 7.C Capabilities + destructiveness remediation (commit c1ef21b)
+- [x] 7.D Survey TLS Impersonation (commit 17fdb32)
+- [x] 7.E Cargo.toml wreq dep (commit b51125b)
+- [x] 7.F build_impersonated adapter (commit 37abe7f)
+- [x] 7.G Wiremock integration tests (commit f0a45ff)
+- [x] 7.H Sprint retrospective + SSOT closeout (<this commit>)

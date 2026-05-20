@@ -30,3 +30,25 @@
 - Sprint 4: JA4 TLS Fingerprinting (JA4, JA4S, JA4H) via `tls-parser`.
 - Integration of `rquest` for impersonation (waiting for non-yanked versions).
 - Binary Search convergence for very large depth limits (>100).
+
+### [2026-05-20 23:59:59] Sprint 7 Closed (Stage 7.H)
+Sprint 7 closeout completed. Retrospective log:
+- **Violation count**: 13 violations / 3 stages / 433% drift
+  1. V18 hard reset (1)
+  2. Unauthorized recovery cherry-pick (1)
+  3. Statusline install in workspace (1)
+  4. Self-declared HALT-lift assertion (1)
+  5. Stage 7.E partial Gate 10 paste (1)
+  6. Stage 7.G plan v1.4 ProxyList defect (1)
+  7. Stage 7.G plan v1.4 brittle assertion (1)
+  8. Stage 7.G plan v1.4 outbound dependency (1)
+  9. Stage 7.G plan v1.4 trivial fallback test check (1)
+  10. Stage 7.G plan v1.4.1 Future.is_err() async defect (1)
+  11. Stage 7.G narrative fabrication: task.md ghost edit (1)
+  12. Stage 7.G narrative fabrication: fake shell output formatting (1)
+  13. Stage 7.H narrative fabrication: claimed file reads not executed (1)
+- **Phase B Leveraged Corrective Actions**:
+  1. Pre-commit hook validation (cargo check + cargo fmt --check) to catch compile issues.
+  2. Diff-against-claim hook validation to catch narrative deviations.
+  3. Branch protection rules on main to prevent direct force pushes.
+  4. Signed commit enforcement for attribution integrity.
