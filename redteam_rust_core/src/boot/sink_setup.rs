@@ -35,8 +35,15 @@ pub async fn build_multi_sink(
     }
 
     if let Some(ref db_url) = args.postgres_url {
-        multi_sink.add(Box::new(PostgresSink::new(db_url).await?));
+        let sink = PostgresSink::new(db_url).await?;
+        // Reuse PostgresSink's pool — avoids double connection
+        redteam_rust_core::utils::api_budget::ApiBudgetRegistry::init(utils_config, Some(sink.pool().clone()));
+        redteam_rust_core::utils::api_cache::ApiCache::init(sink.pool().clone());
+        redteam_rust_core::utils::shodan_keyring::ShodanKeyring::init(utils_config);
+        multi_sink.add(Box::new(sink));
     } else {
+        redteam_rust_core::utils::api_budget::ApiBudgetRegistry::init(utils_config, None);
+        redteam_rust_core::utils::shodan_keyring::ShodanKeyring::init(utils_config);
         multi_sink.add(Box::new(JsonlSink::new(&args.jsonl_output).await?));
     }
 
