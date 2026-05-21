@@ -541,6 +541,35 @@ groups:
           summary: "Kill-switch executed"
 ```
 
+### 6.9 Oracle Logging Analytics Connector (Optional, paid tier)
+
+For redundancy in log ingestion, configure the Oracle Cloud Infrastructure (OCI) Logging Analytics service. This parallel log delivery pipeline ensures that even if Box3 (the primary Loki host) is compromised or inaccessible, security logs are safely stored in Oracle-managed vaults.
+
+Allocated from the $300 credit per `HYBRID §7` ($40/yr ≈ 90 days retention for 1 year).
+
+1. **Install OCI Management Agent**:
+   Download and install the agent on Box1, Box2, Box3 to stream files to Logging Analytics.
+   ```bash
+   # Download the management agent installer from the OCI Console (Management Agent > Downloads)
+   sudo rpm -ivh oracle-management-agent-*.rpm # For Oracle Linux/RHEL
+   # Or install on Ubuntu/Debian:
+   sudo dpkg -i oracle-management-agent-*.deb
+
+   # Configure the agent using response file containing your install key:
+   sudo /opt/oracle/mgmt_agent/bin/setupAgent.sh /opt/oracle/mgmt_agent/agent_install_key.rsp
+   ```
+
+2. **Define Log Sources**:
+   In the OCI Console (Logging Analytics > Administration > Sources), create sources matching your log formats:
+   - `mimikri-auditd`: points to `/var/log/audit/audit.log`
+   - `mimikri-ufw`: points to `/var/log/ufw.log`
+   - `mimikri-systemd`: connects to journald logs via sys-log integration
+
+3. **Define Log Groups**:
+   Associate these sources with a dedicated log group (`mimikri-security-logs-group`) for access control and isolation.
+
+Day-350 graduation step (covered in `09 §10`): Migrate all custom parsing rules from OCI Logging Analytics to Loki (where they should be committed under `infrastructure/loki-parsers/`), then delete the OCI log group and stop the management agent services.
+
 ---
 
 ## 7. Verification

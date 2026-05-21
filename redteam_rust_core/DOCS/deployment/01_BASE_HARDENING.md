@@ -479,9 +479,32 @@ sudo apt install -y promtail
 # Config dropped in Phase 8
 ```
 
+## 15. OCI Vulnerability Scanning Service (VSS) (paid tier, credit-funded)
+
+To detect OS vulnerabilities, kernel CVEs, open ports, and CIS benchmark drift on the three control-plane boxes (Box1, Box2, Box3), configure the OCI Vulnerability Scanning Service (VSS).
+
+Allocated from the $300 credit per `HYBRID §7` ($40/yr ≈ continuous scanning for 1 year).
+
+1. **OCI Console Configuration**:
+   - Navigate to **Identity & Security** → **Scanning**.
+   - Under **Host Scan Recipes**, click **Create Recipe**. Configure it to scan weekly for vulnerabilities and CIS benchmark compliance.
+   - Under **Host Scan Targets**, click **Create Target**. Select the compartment containing Box1, Box2, and Box3, and assign the scan recipe.
+
+2. **Verification on Host**:
+   VSS relies on the Oracle Cloud Agent running on each Compute Instance. Verify that the scanning plugin is enabled and running:
+   ```bash
+   # Check if Oracle Cloud Agent is active
+   sudo systemctl status oracle-cloud-agent
+
+   # Verify the Vulnerability Scanning plugin is enabled and log activity:
+   tail -n 20 /var/log/oracle-cloud-agent/plugins/vulnerability-scanning/agent.log
+   ```
+
+Day-350 graduation step (covered in `09 §10`): Export all scanning history and reports, then disable/delete the host scan target in the OCI Console to halt active scanning before paid credits expire.
+
 ---
 
-## 15. Verification checklist
+## 16. Verification checklist
 
 ```bash
 # SSH only via key, no root
@@ -513,6 +536,9 @@ systemctl is-enabled aide-check.timer
 # Kernel hardening applied
 sysctl kernel.kptr_restrict kernel.dmesg_restrict net.ipv4.tcp_syncookies
 # Expected: 2, 1, 1
+
+# Oracle Cloud Agent running (for VSS scanning)
+systemctl is-active oracle-cloud-agent
 ```
 
 Sign off with operator initials + date in `/etc/motd`:
@@ -524,7 +550,7 @@ Take an Oracle snapshot now: this is your "clean baseline" rollback target.
 
 ---
 
-## 16. Common pitfalls
+## 17. Common pitfalls
 
 | Pitfall | Symptom | Fix |
 |---|---|---|
@@ -534,4 +560,4 @@ Take an Oracle snapshot now: this is your "clean baseline" rollback target.
 | TOTP misalignment | `sudo` rejects code | `sudo timedatectl set-ntp true` and confirm `timedatectl status` shows synchronized |
 | AppArmor blocks legit binary | Service fails to start | `sudo aa-complain /etc/apparmor.d/<profile>` temporarily, inspect `journalctl -u apparmor` |
 
-Proceed to `05_TAILSCALE_MESH.md` once all 3 boxes pass §15 verification.
+Proceed to `05_TAILSCALE_MESH.md` once all 3 boxes pass §16 verification.
