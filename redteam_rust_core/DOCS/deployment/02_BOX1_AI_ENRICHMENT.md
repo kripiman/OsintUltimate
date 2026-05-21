@@ -1,10 +1,13 @@
-# 02 — Box1: Coordinator (Postgres + Dashboard + NATS Hub)
+# 02 — Box1: AI Enrichment Pipeline (Ollama + Router + BloodHound) ⚠️ Sacrificable
 
-**Role**: Primary control plane. Hosts Postgres queue + findings store, NATS mesh hub, dashboard, sink aggregator. Secrets unlocked from operator workstation via `age`/YubiKey into tmpfs at `/run/mimikri/secrets.env`.
+**Role**: AI/LLM inference, findings classification, compression, BloodHound post-processing, bug bounty auto-submit. Also hosts OCI paid services (Object Storage, Block Volume Backup of Box2, VSS, Logging Analytics) funded by the student credit.
 
-**Prerequisites**: `01_BASE_HARDENING.md`, `05_TAILSCALE_MESH.md`, `08_SECRETS_MANAGEMENT.md` completed.
+> [!WARNING]
+> Box1 uses a student Oracle account linked to a university email. The university may revoke this email after graduation, causing Oracle to suspend the tenancy. Box1 is **intentionally sacrificable**: losing it stops AI enrichment but does **not** stop Bug Bounty scanning operations, which are coordinated by Box2.
 
-**Specs**: 4 OCPU ARM / 24GB RAM, 200GB block storage, Oracle student tenancy ($300 credit).
+**Prerequisites**: `01_BASE_HARDENING.md`, `05_TAILSCALE_MESH.md`, `08_SECRETS_MANAGEMENT.md`, **Box2 reachable on tailnet** (Box2 holds the Postgres primary that Box1 reads from).
+
+**Specs**: 4 OCPU ARM / 24GB RAM, 200GB block storage, Oracle student tenancy ($300 credit for paid services).
 
 ---
 

@@ -12,8 +12,8 @@
 | # | File | Purpose |
 |---|---|---|
 | 01 | `01_BASE_HARDENING.md` | OS hardening applied to all 3 Oracle boxes |
-| 02 | `02_BOX1_COORDINATOR.md` | Box1: Postgres primary, dashboard, NATS hub, sink aggregator |
-| 03 | `03_BOX2_AI_ENRICHMENT.md` | Box2: Ollama LLM, AI router, BloodHound, bug bounty submit |
+| 02 | `02_BOX1_AI_ENRICHMENT.md` | Box1: Ollama LLM, AI router, BloodHound, bug bounty submit (student ⚠️ — sacrificable) |
+| 03 | `03_BOX2_COORDINATOR.md` | Box2: Postgres primary, dashboard, NATS hub, sink aggregator (personal ✅ — permanent) |
 | 04 | `04_BOX3_INTEL_OBSERVABILITY.md` | Box3: Postgres replica, CertStream, NVD, Loki/Grafana, droplet janitor |
 | 05 | `05_TAILSCALE_MESH.md` | Cross-tenancy mesh + ACL policy |
 | 06 | `06_DO_EPHEMERAL_WORKERS.md` | DigitalOcean droplet lifecycle + cloud-init |
@@ -32,13 +32,13 @@ Read in order on first deploy. After deployment, use as task-specific reference.
 
 | Asset | Sensitivity | Location |
 |---|---|---|
-| Postgres findings DB | High — contains target vulnerabilities | Box1 (primary), Box3 (replica) |
-| API keys (Shodan, FOFA, NVD, etc.) | High — paid credentials | `secrets.env.age` → tmpfs `/run/mimikri/secrets.env` |
-| `DO_TOKEN` (DigitalOcean) | Critical — spawns billable infra | `secrets.env.age` only; decryption requires operator YubiKey |
-| `H1_API_KEY` (HackerOne) | High — can submit reports | `secrets.env.age` only |
-| Dashboard auth token | Medium — grants UI control | `workspace/logs/dashboard.token` |
-| Worker binary | Medium — pre-compiled scanner | Object Storage (signed URL) |
-| Scan logs / findings JSONL | Medium — discloses targets in scope | Box1 disk, Box3 archive |
+| Postgres findings DB | High — contains target vulnerabilities | **Box2** (primary), Box3 (replica) |
+| API keys (Shodan, FOFA, NVD, etc.) | High — paid credentials | `secrets.env.age` on **Box2** → tmpfs `/run/mimikri/secrets.env` |
+| `DO_TOKEN` (DigitalOcean) | Critical — spawns billable infra | `secrets.env.age` on **Box2** only; decryption requires operator YubiKey |
+| `H1_API_KEY` (HackerOne) | High — can submit reports | `secrets.env.age` on **Box2** only |
+| Dashboard auth token | Medium — grants UI control | **Box2** `workspace/logs/dashboard.token` |
+| Worker binary | Medium — pre-compiled scanner | Box1 Object Storage (cold) + Box2 local cache (fallback) |
+| Scan logs / findings JSONL | Medium — discloses targets in scope | **Box2** disk (primary), Box3 archive |
 
 ### 2.2 Adversaries
 
@@ -65,7 +65,7 @@ Read in order on first deploy. After deployment, use as task-specific reference.
 
 | Service | Tier | Notes |
 |---|---|---|
-| Oracle Cloud × 3 tenancies | 1× student ($300 credit), 2× always-free | Each requires distinct email + phone for signup |
+| Oracle Cloud × 3 tenancies | 1× student ($300 credit) ⚠️, 2× personal always-free ✅ | Box1 student credit = sacrificable (may expire with university email); Box2/Box3 personal = permanent |
 | DigitalOcean | GitHub Student Pack ($200) | Activate via education.github.com |
 | Cloudflare | Free | For tunnel + DNS |
 | Tailscale | Free (100 devices) | Single tailnet across all boxes |
@@ -126,8 +126,8 @@ Phase 4 — Secrets (Day 3)
   └─ 08_SECRETS_MANAGEMENT.md — `age` + YubiKey + tmpfs (zero-cost)
 
 Phase 5 — Roles (Day 4-6)
-  ├─ 02_BOX1_COORDINATOR.md
-  ├─ 03_BOX2_AI_ENRICHMENT.md
+  ├─ 02_BOX1_AI_ENRICHMENT.md   (student account ⚠️)
+  ├─ 03_BOX2_COORDINATOR.md     (personal account ✅ — deploy first)
   └─ 04_BOX3_INTEL_OBSERVABILITY.md
 
 Phase 6 — Data plane (Day 6-7)
@@ -157,12 +157,12 @@ Budget 7-10 days for first deploy. Subsequent re-deploys with snapshots: 4 hours
 3. **Ephemeral data plane.** No DO droplet persists > 6 hours. Worker binaries pulled fresh per droplet.
 4. **Audit log everything.** `auditd` enabled on all 3 boxes, logs shipped to Box3 Loki. Postgres `log_statement = 'mod'` for write tracking.
 5. **Defense in depth.** SSH + Tailscale ACL + iptables + AppArmor + auditd. Single layer failure does not grant target access.
-6. **Least privilege.** Each box has minimal install. Box1 does not have Ollama, Box2 does not have postgres-server, etc.
-7. **Reproducible.** All config in version control. Box1 destroyed = restore from `age`-encrypted backup + rebuild from runbook in < 4h.
-8. **Kill-switch tested.** Ctrl+C on Box1 destroys all DO droplets in < 30 seconds. Drill quarterly.
+6. **Least privilege + sacrificable tier.** Box1 (student) holds only AI enrichment and paid OCI services — deliberately the *least critical* workloads. Box2 (personal, permanent) is the coordinator. Losing Box1 degrades enrichment; it never stops Bug Bounty scans.
+7. **Reproducible.** All config in version control. Box2 destroyed = restore from `age`-encrypted backup + rebuild from runbook in < 4h.
+8. **Kill-switch tested.** Ctrl+C on **Box2** destroys all DO droplets in < 30 seconds. Drill quarterly.
 9. **Time-bound credentials.** API keys rotated every 90 days. SSH keys never reused across boxes.
 10. **No attribution leakage.** Worker traffic never references operator identity (no `User-Agent` strings, no `whois` info on droplets).
-11. **Credit posture — active-spend $300 Oracle credit during the 365-day window.** No payment method is registered on the Oracle account (credit granted via Oracle for Education / Oracle Academy university linkage), so auto-billing at credit exhaustion is structurally impossible. Use the credit to maximize security maturity: Object Storage forensic archive, Block Volume Backup, Vulnerability Scanning Service, Logging Analytics retention. Run the day-350 graduation gate (`09_INCIDENT_RESPONSE.md`) to migrate data to Always-Free before paid-tier auto-suspend at day 365.
+11. **Credit posture — active-spend $300 Oracle student credit during the 365-day window, on Box1 only.** No payment method is registered on the Oracle account (credit granted via Oracle for Education / Oracle Academy university linkage), so auto-billing at credit exhaustion is structurally impossible. Credit is spent on Box1 (sacrificable node): Object Storage forensic archive, Block Volume Backup of Box2 via Tailscale, Vulnerability Scanning Service, Logging Analytics retention. **Box2 and Box3 run exclusively on always-free tier — they are unaffected by Box1 credit expiry or email revocation.** Run the day-350 graduation gate (`09_INCIDENT_RESPONSE.md`) to migrate data to Always-Free before paid-tier auto-suspend at day 365.
 
 ---
 
@@ -177,7 +177,7 @@ Budget 7-10 days for first deploy. Subsequent re-deploys with snapshots: 4 hours
 | Monthly | Verify Cloudflare Tunnel cert auto-renewal | `07` |
 | Quarterly | Rotate API keys + SSH keys | `08` |
 | Quarterly | Kill-switch drill | `09` |
-| Quarterly | Restore Box1 from backup in sandbox | `08` |
+| Quarterly | Restore **Box2** from backup in sandbox | `08` |
 | Day 330 of Oracle credit year | Credit-exhaustion warning email arrives — schedule graduation gate | `09` |
 | Day 350 of Oracle credit year | Run graduation gate (migrate paid-tier data to Always-Free + local NAS) | `09` |
 | Annually | Threat model review | this file |
@@ -186,10 +186,11 @@ Budget 7-10 days for first deploy. Subsequent re-deploys with snapshots: 4 hours
 
 ## 7. Glossary
 
-- **Box1/Box2/Box3** — Oracle Cloud ARM VMs (control plane). Each in distinct tenancy.
-- **Worker** — Ephemeral DO droplet running `redteam_rust_core --worker`.
+- **Box1/Box2/Box3** — Oracle Cloud ARM VMs (control plane). Each in distinct tenancy. Box1 = student (sacrificable), Box2/Box3 = personal (permanent).
+- **Coordinator** — Box2. Runs Postgres primary, NATS hub, Dashboard, Sink aggregator, DO spawn controller.
+- **Worker** — Ephemeral DO droplet running `redteam_rust_core --worker`, connects to Box2 Postgres.
 - **Tailnet** — Tailscale virtual private mesh. `100.x.x.x/8` address space.
-- **Kill-switch** — Ctrl+C / SIGTERM on Box1 coordinator → triggers `destroy_all_ephemeral_droplets()`.
+- **Kill-switch** — Ctrl+C / SIGTERM on **Box2** coordinator → triggers `destroy_all_ephemeral_droplets()`.
 - **Scope** — Authorized target set defined in `policy.json` + `--scope-id`.
 - **Campaign** — One scan session with a unique `scope_id`. Maps to one DO droplet pool.
 

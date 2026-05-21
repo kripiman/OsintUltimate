@@ -1,8 +1,8 @@
 # 04 — Box3: Intel + Observability (Postgres Replica + CertStream + NVD + Loki/Grafana + Janitor)
 
-**Role**: Postgres streaming replica (HA), CertStream + NVD passive intel, Loki/Grafana observability, DigitalOcean droplet janitor cron.
+**Role**: Postgres streaming replica, CertStream + NVD passive intel, Loki/Grafana observability, DigitalOcean droplet janitor cron.
 
-**Prerequisites**: `01`, `05`, `08`, Box1 reachable on tailnet.
+**Prerequisites**: `01`, `05`, `08`, **Box2** reachable on tailnet (Box2 is the Postgres primary).
 
 **Specs**: 4 OCPU ARM / 24GB RAM, always-free tier.
 
@@ -24,7 +24,7 @@ sudo install -d -o root -g adm -m 0750 /var/log/mimikri-intel
 
 ## 2. PostgreSQL streaming replica
 
-Box1 is primary (see `02_BOX1_COORDINATOR.md`). Box3 is hot standby — read-only failover target.
+**Box2** is primary (see `03_BOX2_COORDINATOR.md`). Box3 is hot standby — read-only failover target.
 
 ### 2.1 Install (same as Box1 §2)
 
@@ -37,11 +37,11 @@ sudo rm -rf /var/lib/postgresql/16/main/*
 
 ### 2.2 Configure replica auth on Box1
 
-On Box1:
+On Box2:
 ```bash
 sudo -u postgres psql -c "ALTER ROLE replicator WITH REPLICATION LOGIN PASSWORD '<from-vault>';"
 
-# pg_hba already allows from Box3 tailnet IP (see 02 §2.3)
+# pg_hba already allows from Box3 tailnet IP (see 03 §2.3)
 sudo systemctl reload postgresql
 ```
 
@@ -50,7 +50,7 @@ sudo systemctl reload postgresql
 On Box3:
 ```bash
 sudo -u postgres pg_basebackup \
-  -h mimikri-box1 \
+  -h mimikri-box2 \
   -D /var/lib/postgresql/16/main \
   -U replicator \
   -W \
@@ -73,7 +73,7 @@ port = 5432
 hot_standby = on
 hot_standby_feedback = on
 primary_slot_name = 'mimikri_box3_slot'
-primary_conninfo = 'host=mimikri-box1 port=5432 user=replicator password=<from-vault> sslmode=require application_name=mimikri-box3'
+primary_conninfo = 'host=mimikri-box2 port=5432 user=replicator password=<from-vault> sslmode=require application_name=mimikri-box3'
 ```
 
 Recovery from Vault — wrap in a launcher that materializes `primary_conninfo` from `DATABASE_REPLICATION_PASSWORD` Vault secret at start.
@@ -86,8 +86,8 @@ sudo systemctl start postgresql
 sudo -u postgres psql -c "SELECT pg_is_in_recovery();"
 # Expected: t
 
-# Check lag (on Box1)
-ssh opsec@mimikri-box1 'sudo -u postgres psql -c "SELECT application_name, state, sync_state, write_lag, flush_lag, replay_lag FROM pg_stat_replication;"'
+# Check lag (on Box2)
+ssh opsec@mimikri-box2 'sudo -u postgres psql -c "SELECT application_name, state, sync_state, write_lag, flush_lag, replay_lag FROM pg_stat_replication;"'
 # Expected: mimikri-box3 / streaming / async / lag < 5s
 
 sudo ufw allow in on tailscale0 to any port 5432 proto tcp comment 'replica read-only'
@@ -104,8 +104,8 @@ sudo -u postgres pg_ctl promote -D /var/lib/postgresql/16/main
 sudo -u postgres psql -c "SELECT pg_is_in_recovery();"
 # Expected: f (now primary)
 
-# Update Box2 + workers to point to mimikri-box3
-ssh opsec@mimikri-box2 'sudo systemctl restart redteam-enrichment'
+# Update Box1 + workers to point to mimikri-box3
+ssh opsec@mimikri-box1 'sudo systemctl restart redteam-enrichment'
 ```
 
 Drill quarterly per `00_OVERVIEW.md` §6.
@@ -137,6 +137,7 @@ exec /usr/local/bin/redteam_rust_core \
   --certstream-keywords "$CERTSTREAM_KEYWORDS" \
   --postgres-url "$DATABASE_URL" \
   --nats-url "$NATS_URL"
+# Note: DATABASE_URL points to Box2 primary (or Box3 itself if promoted)
 ```
 
 `/etc/systemd/system/redteam-certstream.service`:
@@ -495,7 +496,7 @@ Pre-built dashboards to commit to `redteam_rust_core/infrastructure/grafana/`:
 - `04-auditd-alerts.json` — auditd violations, fail2ban bans
 - `05-postgres-replication.json` — lag, WAL throughput, slot health
 - `06-ollama.json` — inference latency, model load events
-- `07-roi-baseline.json` — Phase 0 telemetry (findings/h by program, $/finding)
+- `08-credit-exhaustion.json` — credit burn rate (Box1 student credit only, Box2/Box3 unaffected)
 
 ### 6.8 Alert rules
 

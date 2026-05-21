@@ -22,16 +22,18 @@ This topology separates the **control plane** (orchestration, queueing, intel ag
 │                        CONTROL PLANE (Oracle)                          │
 │                                                                        │
 │  ┌──────────────────┐  ┌──────────────────┐  ┌──────────────────┐    │
-│  │  Box1 (student)  │  │  Box2 (acct B)   │  │  Box3 (acct C)   │    │
+│  │  Box1 (student⚠)│  │  Box2 (acct B)   │  │  Box3 (acct C)   │    │
 │  │  4c/24GB ARM     │  │  4c/24GB ARM     │  │  4c/24GB ARM     │    │
+│  │  [SACRIFICABLE]  │  │  [COORDINATOR]   │  │  [INTEL/OBS]     │    │
 │  │                  │  │                  │  │                  │    │
-│  │ • Coordinator    │  │ • AI/LLM router  │  │ • Postgres replica│   │
-│  │ • Dashboard 8080 │  │ • compressor.rs  │  │ • CertStream     │    │
-│  │ • Postgres queue │  │ • OllamaClient   │  │ • NVD monitor    │    │
-│  │ • NATS hub       │  │ • Findings enrich│  │ • Loki/Grafana   │    │
-│  │ • Sink aggregator│  │ • BloodHound     │  │ • OTEL collector │    │
-│  │ • secrets.env.age│  │ • Bug bounty     │  │ • NATS secondary │    │
-│  │   (age/YubiKey)  │  │   auto-submit    │  │ • Droplet janitor│    │
+│  │ • AI/LLM router  │  │ • Coordinator    │  │ • Postgres replica│   │
+│  │ • compressor.rs  │  │ • Dashboard 8080 │  │ • CertStream     │    │
+│  │ • OllamaClient   │  │ • Postgres prmy  │  │ • NVD monitor    │    │
+│  │ • BloodHound     │  │ • NATS hub       │  │ • Loki/Grafana   │    │
+│  │ • Bug bounty sub │  │ • Sink aggregator│  │ • OTEL collector │    │
+│  │ • OCI paid svcs  │  │ • secrets.env.age│  │ • NATS secondary │    │
+│  │   (ObjStorage,   │  │   (age/YubiKey)  │  │ • Droplet janitor│    │
+│  │   Backup,VSS,LA) │  │                  │  │                  │    │
 │  └────────┬─────────┘  └────────┬─────────┘  └────────┬─────────┘    │
 │           │                     │                     │              │
 │           └─────── Tailscale mesh (100.x.x.x) ────────┘              │
@@ -64,25 +66,33 @@ This topology separates the **control plane** (orchestration, queueing, intel ag
 
 ### 3.1 Control Plane (Oracle — never touches targets)
 
-**Box1 — Coordinator (student account, $300 credit)**
+> [!IMPORTANT]
+> **Role assignment rationale**: Box1 uses a student email that the university may revoke after graduation. If Oracle invalidates the account, Box1 goes offline. The coordinator (Postgres primary, NATS hub, dashboard) must survive indefinitely — therefore it lives on Box2 (personal permanent account). Box1 is intentionally assigned *sacrificable* roles: AI enrichment and paid OCI services. Losing Box1 degrades enrichment quality but **never stops Bug Bounty operations**.
+
+**Box1 — AI Enrichment + OCI Paid Services (student account ⚠️ — sacrificable)**
+- **SACRIFICABLE**: University may revoke student email; Oracle may suspend this tenancy. Losing Box1 reduces enrichment quality but does not stop operations.
+- `router.rs` classification stage (passive — operates on already-collected findings from Box2 Postgres)
+- `compressor.rs` (`compress_finding_dense`, `compress_swarm_context`, `compress_target_lean`)
+- Local LLM via OllamaClient (CPU inference on ARM, no GPU required)
+- BloodHound graph post-processing (AdIngestor + `bloodhound.rs`)
+- Bug bounty auto-submit sink (HackerOne API calls — outbound to API only, not to targets)
+- Findings deduplication and correlation
+- **OCI paid services (credit-funded)**: Object Storage 250GB (findings cold archive + worker binaries), Block Volume Backup of Box2 disk via Tailscale snapshot script, Vulnerability Scanning Service (all 3 boxes), Logging Analytics (log redundancy)
+
+**Box2 — Coordinator (personal account ✅ — permanent)**
+- **PERMANENT**: Personal email, always-free tier, no expiry risk. This is the system's brain.
 - `RedTeamEngine` orchestrator (no scanning plugins enabled)
 - PostgreSQL primary (queue table `scan_queue`, findings table, `mcp_stats`)
 - Dashboard HTTP server on `:8080` (Tailscale-bound only, no public IP)
 - NATS hub for swarm V4.0 inter-agent messaging
 - Sink aggregator: receives findings from data plane workers, dispatches to JSONL/webhooks/Discord
 - Secrets: `secrets.env.age` encrypted to operator's YubiKey-bound `age` identity. Decrypted into tmpfs at `/run/mimikri/secrets.env` only when the operator runs `unlock-remote.sh` from their workstation. No cloud secret manager used; see `08_SECRETS_MANAGEMENT.md`.
-- OCI Object Storage: archives baselines (`golden_baseline.json`), findings cold storage, pre-built worker binaries
+- Spawn controller: calls DO API to create/destroy ephemeral worker droplets
+- Kill-switch: Ctrl+C on Box2 triggers `destroy_all_ephemeral_droplets()`
 
-**Box2 — AI Enrichment Pipeline (free tier)**
-- `router.rs` classification stage (passive — operates on already-collected findings)
-- `compressor.rs` (`compress_finding_dense`, `compress_swarm_context`, `compress_target_lean`)
-- Local LLM via OllamaClient (CPU inference on ARM, no GPU required)
-- BloodHound graph post-processing (AdIngestor + `bloodhound.rs`)
-- Bug bounty auto-submit sink (HackerOne API calls — outbound to API only, not to targets)
-- Findings deduplication and correlation
-
-**Box3 — Intelligence + Observability (free tier)**
-- PostgreSQL streaming replica from Box1 (HA + read offload)
+**Box3 — Intelligence + Observability (personal account ✅ — permanent)**
+- **PERMANENT**: Personal email, always-free tier, no expiry risk.
+- PostgreSQL streaming replica from **Box2** (HA + read offload)
 - CertStream daemon (passive cert log monitoring via `CERTSTREAM_KEYWORDS`)
 - NVD CVE monitor (polls NVD API, passive)
 - `mcp_stats` analytics consumer
@@ -94,9 +104,9 @@ This topology separates the **control plane** (orchestration, queueing, intel ag
 
 - Droplet size: `s-1vcpu-1gb` ($0.009/hr ≈ $6/mo if 24/7, prorated per use)
 - Image: snapshot pre-baked with worker binary + dependencies (nmap, masscan, etc.)
-- Bootstrap: cloud-init pulls pre-compiled `redteam_rust_core` ARM/x86_64 binary from Box1 Object Storage, joins Tailscale via ephemeral auth-key
-- Execution: `redteam_rust_core --worker --postgres-url postgres://box1.tailscale-ip:5432/... --node-id do-${droplet_id}`
-- Lifecycle: pulls one or more jobs from `scan_queue`, executes scan plugins, pushes findings via Postgres connection, then exits
+- Bootstrap: cloud-init pulls pre-compiled `redteam_rust_core` ARM/x86_64 binary from **Box1** Object Storage (signed URL), joins Tailscale via ephemeral auth-key
+- Execution: `redteam_rust_core --worker --postgres-url postgres://box2.tailscale-ip:5432/... --node-id do-${droplet_id}`
+- Lifecycle: pulls one or more jobs from `scan_queue`, executes scan plugins, pushes findings via Postgres connection to **Box2**, then exits
 - TTL enforcement: `at +6h shutdown -h now` in cloud-init prevents orphan billing
 - Memory bound: `config.soft_memory_limit_mb = 600` (reserves 400MB for OS + nmap)
 
@@ -121,26 +131,26 @@ This topology separates the **control plane** (orchestration, queueing, intel ag
 
 ## 5. DO Droplet Lifecycle
 
-### Spawn (Box1 initiates)
-1. Box1 reads `DO_TOKEN` from `/run/mimikri/secrets.env` (populated by operator unlock — `08_SECRETS_MANAGEMENT.md` §4.3)
+### Spawn (**Box2** initiates)
+1. **Box2** reads `DO_TOKEN` from `/run/mimikri/secrets.env` (populated by operator unlock — `08_SECRETS_MANAGEMENT.md` §4.3)
 2. Calls DO API `POST /v2/droplets` with image=snapshot, region matching target geography, user-data containing cloud-init script
 3. Cloud-init script:
    - Installs Tailscale, joins tailnet with one-shot auth key
-   - Downloads worker binary from Object Storage (signed URL, 1h TTL)
+   - Downloads worker binary from **Box1** Object Storage (signed URL, 1h TTL; if Box1 offline, fallback to Box2 local cache)
    - Sets `at +6h shutdown -h now`
-   - Starts `redteam_rust_core --worker ...`
-4. Droplet tagged `purpose=redteam-ephemeral`, `spawned-by=box1`, `campaign=<scope_id>`
+   - Starts `redteam_rust_core --worker --postgres-url postgres://box2-tailscale-ip:5432/...`
+4. Droplet tagged `purpose=redteam-ephemeral`, `spawned-by=box2`, `campaign=<scope_id>`
 
 ### Execution
-- Worker polls `scan_queue` via Tailscale-tunneled Postgres
+- Worker polls `scan_queue` on **Box2** Postgres via Tailscale-tunneled connection
 - Claims job (`UPDATE ... SET claimed_by = 'do-${droplet_id}'`)
 - Executes scan plugins (active probes leave DO IP, target sees only DO)
-- Pushes findings rows to Postgres + emits NATS events for swarm coordination
+- Pushes findings rows to **Box2** Postgres + emits NATS events for swarm coordination
 
 ### Destroy
-- **Normal**: worker exits cleanly after job pool drained → cloud-init shutdown timer or explicit `poweroff` → Box1 detects droplet stopped, calls DO API `DELETE /v2/droplets/{id}`
+- **Normal**: worker exits cleanly after job pool drained → cloud-init shutdown timer or explicit `poweroff` → **Box2** detects droplet stopped, calls DO API `DELETE /v2/droplets/{id}`
 - **Forced**: Box3 janitor cron detects droplet > TTL → DO API destroy
-- **Kill-switch**: Ctrl+C on Box1 triggers `infrastructure/digital_ocean.rs` cleanup → enumerate all droplets tagged `purpose=redteam-ephemeral` for current campaign, destroy in parallel
+- **Kill-switch**: Ctrl+C on **Box2** triggers `infrastructure/digital_ocean.rs` cleanup → enumerate all droplets tagged `purpose=redteam-ephemeral` for current campaign, destroy in parallel
 
 ## 6. Traffic Patterns and OPSEC Visibility
 
@@ -148,7 +158,7 @@ This topology separates the **control plane** (orchestration, queueing, intel ag
 - HTTPS to `api.digitalocean.com` (droplet spawn/destroy)
 - Tailscale UDP to `derp.tailscale.com` and direct peer connections
 - HTTPS to `api.hackerone.com`, `services.nvd.nist.gov`, Discord webhooks, GitHub
-- Postgres replication traffic Box1↔Box3 over Tailscale
+- Postgres replication traffic **Box2↔Box3** over Tailscale
 - **Zero packets to target IPs** — passes Oracle abuse heuristics
 
 ### What DigitalOcean sees
@@ -168,9 +178,9 @@ This topology separates the **control plane** (orchestration, queueing, intel ag
 
 | Provider | Source | Amount | Validity | Renewable |
 |---|---|---|---|---|
-| Oracle Cloud (Box1 only) | Oracle Academy Student | $300 USD | 365 days | No |
-| Oracle Cloud (Box2) | Standard signup | $0 (always-free only) | Permanent | N/A |
-| Oracle Cloud (Box3) | Standard signup | $0 (always-free only) | Permanent | N/A |
+| Oracle Cloud (Box1) | Oracle Academy Student ⚠️ | $300 USD | 365 days | No |
+| Oracle Cloud (Box2) | Personal signup ✅ | $0 (always-free only) | Permanent | N/A |
+| Oracle Cloud (Box3) | Personal signup ✅ | $0 (always-free only) | Permanent | N/A |
 | DigitalOcean | GitHub Student Pack | $200 USD | 365 days from activation | No |
 | **Total** | | **$500 USD / year** | | |
 
@@ -191,8 +201,8 @@ Strategy: actively spend the $300 during the 365-day credit window on services t
 
 | Service | Annual allocation | What it buys | Graduation behavior at day 365 |
 |---|---|---|---|
-| OCI Object Storage 250GB | $80 | Forensic archive + worker binary versioned distribution + AIDE baselines + Postgres weekly age-encrypted snapshots | Auto-suspend. Operator prunes data to ≤60GB free (20GB × 3 tenancies) before day 350. |
-| OCI Block Volume Backup | $60 | Oracle-managed daily snapshots of Box1 boot + Postgres data volumes (immutable, off-host) — survives ransomware on Box1 disk | Last weekly snapshot exported to operator local NAS before day 360. |
+| OCI Object Storage 250GB | $80 | Forensic findings archive + worker binary versioned distribution + AIDE baselines; hosted on Box1 student tenancy | Auto-suspend. Operator prunes data to ≤60GB free (20GB × 3 tenancies) before day 350. |
+| OCI Block Volume Backup | $60 | Oracle-managed daily snapshots of **Box2** boot + Postgres data volumes via Tailscale snapshot script — protects the actual coordinator | Last weekly pg_dump exported to operator local NAS before day 360. |
 | OCI Vulnerability Scanning Service (VSS) | $40 | Continuous CIS/CVE scan of the 3 control-plane boxes themselves; complements AIDE+auditd by catching host-level vulnerabilities | Scanning stops at expiry; AIDE + unattended-upgrades remain primary. |
 | OCI Logging Analytics | $40 | Centralized log retention 90d with parsing rules — independent retention path if Box3 (Loki host) is compromised | Parsing rules migrated to Loki before expiry; raw logs accessible during suspend. |
 | OCI Bastion overflow | $20 | Buffer above free-tier session cap for incident-response months | Falls back to free-tier cap. |
@@ -240,34 +250,37 @@ Pure ephemeral droplet usage — every dollar buys scan-hours.
 
 ## 8. Failure and Degradation Modes
 
-### Box1 down (control plane partial loss)
-- Box3 replica promotes to primary (`pg_ctl promote`)
-- Box2 enrichment pauses (no queue to drain)
-- Existing droplets continue executing claimed jobs, push findings to Box3 promoted Postgres
-- Box3 janitor still destroys droplets at TTL
-- **No active scans lost**, no orphan billing
+### Box1 down (student tenancy suspended / email revoked)
+- **Expected and tolerated.** Box1 is sacrificable by design.
+- AI enrichment (Ollama, router.rs, compressor.rs, BloodHound) goes offline — findings accumulate in Box2 Postgres without LLM classification
+- Worker binary distribution from Object Storage fails → fallback: Box2 serves binary from local cache (`/opt/mimikri/bin/worker-cache/`)
+- OCI paid services (Object Storage cold archive, VSS scanning, Logging Analytics) suspend → Loki on Box3 becomes sole log store; AIDE primary defence
+- **Coordinator (Box2), Postgres primary (Box2), NATS hub (Box2), Dashboard (Box2), data plane workers, Box3 replica — ALL continue unaffected**
+- Recovery: enrich backlog manually or restore Box1 from snapshot if account reinstated
 
-### Box2 down (AI offline)
-- Coordinator unaffected, workers unaffected
-- Findings accumulate in Postgres without LLM classification
-- Enrichment backlog processed when Box2 returns
+### Box2 down (coordinator offline — high impact)
+- Workers lose Postgres connection; they finish in-progress jobs and self-destroy via TTL timer
+- No new droplets can be spawned (Box2 holds DO_TOKEN)
+- Box3 replica promotes to primary (`pg_ctl promote`) to preserve findings already written
+- Box1 enrichment pauses (no queue to drain from Box2)
+- **Recovery**: restore Box2 from snapshot (< 4h), re-unlock secrets, redirect Box3 replica back to streaming from Box2
 
 ### Box3 down (intel/observability offline)
 - Control plane and scans continue
-- Lost: passive intel ingest, observability, droplet janitor cron
-- **Risk**: orphan droplets if Box1 also misses cleanup → mitigate with cloud-init TTL `at +6h shutdown` (independent of janitor)
+- Lost: passive intel ingest (CertStream, NVD), observability (Loki, Grafana), droplet janitor cron, Postgres replica
+- **Risk**: orphan droplets if Box2 also misses cleanup → mitigate with cloud-init TTL `at +6h shutdown` (independent of janitor)
 
 ### DO API outage
-- No new droplets spawn, scan queue accumulates
+- No new droplets spawn, scan queue accumulates on Box2
 - Existing droplets finish current jobs and self-destroy via TTL
 - Control plane unaffected
 
-### $300 credit exhausted (day 365)
+### $300 credit exhausted (day 365) — Box1 student credit only
 - Day 350 graduation gate has already migrated paid-tier data to Always-Free tiers + operator local NAS (see `09_INCIDENT_RESPONSE.md` SEV-3 Credit Exhaustion procedure).
-- Oracle auto-suspends paid services (Object Storage > 20GB, Block Volume Backup, VSS, Logging Analytics, Bastion overflow). No billing event because no card is on file.
-- Secrets remain under `age` + YubiKey (independent of any Oracle service).
+- Oracle auto-suspends paid services on Box1 tenancy (Object Storage > 20GB, Block Volume Backup, VSS, Logging Analytics, Bastion overflow). No billing event — no card on file.
+- Secrets remain under `age` + YubiKey (on Box2, independent of Box1).
 - Loki on Box3 becomes sole authoritative log store; AIDE + unattended-upgrades cover what VSS used to.
-- **12-core 72GB control plane survives indefinitely on Always-Free tier alone.**
+- **Box2 and Box3 (personal accounts, always-free) survive indefinitely. 12-core 72GB control plane continues unaffected.**
 
 ## 9. $300 Credit Allocation Strategy — ACTIVE SPEND
 
@@ -312,24 +325,25 @@ This document describes the **target architecture**. Current state:
 | Component | Status |
 |---|---|
 | `infrastructure/digital_ocean.rs` ephemeral spawn | Implemented (V14.1) |
-| Kill-switch on Ctrl+C | Implemented (V14.1) |
+| Kill-switch on Ctrl+C | Implemented (V14.1) — **must point to Box2** |
 | Worker mode `--worker` | Implemented |
-| PostgreSQL `scan_queue` table | Documented in CLAUDE.md, requires migration |
+| PostgreSQL `scan_queue` table | Documented in CLAUDE.md, requires migration — **on Box2** |
 | Tailscale cross-tenancy mesh | **Not yet implemented** — manual setup required |
-| Box1/Box2/Box3 role separation | **Not yet deployed** — current dev runs monolithic |
-| Cloud-init worker bootstrap script | **Not yet written** |
+| Box1(AI)/Box2(coord)/Box3(intel) role separation | **Not yet deployed** — current dev runs monolithic |
+| Cloud-init worker bootstrap script | **Not yet written** — must point to Box2 Postgres |
 | Droplet janitor cron (Box3) | **Not yet written** |
-| `age` + YubiKey secrets workflow | **Documented in `08_SECRETS_MANAGEMENT.md`** — no code-side changes required; `utils/config.rs` continues to read env vars supplied by tmpfs `/run/mimikri/secrets.env` |
-| Object Storage findings archive sink | **Not yet implemented** — extend `core/sink.rs` |
-| Box1→Box3 Postgres streaming replication | **Not yet configured** |
+| `age` + YubiKey secrets workflow | **Documented in `08_SECRETS_MANAGEMENT.md`** — secrets unlock on **Box2** |
+| Object Storage findings archive sink (Box1) | **Not yet implemented** — extend `core/sink.rs` |
+| Box2→Box3 Postgres streaming replication | **Not yet configured** (was Box1→Box3, now Box2→Box3) |
+| Box1 binary distribution cache fallback on Box2 | **Not yet implemented** |
 
 Implementation order proposed (post Sprint 7.5 closure):
 1. Sprint 8.A: Tailscale provisioning scripts + ACL templates
-2. Sprint 8.B: Cloud-init template + worker binary distribution via Object Storage
+2. Sprint 8.B: Cloud-init template + worker binary distribution (Box1 Object Storage primary, Box2 cache fallback)
 3. Sprint 8.C: ~~OCI Vault integration~~ — **DROPPED**, replaced by `age` + YubiKey workflow documented in `08_SECRETS_MANAGEMENT.md`. No code changes required.
 4. Sprint 8.D: Droplet janitor cron + monitoring
-5. Sprint 8.E: Postgres replication Box1→Box3
-6. Sprint 8.F: Object Storage findings sink
+5. Sprint 8.E: Postgres replication **Box2→Box3** (coordinator is Box2)
+6. Sprint 8.F: Object Storage findings sink on Box1
 7. Sprint 8.G: End-to-end smoke test (1 campaign, 1 droplet, full lifecycle)
 
 ## 12. References

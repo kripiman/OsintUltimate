@@ -1,10 +1,13 @@
-# 03 — Box2: AI Enrichment Pipeline (Ollama + Router + BloodHound)
+# 03 — Box2: Coordinator (Postgres + Dashboard + NATS Hub) ✅ Permanent
 
-**Role**: AI/LLM inference, findings classification, compression, BloodHound post-processing, bug bounty auto-submit.
+**Role**: Primary control plane. Hosts Postgres queue + findings store, NATS mesh hub, dashboard, sink aggregator, DO spawn controller. Secrets unlocked from operator workstation via `age`/YubiKey into tmpfs at `/run/mimikri/secrets.env`.
 
-**Prerequisites**: `01_BASE_HARDENING.md`, `05_TAILSCALE_MESH.md`, `08_SECRETS_MANAGEMENT.md`, Box1 reachable on tailnet.
+> [!IMPORTANT]
+> Box2 is the **permanent brain** of the system. It runs on a personal Oracle account (not tied to any university email). Box1 (student account) is intentionally sacrificable. All critical services (Postgres primary, NATS, secrets, Dashboard) live here.
 
-**Specs**: 4 OCPU ARM / 24GB RAM, always-free tier. No paid services on Box2.
+**Prerequisites**: `01_BASE_HARDENING.md`, `05_TAILSCALE_MESH.md`, `08_SECRETS_MANAGEMENT.md` completed.
+
+**Specs**: 4 OCPU ARM / 24GB RAM, 200GB block storage, personal Oracle always-free tenancy (no paid services, no credit dependency).
 
 ---
 
