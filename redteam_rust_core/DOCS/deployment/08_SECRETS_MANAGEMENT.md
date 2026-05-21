@@ -14,9 +14,11 @@ Design choice rationale (operator-confirmed):
 | Secret | Sensitivity | Used by | Rotation |
 |---|---|---|---|
 | `DATABASE_URL` (Postgres pass) | High | All boxes + workers | 90d |
-| `DO_TOKEN` | Critical | Box1 (spawn/destroy droplets) | 90d |
+| `DO_TOKEN` | Critical | **Box2** (spawn/destroy droplets) | 90d |
 | `TAILSCALE_AUTH_KEY` (worker) | High | DO worker bootstrap | 90d |
-| `H1_API_KEY` (HackerOne) | High | Box2 (bug bounty submit) | 90d |
+| `H1_API_KEY` (HackerOne) | High | Box1 (bug bounty submit) | 90d |
+| `INTERACTSH_TOKEN` | Critical | Box4 server + Box2 poll + DO workers | 90d |
+| `INTERACTSH_URL` | Medium | Box2 (polling) + DO workers (payload gen) | static |
 | `SHODAN_STUDENT_API_KEY` | Medium | Workers | 365d |
 | `SHODAN_API_KEY` (paid) | High | Workers | 365d |
 | `NETLAS_API_KEY` | Medium | Workers | 365d |
@@ -91,12 +93,18 @@ This handle just tells `age` "use the YubiKey for this identity". The actual key
 
 ```env
 # === Critical ===
-DATABASE_URL=postgres://mimikri:STRONGPASS@mimikri-box1:5432/redteam
+DATABASE_URL=postgres://mimikri:STRONGPASS@mimikri-box2:5432/redteam
 DO_TOKEN=dop_v1_...
 TAILSCALE_AUTH_KEY=tskey-auth-...
 H1_API_KEY=...
 CLOUDFLARE_TUNNEL_TOKEN=...
 CF_API_TOKEN=...
+
+# === Box4 Interactsh OOB ===
+INTERACTSH_TOKEN=<openssl rand -hex 32 output>
+INTERACTSH_URL=https://oast.<your-domain>
+INTERACTSH_PUBLIC_IP=<azure-africa-public-ip>
+INTERACTSH_DOMAIN=<your-domain>
 
 # === API keys ===
 SHODAN_STUDENT_API_KEY=...
@@ -295,7 +303,7 @@ $PSQL -c "ALTER ROLE mimikri WITH PASSWORD '$NEW_PG_PASS';"
 
 # 4. Compose new secrets.env in-memory
 NEW_SECRETS=$(echo "$PLAINTEXT" | sed \
-  -e "s|^DATABASE_URL=.*|DATABASE_URL=postgres://mimikri:$NEW_PG_PASS@mimikri-box1:5432/redteam|" \
+  -e "s|^DATABASE_URL=.*|DATABASE_URL=postgres://mimikri:$NEW_PG_PASS@mimikri-box2:5432/redteam|" \
   -e "s|^DO_TOKEN=.*|DO_TOKEN=$NEW_DO_TOKEN|" \
   -e "s|^TAILSCALE_AUTH_KEY=.*|TAILSCALE_AUTH_KEY=$NEW_TS_KEY|" \
   -e "s|^H1_API_KEY=.*|H1_API_KEY=$NEW_H1|" \

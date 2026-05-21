@@ -1,8 +1,8 @@
 # 06 — DigitalOcean Ephemeral Workers
 
-**Role**: Data plane. Short-lived droplets (TTL 6h) execute active scans against authorized targets. Spawn from Box1, self-destroy on completion.
+**Role**: Data plane. Short-lived droplets (TTL 6h) execute active scans against authorized targets. Spawn from **Box2**, self-destroy on completion. Workers receive interactsh OOB config from `secrets.env` to generate callback payloads pointing at Box4.
 
-**Prerequisites**: `02_BOX1_COORDINATOR.md`, `05_TAILSCALE_MESH.md`, `08_SECRETS_MANAGEMENT.md`. Worker auth-key in Vault.
+**Prerequisites**: `03_BOX2_COORDINATOR.md`, `05_BOX4_INTERACTSH.md`, `05_TAILSCALE_MESH.md`, `08_SECRETS_MANAGEMENT.md`. Worker auth-key and interactsh token in secrets bundle.
 
 ---
 
@@ -231,6 +231,8 @@ runcmd:
     Environment="OTEL_ENDPOINT=${OTEL_ENDPOINT}"
     Environment="SCOPE_ID=${SCOPE_ID}"
     Environment="REDTEAM_AUTHORIZED_SCOPE=${SCOPE_ID}"
+    Environment="INTERACTSH_URL=${INTERACTSH_URL}"
+    Environment="INTERACTSH_TOKEN=${INTERACTSH_TOKEN}"
     ExecStart=/usr/local/bin/redteam_rust_core \
       --worker \
       --postgres-url \${DATABASE_URL} \
@@ -288,11 +290,11 @@ power_state:
 ```
 
 > [!NOTE]
-> The cloud-init template is rendered by `infrastructure/digital_ocean.rs` with the campaign-specific values (`DROPLET_ID`, `TAILSCALE_AUTH_KEY`, `DATABASE_URL`, `SCOPE_ID`). These values come from `/run/mimikri/secrets.env` (tmpfs, populated by the operator-side `unlock-remote.sh` flow in `08_SECRETS_MANAGEMENT.md`). They are never embedded in the snapshot and never written to Box1 disk.
+> The cloud-init template is rendered by `infrastructure/digital_ocean.rs` with the campaign-specific values (`DROPLET_ID`, `TAILSCALE_AUTH_KEY`, `DATABASE_URL`, `SCOPE_ID`, `INTERACTSH_URL`, `INTERACTSH_TOKEN`). These values come from `/run/mimikri/secrets.env` on **Box2** (tmpfs, populated by the operator-side `unlock-remote.sh` flow in `08_SECRETS_MANAGEMENT.md`). They are never embedded in the snapshot and never written to Box2 disk.
 
 ---
 
-## 3. Spawn flow (Box1 → DO)
+### Spawn flow (**Box2** → DO)
 
 `infrastructure/digital_ocean.rs::spawn()` performs:
 
@@ -310,7 +312,7 @@ power_state:
      "backups": false,
      "ipv6": false,
      "monitoring": false,
-     "tags": ["purpose:redteam-ephemeral", "campaign:${SCOPE_ID}", "spawned-by:box1"],
+     "tags": ["purpose:redteam-ephemeral", "campaign:${SCOPE_ID}", "spawned-by:box2"],
      "user_data": "${BASE64_CLOUD_INIT}",
      "vpc_uuid": null
    }
@@ -329,7 +331,7 @@ power_state:
 2. `redteam_rust_core --worker` exits with status 0
 3. `worker-finalize.sh` runs (ExecStopPost), `poweroff -f`
 4. Droplet enters `off` state
-5. Box1 polling loop detects `off` → calls DELETE on droplet
+5. **Box2** polling loop detects `off` → calls DELETE on droplet
 6. Tailnet device entry auto-expires (ephemeral key)
 
 ### 4.2 TTL-forced — 6h cloud-init `at` timer
@@ -354,7 +356,7 @@ power_state:
 
 ## 5. Cost ceiling enforcement
 
-Box1 tracks DO spend via tag-based monitoring. Hard ceiling:
+**Cost ceiling tracking** uses **Box2** env vars. Hard ceiling:
 
 `/opt/mimikri/etc/runtime.env`:
 ```env
@@ -395,8 +397,8 @@ But VPC adds complexity and is not free in all regions. Tailscale + UFW already 
 # Snapshot present
 doctl compute snapshot list --resource droplet | grep mimikri-worker
 
-# Test spawn (Box1)
-ssh opsec@mimikri-box1
+# Test spawn (Box2)
+ssh opsec@mimikri-box2
 sudo -u mimikri /usr/local/bin/redteam_rust_core \
   --spawn-test-droplet \
   --scope-id test-001 \
@@ -404,7 +406,7 @@ sudo -u mimikri /usr/local/bin/redteam_rust_core \
 # Expected: droplet appears in DO console + tailnet within 90s
 
 # Worker polls queue
-psql -h mimikri-box1 -U mimikri redteam -c \
+psql -h mimikri-box2 -U mimikri redteam -c \
   "SELECT id, status, claimed_by FROM scan_queue ORDER BY id DESC LIMIT 5;"
 
 # Worker self-destructs
@@ -430,5 +432,7 @@ doctl compute droplet list --tag-name campaign:test-001
 | Region selected outside scope geo | Latency / target geo policies | Spawn in region near target |
 | `purpose:redteam-ephemeral` tag forgotten | Janitor cannot find droplet | Validate in spawn() code: `assert!(tags.contains("purpose:redteam-ephemeral"))` |
 | Worker exposes SSH momentarily before disable | Brief attack window | UFW default-deny inbound before SSH service starts |
+| interactsh token not injected in cloud-init | Workers generate payloads but Box4 rejects them | Verify `INTERACTSH_TOKEN` in `secrets.env` and cloud-init env block |
+| interactsh server down (Box4) | OOB callbacks missed; scans continue but blind findings unconfirmed | Restart interactsh on Box4; restart scan session to re-inject fresh payloads |
 
 Proceed to `07_DASHBOARD_PUBLIC_ACCESS.md`.

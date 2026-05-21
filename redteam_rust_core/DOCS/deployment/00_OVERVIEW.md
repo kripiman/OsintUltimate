@@ -15,12 +15,12 @@
 | 02 | `02_BOX1_AI_ENRICHMENT.md` | Box1: Ollama LLM, AI router, BloodHound, bug bounty submit (student ⚠️ — sacrificable) |
 | 03 | `03_BOX2_COORDINATOR.md` | Box2: Postgres primary, dashboard, NATS hub, sink aggregator (personal ✅ — permanent) |
 | 04 | `04_BOX3_INTEL_OBSERVABILITY.md` | Box3: Postgres replica, CertStream, NVD, Loki/Grafana, droplet janitor |
-| 05 | `05_TAILSCALE_MESH.md` | Cross-tenancy mesh + ACL policy |
+| 05 | `05_BOX4_INTERACTSH.md` | Box4: interactsh OOB server (Azure Africa VPS — Azure Student, permanent) |
 | 06 | `06_DO_EPHEMERAL_WORKERS.md` | DigitalOcean droplet lifecycle + cloud-init |
 | 07 | `07_DASHBOARD_PUBLIC_ACCESS.md` | Cloudflare Tunnel for `mimikri.<tld>` |
 | 08 | `08_SECRETS_MANAGEMENT.md` | `age` + YubiKey + tmpfs (zero-cost, hardware-bound) |
 | 09 | `09_INCIDENT_RESPONSE.md` | Kill-switch, IR playbooks, forensic capture |
-| 10 | `10_SMOKE_TEST.md` | End-to-end validation: 1 campaign → 1 droplet → findings |
+| 10 | `10_SMOKE_TEST.md` | End-to-end validation: 1 campaign → 1 droplet → findings + OOB |
 
 Read in order on first deploy. After deployment, use as task-specific reference.
 
@@ -36,7 +36,8 @@ Read in order on first deploy. After deployment, use as task-specific reference.
 | API keys (Shodan, FOFA, NVD, etc.) | High — paid credentials | `secrets.env.age` on **Box2** → tmpfs `/run/mimikri/secrets.env` |
 | `DO_TOKEN` (DigitalOcean) | Critical — spawns billable infra | `secrets.env.age` on **Box2** only; decryption requires operator YubiKey |
 | `H1_API_KEY` (HackerOne) | High — can submit reports | `secrets.env.age` on **Box2** only |
-| Dashboard auth token | Medium — grants UI control | **Box2** `workspace/logs/dashboard.token` |
+| `INTERACTSH_TOKEN` | Critical — authenticates OOB poll | `secrets.env` on **Box2** + Box4 + DO workers | 90d |
+| `INTERACTSH_URL` | Medium | Box2 (polling) + workers (payload gen) | static |
 | Worker binary | Medium — pre-compiled scanner | Box1 Object Storage (cold) + Box2 local cache (fallback) |
 | Scan logs / findings JSONL | Medium — discloses targets in scope | **Box2** disk (primary), Box3 archive |
 
@@ -66,6 +67,7 @@ Read in order on first deploy. After deployment, use as task-specific reference.
 | Service | Tier | Notes |
 |---|---|---|
 | Oracle Cloud × 3 tenancies | 1× student ($300 credit) ⚠️, 2× personal always-free ✅ | Box1 student credit = sacrificable (may expire with university email); Box2/Box3 personal = permanent |
+| Azure Student VPS × 1 | Azure Student credit | Box4: interactsh OOB server. 1GB RAM, 2 vCPU, Africa region. Permanent while credit lasts; migrate to DO Reserved IP if expired |
 | DigitalOcean | GitHub Student Pack ($200) | Activate via education.github.com |
 | Cloudflare | Free | For tunnel + DNS |
 | Tailscale | Free (100 devices) | Single tailnet across all boxes |
@@ -126,9 +128,10 @@ Phase 4 — Secrets (Day 3)
   └─ 08_SECRETS_MANAGEMENT.md — `age` + YubiKey + tmpfs (zero-cost)
 
 Phase 5 — Roles (Day 4-6)
-  ├─ 02_BOX1_AI_ENRICHMENT.md   (student account ⚠️)
   ├─ 03_BOX2_COORDINATOR.md     (personal account ✅ — deploy first)
-  └─ 04_BOX3_INTEL_OBSERVABILITY.md
+  ├─ 02_BOX1_AI_ENRICHMENT.md   (student account ⚠️)
+  ├─ 04_BOX3_INTEL_OBSERVABILITY.md
+  └─ 05_BOX4_INTERACTSH.md      (Azure Africa VPS)
 
 Phase 6 — Data plane (Day 6-7)
   └─ 06_DO_EPHEMERAL_WORKERS.md — cloud-init + worker binary distribution
@@ -187,9 +190,11 @@ Budget 7-10 days for first deploy. Subsequent re-deploys with snapshots: 4 hours
 ## 7. Glossary
 
 - **Box1/Box2/Box3** — Oracle Cloud ARM VMs (control plane). Each in distinct tenancy. Box1 = student (sacrificable), Box2/Box3 = personal (permanent).
+- **Box4** — Azure Africa VPS. Runs `interactsh-server`. Persistent OOB capture node.
 - **Coordinator** — Box2. Runs Postgres primary, NATS hub, Dashboard, Sink aggregator, DO spawn controller.
 - **Worker** — Ephemeral DO droplet running `redteam_rust_core --worker`, connects to Box2 Postgres.
-- **Tailnet** — Tailscale virtual private mesh. `100.x.x.x/8` address space.
+- **OOB (Out-of-Band)** — Interaction captured by Box4 interactsh when a target makes a callback (DNS/HTTP/SMTP) to a payload the worker injected.
+- **Tailnet** — Tailscale virtual private mesh. `100.x.x.x/8` address space. All 4 boxes + workers joined.
 - **Kill-switch** — Ctrl+C / SIGTERM on **Box2** coordinator → triggers `destroy_all_ephemeral_droplets()`.
 - **Scope** — Authorized target set defined in `policy.json` + `--scope-id`.
 - **Campaign** — One scan session with a unique `scope_id`. Maps to one DO droplet pool.

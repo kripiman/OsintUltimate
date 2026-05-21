@@ -18,48 +18,53 @@ This topology separates the **control plane** (orchestration, queueing, intel ag
 ## 2. High-Level Topology
 
 ```
-┌────────────────────────────────────────────────────────────────────────┐
-│                        CONTROL PLANE (Oracle)                          │
-│                                                                        │
-│  ┌──────────────────┐  ┌──────────────────┐  ┌──────────────────┐    │
-│  │  Box1 (student⚠)│  │  Box2 (acct B)   │  │  Box3 (acct C)   │    │
-│  │  4c/24GB ARM     │  │  4c/24GB ARM     │  │  4c/24GB ARM     │    │
-│  │  [SACRIFICABLE]  │  │  [COORDINATOR]   │  │  [INTEL/OBS]     │    │
-│  │                  │  │                  │  │                  │    │
-│  │ • AI/LLM router  │  │ • Coordinator    │  │ • Postgres replica│   │
-│  │ • compressor.rs  │  │ • Dashboard 8080 │  │ • CertStream     │    │
-│  │ • OllamaClient   │  │ • Postgres prmy  │  │ • NVD monitor    │    │
-│  │ • BloodHound     │  │ • NATS hub       │  │ • Loki/Grafana   │    │
-│  │ • Bug bounty sub │  │ • Sink aggregator│  │ • OTEL collector │    │
-│  │ • OCI paid svcs  │  │ • secrets.env.age│  │ • NATS secondary │    │
-│  │   (ObjStorage,   │  │   (age/YubiKey)  │  │ • Droplet janitor│    │
-│  │   Backup,VSS,LA) │  │                  │  │                  │    │
-│  └────────┬─────────┘  └────────┬─────────┘  └────────┬─────────┘    │
-│           │                     │                     │              │
-│           └─────── Tailscale mesh (100.x.x.x) ────────┘              │
-│                              │                                       │
-└──────────────────────────────┼───────────────────────────────────────┘
-                               │
-                  ┌────────────┴────────────┐
-                  │  DO API (spawn/destroy) │
-                  │  Tailscale auth-key     │
-                  └────────────┬────────────┘
-                               │
-┌──────────────────────────────┼───────────────────────────────────────┐
-│                       DATA PLANE (DigitalOcean ephemeral)            │
-│                                                                      │
-│  ┌──────────┐ ┌──────────┐ ┌──────────┐ ┌──────────┐ ┌──────────┐   │
-│  │ Droplet  │ │ Droplet  │ │ Droplet  │ │ Droplet  │ │ Droplet  │   │
-│  │ 1c/1GB   │ │ 1c/1GB   │ │ 1c/1GB   │ │ 1c/1GB   │ │ 1c/1GB   │   │
-│  │ --worker │ │ --worker │ │ --worker │ │ --worker │ │ --worker │   │
-│  │ TTL=6h   │ │ TTL=6h   │ │ TTL=6h   │ │ TTL=6h   │ │ TTL=6h   │   │
-│  └─────┬────┘ └─────┬────┘ └─────┬────┘ └─────┬────┘ └─────┬────┘   │
-│        │            │            │            │            │        │
-└────────┼────────────┼────────────┼────────────┼────────────┼────────┘
-         │            │            │            │            │
-         ▼            ▼            ▼            ▼            ▼
-                          [ AUTHORIZED TARGETS ]
-                  (nmap, scanning/*, exploitation/*)
++------------------------------------------------------------------------+
+|                        CONTROL PLANE (Oracle)                          |
+|                                                                        |
+|  +------------------+  +------------------+  +------------------+    |
+|  |  Box1 (student!) |  |  Box2 (acct B)   |  |  Box3 (acct C)   |    |
+|  |  4c/24GB ARM     |  |  4c/24GB ARM     |  |  4c/24GB ARM     |    |
+|  |  [SACRIFICABLE]  |  |  [COORDINATOR]   |  |  [INTEL/OBS]     |    |
+|  |                  |  |                  |  |                  |    |
+|  | * AI/LLM router  |  | * Coordinator    |  | * Postgres replica|   |
+|  | * compressor.rs  |  | * Dashboard 8080 |  | * CertStream     |    |
+|  | * OllamaClient   |  | * Postgres prmy  |  | * NVD monitor    |    |
+|  | * BloodHound     |  | * NATS hub       |  | * Loki/Grafana   |    |
+|  | * Bug bounty sub |  | * Sink aggregator|  | * OTEL collector |    |
+|  | * OCI paid svcs  |  | * secrets.env.age|  | * NATS secondary |    |
+|  |   (ObjStorage,   |  |   (age/YubiKey)  |  | * Droplet janitor|    |
+|  |   Backup,VSS,LA) |  | * interactsh poll|  |                  |    |
+|  +--------+---------+  +--------+---------+  +--------+---------+    |
+|           |                     |                     |              |
+|           +------- Tailscale mesh (100.x.x.x) --------+              |
+|                              |                |                      |
++------------------------------+----------------+----------------------+
+                               |                |
+                               |                | Tailscale poll :1337
+               +---------------+------------+   |
+               |  DO API (spawn/destroy)    |   |
+               |  Tailscale auth-key        |   |
+               +---------------+------------+   |
+                               |                v
++------------------------------+-------+  +------------------------------+
+|     DATA PLANE (DO ephemeral)        |  |  Box4 (Azure Africa OK)      |
+|                                      |  |  1GB/2vCPU [INTERACTSH]      |
+|  +--------+ +--------+               |  |                              |
+|  |Droplet | |Droplet | ...           |  | * interactsh-server          |
+|  | 1c/1GB | | 1c/1GB |              |  | * DNS  :53  (OOB callbacks)  |
+|  |--worker| |--worker|              |  | * HTTP :80 / HTTPS :443      |
+|  | TTL=6h | | TTL=6h |             |  | * SMTP :25 (email injection) |
+|  | OOB    | | OOB    |             |  | * API  :1337 (tailnet only)  |
+|  | payload| | payload|              |  | * NS -> oast.<your-domain>   |
+|  +----+---+ +----+---+              |  +------------+-----------------+
++-------+----------+-----------------+               |
+        |          |  OOB callbacks                  |
+        v          v  ------------------>             |
+  [ AUTHORIZED TARGETS ]                             |
+  (nmap, interactsh payloads,  <--------------------+
+   scanning/*, exploitation/*)
+   Box4 captures DNS/HTTP/SMTP
+   Box2 polls :1337 to correlate
 ```
 
 ## 3. Plane Responsibilities
@@ -100,13 +105,22 @@ This topology separates the **control plane** (orchestration, queueing, intel ag
 - NATS secondary node (control plane resilience)
 - **Droplet janitor cron**: lists DO droplets every 15min via API, force-destroys any tagged `purpose=redteam-ephemeral` exceeding `TTL=6h`
 
+**Box4 — Interactsh OOB Server (Azure Africa VPS ✅ — persistent)**
+- **PERSISTENT**: Azure Student VPS, personal account. Not tied to Oracle AUP. Stable public IP + DNS authority.
+- `interactsh-server` listening on ports 53 (DNS), 80 (HTTP), 443 (HTTPS), 25 (SMTP)
+- DNS authority over `*.oast.<your-domain>` via NS glue record
+- REST API on `:1337` (Tailscale-only) polled by Box2 to correlate callbacks to scan findings
+- Captures blind SSRF, blind XSS, blind command injection, DNS rebinding, SMTP header injection
+- Joined to same Tailscale mesh as Box1/2/3; API never exposed to public internet
+
 ### 3.2 Data Plane (DigitalOcean ephemeral — touches targets)
 
 - Droplet size: `s-1vcpu-1gb` ($0.009/hr ≈ $6/mo if 24/7, prorated per use)
 - Image: snapshot pre-baked with worker binary + dependencies (nmap, masscan, etc.)
 - Bootstrap: cloud-init pulls pre-compiled `redteam_rust_core` ARM/x86_64 binary from **Box1** Object Storage (signed URL), joins Tailscale via ephemeral auth-key
 - Execution: `redteam_rust_core --worker --postgres-url postgres://box2.tailscale-ip:5432/... --node-id do-${droplet_id}`
-- Lifecycle: pulls one or more jobs from `scan_queue`, executes scan plugins, pushes findings via Postgres connection to **Box2**, then exits
+- OOB payloads: worker uses `INTERACTSH_URL` + `INTERACTSH_TOKEN` (from `secrets.env`) to generate unique payload subdomains pointing to Box4
+- Lifecycle: pulls one or more jobs from `scan_queue`, executes scan plugins (including OOB probes), pushes findings via Postgres connection to **Box2**, then exits
 - TTL enforcement: `at +6h shutdown -h now` in cloud-init prevents orphan billing
 - Memory bound: `config.soft_memory_limit_mb = 600` (reserves 400MB for OS + nmap)
 
@@ -159,6 +173,7 @@ This topology separates the **control plane** (orchestration, queueing, intel ag
 - Tailscale UDP to `derp.tailscale.com` and direct peer connections
 - HTTPS to `api.hackerone.com`, `services.nvd.nist.gov`, Discord webhooks, GitHub
 - Postgres replication traffic **Box2↔Box3** over Tailscale
+- Box2 polls Box4 (Azure) API via Tailscale: `GET https://box4-tailscale-ip:1337/poll`
 - **Zero packets to target IPs** — passes Oracle abuse heuristics
 
 ### What DigitalOcean sees
@@ -249,6 +264,14 @@ Pure ephemeral droplet usage — every dollar buys scan-hours.
 - Scan traffic (DO → target): consumed from DO droplet bandwidth (1TB/mo per droplet, far above need)
 
 ## 8. Failure and Degradation Modes
+
+### Box4 down (OOB server offline)
+- **Degraded but tolerable.** Active scans continue.
+- Blind SSRF / blind XSS / blind injection findings will not be confirmed (payloads fire but callbacks are not captured)
+- Workers continue running all non-OOB plugins (port scans, service enum, CVE matching) without interruption
+- No data loss in Postgres; findings that didn't trigger OOB still get recorded
+- **Recovery**: restart `interactsh` service on Box4. No data migration needed.
+- **If Box4 is permanently down**: use `projectdiscovery.io` hosted interactsh or migrate to a DO Reserved IP
 
 ### Box1 down (student tenancy suspended / email revoked)
 - **Expected and tolerated.** Box1 is sacrificable by design.
