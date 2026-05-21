@@ -55,6 +55,11 @@ async fn main() -> Result<()> {
             scope_id: "baseline".to_string(),
         });
 
+        let concurrency_semaphore = Arc::new(Semaphore::new(10));
+        let policy = config.policy.clone();
+        let strict_scope = false;
+        let approval_timeout_secs = None;
+
         let (findings, _error) = dispatch_scan(
             target.clone(),
             plugins.clone(),
@@ -62,6 +67,10 @@ async fn main() -> Result<()> {
             approval_gate.clone(),
             memory_semaphore.clone(),
             memory_monitor.clone(),
+            concurrency_semaphore,
+            policy,
+            strict_scope,
+            approval_timeout_secs,
         ).await;
 
         println!("📥 Captured {} findings from {}", findings.len(), host);

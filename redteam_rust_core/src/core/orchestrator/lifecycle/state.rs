@@ -13,6 +13,7 @@ pub struct Orchestrator<M: ExecutorMode> {
     pub blackarch_bridge: Arc<crate::core::blackarch::BlackArchBridge>,
     pub memory_semaphore: Arc<tokio::sync::Semaphore>,
     pub memory_monitor: Arc<crate::utils::memory_monitor::MemoryMonitor>,
+    pub concurrency_semaphore: Arc<tokio::sync::Semaphore>,
     pub dashboard_tx: Option<tokio::sync::broadcast::Sender<Finding>>,
     pub dashboard_targets: Arc<dashmap::DashMap<String, TargetHost>>,
     pub swarm_mode: bool,

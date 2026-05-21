@@ -34,12 +34,14 @@ impl TacticalWebhookSink {
             return Ok(());
         }
 
-        let json = serde_json::to_vec(&self.buffer)
+        let json = serde_json::to_string(&self.buffer)
             .context("TacticalWebhookSink: Failed to serialize batch to JSON")?;
+        
+        let scrubbed_json = crate::core::ai::scrubber::SCRUBBER.scrub(&json);
         
         // Gzip compression for remote latency optimization
         let mut encoder = GzEncoder::new(Vec::new(), Compression::default());
-        encoder.write_all(&json)?;
+        encoder.write_all(scrubbed_json.as_bytes())?;
         let compressed_data = encoder.finish()?;
 
         let host = url::Url::parse(&self.url)?.host_str().unwrap_or("c2-server").to_string();

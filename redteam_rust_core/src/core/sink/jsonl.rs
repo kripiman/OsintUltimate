@@ -35,14 +35,15 @@ impl JsonlSink {
 #[async_trait]
 impl DataSink for JsonlSink {
     async fn write(&mut self, target: &TargetHost) -> Result<()> {
-        let mut json = serde_json::to_string(target)
+        let json = serde_json::to_string(target)
             .context("JsonlSink: Failed to serialize TargetHost to JSON")?;
             
+        let mut scrubbed_json = crate::core::ai::scrubber::SCRUBBER.scrub(&json);
         // Ensure NewLine is appended for JSONL format
-        json.push('\n');
+        scrubbed_json.push('\n');
         
         // Write out the serialized byte buffer
-        self.file.write_all(json.as_bytes())
+        self.file.write_all(scrubbed_json.as_bytes())
             .await
             .context("JsonlSink: Failed to write bytes to JSONL file")?;
             

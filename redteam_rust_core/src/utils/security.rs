@@ -116,3 +116,35 @@ pub fn is_ssrf_safe_host(host: &str) -> bool {
 
     true
 }
+
+pub fn build_ssrf_safe_client() -> Result<reqwest::Client, reqwest::Error> {
+    reqwest::Client::builder()
+        .redirect(reqwest::redirect::Policy::custom(|attempt| {
+            let url = attempt.url();
+            if let Some(host) = url.host_str() {
+                if is_ssrf_safe_host(host) {
+                    attempt.follow()
+                } else {
+                    attempt.stop()
+                }
+            } else {
+                attempt.stop()
+            }
+        }))
+        .build()
+}
+
+pub async fn validate_url_ssrf(url_str: &str) -> anyhow::Result<()> {
+    let url = url::Url::parse(url_str)
+        .map_err(|_| anyhow::anyhow!("Invalid URL: {}", url_str))?;
+    
+    if let Some(host) = url.host_str() {
+        if !is_ssrf_safe_host_async(host).await {
+            return Err(anyhow::anyhow!("SSRF violation: Host '{}' resolves to a private or loopback IP address.", host));
+        }
+    } else {
+        return Err(anyhow::anyhow!("URL has no host: {}", url_str));
+    }
+    
+    Ok(())
+}

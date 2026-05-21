@@ -14,8 +14,15 @@ pub struct PostgresSink {
 
 impl PostgresSink {
     pub async fn new(path: impl Into<PathBuf>) -> Result<Self> {
-        let _path = path.into();
-        let connection_str = std::env::var("DATABASE_URL").unwrap_or_else(|_| "postgres://osintuser:WENYANULTRA_SECURE_PASS@localhost:5432/osintdb".to_string());
+        let path = path.into();
+        let path_str = path.to_string_lossy();
+        
+        let connection_str = if path_str.starts_with("postgres://") || path_str.starts_with("postgresql://") {
+            path_str.into_owned()
+        } else {
+            std::env::var("DATABASE_URL")
+                .map_err(|_| anyhow::anyhow!("DATABASE_URL environment variable is missing and path is not a postgres URL"))?
+        };
         
         let pool = sqlx::postgres::PgPoolOptions::new()
             .max_connections(50)
@@ -195,9 +202,10 @@ impl DataSink for PostgresSink {
 
         // Insert findings
         for finding in target.findings.iter() {
-            let evidence = serde_json::to_string(&finding.evidence)?;
-            let enrichment = serde_json::to_string(&finding.enrichment)?;
-            let context = serde_json::to_string(&finding.context)?;
+            let scrubbed_desc = crate::core::ai::scrubber::SCRUBBER.scrub(&finding.core.description);
+            let evidence = crate::core::ai::scrubber::SCRUBBER.scrub(&serde_json::to_string(&finding.evidence)?);
+            let enrichment = crate::core::ai::scrubber::SCRUBBER.scrub(&serde_json::to_string(&finding.enrichment)?);
+            let context = crate::core::ai::scrubber::SCRUBBER.scrub(&serde_json::to_string(&finding.context)?);
             
             sqlx::query(
                 "INSERT INTO findings (id, target_id, category, severity, description, evidence, enrichment, context, timestamps)
@@ -207,7 +215,7 @@ impl DataSink for PostgresSink {
             .bind(target_id)
             .bind(format!("{:?}", finding.core.category))
             .bind(format!("{:?}", finding.core.severity))
-            .bind(&finding.core.description)
+            .bind(scrubbed_desc)
             .bind(evidence)
             .bind(enrichment)
             .bind(context)

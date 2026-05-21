@@ -238,16 +238,13 @@ impl SovereignReconScanner {
         subdomains
     }
 
-    // --- Phase 4: Shodan (Enrichment) ---
-    pub(super) async fn query_shodan(&self, domain: &str) -> HashSet<String> {
-        // min防止paid search與host enrichment兩路合計超出單次掃描預算
-        let limit = std::cmp::min(self.shodan_paid_max_hosts, self.shodan_host_ip_max_hosts);
-        if limit == 0 {
-            return HashSet::new();
-        }
+    // --- Phase 4a: Shodan DNS (student key — /dns/domain/) ---
+    async fn query_shodan_dns(&self, domain: &str) -> HashSet<String> {
+        let limit = self.shodan_host_ip_max_hosts;
+        if limit == 0 { return HashSet::new(); }
 
         if let Some(cache) = crate::utils::api_cache::ApiCache::global() {
-            if let Some(hit) = cache.get::<HashSet<String>>("shodan", domain, "subdomains", Duration::from_secs(CACHE_TTL_LONG_SECS)).await {
+            if let Some(hit) = cache.get::<HashSet<String>>("shodan_dns", domain, "subdomains", Duration::from_secs(CACHE_TTL_LONG_SECS)).await {
                 return apply_cap(hit, limit);
             }
         }
@@ -257,20 +254,16 @@ impl SovereignReconScanner {
             Some((k, s)) => (k, s),
             _ => return results,
         };
+        if !ApiBudgetRegistry::get().can_spend(slot, 1).await { return results; }
 
-        if !ApiBudgetRegistry::get().can_spend(slot, 1).await {
-            return results;
-        }
-
-        debug!("🔭 Phase 4: Shodan infrastructure discovery for {}", domain);
+        debug!("🔭 Phase 4a: Shodan DNS subdomain discovery for {}", domain);
         let url = format!("https://api.shodan.io/dns/domain/{}", domain);
-        
         let mut success = false;
         if let Ok(client) = self.get_client("api.shodan.io").await {
-            if let Ok(resp) = client.get(&url).header("Authorization", format!("Bearer {}", key)).send().await {
+            if let Ok(resp) = client.get(&url).query(&[("key", key)]).send().await {
                 #[derive(Deserialize)]
-                struct ShodanResp { subdomains: Option<Vec<String>> }
-                if let Ok(data) = resp.json::<ShodanResp>().await {
+                struct ShodanDnsResp { subdomains: Option<Vec<String>> }
+                if let Ok(data) = resp.json::<ShodanDnsResp>().await {
                     success = true;
                     if let Some(subs) = data.subdomains {
                         for s in subs { results.insert(format!("{}.{}", s, domain)); }
@@ -278,13 +271,70 @@ impl SovereignReconScanner {
                 }
             }
         }
-
         if success {
             if let Some(cache) = crate::utils::api_cache::ApiCache::global() {
-                cache.put("shodan", domain, "subdomains", &results).await;
+                cache.put("shodan_dns", domain, "subdomains", &results).await;
             }
         }
         apply_cap(results, limit)
+    }
+
+    // --- Phase 4b: Shodan Search (paid/membership key — /shodan/host/search) ---
+    async fn query_shodan_search(&self, domain: &str) -> HashSet<String> {
+        let limit = self.shodan_paid_max_hosts;
+        if limit == 0 { return HashSet::new(); }
+
+        if let Some(cache) = crate::utils::api_cache::ApiCache::global() {
+            if let Some(hit) = cache.get::<HashSet<String>>("shodan_search", domain, "subdomains", Duration::from_secs(CACHE_TTL_LONG_SECS)).await {
+                return apply_cap(hit, limit);
+            }
+        }
+
+        let mut results = HashSet::new();
+        let key = match ShodanKeyring::get().get_key_for_search() {
+            Some(k) => k,
+            _ => return results,
+        };
+        if !ApiBudgetRegistry::get().can_spend("shodan_paid", 1).await { return results; }
+
+        debug!("🔭 Phase 4b: Shodan paid search for hostname:{}", domain);
+        let query = format!("hostname:{}", domain);
+        let url = "https://api.shodan.io/shodan/host/search";
+        let mut success = false;
+        if let Ok(client) = self.get_client("api.shodan.io").await {
+            if let Ok(resp) = client.get(url)
+                .query(&[("key", key), ("query", query.as_str()), ("minify", "true")])
+                .send().await
+            {
+                #[derive(Deserialize)]
+                struct ShodanMatch { hostnames: Option<Vec<String>> }
+                #[derive(Deserialize)]
+                struct ShodanSearchResp { matches: Option<Vec<ShodanMatch>> }
+                if let Ok(data) = resp.json::<ShodanSearchResp>().await {
+                    success = true;
+                    if let Some(matches) = data.matches {
+                        for m in matches {
+                            if let Some(hosts) = m.hostnames {
+                                for h in hosts { results.insert(h); }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        if success {
+            if let Some(cache) = crate::utils::api_cache::ApiCache::global() {
+                cache.put("shodan_search", domain, "subdomains", &results).await;
+            }
+        }
+        apply_cap(results, limit)
+    }
+
+    // --- Phase 4: Shodan (union of DNS + Search) ---
+    pub(super) async fn query_shodan(&self, domain: &str) -> HashSet<String> {
+        let mut results = self.query_shodan_dns(domain).await;
+        results.extend(self.query_shodan_search(domain).await);
+        results
     }
 
     // --- Phase 5: Crimina    // --- Phase 5: Criminal IP (Reputation) ---

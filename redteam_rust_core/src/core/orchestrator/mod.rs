@@ -21,6 +21,7 @@ impl<M: ExecutorMode> Orchestrator<M> {
     pub fn new(config: OrchestratorConfig<M>) -> Self {
         let hard_limit = config.memory_monitor.hard_limit_mb();
         let memory_semaphore = Arc::new(tokio::sync::Semaphore::new(hard_limit as usize));
+        let concurrency_semaphore = Arc::new(tokio::sync::Semaphore::new(config.concurrency));
 
         if let Some(feedback_tx) = &config.feedback_tx {
             for scanner in config.plugins.iter() {
@@ -36,6 +37,7 @@ impl<M: ExecutorMode> Orchestrator<M> {
             blackarch_bridge: config.blackarch_bridge,
             memory_semaphore,
             memory_monitor: config.memory_monitor,
+            concurrency_semaphore,
             dashboard_tx: None,
             dashboard_targets: Arc::new(dashmap::DashMap::new()),
             swarm_mode: false,
@@ -176,6 +178,7 @@ impl<M: ExecutorMode> Orchestrator<M> {
                     let dashboard_tx = self.dashboard_tx.clone();
                     let dashboard_targets = self.dashboard_targets.clone();
                     let inventory = self.inventory.clone();
+                    let concurrency_semaphore = self.concurrency_semaphore.clone();
                     
                     let ctx = dispatch::TargetProcessContext {
                         plugins,
@@ -189,6 +192,8 @@ impl<M: ExecutorMode> Orchestrator<M> {
                         dashboard_tx,
                         dashboard_targets,
                         inventory,
+                        approval_timeout_secs: None,
+                        concurrency_semaphore,
                     };
                     
                     async move {

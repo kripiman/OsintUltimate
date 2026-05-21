@@ -14,6 +14,10 @@ pub async fn dispatch_scan(
     approval_gate: Arc<ApprovalGate>,
     memory_semaphore: Arc<tokio::sync::Semaphore>,
     memory_monitor: Arc<crate::utils::memory_monitor::MemoryMonitor>,
+    concurrency_semaphore: Arc<tokio::sync::Semaphore>,
+    policy: Arc<dyn crate::core::policy::PolicyProvider>,
+    strict_scope: bool,
+    approval_timeout_secs: Option<u64>,
 ) -> (Vec<Finding>, bool) {
     let mut join_set = JoinSet::new();
 
@@ -62,6 +66,9 @@ pub async fn dispatch_scan(
             let approval_gate = Arc::clone(&approval_gate);
             let memory_semaphore_clone = memory_semaphore.clone();
             let memory_monitor_clone = memory_monitor.clone();
+            let concurrency_semaphore_clone = concurrency_semaphore.clone();
+            let policy_clone = policy.clone();
+            let strict_scope_val = strict_scope;
 
             join_set.spawn(async move {
                 let p = &plugins_clone[i];
@@ -86,10 +93,12 @@ pub async fn dispatch_scan(
                 let base_permits = meta.cost.max(1) * (total_capacity / 10).max(10);
                 let permits_needed = ((base_permits as f32 * multiplier) as u32).min(total_capacity.saturating_sub(1));
                 
+                // Concurrency control: Acquire a spawner concurrency permit
+                let _concurrency_permit = concurrency_semaphore_clone.acquire().await;
                 let _permit = memory_semaphore_clone.acquire_many(permits_needed).await;
                 
                 match p.check_dependencies().await {
-                    Ok(true) => (p.name().to_string(), p.scan(&target_snapshot).await),
+                    Ok(true) => (p.name().to_string(), p.execute_safe_scan(&target_snapshot, policy_clone, strict_scope_val, approval_gate, approval_timeout_secs).await),
                     Ok(false) => (p.name().to_string(), Ok(Vec::new())),
                     Err(e) => (p.name().to_string(), Err(e)),
                 }
@@ -155,6 +164,8 @@ pub struct TargetProcessContext {
     pub dashboard_tx: Option<tokio::sync::broadcast::Sender<Finding>>,
     pub dashboard_targets: Arc<dashmap::DashMap<String, TargetHost>>,
     pub inventory: Arc<crate::core::orchestrator::swarm::inventory::SwarmInventory>,
+    pub approval_timeout_secs: Option<u64>,
+    pub concurrency_semaphore: Arc<tokio::sync::Semaphore>,
 }
 
 pub async fn process_target(
@@ -195,7 +206,11 @@ pub async fn process_target(
         ctx.lp,
         ctx.approval_gate.clone(),
         ctx.memory_semaphore,
-        ctx.memory_monitor
+        ctx.memory_monitor,
+        ctx.concurrency_semaphore,
+        ctx.policy.clone(),
+        ctx.strict_scope,
+        ctx.approval_timeout_secs,
     ).await;
 
     ctx.dashboard_targets.remove(&target_arc.host);

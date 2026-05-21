@@ -48,14 +48,17 @@ impl DataSink for DiscordSink {
             let color = self.get_color_for_severity(&finding.core.severity);
             
             // Build the main embed
+            let scrubbed_desc = crate::core::ai::scrubber::SCRUBBER.scrub(&finding.core.description);
             let mut description = format!("**Category:** {:?}\n**Description:** {}\n", 
-                finding.core.category, finding.core.description);
+                finding.core.category, scrubbed_desc);
 
             // Add AI Analysis if available
             if let Some(ai) = &finding.enrichment.ai_analysis {
+                let scrubbed_impact = crate::core::ai::scrubber::SCRUBBER.scrub(&ai.impact);
+                let scrubbed_path = crate::core::ai::scrubber::SCRUBBER.scrub(&ai.exploit_path);
                 description.push_str("\n--- 🤖 **AI ANALYSIS** ---\n");
-                description.push_str(&format!("**Impact:** {}\n", ai.impact));
-                description.push_str(&format!("**Exploit Path:** {}\n", ai.exploit_path));
+                description.push_str(&format!("**Impact:** {}\n", scrubbed_impact));
+                description.push_str(&format!("**Exploit Path:** {}\n", scrubbed_path));
             }
 
             let payload = json!({
