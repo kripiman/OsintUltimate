@@ -162,7 +162,7 @@ Budget 7-10 days for first deploy. Subsequent re-deploys with snapshots: 4 hours
 8. **Kill-switch tested.** Ctrl+C on Box1 destroys all DO droplets in < 30 seconds. Drill quarterly.
 9. **Time-bound credentials.** API keys rotated every 90 days. SSH keys never reused across boxes.
 10. **No attribution leakage.** Worker traffic never references operator identity (no `User-Agent` strings, no `whois` info on droplets).
-11. **Credit posture — $300 Oracle credit is insurance, not active spend.** Zero paid Oracle services at day 1. The credit absorbs egress overages and one-off emergencies only. After credit expiry the deployment continues unchanged because nothing depended on it. No auto-billing risk if operator funds dry up.
+11. **Credit posture — active-spend $300 Oracle credit during the 365-day window.** No payment method is registered on the Oracle account (credit granted via Oracle for Education / Oracle Academy university linkage), so auto-billing at credit exhaustion is structurally impossible. Use the credit to maximize security maturity: Object Storage forensic archive, Block Volume Backup, Vulnerability Scanning Service, Logging Analytics retention. Run the day-350 graduation gate (`09_INCIDENT_RESPONSE.md`) to migrate data to Always-Free before paid-tier auto-suspend at day 365.
 
 ---
 
@@ -178,6 +178,8 @@ Budget 7-10 days for first deploy. Subsequent re-deploys with snapshots: 4 hours
 | Quarterly | Rotate API keys + SSH keys | `08` |
 | Quarterly | Kill-switch drill | `09` |
 | Quarterly | Restore Box1 from backup in sandbox | `08` |
+| Day 330 of Oracle credit year | Credit-exhaustion warning email arrives — schedule graduation gate | `09` |
+| Day 350 of Oracle credit year | Run graduation gate (migrate paid-tier data to Always-Free + local NAS) | `09` |
 | Annually | Threat model review | this file |
 
 ---

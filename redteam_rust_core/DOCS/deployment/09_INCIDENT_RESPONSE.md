@@ -315,7 +315,111 @@ sudo systemctl start postgresql
 
 ---
 
-## 10. SEV-3: One box down
+## 10. SEV-3: Approaching Oracle credit exhaustion (day 330–360)
+
+Routine maintenance, not an incident in the security sense — but treated as SEV-3 to ensure operator runs the graduation gate before paid services auto-suspend at day 365.
+
+### Trigger signals
+- Oracle billing dashboard shows used credit > $250 (≈day 330 at $25/mo burn).
+- Email from Oracle: "your promotional credit is about to expire".
+- `oci usage-api request-summarized-usages` shows < $50 remaining.
+
+### Graduation gate procedure (~2h)
+
+```bash
+# 0. Sanity check current credit + spend
+oci usage-api request-summarized-usages \
+  --tenant-id <root-ocid> \
+  --time-usage-started "$(date -u -d '30 days ago' +%FT%TZ)" \
+  --time-usage-ended "$(date -u +%FT%TZ)" \
+  --granularity DAILY \
+  | jq '.data.items | map(.computed_amount) | add'
+
+# 1. Object Storage — prune oldest archives to fit free tier (≤20GB per tenancy)
+for tenancy in box1 box2 box3; do
+  oci os bucket get --bucket-name mimikri-cold --tenancy $tenancy --query 'data."approximate-size"' \
+    | awk '$0 > 20000000000 { print "PRUNE NEEDED"; exit 1 }'
+done
+# If prune needed, delete oldest objects:
+oci os object list --bucket-name mimikri-cold \
+  --query 'data | sort_by(@, &"time-created") | [0:200].name' \
+  | xargs -I{} oci os object delete --bucket-name mimikri-cold --object-name {} --force
+
+# 2. Block Volume Backup — export final weekly Postgres snapshot to local NAS
+LATEST_BACKUP=$(oci bv backup list --query 'data | sort_by(@, &"time-created") | [-1].id' --raw-output)
+oci bv backup export --backup-id "$LATEST_BACKUP" --destination-region <local-or-nas>
+# OR: pg_dump the live database into operator's local NAS via WireGuard
+ssh opsec@mimikri-box1 'sudo -u postgres pg_dump -Fc redteam' | age -R recipients.txt > ~/nas/final-snapshot-$(date +%F).dump.age
+
+# 3. VSS — export findings before service suspends
+oci vss host-cis-benchmark-scan-result-summary list \
+  --compartment-id <root-ocid> --all > vss-cis-findings-$(date +%F).json
+oci vss host-vulnerability list \
+  --compartment-id <root-ocid> --all > vss-vulns-$(date +%F).json
+
+# 4. Logging Analytics — migrate parsing rules to Loki + export raw logs
+oci log-analytics parser list --namespace-name <ns> > logan-parsers-$(date +%F).json
+# Convert + commit parsers to redteam_rust_core/infrastructure/loki-parsers/ (operator manual step)
+
+# 5. Bastion — confirm session count returns to free-tier cap
+oci bastion session list --bastion-id <id> --query 'data | length(@)'
+
+# 6. Verify Always-Free quotas all healthy
+for service in compute object-storage block-volume; do
+  oci limits resource-availability get --service-name $service --compartment-id <root-ocid>
+done
+
+# 7. Confirm no service is in a state that would require billing post-expiry
+oci limits limit-value list --service-name compute \
+  --query 'data[?"value">`0` && "scope-type"==`AD`]'
+
+# 8. Document graduation in postmortem-style file
+cat > workspace/graduations/$(date +%F)-credit-expiry.md <<EOF
+# Oracle credit graduation $(date +%F)
+
+Credit balance pre-graduation: \$XX
+Object Storage GB used: X.X
+Block Volume Backup last export: ...
+VSS findings archived: X
+Logging Analytics parsers migrated: X
+
+Day 365 auto-suspend executed.
+Day 366 status: all services on Always-Free, no billing event.
+
+Operator signature: ___________________
+EOF
+```
+
+### Day 365 + 1 verification (next morning)
+
+```bash
+# Cost dashboard should show $0 usage since expiry
+oci usage-api request-summarized-usages \
+  --tenant-id <root-ocid> \
+  --time-usage-started "$(date -u -d '2 days ago' +%FT%TZ)" \
+  --time-usage-ended "$(date -u +%FT%TZ)"
+# Expected: zero cost rows
+
+# Always-Free services still active
+ssh opsec@mimikri-box1 'systemctl is-active redteam-*'
+# Expected: all active
+
+# No "billing event" in account console
+# Manually verify: Oracle console → Billing → no invoices issued
+```
+
+### What goes wrong + recovery
+
+| Failure | Symptom | Fix |
+|---|---|---|
+| Object Storage > 20GB at day 365 | Auto-suspend with locked content | Open SR; data accessible read-only, prune to under 20GB to unlock |
+| Block Volume Backup not exported in time | Last snapshot inaccessible | Open SR within 30d before Oracle purges; or accept loss (Postgres replica on Box3 + age-encrypted weekly snapshots are independent recovery paths) |
+| VSS export missed | Findings history lost | AIDE + auditd logs remain on Box3 Loki |
+| Loki parsing rule migration incomplete | New log formats not parsed | Backfill parsers; old logs still searchable |
+
+---
+
+## 11. SEV-3: One box down
 
 If Box2 or Box3 dies but Box1 + workers continue, the system degrades gracefully.
 
@@ -337,7 +441,7 @@ ssh opsec@mimikri-box2 'systemctl status redteam-enrichment ollama'
 
 ---
 
-## 11. Forensic preservation checklist
+## 12. Forensic preservation checklist
 
 For any SEV-0 / SEV-1 incident, preserve:
 
@@ -366,7 +470,7 @@ oci os object put --bucket-name mimikri-forensics \
 
 ---
 
-## 12. Postmortem template
+## 13. Postmortem template
 
 Save as `workspace/incidents/POSTMORTEM-$(date +%F)-<slug>.md`:
 
@@ -420,7 +524,7 @@ Commit postmortems to private repo. Reference in `00_OVERVIEW.md` if threat mode
 
 ---
 
-## 13. Drill schedule (quarterly)
+## 14. Drill schedule (quarterly)
 
 | Quarter | Drill | Expected duration |
 |---|---|---|
@@ -433,7 +537,7 @@ Document each drill in `workspace/drills/`. Failure of any drill = SEV-2 (system
 
 ---
 
-## 14. After every incident
+## 15. After every incident
 
 - [ ] Postmortem written within 72h
 - [ ] All action items have owners + dates

@@ -577,15 +577,33 @@ rsync -az --delete "$BACKUP_DIR/" opsec@mimikri-box3:/var/backups/postgres/box1/
 # Encrypt one weekly snapshot for offline cold storage
 if [[ $(date +%u) -eq 7 ]]; then
   age -R /opt/mimikri/etc/age-recipient.txt -o "$DUMP.age" "$DUMP"
-  # Stay within Box1 tenancy's 20GB free Object Storage allotment; older dumps rotate out via the
-  # 30-day local retention above + bucket lifecycle policy. No paid tier needed.
+  # Stay within Box1 tenancy's 20GB free Object Storage allotment by day 350; older dumps rotate out via the
+  # 30-day local retention above + bucket lifecycle policy. During credit window, paid tier ($80 in HYBRID §7
+  # allocation) buys 250GB headroom for the same archive.
   oci os object put --bucket-name mimikri-cold --file "$DUMP.age"
 fi
 ```
 
----
+### 7.1 Oracle-managed Block Volume Backup (paid tier, credit-funded)
 
-## 8. Verification
+Independent of the pg_dump logical backup above, enable Oracle's volume-level snapshot service for Box1's boot volume + Postgres data volume. These snapshots are immutable, off-host, and survive a full ransomware compromise of the live VM.
+
+Allocated from the $300 credit per `HYBRID §7` ($60/yr ≈ daily snapshots for 1 year).
+
+```bash
+# Oracle console: Storage → Block Volumes → <Box1 boot volume> → Backup Policies
+#   Apply policy: Bronze (daily, 7d retention) OR Silver (daily + weekly, 90d retention)
+# Repeat for Postgres data volume.
+
+# Or via CLI:
+BOOT_VOL_ID=$(oci compute boot-volume list --availability-domain <AD> --compartment-id <root> --query 'data[?"display-name"==`mimikri-box1-boot`].id|[0]' --raw-output)
+
+oci bv volume-backup-policy-assignment create \
+  --asset-id "$BOOT_VOL_ID" \
+  --policy-id <silver-policy-ocid>
+```
+
+Day-350 graduation step (covered in `09 §10`): export final weekly snapshot to operator local NAS, then unassign the policy. Snapshots remain accessible read-only during the suspend grace period.
 
 ```bash
 # Postgres listening only on tailscale0 + localhost

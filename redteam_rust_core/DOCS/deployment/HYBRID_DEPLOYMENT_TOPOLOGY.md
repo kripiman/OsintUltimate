@@ -183,23 +183,30 @@ This topology separates the **control plane** (orchestration, queueing, intel ag
 - Bastion service within usage caps
 - Load Balancer 10Mbps
 
-### Oracle $300 credit — INSURANCE-MODE allocation
+### Oracle $300 credit — ACTIVE-SPEND allocation (no card on file)
 
-Operator decision: **operate 100% on always-free tier from day 1; the $300 credit is standby insurance, not active budget**. Rationale: if operator runs out of bank funds in the future, no Oracle service should be auto-charging beyond credit. Eliminating all paid line items means credit exhaustion has zero operational impact.
+**Critical fact:** the $300 credit was granted via Oracle for Education / Oracle Academy linkage of the operator's university email. **No payment method is registered on the account.** This means Oracle structurally cannot auto-bill at credit exhaustion — paid services simply suspend pending an explicit "upgrade to paid" action that the operator never has to take.
 
-| Service | Annual cost | Status | Free-tier sufficiency |
+Strategy: actively spend the $300 during the 365-day credit window on services that maximize Mimikri security and operational maturity. At day 350, run the graduation gate (`09_INCIDENT_RESPONSE.md`) to migrate data off paid tiers. At day 366, paid services auto-suspend; Always-Free continues indefinitely.
+
+| Service | Annual allocation | What it buys | Graduation behavior at day 365 |
 |---|---|---|---|
-| OCI Vault | $0 | **REMOVED** | `age` + YubiKey + tmpfs (see `08_SECRETS_MANAGEMENT.md`) |
-| WAF | $0 | **REMOVED** | Cloudflare free tier (Zero Trust Access + managed ruleset + rate limit) |
-| OCI Object Storage | $0 | Stay within 60GB free (20GB × 3 tenancies) | Sufficient for recent findings + 30d backups; overflow via Backblaze B2 (~$5/yr/TB) only if absolutely needed |
-| OCI Bastion | $0 | Free-tier within caps | Sufficient |
-| Load Balancer | $0 | Not used | Cloudflare Tunnel covers external ingress |
-| **Active spend** | **$0/yr** | | |
-| Egress overage buffer | up to $100 standby | Only consumed if Box1 > 10TB/mo cap | Reduce concurrency before consuming |
-| Emergency reserve | up to $200 standby | Only consumed if Oracle reclassifies workload | Last resort |
-| **Total standby** | **up to $300/yr** | | Untouched in normal operation |
+| OCI Object Storage 250GB | $80 | Forensic archive + worker binary versioned distribution + AIDE baselines + Postgres weekly age-encrypted snapshots | Auto-suspend. Operator prunes data to ≤60GB free (20GB × 3 tenancies) before day 350. |
+| OCI Block Volume Backup | $60 | Oracle-managed daily snapshots of Box1 boot + Postgres data volumes (immutable, off-host) — survives ransomware on Box1 disk | Last weekly snapshot exported to operator local NAS before day 360. |
+| OCI Vulnerability Scanning Service (VSS) | $40 | Continuous CIS/CVE scan of the 3 control-plane boxes themselves; complements AIDE+auditd by catching host-level vulnerabilities | Scanning stops at expiry; AIDE + unattended-upgrades remain primary. |
+| OCI Logging Analytics | $40 | Centralized log retention 90d with parsing rules — independent retention path if Box3 (Loki host) is compromised | Parsing rules migrated to Loki before expiry; raw logs accessible during suspend. |
+| OCI Bastion overflow | $20 | Buffer above free-tier session cap for incident-response months | Falls back to free-tier cap. |
+| Egress overage buffer | $40 | Cushion for high-scan months exceeding 10TB/mo Box1 cap | Throttle concurrency below cap. |
+| Reserve / Unforeseen | $20 | One-off unplanned spend | Untouched if not needed. |
+| **Active total** | **$300** | Average ~$25/month over 12 months | Auto-suspend at credit expiry (no billing event) |
 
-Operating principle: the credit's job is to absorb a single bad month, never to fund regular operations. After day 365 the credit expires; the deployment continues unchanged because nothing depended on it.
+Services explicitly NOT spent on (and why):
+- **WAF** — Cloudflare Free covers managed rules + rate limit + Zero Trust Access. Redundant.
+- **Network Firewall** — UFW + Tailscale ACL cover the threat model.
+- **API Gateway** — single-operator dashboard traffic is low-volume.
+- **OCI Streaming (Kafka)** — NATS already covers messaging.
+- **Compute expansion** — 12c/72GB always-free across 3 boxes is enough; paid compute would disappear at day 365 (creates dependency).
+- **OCI Container Registry** — Object Storage signed URLs already cover worker binary distribution.
 
 ### DigitalOcean $200 burn plan (365 days)
 
@@ -256,23 +263,28 @@ Pure ephemeral droplet usage — every dollar buys scan-hours.
 - Control plane unaffected
 
 ### $300 credit exhausted (day 365)
-- **No-op**: insurance-mode allocation ensures zero paid services active at day 1; credit expiry has no operational impact.
-- Object Storage usage already within free 60GB (20GB × 3 tenancies); no migration needed.
-- Secrets remain under `age` + YubiKey (no Vault dependency).
-- Logging Analytics not used; Loki on Box3 already authoritative.
-- **12-core control plane survives indefinitely on always-free tier alone.**
+- Day 350 graduation gate has already migrated paid-tier data to Always-Free tiers + operator local NAS (see `09_INCIDENT_RESPONSE.md` SEV-3 Credit Exhaustion procedure).
+- Oracle auto-suspends paid services (Object Storage > 20GB, Block Volume Backup, VSS, Logging Analytics, Bastion overflow). No billing event because no card is on file.
+- Secrets remain under `age` + YubiKey (independent of any Oracle service).
+- Loki on Box3 becomes sole authoritative log store; AIDE + unattended-upgrades cover what VSS used to.
+- **12-core 72GB control plane survives indefinitely on Always-Free tier alone.**
 
-## 9. $300 Credit Allocation Strategy — INSURANCE MODE
+## 9. $300 Credit Allocation Strategy — ACTIVE SPEND
 
-Superseded by §7 "Oracle $300 credit — INSURANCE-MODE allocation". Active spend = $0. Credit held as standby buffer only:
+Detailed allocation in §7 above. Summary view:
 
-| Reserve bucket | Cap | Triggered by | First mitigation |
+| Bucket | Monthly target | Annual cap | Day-350 graduation step |
 |---|---|---|---|
-| Egress overage | up to $100 | Box1 > 10TB/mo egress | Throttle concurrency, defer non-critical campaigns |
-| Emergency | up to $200 | Oracle reclassifies workload, abuse heuristic kicks in, mass restore | Last resort; operator manual decision required |
-| **Total** | **$300/yr** | | All untouched in normal operation |
+| Object Storage | ~$7 | $80 | Prune > 60GB total across 3 tenancies |
+| Block Volume Backup | ~$5 | $60 | Export last weekly snapshot to local NAS |
+| Vulnerability Scanning Service | ~$3 | $40 | Export 12-month findings, disable target |
+| Logging Analytics | ~$3 | $40 | Migrate parsing rules to Loki, export raw logs |
+| Bastion overflow | ~$2 | $20 | Drop to free-tier cap |
+| Egress overage | as-needed | $40 | Throttle if approaching cap |
+| Reserve | as-needed | $20 | Untouched if unused |
+| **Total active monthly** | **~$25** | **$300/yr** | All migrated by day 360 |
 
-No active line items. After day 365, credit expires; deployment unaffected.
+After day 365: paid services auto-suspend (no billing — no card). Always-Free tier continues. Graduation procedure in `09_INCIDENT_RESPONSE.md` "Credit Exhaustion (day 350)".
 
 ## 10. TOS Compliance Notes
 
