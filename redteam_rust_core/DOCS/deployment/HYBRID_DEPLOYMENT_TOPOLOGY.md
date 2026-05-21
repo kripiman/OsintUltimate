@@ -30,8 +30,8 @@ This topology separates the **control plane** (orchestration, queueing, intel ag
 │  │ • Postgres queue │  │ • OllamaClient   │  │ • NVD monitor    │    │
 │  │ • NATS hub       │  │ • Findings enrich│  │ • Loki/Grafana   │    │
 │  │ • Sink aggregator│  │ • BloodHound     │  │ • OTEL collector │    │
-│  │ • OCI Vault      │  │ • Bug bounty     │  │ • NATS secondary │    │
-│  │   ($300 credit)  │  │   auto-submit    │  │ • Droplet janitor│    │
+│  │ • secrets.env.age│  │ • Bug bounty     │  │ • NATS secondary │    │
+│  │   (age/YubiKey)  │  │   auto-submit    │  │ • Droplet janitor│    │
 │  └────────┬─────────┘  └────────┬─────────┘  └────────┬─────────┘    │
 │           │                     │                     │              │
 │           └─────── Tailscale mesh (100.x.x.x) ────────┘              │
@@ -70,7 +70,7 @@ This topology separates the **control plane** (orchestration, queueing, intel ag
 - Dashboard HTTP server on `:8080` (Tailscale-bound only, no public IP)
 - NATS hub for swarm V4.0 inter-agent messaging
 - Sink aggregator: receives findings from data plane workers, dispatches to JSONL/webhooks/Discord
-- OCI Vault: stores `DO_TOKEN`, `H1_API_KEY`, `NVD_API_KEY`, `C2_TOKEN`, Postgres password
+- Secrets: `secrets.env.age` encrypted to operator's YubiKey-bound `age` identity. Decrypted into tmpfs at `/run/mimikri/secrets.env` only when the operator runs `unlock-remote.sh` from their workstation. No cloud secret manager used; see `08_SECRETS_MANAGEMENT.md`.
 - OCI Object Storage: archives baselines (`golden_baseline.json`), findings cold storage, pre-built worker binaries
 
 **Box2 — AI Enrichment Pipeline (free tier)**
@@ -122,7 +122,7 @@ This topology separates the **control plane** (orchestration, queueing, intel ag
 ## 5. DO Droplet Lifecycle
 
 ### Spawn (Box1 initiates)
-1. Box1 reads `DO_TOKEN` from OCI Vault
+1. Box1 reads `DO_TOKEN` from `/run/mimikri/secrets.env` (populated by operator unlock — `08_SECRETS_MANAGEMENT.md` §4.3)
 2. Calls DO API `POST /v2/droplets` with image=snapshot, region matching target geography, user-data containing cloud-init script
 3. Cloud-init script:
    - Installs Tailscale, joins tailnet with one-shot auth key
@@ -183,15 +183,23 @@ This topology separates the **control plane** (orchestration, queueing, intel ag
 - Bastion service within usage caps
 - Load Balancer 10Mbps
 
-### Oracle $300 burn plan (Box1 only, 365 days)
-| Service | Annual cost | Purpose | Free-tier fallback when $300 expires |
+### Oracle $300 credit — INSURANCE-MODE allocation
+
+Operator decision: **operate 100% on always-free tier from day 1; the $300 credit is standby insurance, not active budget**. Rationale: if operator runs out of bank funds in the future, no Oracle service should be auto-charging beyond credit. Eliminating all paid line items means credit exhaustion has zero operational impact.
+
+| Service | Annual cost | Status | Free-tier sufficiency |
 |---|---|---|---|
-| OCI Vault | ~$24 | Secrets custody | `age`-encrypted file in private git, decrypted on boot |
-| Object Storage 500GB | ~$150 | Findings cold archive, worker binary distribution | Use 60GB total free Object Storage across 3 tenancies + Backblaze B2 overflow ($0.005/GB) |
-| Egress overage buffer | ~$50 | Cushion above 10TB/mo | Throttle scan campaigns |
-| WAF (only if dashboard exposed) | ~$60 | `:8080` protection | Tailscale-bind only (zero cost) |
-| Reserve | ~$16 | Unforeseen | — |
-| **Total** | **~$300** | | |
+| OCI Vault | $0 | **REMOVED** | `age` + YubiKey + tmpfs (see `08_SECRETS_MANAGEMENT.md`) |
+| WAF | $0 | **REMOVED** | Cloudflare free tier (Zero Trust Access + managed ruleset + rate limit) |
+| OCI Object Storage | $0 | Stay within 60GB free (20GB × 3 tenancies) | Sufficient for recent findings + 30d backups; overflow via Backblaze B2 (~$5/yr/TB) only if absolutely needed |
+| OCI Bastion | $0 | Free-tier within caps | Sufficient |
+| Load Balancer | $0 | Not used | Cloudflare Tunnel covers external ingress |
+| **Active spend** | **$0/yr** | | |
+| Egress overage buffer | up to $100 standby | Only consumed if Box1 > 10TB/mo cap | Reduce concurrency before consuming |
+| Emergency reserve | up to $200 standby | Only consumed if Oracle reclassifies workload | Last resort |
+| **Total standby** | **up to $300/yr** | | Untouched in normal operation |
+
+Operating principle: the credit's job is to absorb a single bad month, never to fund regular operations. After day 365 the credit expires; the deployment continues unchanged because nothing depended on it.
 
 ### DigitalOcean $200 burn plan (365 days)
 
@@ -248,24 +256,23 @@ Pure ephemeral droplet usage — every dollar buys scan-hours.
 - Control plane unaffected
 
 ### $300 credit exhausted (day 365)
-- Box1 OCI Vault → migrate secrets to `age`-encrypted file in private repo (pre-scripted)
-- Object Storage → migrate to Backblaze B2 ($0.005/GB) or Box3 local 200GB free disk
-- Logging Analytics (if used) → fail over to Loki on Box3 (`OTEL_ENDPOINT` swap)
-- Box1 continues with free-tier-only services
-- **12-core control plane survives indefinitely**
+- **No-op**: insurance-mode allocation ensures zero paid services active at day 1; credit expiry has no operational impact.
+- Object Storage usage already within free 60GB (20GB × 3 tenancies); no migration needed.
+- Secrets remain under `age` + YubiKey (no Vault dependency).
+- Logging Analytics not used; Loki on Box3 already authoritative.
+- **12-core control plane survives indefinitely on always-free tier alone.**
 
-## 9. $300 Credit Allocation Strategy
+## 9. $300 Credit Allocation Strategy — INSURANCE MODE
 
-| Service | Annual cost | Purpose | Free-tier fallback when expires |
+Superseded by §7 "Oracle $300 credit — INSURANCE-MODE allocation". Active spend = $0. Credit held as standby buffer only:
+
+| Reserve bucket | Cap | Triggered by | First mitigation |
 |---|---|---|---|
-| OCI Vault | $24 | Secrets custody (`DO_TOKEN`, API keys, DB password) | `age`-encrypted file in private git, decrypted on Box1 boot |
-| OCI Object Storage 500GB | $150 | Findings cold archive, baselines, worker binary distribution | Backblaze B2 or local disk on Box3 |
-| OCI Bastion | Free | SSH jump host | Native — keep |
-| Egress overage buffer | $50 | Cushion if Box1 exceeds 10TB/mo | Throttle or accept downtime |
-| WAF (if dashboard exposed publicly) | $60 | Protect `:8080` if not Tailscale-only | Tailscale-bind only (zero cost) |
-| **Total** | **~$284** | | |
+| Egress overage | up to $100 | Box1 > 10TB/mo egress | Throttle concurrency, defer non-critical campaigns |
+| Emergency | up to $200 | Oracle reclassifies workload, abuse heuristic kicks in, mass restore | Last resort; operator manual decision required |
+| **Total** | **$300/yr** | | All untouched in normal operation |
 
-Reserve ~$16 buffer for unforeseen.
+No active line items. After day 365, credit expires; deployment unaffected.
 
 ## 10. TOS Compliance Notes
 
@@ -300,14 +307,14 @@ This document describes the **target architecture**. Current state:
 | Box1/Box2/Box3 role separation | **Not yet deployed** — current dev runs monolithic |
 | Cloud-init worker bootstrap script | **Not yet written** |
 | Droplet janitor cron (Box3) | **Not yet written** |
-| OCI Vault integration for secret loading | **Not yet implemented** — currently uses env vars (`utils/config.rs`) |
+| `age` + YubiKey secrets workflow | **Documented in `08_SECRETS_MANAGEMENT.md`** — no code-side changes required; `utils/config.rs` continues to read env vars supplied by tmpfs `/run/mimikri/secrets.env` |
 | Object Storage findings archive sink | **Not yet implemented** — extend `core/sink.rs` |
 | Box1→Box3 Postgres streaming replication | **Not yet configured** |
 
 Implementation order proposed (post Sprint 7.5 closure):
 1. Sprint 8.A: Tailscale provisioning scripts + ACL templates
 2. Sprint 8.B: Cloud-init template + worker binary distribution via Object Storage
-3. Sprint 8.C: OCI Vault integration in `utils/config.rs` with env-var fallback
+3. Sprint 8.C: ~~OCI Vault integration~~ — **DROPPED**, replaced by `age` + YubiKey workflow documented in `08_SECRETS_MANAGEMENT.md`. No code changes required.
 4. Sprint 8.D: Droplet janitor cron + monitoring
 5. Sprint 8.E: Postgres replication Box1→Box3
 6. Sprint 8.F: Object Storage findings sink
@@ -317,7 +324,7 @@ Implementation order proposed (post Sprint 7.5 closure):
 
 - `infrastructure/digital_ocean.rs` — DO API client, kill-switch
 - `core/engine.rs` — `RedTeamEngine` initialization
-- `utils/config.rs` — Env loading (target for OCI Vault integration)
+- `utils/config.rs` — Env loading (reads `/run/mimikri/secrets.env` via systemd `EnvironmentFile`)
 - `core/sink.rs` — `DataSink` trait (target for Object Storage backend)
 - `stealth_opsec.md` — Stealth infrastructure principles
 - `multi_vps_deployment.original.md` — Prior multi-VPS thinking

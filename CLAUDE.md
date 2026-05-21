@@ -348,7 +348,7 @@ Dashboard allows live mission injection (new targets added mid-scan).
 ## Active Audit Status
 - **Status**: Sprint 9 complete (Production Hardening)
 - **Next**: Sprint 10
-- **HEAD**: 2575e99
+- **HEAD**: ad14f09
 - **Baseline SHA256**: f65085dc14e274afb071dec17774ed49bc5c58b92cdf739dec87f256445da058
 - **Violations cumulative**: 18 (Sprint 7=13, Sprint 7.5=5)
 
