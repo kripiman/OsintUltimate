@@ -334,7 +334,8 @@ impl SovereignReconScanner {
     pub(super) async fn query_shodan(&self, domain: &str) -> HashSet<String> {
         let mut results = self.query_shodan_dns(domain).await;
         results.extend(self.query_shodan_search(domain).await);
-        results
+        let combined_limit = std::cmp::min(self.shodan_host_ip_max_hosts, self.shodan_paid_max_hosts);
+        apply_cap(results, combined_limit)
     }
 
     // --- Phase 5: Crimina    // --- Phase 5: Criminal IP (Reputation) ---
@@ -576,18 +577,58 @@ impl SovereignReconScanner {
 
 #[cfg(test)]
 mod tests {
-    use super::apply_cap;
+    use super::*;
     use std::collections::HashSet;
+    use std::sync::Arc;
+    use crate::utils::config::Config;
+    use crate::utils::proxy::ProxyManager;
 
     #[test]
     fn test_per_api_cap_truncates_at_limit() {
         let input: HashSet<String> = (0..10).map(|i| i.to_string()).collect();
-        assert_eq!(apply_cap(input, 3).len(), 3);
+        assert_eq!(apply_cap(input.clone(), 3).len(), 3);
+        assert_eq!(apply_cap(input.clone(), 5).len(), 5);
+        assert_eq!(apply_cap(input, 15).len(), 10);
     }
 
     #[test]
-    fn test_per_api_cap_respects_zero_disables() {
-        let input: HashSet<String> = ["x".to_string()].into();
-        assert!(apply_cap(input, 0).is_empty());
+    fn test_per_api_cap_propagation() {
+        let mut config = Config::from_env();
+        config.securitytrails_max_hosts_per_scan = 10;
+        config.fofa_max_hosts_per_scan = 20;
+        config.shodan_host_ip_max_hosts_per_scan = 30;
+        config.shodan_paid_max_hosts_per_scan = 40;
+
+        let pm = Arc::new(ProxyManager::new(Vec::new(), false, crate::utils::config::ProxyMode::None, 1));
+        let scanner = SovereignReconScanner::new(&config, pm);
+
+        assert_eq!(scanner.securitytrails_max_hosts, 10);
+        assert_eq!(scanner.fofa_max_hosts, 20);
+        assert_eq!(scanner.shodan_host_ip_max_hosts, 30);
+        assert_eq!(scanner.shodan_paid_max_hosts, 40);
+    }
+
+    #[tokio::test]
+    async fn test_per_api_cap_respects_zero_disables() {
+        let mut config = Config::from_env();
+        config.securitytrails_max_hosts_per_scan = 0;
+        config.fofa_max_hosts_per_scan = 0;
+        config.shodan_host_ip_max_hosts_per_scan = 0;
+        config.shodan_paid_max_hosts_per_scan = 0;
+
+        let pm = Arc::new(ProxyManager::new(Vec::new(), false, crate::utils::config::ProxyMode::None, 1));
+        let scanner = SovereignReconScanner::new(&config, pm);
+
+        // SecurityTrails
+        let st = scanner.query_securitytrails("example.com").await;
+        assert!(st.is_empty(), "SecurityTrails should be disabled");
+
+        // FOFA
+        let fofa = scanner.query_fofa("example.com").await;
+        assert!(fofa.is_empty(), "FOFA should be disabled");
+
+        // Shodan
+        let shodan = scanner.query_shodan("example.com").await;
+        assert!(shodan.is_empty(), "Shodan should be disabled");
     }
 }
