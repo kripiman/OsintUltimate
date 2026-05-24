@@ -30,8 +30,13 @@ pub struct OobInteractionManager {
 
 impl OobInteractionManager {
     pub fn new(proxy_manager: Arc<ProxyManager>) -> Self {
-        let server_url = std::env::var("INTERACTSH_SERVER_URL")
+        let raw = std::env::var("INTERACTSH_SERVER_URL")
             .unwrap_or_else(|_| OOB_DEFAULT_SERVER.to_string());
+        let server_url = raw
+            .trim_start_matches("https://")
+            .trim_start_matches("http://")
+            .trim_end_matches('/')
+            .to_string();
         let token = std::env::var("INTERACTSH_TOKEN").ok();
 
         Self {
