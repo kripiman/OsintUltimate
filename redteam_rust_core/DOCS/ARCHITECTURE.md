@@ -171,7 +171,7 @@ flowchart TD
     TO --> CASCADE["Provider cascade<br/>Local → Mid → Premium on error"]
 
     subgraph Tier0["Local - Ollama"]
-        OL["qwen2.5-coder:7b"]
+        OL["qwen2.5:14b-instruct-q4_K_M"]
     end
     subgraph Tier1["Mid"]
         AZ["Azure GPT-4o-mini p0"]
@@ -188,6 +188,10 @@ flowchart TD
 
     CASCADE --> Tier0 & Tier1 & Tier2
 ```
+
+> **Note**: Tier0 production model is `qwen2.5:14b-instruct-q4_K_M` (9GB resident, Q4_K_M quant).
+> The previous diagram reference to `qwen2.5-coder:7b` was an outdated placeholder.
+> See `03_BOX2_COORDINATOR.md` §2.4 for the full selection rationale.
 
 **Routing rules:**
 - `source_aware` evidence type → always Local (no cloud API burn for code analysis).
