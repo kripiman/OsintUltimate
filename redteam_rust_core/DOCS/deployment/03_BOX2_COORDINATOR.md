@@ -132,14 +132,138 @@ Expected first run: 10-30s (model load), subsequent ~3-5s for 100 tokens.
 
 ---
 
-## 3. Worker mode for AI tasks
+## 3. NATS mesh hub
+
+NATS is the inter-agent message bus for swarm V4.0. Box2 runs the primary hub; Box3 runs a secondary.
+
+### 3.1 Install
+
+```bash
+NATS_VERSION=2.10.18
+curl -fsSL https://github.com/nats-io/nats-server/releases/download/v${NATS_VERSION}/nats-server-v${NATS_VERSION}-linux-arm64.tar.gz | sudo tar -xzC /usr/local/bin --strip-components=1 nats-server-v${NATS_VERSION}-linux-arm64/nats-server
+sudo chmod 755 /usr/local/bin/nats-server
+sudo install -d -o nobody -g nogroup -m 0700 /var/lib/nats
+```
+
+### 3.2 Config
+
+`/etc/nats/nats-server.conf`:
+
+```
+listen: 100.x.x.x:4222              # tailscale0 only
+http: 100.x.x.x:8222                # monitoring (read-only)
+server_name: mimikri-box2-nats
+max_payload: 16MB
+write_deadline: "10s"
+
+# TLS — required for cross-tenancy mesh
+tls {
+  cert_file: "/etc/nats/server.crt"
+  key_file: "/etc/nats/server.key"
+  ca_file: "/etc/nats/ca.crt"
+  verify_and_map: true
+  cipher_suites: [
+    "TLS_AES_256_GCM_SHA384",
+    "TLS_CHACHA20_POLY1305_SHA256"
+  ]
+}
+
+# JWT-based auth
+operator: "/etc/nats/operator.jwt"
+resolver: MEMORY
+resolver_preload {
+  ACC_REDTEAM: "<account JWT>"
+}
+
+# Cluster with Box3 secondary
+cluster {
+  name: mimikri-mesh
+  listen: 100.x.x.x:6222
+  authorization {
+    user: cluster
+    password: "$NATS_CLUSTER_PASS"
+  }
+  routes = [
+    nats-route://cluster:$NATS_CLUSTER_PASS@mimikri-box3:6222
+  ]
+  tls {
+    cert_file: "/etc/nats/cluster.crt"
+    key_file:  "/etc/nats/cluster.key"
+    ca_file:   "/etc/nats/ca.crt"
+  }
+}
+
+jetstream {
+  store_dir: "/var/lib/nats/jetstream"
+  max_memory_store: 2GB
+  max_file_store: 10GB
+}
+
+# Limits to prevent abuse
+max_connections: 1024
+max_subscriptions: 10000
+ping_interval: "30s"
+ping_max: 3
+```
+
+Generate NATS NKey/JWT credentials with `nsc` (https://docs.nats.io/using-nats/nats-tools/nsc). Operator/account/user setup out of scope here — see NATS official docs. Bundle the `.creds` content into `secrets.env.age` (per `08_SECRETS_MANAGEMENT.md`) as `NATS_OPERATOR_CREDS=...` and write it to disk on unlock.
+
+### 3.3 Systemd service
+
+`/etc/systemd/system/nats.service`:
+
+```ini
+[Unit]
+Description=NATS server (mimikri mesh hub)
+After=network-online.target tailscaled.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=nobody
+Group=nogroup
+ExecStart=/usr/local/bin/nats-server -c /etc/nats/nats-server.conf
+EnvironmentFile=/opt/mimikri-ai/etc/nats.env
+Restart=on-failure
+RestartSec=5
+
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+PrivateDevices=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectKernelLogs=yes
+ProtectControlGroups=yes
+ReadWritePaths=/var/lib/nats /var/log/nats
+SystemCallArchitectures=native
+SystemCallFilter=@system-service
+SystemCallFilter=~@mount @debug @keyring @obsolete @privileged
+
+[Install]
+WantedBy=multi-user.target
+```
+
+```bash
+sudo ufw allow in on tailscale0 to any port 4222 proto tcp comment 'nats client'
+sudo ufw allow in on tailscale0 to any port 6222 proto tcp comment 'nats cluster'
+sudo ufw allow in on tailscale0 from 100.x.x.x to any port 8222 proto tcp comment 'nats mon (Box3 only)'
+
+sudo systemctl daemon-reload
+sudo systemctl enable --now nats
+```
+
+---
+
+## 4. Worker mode for AI tasks
 
 Box2 runs `redteam_rust_core --worker` but with a profile that only pulls **AI-enrichment** jobs from `scan_queue`, not active scan jobs. Implementation: Box2 sets `WORKER_PROFILE=ai` env var, the worker filters jobs by `priority` or a future `category` column.
 
 > [!NOTE]
 > The current `scan_queue` schema does not have a worker_profile column. Sprint 10 work item: add `worker_profile VARCHAR DEFAULT 'scan'` column. Interim: dedicate Box2 to non-scan tasks by NOT setting `--worker` and instead running enrichment via a separate binary or by relying on the swarm orchestrator's `--swarm` mode to assign roles. For now, Box2 runs the secondary swarm agent.
 
-### 3.1 Launcher
+### 4.1 Launcher
 
 `/opt/mimikri-ai/bin/run-enrichment.sh`:
 
@@ -169,11 +293,11 @@ exec /usr/local/bin/redteam_rust_core \
 ```env
 RUST_LOG=info,sqlx=warn
 OTEL_ENDPOINT=http://mimikri-box3:4317
-NATS_URL=nats://mimikri-box1:4222
+NATS_URL=nats://mimikri-box2:4222
 OLLAMA_URL=http://localhost:11434
 ```
 
-### 3.2 systemd
+### 4.2 systemd
 
 `/etc/systemd/system/redteam-enrichment.service`:
 
@@ -220,7 +344,7 @@ WantedBy=multi-user.target
 
 ---
 
-## 4. BloodHound post-processor (optional, sovereign-flagged)
+## 5. BloodHound post-processor (optional, sovereign-flagged)
 
 > [!NOTE]
 > BloodHound graph processing is part of the `sovereign` feature. For default bug-bounty deployments, skip this section.
@@ -253,7 +377,7 @@ sudo ufw allow in on tailscale0 to any port 7687 proto tcp comment 'neo4j bolt'
 
 ---
 
-## 5. Bug bounty auto-submit pipeline
+## 6. Bug bounty auto-submit pipeline
 
 Runs as a subsystem of `redteam-enrichment`. When findings reach severity ≥ High **and** `policy.json` declares the program in scope, the BountySink composes a report + submits via `H1_API_KEY`.
 
@@ -272,7 +396,7 @@ The "approve" UI is the existing Dashboard ROI tab — operator sees pending sub
 
 ---
 
-## 6. Model integrity verification
+## 7. Model integrity verification
 
 Ollama models are downloaded over HTTPS but Ollama does not pin a known-good SHA. Lock manifests:
 
@@ -327,7 +451,7 @@ sudo systemctl enable --now model-integrity.timer
 
 ---
 
-## 7. Network isolation
+## 8. Network isolation
 
 Box2 outbound is locked down — Ollama doesn't need internet after models are pulled. **Disable outbound HTTPS to all but the tailnet + Oracle/DO APIs once steady state is reached.**
 
@@ -352,7 +476,7 @@ sudo ufw reload
 
 ---
 
-## 8. Verification
+## 9. Verification
 
 ```bash
 # Ollama on tailnet only
@@ -362,8 +486,8 @@ ss -ltnp | grep 11434
 # Model loaded
 curl -s http://mimikri-box2:11434/api/tags | jq '.models[].name'
 
-# Enrichment worker can reach Box1 Postgres
-sudo -u mimikri-ai psql -h mimikri-box1 -U mimikri redteam -c 'SELECT 1;'
+# Coordinator reaches local Postgres primary
+sudo -u mimikri-ai psql -h localhost -U mimikri redteam -c 'SELECT 1;'
 
 # AppArmor enforce
 sudo aa-status | grep ollama
@@ -374,7 +498,7 @@ test -f /opt/mimikri-ai/etc/model-baseline.sha256 && wc -l < /opt/mimikri-ai/etc
 
 ---
 
-## 9. Pitfalls
+## 10. Pitfalls
 
 | Pitfall | Symptom | Fix |
 |---|---|---|
