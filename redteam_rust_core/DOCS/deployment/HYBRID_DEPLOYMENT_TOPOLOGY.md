@@ -67,6 +67,19 @@ This topology separates the **control plane** (orchestration, queueing, intel ag
    Box2 polls :1337 to correlate
 ```
 
+## 2.1 Box Inventory
+
+| Box | Provider / Region | Specs | Role | Persistence | Key Services |
+|-----|-------------------|-------|------|-------------|--------------|
+| Box1 | OCI (Always Free) | 4c / 24GB ARM | Sacrificable AI client | Persistent VM | Ollama client, BloodHound, Bug-bounty submitter, OCI paid services (ObjStorage, Backup, VSS, LA) |
+| Box2 | OCI (Always Free) | 4c / 24GB ARM | Permanent coordinator | Persistent VM | Postgres primary, NATS hub, Ollama server (`qwen2.5:14b-instruct-q4_K_M`), Dashboard :8080, secrets vault (`age` / YubiKey) |
+| Box3 | OCI (Always Free) | 4c / 24GB ARM | Intel / Observability | Persistent VM | Postgres replica, CertStream, NVD monitor, Loki/Grafana, OTEL collector, NATS secondary, droplet janitor |
+| Box4 | Azure (Africa) | 1GB / 2vCPU | OOB Interactsh | Persistent VM | `interactsh-server`, DNS :53, HTTP/S, SMTP :25, API :1337 (tailnet only) |
+| DO Droplets | DigitalOcean | 1c / 1GB (typical) | Ephemeral worker | **TTL ≤ 6h** | Active scan worker (nmap, exploitation, scanning plugins), OOB payload delivery |
+
+> [!NOTE]
+> DO droplets are **not** pre-provisioned inventory. They are spawned on-demand via the DO API by the janitor (`infrastructure/digital_ocean.rs`) and destroyed immediately after job completion. The `1c/1GB` spec is the default worker size; larger droplets (`2c/4GB`, `4c/8GB`) can be requested per-campaign via the `DO_DROPLET_SIZE` env var. All droplets join the Tailscale mesh before accepting NATS tasks.
+
 ## 3. Plane Responsibilities
 
 ### 3.1 Control Plane (Oracle — never touches targets)
@@ -119,7 +132,7 @@ This topology separates the **control plane** (orchestration, queueing, intel ag
 - Image: snapshot pre-baked with worker binary + dependencies (nmap, masscan, etc.)
 - Bootstrap: cloud-init pulls pre-compiled `redteam_rust_core` ARM/x86_64 binary from **Box1** Object Storage (signed URL), joins Tailscale via ephemeral auth-key
 - Execution: `redteam_rust_core --worker --postgres-url postgres://box2.tailscale-ip:5432/... --node-id do-${droplet_id}`
-- OOB payloads: worker uses `INTERACTSH_URL` + `INTERACTSH_TOKEN` (from `secrets.env`) to generate unique payload subdomains pointing to Box4
+- OOB payloads: worker uses `INTERACTSH_SERVER_URL` + `INTERACTSH_TOKEN` (from `secrets.env`) to generate unique payload subdomains pointing to Box4
 - Lifecycle: pulls one or more jobs from `scan_queue`, executes scan plugins (including OOB probes), pushes findings via Postgres connection to **Box2**, then exits
 - TTL enforcement: `at +6h shutdown -h now` in cloud-init prevents orphan billing
 - Memory bound: `config.soft_memory_limit_mb = 600` (reserves 400MB for OS + nmap)
