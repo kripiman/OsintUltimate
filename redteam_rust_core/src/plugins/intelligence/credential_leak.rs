@@ -5,6 +5,7 @@ use anyhow::Result;
 use regex::Regex;
 use tracing::{info, warn, debug};
 use std::collections::HashSet;
+use std::process::Stdio;
 use std::sync::OnceLock;
 use std::time::Duration;
 use percent_encoding::{utf8_percent_encode, NON_ALPHANUMERIC};
@@ -23,6 +24,7 @@ pub struct CredentialLeakScanner {
     max_password_lookups: usize,
     hibp_pwned_base_url: String,
     hibp_breached_base_url: String,
+    h8mail_path: String,
 }
 
 impl Default for CredentialLeakScanner {
@@ -43,6 +45,7 @@ impl CredentialLeakScanner {
             max_password_lookups: MAX_PASSWORD_LOOKUPS,
             hibp_pwned_base_url: "https://api.pwnedpasswords.com".to_string(),
             hibp_breached_base_url: "https://haveibeenpwned.com".to_string(),
+            h8mail_path: crate::utils::tool_detection::detect_tool("h8mail"),
         }
     }
 
@@ -60,7 +63,14 @@ impl CredentialLeakScanner {
             max_password_lookups,
             hibp_pwned_base_url: "https://api.pwnedpasswords.com".to_string(),
             hibp_breached_base_url: "https://haveibeenpwned.com".to_string(),
+            h8mail_path: String::new(),
         }
+    }
+
+    #[cfg(test)]
+    pub fn with_h8mail_path(mut self, path: String) -> Self {
+        self.h8mail_path = path;
+        self
     }
 
     #[cfg(test)]
@@ -278,10 +288,78 @@ impl CredentialLeakScanner {
         serde_json::from_str::<Vec<H8mailHit>>(json).unwrap_or_default()
     }
 
-    async fn pivot_h8mail(&self, _email: &str) -> Vec<Finding> {
-        // h8mail is not installed in this environment; graceful degrade.
-        // If h8mail were available, this would spawn subprocess and parse output.
-        Vec::new()
+    async fn pivot_h8mail(&self, email: &str) -> Vec<Finding> {
+        // Graceful degrade: skip if h8mail binary not detected.
+        if self.h8mail_path.is_empty() || !tokio::fs::try_exists(&self.h8mail_path).await.unwrap_or(false) {
+            debug!("CredentialLeakScanner: h8mail not available, skipping");
+            return Vec::new();
+        }
+
+        let tmpfile = format!(
+            "/tmp/h8mail_{}_{}.json",
+            Self::sanitize_id(email),
+            &uuid::Uuid::new_v4().to_string()[..8]
+        );
+
+        debug!("CredentialLeakScanner: spawning h8mail for {} -> {}", email, tmpfile);
+        let child = match tokio::process::Command::new(&self.h8mail_path)
+            .arg("-t").arg(email)
+            .arg("--chase").arg("--power-chase")
+            .arg("-o").arg(&tmpfile)
+            .stdout(Stdio::piped())
+            .stderr(Stdio::null())
+            .spawn()
+        {
+            Ok(c) => c,
+            Err(e) => {
+                warn!("Failed to spawn h8mail for {}: {}", email, e);
+                return Vec::new();
+            }
+        };
+
+        let output = match child.wait_with_output().await {
+            Ok(o) => o,
+            Err(e) => {
+                warn!("h8mail failed for {}: {}", email, e);
+                let _ = tokio::fs::remove_file(&tmpfile).await;
+                return Vec::new();
+            }
+        };
+
+        if !output.status.success() {
+            warn!("h8mail exited with status {} for {}", output.status, email);
+            let _ = tokio::fs::remove_file(&tmpfile).await;
+            return Vec::new();
+        }
+
+        let json = match tokio::fs::read_to_string(&tmpfile).await {
+            Ok(s) => s,
+            Err(e) => {
+                warn!("Failed to read h8mail output for {}: {}", email, e);
+                let _ = tokio::fs::remove_file(&tmpfile).await;
+                return Vec::new();
+            }
+        };
+
+        let _ = tokio::fs::remove_file(&tmpfile).await;
+        let hits = Self::parse_h8mail_output(&json);
+        let mut findings = Vec::new();
+        for hit in hits {
+            if let Some(breach) = hit.breach {
+                findings.push(Finding::new(
+                    &format!("CREDENTIAL-LEAK-H8MAIL-{}", Self::sanitize_id(&hit.target)),
+                    Category::CredentialLeak,
+                    Severity::High,
+                    &format!("h8mail found {} in {}", hit.target, breach),
+                    serde_json::json!({
+                        "email": hit.target,
+                        "breach": breach,
+                        "source": "h8mail",
+                    }),
+                ));
+            }
+        }
+        findings
     }
 
     fn build_finding(
@@ -419,6 +497,11 @@ impl ScannerPlugin for CredentialLeakScanner {
                         }),
                     ));
                 }
+            }
+
+            // Rate limit between HIBP Pwned Passwords calls
+            if password_count < self.max_password_lookups {
+                tokio::time::sleep(Duration::from_millis(HIBP_RATE_LIMIT_MS)).await;
             }
         }
 
