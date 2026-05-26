@@ -99,8 +99,11 @@ pub struct Config {
     pub github_token: Option<String>,
     pub github_max_dorks_per_scan: usize,
     pub alienvault_otx_api_key: Option<String>,
+    pub alienvault_otx_max_ips_per_scan: usize,
     pub abuseipdb_api_key: Option<String>,
     pub abuseipdb_max_ips_per_scan: usize,
+    pub greynoise_api_key: Option<String>,
+    pub hibp_api_key: Option<String>,
 }
 
 impl Config {
@@ -269,11 +272,17 @@ impl Config {
                 .and_then(|s| s.parse().ok())
                 .unwrap_or(10),
             alienvault_otx_api_key: env::var("ALIENVAULT_OTX_API_KEY").ok(),
+            alienvault_otx_max_ips_per_scan: env::var("ALIENVAULT_OTX_MAX_IPS_PER_SCAN")
+                .ok()
+                .and_then(|s| s.parse().ok())
+                .unwrap_or(50),
             abuseipdb_api_key: env::var("ABUSEIPDB_API_KEY").ok(),
             abuseipdb_max_ips_per_scan: env::var("ABUSEIPDB_MAX_IPS_PER_SCAN")
                 .ok()
                 .and_then(|s| s.parse().ok())
                 .unwrap_or(50),
+            greynoise_api_key: env::var("GREYNOISE_API_KEY").ok(),
+            hibp_api_key: env::var("HIBP_API_KEY").ok(),
         }
     }
 

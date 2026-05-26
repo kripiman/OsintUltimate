@@ -1,4 +1,5 @@
 use crate::plugins::{Capability, PluginMetadata, RiskLevel, ScannerPlugin, TargetType};
+use crate::utils::config::Config;
 use crate::models::{Category, Finding, Severity, TargetHost, PLUGIN_CREDENTIAL_LEAK};
 use async_trait::async_trait;
 use anyhow::Result;
@@ -35,12 +36,13 @@ impl Default for CredentialLeakScanner {
 
 impl CredentialLeakScanner {
     pub fn new() -> Self {
+        let cfg = Config::from_env();
         Self {
             client: reqwest::Client::builder()
                 .timeout(Duration::from_secs(HIBP_TIMEOUT_SECS))
                 .build()
                 .expect("reqwest::Client builder must not fail"),
-            hibp_api_key: std::env::var("HIBP_API_KEY").ok(),
+            hibp_api_key: cfg.hibp_api_key,
             max_email_lookups: MAX_EMAIL_LOOKUPS,
             max_password_lookups: MAX_PASSWORD_LOOKUPS,
             hibp_pwned_base_url: "https://api.pwnedpasswords.com".to_string(),

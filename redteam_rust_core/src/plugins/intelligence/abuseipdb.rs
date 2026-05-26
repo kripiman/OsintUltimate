@@ -1,5 +1,6 @@
 use crate::plugins::{ScannerPlugin, Capability, TargetType, RiskLevel};
 use crate::models::{TargetHost, Finding, Severity, Category};
+use crate::utils::config::Config;
 use async_trait::async_trait;
 use anyhow::Result;
 use tracing::{info, warn, error};
@@ -19,12 +20,10 @@ impl Default for AbuseIPDBScanner {
 
 impl AbuseIPDBScanner {
     pub fn new() -> Self {
+        let cfg = Config::from_env();
         Self {
-            api_key: std::env::var("ABUSEIPDB_API_KEY").ok(),
-            max_ips: std::env::var("ABUSEIPDB_MAX_IPS_PER_SCAN")
-                .ok()
-                .and_then(|s| s.parse().ok())
-                .unwrap_or(50),
+            api_key: cfg.abuseipdb_api_key,
+            max_ips: cfg.abuseipdb_max_ips_per_scan,
         }
     }
 
