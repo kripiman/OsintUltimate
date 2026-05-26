@@ -50,6 +50,15 @@ impl OobInteractionManager {
         uuid::Uuid::new_v4().to_string().replace("-", "")[..16].to_string()
     }
 
+    /// Deterministic OOB ID derived from scan_queue.id for correlation.
+    pub fn generate_id_for_queue(queue_id: i64) -> String {
+        use sha2::{Sha256, Digest};
+        let mut hasher = Sha256::new();
+        hasher.update(queue_id.to_le_bytes());
+        let result = hasher.finalize();
+        format!("{:016x}", u64::from_le_bytes(result[0..8].try_into().unwrap()))
+    }
+
     pub fn get_oob_domain(&self, id: &str) -> String {
         format!("{}.{}", id, self.server_url)
     }

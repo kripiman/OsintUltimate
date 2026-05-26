@@ -46,4 +46,6 @@ pub struct ExecutionContext {
     pub detection_notes: String,
     #[serde(default)]
     pub validation: ValidationMetadata,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub oob_correlation_id: Option<String>,
 }

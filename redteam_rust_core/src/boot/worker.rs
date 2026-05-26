@@ -2,14 +2,60 @@ use crate::boot::cli::Args;
 use redteam_rust_core::models::{TargetHost, TargetStatus};
 use redteam_rust_core::models::worker_profile::WorkerProfile;
 use redteam_rust_core::core::engine::{RedTeamEngine, app::EngineConfig};
-use redteam_rust_core::core::sink::{MultiSink, PostgresSink};
+use redteam_rust_core::core::sink::{MultiSink, PostgresSink, DataSink};
 use redteam_rust_core::core::capability_layer::ScanLayer;
+use redteam_rust_core::core::verification::interaction::OobInteractionManager;
 use redteam_rust_core::utils::config::Config;
+use redteam_rust_core::models::ScanMetadata;
+use async_trait::async_trait;
 use tracing::{info, error};
 use anyhow::{Result, Context};
 use std::time::Duration;
 use std::str::FromStr;
 use std::sync::Arc;
+
+/// Wrapper sink that injects oob_correlation_id into every Finding's context
+/// before passing to the inner sink. Centralized injection — no plugin changes needed.
+pub struct OobEnrichingSink {
+    inner: Box<dyn DataSink>,
+    oob_id: String,
+}
+
+impl OobEnrichingSink {
+    pub fn new(inner: Box<dyn DataSink>, oob_id: String) -> Self {
+        Self { inner, oob_id }
+    }
+}
+
+#[async_trait]
+impl DataSink for OobEnrichingSink {
+    async fn write(&mut self, target: &TargetHost) -> Result<()> {
+        let mut enriched = target.clone();
+        let findings: Vec<_> = target.findings.iter().map(|f| {
+            let mut finding = f.clone();
+            finding.context.oob_correlation_id = Some(self.oob_id.clone());
+            finding
+        }).collect();
+        enriched.findings = Arc::new(findings);
+        self.inner.write(&enriched).await
+    }
+
+    async fn write_metadata(&mut self, metadata: &ScanMetadata) -> Result<()> {
+        self.inner.write_metadata(metadata).await
+    }
+
+    async fn close(&mut self) -> Result<()> {
+        self.inner.close().await
+    }
+
+    fn get_db_pool(&self) -> Option<sqlx::PgPool> {
+        self.inner.get_db_pool()
+    }
+
+    fn get_scan_id(&self) -> Option<i64> {
+        self.inner.get_scan_id()
+    }
+}
 
 pub fn resolve_worker_profile(args: &Args) -> WorkerProfile {
     if args.cve_correlation_only {
@@ -148,6 +194,15 @@ pub async fn run_worker_mode(args: &Args) -> Result<()> {
                 };
 
                 let engine = RedTeamEngine::from_config(engine_config, &utils_config_clone);
+
+                // Sprint 10: Deterministic OOB correlation ID per queue job
+                let oob_id = OobInteractionManager::generate_id_for_queue(id.into());
+                let mut tactical_context = tactical_context;
+                if let Some(obj) = tactical_context.as_object_mut() {
+                    obj.insert("oob_correlation_id".to_string(), serde_json::json!(oob_id));
+                } else {
+                    tactical_context = serde_json::json!({"oob_correlation_id": oob_id});
+                }
                 
                 let target = TargetHost {
                     host: host.clone(),
@@ -184,8 +239,9 @@ pub async fn run_worker_mode(args: &Args) -> Result<()> {
                             )));
                         }
 
+                        let oob_sink = OobEnrichingSink::new(Box::new(multi_sink), oob_id);
                         let target_stream = Box::pin(futures::stream::once(async move { target }));
-                        match engine.run_autopilot(target_stream, Box::new(multi_sink)).await {
+                        match engine.run_autopilot(target_stream, Box::new(oob_sink)).await {
                             Ok(_) => {
                                 info!("✅ [Worker] Completed job {}", id);
                                 let _ = sqlx::query("UPDATE scan_queue SET status = 'completed', updated_at = NOW() WHERE id = $1")

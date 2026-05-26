@@ -1,7 +1,7 @@
 use clap::Parser;
 use tracing::{info, warn};
 
-#[derive(Parser, Debug, Clone)]
+#[derive(Parser, Debug, Clone, Default)]
 #[command(author, version, about, long_about = None)]
 pub struct Args {
     pub target: Option<String>,
