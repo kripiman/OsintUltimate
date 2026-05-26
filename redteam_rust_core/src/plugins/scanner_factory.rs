@@ -245,6 +245,7 @@ pub fn get_all_scanners<M: ExecutorMode>(config: GlobalConfig<M>) -> Vec<Box<dyn
         Box::new(GreyNoiseScanner::new()),
         Box::new(AlienVaultOtxScanner::new()),
         Box::new(AbuseIPDBScanner::new()),
+        Box::new(crate::plugins::intelligence::credential_leak::CredentialLeakScanner::new()),
         Box::new(X8Scanner::new()),
         Box::new(InQLScanner::new()),
         Box::new(crate::plugins::compliance::syft::SyftScanner::new()),
