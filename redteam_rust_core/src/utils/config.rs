@@ -92,6 +92,15 @@ pub struct Config {
     pub fofa_max_hosts_per_scan: usize,
     pub greynoise_max_ips_per_scan: usize,
     pub securitytrails_max_hosts_per_scan: usize,
+    pub zoomeye_max_hosts_per_scan: usize,
+    pub crtsh_max_hosts_per_scan: usize,
+    pub leakix_api_key: Option<String>,
+    pub leakix_max_hosts_per_scan: usize,
+    pub github_token: Option<String>,
+    pub github_max_dorks_per_scan: usize,
+    pub alienvault_otx_api_key: Option<String>,
+    pub abuseipdb_api_key: Option<String>,
+    pub abuseipdb_max_ips_per_scan: usize,
 }
 
 impl Config {
@@ -232,7 +241,7 @@ impl Config {
             fofa_max_hosts_per_scan: env::var("FOFA_MAX_HOSTS_PER_SCAN")
                 .ok()
                 .and_then(|s| s.parse().ok())
-                .unwrap_or(100),
+                .unwrap_or(0),
             greynoise_max_ips_per_scan: env::var("GREYNOISE_MAX_IPS_PER_SCAN")
                 .ok()
                 .and_then(|s| s.parse().ok())
@@ -240,7 +249,31 @@ impl Config {
             securitytrails_max_hosts_per_scan: env::var("SECURITYTRAILS_MAX_HOSTS_PER_SCAN")
                 .ok()
                 .and_then(|s| s.parse().ok())
-                .unwrap_or(20),
+                .unwrap_or(0),
+            zoomeye_max_hosts_per_scan: env::var("ZOOMEYE_MAX_HOSTS_PER_SCAN")
+                .ok()
+                .and_then(|s| s.parse().ok())
+                .unwrap_or(0),
+            crtsh_max_hosts_per_scan: env::var("CRTSH_MAX_HOSTS_PER_SCAN")
+                .ok()
+                .and_then(|s| s.parse().ok())
+                .unwrap_or(100),
+            leakix_api_key: env::var("LEAKIX_API_KEY").ok(),
+            leakix_max_hosts_per_scan: env::var("LEAKIX_MAX_HOSTS_PER_SCAN")
+                .ok()
+                .and_then(|s| s.parse().ok())
+                .unwrap_or(50),
+            github_token: env::var("GITHUB_TOKEN").ok(),
+            github_max_dorks_per_scan: env::var("GITHUB_MAX_DORKS_PER_SCAN")
+                .ok()
+                .and_then(|s| s.parse().ok())
+                .unwrap_or(10),
+            alienvault_otx_api_key: env::var("ALIENVAULT_OTX_API_KEY").ok(),
+            abuseipdb_api_key: env::var("ABUSEIPDB_API_KEY").ok(),
+            abuseipdb_max_ips_per_scan: env::var("ABUSEIPDB_MAX_IPS_PER_SCAN")
+                .ok()
+                .and_then(|s| s.parse().ok())
+                .unwrap_or(50),
         }
     }
 

@@ -158,6 +158,9 @@ impl ApiBudgetRegistry {
         let greynoise_budget = std::env::var("GREYNOISE_BUDGET").ok().and_then(|v| v.parse().ok()).unwrap_or(1000);
         let fofa_budget = std::env::var("FOFA_BUDGET").ok().and_then(|v| v.parse().ok()).unwrap_or(10000);
         let chaos_budget = std::env::var("CHAOS_BUDGET").ok().and_then(|v| v.parse().ok()).unwrap_or(1000);
+        let crtsh_budget = std::env::var("CRTSH_BUDGET").ok().and_then(|v| v.parse().ok()).unwrap_or(1000);
+        let leakix_budget = std::env::var("LEAKIX_BUDGET").ok().and_then(|v| v.parse().ok()).unwrap_or(1000);
+        let github_budget = std::env::var("GITHUB_BUDGET").ok().and_then(|v| v.parse().ok()).unwrap_or(5000);
 
         managers.insert(
             "netlas".to_string(),
@@ -194,6 +197,18 @@ impl ApiBudgetRegistry {
         managers.insert(
             "chaos".to_string(),
             CreditManager::new(chaos_budget, BudgetWindow::Monthly),
+        );
+        managers.insert(
+            "crtsh".to_string(),
+            CreditManager::new(crtsh_budget, BudgetWindow::Daily),
+        );
+        managers.insert(
+            "leakix".to_string(),
+            CreditManager::new(leakix_budget, BudgetWindow::Daily),
+        );
+        managers.insert(
+            "github".to_string(),
+            CreditManager::new(github_budget, BudgetWindow::Daily),
         );
 
         let registry = Self { managers, pool };

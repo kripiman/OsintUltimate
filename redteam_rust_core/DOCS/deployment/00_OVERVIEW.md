@@ -37,7 +37,7 @@ Read in order on first deploy. After deployment, use as task-specific reference.
 | `DO_TOKEN` (DigitalOcean) | Critical — spawns billable infra | `secrets.env.age` on **Box2** only; decryption requires operator YubiKey |
 | `H1_API_KEY` (HackerOne) | High — can submit reports | `secrets.env.age` on **Box2** only |
 | `INTERACTSH_TOKEN` | Critical — authenticates OOB poll | `secrets.env` on **Box2** + Box4 + DO workers | 90d |
-| `INTERACTSH_URL` | Medium | Box2 (polling) + workers (payload gen) | static |
+| `INTERACTSH_SERVER_URL` | Medium | Box2 (polling) + workers (payload gen). Bare host, no scheme | static |
 | Worker binary | Medium — pre-compiled scanner | Box1 Object Storage (cold) + Box2 local cache (fallback) |
 | Scan logs / findings JSONL | Medium — discloses targets in scope | **Box2** disk (primary), Box3 archive |
 

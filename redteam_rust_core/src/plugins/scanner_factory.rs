@@ -81,6 +81,8 @@ pub fn get_all_scanners<M: ExecutorMode>(config: GlobalConfig<M>) -> Vec<Box<dyn
     use crate::plugins::exploitation::web::nomore403::NoMore403Scanner; // NUEVO
     use crate::plugins::exploitation::web::smuggler::SmugglerScanner; // NUEVO
     use crate::plugins::intelligence::greynoise::GreyNoiseScanner; // NUEVO
+    use crate::plugins::intelligence::alienvault_otx::AlienVaultOtxScanner;
+    use crate::plugins::intelligence::abuseipdb::AbuseIPDBScanner;
     use crate::plugins::enumeration::web::x8::X8Scanner; // NUEVO
     use crate::plugins::enumeration::web::inql::InQLScanner; // NUEVO
     use crate::plugins::enumeration::web::ppmap::PpmapScanner; // NUEVO
@@ -239,6 +241,8 @@ pub fn get_all_scanners<M: ExecutorMode>(config: GlobalConfig<M>) -> Vec<Box<dyn
         Box::new(NoMore403Scanner::new(config.insecure)),
         Box::new(SmugglerScanner::new()),
         Box::new(GreyNoiseScanner::new()),
+        Box::new(AlienVaultOtxScanner::new()),
+        Box::new(AbuseIPDBScanner::new()),
         Box::new(X8Scanner::new()),
         Box::new(InQLScanner::new()),
         Box::new(crate::plugins::compliance::syft::SyftScanner::new()),
