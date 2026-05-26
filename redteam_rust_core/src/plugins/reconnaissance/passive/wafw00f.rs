@@ -67,7 +67,10 @@ impl ScannerPlugin for Wafw00fScanner {
 
         info!("Wafw00fScanner: fingerprinting WAF for {}", url);
 
-        let tmpfile = format!("/tmp/wafw00f_{}.json", target.host.replace(|c: char| !c.is_alphanumeric(), "_"));
+        let tmpfile = format!("/tmp/wafw00f_{}_{}.json",
+            target.host.replace(|c: char| !c.is_alphanumeric(), "_"),
+            &uuid::Uuid::new_v4().to_string().replace('-', "")[..8]
+        );
 
         let child = Command::new(&self.binary_path)
             .arg("-a")
