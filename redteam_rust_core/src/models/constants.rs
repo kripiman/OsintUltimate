@@ -108,6 +108,7 @@ pub const PLUGIN_AMASS: &str = "AmassScanner";
 pub const PLUGIN_RUSTSCAN: &str = "RustScanScanner";
 pub const PLUGIN_NETEXEC: &str = "NetExecScanner";
 pub const PLUGIN_TRUFFLEHOG: &str = "TrufflehogScanner";
+pub const PLUGIN_WAFW00F: &str = "Wafw00fScanner";
 pub const PLUGIN_DALFOX: &str = "DalfoxScanner";
 pub const PLUGIN_KATANA: &str = "KatanaScanner";
 pub const PLUGIN_BLOODHOUND: &str = "BloodHoundScanner";

@@ -52,6 +52,7 @@ pub enum Category {
     RaceCondition,
     FileUploadVulnerability,
     AttackPath,
+    WafDetected,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]

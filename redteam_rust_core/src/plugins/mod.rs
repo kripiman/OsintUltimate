@@ -41,6 +41,7 @@ pub enum Capability {
     VulnerabilityScanning,
     WebFuzzing,
     SecretDiscovery,
+    WafDetection,
     CloudAudit,
     ActiveDirectory,
     OsintDiscovery,

@@ -20,6 +20,7 @@ pub fn get_all_scanners<M: ExecutorMode>(config: GlobalConfig<M>) -> Vec<Box<dyn
     use crate::plugins::enumeration::network::enum4linux::Enum4LinuxScanner;
     use crate::plugins::exploitation::network::netexec::NetExecScanner;
     use crate::plugins::reconnaissance::passive::trufflehog::TruffleHogScanner;
+    use crate::plugins::reconnaissance::passive::wafw00f::Wafw00fScanner;
     use crate::plugins::exploitation::web::dalfox::DalfoxScanner;
     use crate::plugins::enumeration::web::katana::KatanaScanner;
     #[cfg(feature = "sovereign")]
@@ -176,7 +177,8 @@ pub fn get_all_scanners<M: ExecutorMode>(config: GlobalConfig<M>) -> Vec<Box<dyn
         Box::new(KerbruteScanner::new()),
         Box::new(Enum4LinuxScanner::new()), 
         Box::new(NetExecScanner::new()), 
-        Box::new(TruffleHogScanner::new()), 
+        Box::new(TruffleHogScanner::new()),
+        Box::new(Wafw00fScanner::new()), 
         Box::new(DalfoxScanner::new()), 
         Box::new(KatanaScanner::new()), 
         #[cfg(feature = "sovereign")]
