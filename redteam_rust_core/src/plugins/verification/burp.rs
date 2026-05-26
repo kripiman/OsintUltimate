@@ -1,5 +1,6 @@
 use crate::plugins::{ScannerPlugin, Capability};
 use crate::models::{TargetHost, Finding, Severity, Category};
+use crate::utils::config::Config;
 use async_trait::async_trait;
 use anyhow::Result;
 use tracing::{info, warn};
@@ -13,7 +14,7 @@ pub struct BurpScanner {
 impl BurpScanner {
     pub fn new(api_key: Option<String>, api_url: Option<String>) -> Self {
         Self {
-            api_key: api_key.unwrap_or_else(|| std::env::var("BURP_API_KEY").unwrap_or_default()),
+            api_key: api_key.unwrap_or_else(|| Config::from_env().burp_api_key.unwrap_or_default()),
             api_url: api_url.unwrap_or_else(|| "http://localhost:1337".into()),
         }
     }

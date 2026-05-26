@@ -1,4 +1,5 @@
 use crate::models::{Finding, Category, Severity, TargetHost, TargetType, constants::*};
+use crate::utils::config::Config;
 use std::sync::RwLock;
 use crate::plugins::{ScannerPlugin, Capability, PluginMetadata, RiskLevel};
 use async_trait::async_trait;
@@ -13,10 +14,11 @@ pub struct NvdMonitor {
 }
 
 impl NvdMonitor {
-    pub fn new(api_key: Option<String>) -> Self {
+    pub fn new() -> Self {
+        let cfg = Config::from_env();
         Self {
             last_check: RwLock::new(Utc::now() - Duration::hours(24)),
-            api_key,
+            api_key: cfg.nvd_api_key,
         }
     }
 

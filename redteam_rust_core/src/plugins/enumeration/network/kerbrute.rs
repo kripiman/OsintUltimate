@@ -1,6 +1,7 @@
 use crate::plugins::{PluginMetadata, ScannerPlugin, Capability, RiskLevel};
 use crate::models::{TargetHost, TargetType, Finding, findings::{Category, Severity}};
 use crate::utils::tool_detection::check_tool_availability;
+use crate::utils::config::Config;
 use crate::core::capability_layer::ScanLayer;
 use async_trait::async_trait;
 use anyhow::{Result, Context};
@@ -14,8 +15,9 @@ pub struct KerbruteScanner {
 
 impl KerbruteScanner {
     pub fn new() -> Self {
+        let cfg = Config::from_env();
         Self {
-            wordlist_path: env::var("KERBRUTE_USERLIST").ok(),
+            wordlist_path: cfg.kerbrute_userlist,
         }
     }
 }

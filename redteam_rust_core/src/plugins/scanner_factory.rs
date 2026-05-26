@@ -287,7 +287,7 @@ pub fn get_all_scanners<M: ExecutorMode>(config: GlobalConfig<M>) -> Vec<Box<dyn
         Box::new(AzureHoundScanner::new()),
         #[cfg(feature = "sovereign")]
         Box::new(RoadReconScanner::new()),
-        Box::new(NvdMonitor::new(std::env::var("NVD_API_KEY").ok())), 
+        Box::new(NvdMonitor::new()), 
         Box::new(JwtForgeScanner::new()),
         Box::new(JwksDiscoveryScanner::new()),
         Box::new(CorsTokenExfiltrator::new()),

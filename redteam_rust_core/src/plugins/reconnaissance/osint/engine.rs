@@ -1,5 +1,6 @@
 use crate::plugins::{DiscoveryPlugin, Capability, DiscoveryResult};
 use crate::models::TargetHost;
+use crate::utils::config::Config;
 use async_trait::async_trait;
 use anyhow::Result;
 use tracing::{info, warn, debug};
@@ -67,8 +68,8 @@ impl OsintScanner {
     }
 
     async fn query_shodan(&self, domain: &str) -> Result<HashSet<String>> {
-        let api_key = match std::env::var("SHODAN_API_KEY") {
-            Ok(key) if !key.trim().is_empty() => key,
+        let api_key = match Config::from_env().shodan_api_key {
+            Some(key) if !key.trim().is_empty() => key,
             _ => {
                 debug!("SHODAN_API_KEY not set. Skipping Shodan OSINT.");
                 return Ok(HashSet::new());

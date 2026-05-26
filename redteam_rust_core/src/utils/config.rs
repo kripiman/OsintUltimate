@@ -104,6 +104,10 @@ pub struct Config {
     pub abuseipdb_max_ips_per_scan: usize,
     pub greynoise_api_key: Option<String>,
     pub hibp_api_key: Option<String>,
+    pub zap_api_key: Option<String>,
+    pub burp_api_key: Option<String>,
+    pub nvd_api_key: Option<String>,
+    pub kerbrute_userlist: Option<String>,
 }
 
 impl Config {
@@ -283,6 +287,10 @@ impl Config {
                 .unwrap_or(50),
             greynoise_api_key: env::var("GREYNOISE_API_KEY").ok(),
             hibp_api_key: env::var("HIBP_API_KEY").ok(),
+            zap_api_key: env::var("ZAP_API_KEY").ok(),
+            burp_api_key: env::var("BURP_API_KEY").ok(),
+            nvd_api_key: env::var("NVD_API_KEY").ok(),
+            kerbrute_userlist: env::var("KERBRUTE_USERLIST").ok(),
         }
     }
 

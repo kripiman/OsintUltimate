@@ -1,5 +1,6 @@
 use crate::plugins::{ScannerPlugin, Capability};
 use crate::models::{TargetHost, Finding, Severity, Category};
+use crate::utils::config::Config;
 use async_trait::async_trait;
 use anyhow::Result;
 use tracing::{info, warn};
@@ -14,7 +15,7 @@ pub struct ZapScanner {
 impl ZapScanner {
     pub fn new(api_key: Option<String>, api_url: Option<String>, base_target: Option<String>) -> Self {
         Self {
-            api_key: api_key.unwrap_or_else(|| std::env::var("ZAP_API_KEY").unwrap_or_default()),
+            api_key: api_key.unwrap_or_else(|| Config::from_env().zap_api_key.unwrap_or_default()),
             api_url: api_url.unwrap_or_else(|| "http://localhost:8080".into()),
             _base_target: base_target.unwrap_or_default(),
         }
