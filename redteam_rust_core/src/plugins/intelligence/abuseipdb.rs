@@ -10,6 +10,7 @@ use std::time::Duration;
 pub struct AbuseIPDBScanner {
     api_key: Option<String>,
     pub max_ips: usize,
+    client: reqwest::Client,
 }
 
 impl Default for AbuseIPDBScanner {
@@ -24,12 +25,13 @@ impl AbuseIPDBScanner {
         Self {
             api_key: cfg.abuseipdb_api_key,
             max_ips: cfg.abuseipdb_max_ips_per_scan,
+            client: reqwest::Client::new(),
         }
     }
 
     #[cfg(test)]
     pub fn with_key(key: Option<String>, max_ips: usize) -> Self {
-        Self { api_key: key, max_ips }
+        Self { api_key: key, max_ips, client: reqwest::Client::new() }
     }
 }
 
@@ -94,7 +96,7 @@ impl ScannerPlugin for AbuseIPDBScanner {
 
         info!("AbuseIPDBScanner: checking IP {}", ip);
 
-        let client = reqwest::Client::new();
+        let client = &self.client;
         let url = "https://api.abuseipdb.com/api/v2/check";
 
         let response = match client.get(url)

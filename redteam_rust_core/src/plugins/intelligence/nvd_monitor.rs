@@ -11,6 +11,7 @@ use serde_json::json;
 pub struct NvdMonitor {
     last_check: RwLock<DateTime<Utc>>,
     api_key: Option<String>,
+    client: reqwest::Client,
 }
 
 impl NvdMonitor {
@@ -19,11 +20,12 @@ impl NvdMonitor {
         Self {
             last_check: RwLock::new(Utc::now() - Duration::hours(24)),
             api_key: cfg.nvd_api_key,
+            client: reqwest::Client::new(),
         }
     }
 
     pub async fn poll(&self) -> Result<Vec<Finding>> {
-        let client = reqwest::Client::new();
+        let client = &self.client;
         let now = Utc::now();
         
         let start_date = self.last_check.read().unwrap().format("%Y-%m-%dT%H:%M:%S").to_string();

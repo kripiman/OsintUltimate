@@ -10,7 +10,9 @@
   - Removed last inline `std::env::var` from `plugins/` space (except intentional gating vars).
   - **Procedural violation**: executed without prior plan audit; renamed post-hoc per auditor Option A.
   - Test discipline: 177 lib + 10 bin + 3 OOB + 1 zero-cost = all green.
-- **Stage 12.C** (BACKLOG): `reqwest::Client` per-call reuse audit across intelligence scanners.
+- **Stage 12.C** (`2cf9837`): `reqwest::Client` per-call reuse audit across intelligence scanners.
+  - Refactored 4 scanners (`AlienVaultOtx`, `AbuseIPDB`, `GreyNoise`, `NvdMonitor`) to store `client` as struct field instead of creating per-call.
+  - Test discipline: 177 lib + 10 bin + 3 OOB + 1 zero-cost = all green.
 
 ## Sprint 11 — Intelligence Scanners
 - **Stage 11.A**: `Wafw00fScanner` subprocess plugin with JSON parsing, `Category::WafDetected`.

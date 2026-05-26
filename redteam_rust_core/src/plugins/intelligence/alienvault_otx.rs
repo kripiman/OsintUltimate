@@ -10,6 +10,7 @@ use std::time::Duration;
 pub struct AlienVaultOtxScanner {
     api_key: Option<String>,
     pub max_ips: usize,
+    client: reqwest::Client,
 }
 
 impl Default for AlienVaultOtxScanner {
@@ -24,12 +25,13 @@ impl AlienVaultOtxScanner {
         Self {
             api_key: cfg.alienvault_otx_api_key,
             max_ips: cfg.alienvault_otx_max_ips_per_scan,
+            client: reqwest::Client::new(),
         }
     }
 
     #[cfg(test)]
     pub fn with_key(key: Option<String>, max_ips: usize) -> Self {
-        Self { api_key: key, max_ips }
+        Self { api_key: key, max_ips, client: reqwest::Client::new() }
     }
 }
 
@@ -94,7 +96,7 @@ impl ScannerPlugin for AlienVaultOtxScanner {
 
         info!("AlienVaultOtxScanner: checking IP {}", ip);
 
-        let client = reqwest::Client::new();
+        let client = &self.client;
         let url = format!("https://otx.alienvault.com/api/v1/indicators/IPv4/{}/general", ip);
 
         let response = match client.get(&url)

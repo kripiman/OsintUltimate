@@ -10,6 +10,7 @@ use std::time::Duration;
 pub struct GreyNoiseScanner {
     api_key: Option<String>,
     pub max_ips: usize,
+    client: reqwest::Client,
 }
 
 impl Default for GreyNoiseScanner {
@@ -24,6 +25,7 @@ impl GreyNoiseScanner {
         Self {
             api_key: cfg.greynoise_api_key,
             max_ips: cfg.greynoise_max_ips_per_scan,
+            client: reqwest::Client::new(),
         }
     }
 }
@@ -88,7 +90,7 @@ impl ScannerPlugin for GreyNoiseScanner {
             }
         };
 
-        let client = reqwest::Client::new();
+        let client = &self.client;
         let url = format!("https://api.greynoise.io/v3/community/{}", ip);
         
         let response = match client.get(&url)
