@@ -130,21 +130,24 @@ impl PlatformClient {
         severity: &Severity,
         program_handle: &str,
     ) -> Result<String> {
+        let severity_id: u8 = match severity {
+            Severity::Critical => 4,
+            Severity::High => 3,
+            Severity::Medium => 2,
+            Severity::Low => 1,
+            Severity::Info => 0,
+        };
+
         let payload = json!({
             "title": title,
             "description": report_md,
-            "severityId": match severity {
-                Severity::Critical => 4,
-                Severity::High => 3,
-                Severity::Medium => 2,
-                Severity::Low => 1,
-                Severity::Info => 0,
-            },
+            "severityId": severity_id,
             "programHandle": program_handle,
+            "type": 1,
         });
 
         let resp = self.client
-            .post("https://api.intigriti.com/external/researcher/v1/submission")
+            .post("https://api.intigriti.com/external/researcher/v1/submissions")
             .header("Authorization", format!("Bearer {}", self.api_key))
             .json(&payload)
             .send()
@@ -157,7 +160,12 @@ impl PlatformClient {
             return Err(anyhow!("Intigriti API error: {} - {}", status, err_text));
         }
 
-        Ok("Submission successful (check Intigriti dashboard)".to_string())
+        let body: serde_json::Value = resp.json().await?;
+        let submission_id = body["id"].as_str()
+            .or_else(|| body["referenceId"].as_str())
+            .unwrap_or("unknown");
+
+        Ok(format!("https://app.intigriti.com/researcher/submissions/{}", submission_id))
     }
 
     async fn fetch_h1_scope(&self, program_handle: &str) -> Result<Vec<String>> {
@@ -234,10 +242,12 @@ impl PlatformClient {
         let body: serde_json::Value = resp.json().await?;
         let mut scopes = Vec::new();
 
-        if let Some(in_scope) = body["inScope"].as_array() {
-            for entry in in_scope {
-                if let Some(endpoint) = entry["endpoint"].as_str() {
-                    scopes.push(endpoint.to_string());
+        if let Some(domains) = body["domains"].as_array() {
+            for entry in domains {
+                if entry["tier"].as_str() == Some("in_scope") {
+                    if let Some(endpoint) = entry["endpoint"].as_str() {
+                        scopes.push(endpoint.to_string());
+                    }
                 }
             }
         }

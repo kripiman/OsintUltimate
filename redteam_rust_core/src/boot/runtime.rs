@@ -123,26 +123,40 @@ pub async fn dispatch(args: Args) -> Result<()> {
     
     // --- SCOPE SYNCHRONIZATION (V15.1) ---
     if std::env::var("SCOPE_SYNC").map(|v| v == "true").unwrap_or(false) {
-        if let Some(ref h1_key) = engine_config.h1_api_key {
+        let has_any_platform = engine_config.h1_api_key.is_some() || engine_config.intigriti_token.is_some();
+        if has_any_platform {
             let policy_file = engine_config.policy_file.clone().unwrap_or_else(|| "policy.json".to_string());
             let mut syncer = redteam_rust_core::core::policy::scope_syncer::ScopeSyncer::new(
                 engine.policy(),
                 std::path::PathBuf::from(policy_file),
             );
-            
+
             // Register HackerOne client
-            let h1_client = PlatformClient::new(
-                ReportPlatform::HackerOne,
-                h1_key.clone(),
-                engine_config.h1_username.clone(),
-            );
-            syncer.add_client(h1_client, engine_config.h1_username.clone().unwrap_or_default());
+            if let Some(ref h1_key) = engine_config.h1_api_key {
+                let h1_client = PlatformClient::new(
+                    ReportPlatform::HackerOne,
+                    h1_key.clone(),
+                    engine_config.h1_username.clone(),
+                );
+                syncer.add_client(h1_client, engine_config.h1_username.clone().unwrap_or_default());
+            }
+
+            // Register Intigriti client (handle format: "companyHandle/programHandle")
+            if let Some(ref inti_key) = engine_config.intigriti_token {
+                let inti_client = PlatformClient::new(
+                    ReportPlatform::Intigriti,
+                    inti_key.clone(),
+                    None,
+                );
+                let handle = engine_config.bb_program_handle.clone().unwrap_or_default();
+                syncer.add_client(inti_client, handle);
+            }
 
             info!("🔱 V15.1 SCOPE: Initializing scope synchronization...");
             if let Err(e) = syncer.sync().await {
                 error!("❌ V15.1 SCOPE: Initial sync failed: {}", e);
             }
-            
+
             // Periodic sync every 4 hours
             let syncer_loop = Arc::new(syncer);
             tokio::spawn(async move {
