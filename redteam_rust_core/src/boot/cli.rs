@@ -77,6 +77,10 @@ pub struct Args {
     pub nats_url: Option<String>,
     #[arg(long, help = "Scope ID for cross-target isolation and lateral movement grouping")]
     pub scope_id: Option<String>,
+    #[arg(long, default_value = "scan", help = "Worker profile: scan, enrich, cve_correlation")]
+    pub profile: String,
+    #[arg(long, default_value_t = false, help = "Alias for --profile=cve_correlation (Box3 mode)")]
+    pub cve_correlation_only: bool,
 }
 
 pub fn parse() -> Args {
