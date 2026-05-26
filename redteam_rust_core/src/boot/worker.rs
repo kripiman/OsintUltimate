@@ -1,5 +1,5 @@
 use crate::boot::cli::Args;
-use redteam_rust_core::models::{TargetHost, TargetStatus};
+use redteam_rust_core::models::{TargetHost, TargetStatus, WorkerProfile};
 use redteam_rust_core::core::engine::{RedTeamEngine, app::EngineConfig};
 use redteam_rust_core::core::sink::{MultiSink, PostgresSink};
 use redteam_rust_core::core::capability_layer::ScanLayer;
@@ -17,7 +17,12 @@ pub async fn run_worker_mode(args: &Args) -> Result<()> {
         format!("node-{}", std::process::id())
     });
 
-    info!("🐝 [Worker] Starting in distributed mode. Node ID: {}", node_id);
+    let profile = if args.cve_correlation_only {
+        WorkerProfile::CveCorrelation
+    } else {
+        WorkerProfile::from_str(&args.profile).unwrap_or_default()
+    };
+    info!("🐝 [Worker] Starting in distributed mode. Node ID: {} | Profile: {}", node_id, profile);
     let pool = sqlx::PgPool::connect(db_url).await?;
 
     // Register node
@@ -42,17 +47,18 @@ pub async fn run_worker_mode(args: &Args) -> Result<()> {
         // Wait until we have a permit before pulling a job.
         let permit = semaphore.clone().acquire_owned().await.unwrap();
 
-        // Poll for a job
+        // Poll for a job matching this worker's profile
         let job: Option<(i32, String, String, serde_json::Value)> = sqlx::query_as(
-            "UPDATE scan_queue SET status = 'claimed', claimed_by = $1, updated_at = NOW() 
+            "UPDATE scan_queue SET status = 'claimed', claimed_by = $1, updated_at = NOW()
              WHERE id = (
-                 SELECT id FROM scan_queue 
-                 WHERE status = 'pending' 
-                 ORDER BY priority DESC, created_at ASC 
+                 SELECT id FROM scan_queue
+                 WHERE status = 'pending' AND worker_profile = $2
+                 ORDER BY priority DESC, created_at ASC
                  LIMIT 1 FOR UPDATE SKIP LOCKED
              ) RETURNING id, host, target_type, tactical_context"
         )
         .bind(&node_id)
+        .bind(profile.to_string())
         .fetch_optional(&pool)
         .await?;
 
@@ -95,7 +101,10 @@ pub async fn run_worker_mode(args: &Args) -> Result<()> {
                     doh: args_clone.doh,
                     proxies: args_clone.proxies.as_ref().map(|s| s.split(',').map(|i| i.trim().to_string()).collect()),
                     plugins_dir: args_clone.plugins_dir.clone(),
-                    max_layer: ScanLayer::from_str(&args_clone.max_layer).unwrap_or(ScanLayer::Scanning),
+                    max_layer: match profile {
+                        WorkerProfile::Scan => ScanLayer::from_str(&args_clone.max_layer).unwrap_or(ScanLayer::Scanning),
+                        WorkerProfile::Enrich | WorkerProfile::CveCorrelation => ScanLayer::Passive,
+                    },
                     dashboard_port: args_clone.dashboard,
                     readiness_timeout: std::time::Duration::from_secs(60),
                     proxy_mode: utils_config_clone.proxy_mode,
