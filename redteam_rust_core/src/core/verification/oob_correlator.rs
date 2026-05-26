@@ -49,6 +49,9 @@ impl OobCorrelator {
             }
         });
 
+        // Runtime query (not sqlx::query! macro) — consistent with worker.rs pattern.
+        // Single UPDATE is atomic per PostgreSQL ACID; wrapping in a transaction adds
+        // overhead with no additional correctness benefit for this idempotent operation.
         let rows = sqlx::query(
             r#"
             UPDATE findings
@@ -69,15 +72,6 @@ impl OobCorrelator {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::utils::proxy::ProxyManager;
-    use crate::utils::config::ProxyMode;
-
-    fn mock_pool() -> PgPool {
-        // sqlx::PgPool::connect_lazy is not ideal for unit tests without DB.
-        // Real integration tests live in tests/integration_oob.rs.
-        // These unit tests verify logic only.
-        todo!("Integration tests require running PostgreSQL — see tests/integration_oob.rs")
-    }
 
     #[test]
     fn test_enrichment_json_structure() {

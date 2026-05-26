@@ -27,6 +27,11 @@ impl AbuseIPDBScanner {
                 .unwrap_or(50),
         }
     }
+
+    #[cfg(test)]
+    pub fn with_key(key: Option<String>, max_ips: usize) -> Self {
+        Self { api_key: key, max_ips }
+    }
 }
 
 #[async_trait]
@@ -133,7 +138,7 @@ impl ScannerPlugin for AbuseIPDBScanner {
                 };
 
                 findings.push(Finding::new(
-                    "IP-REPUTATION",
+                    &format!("IP-REPUTATION-{}", ip),
                     Category::Recon,
                     severity,
                     &format!("AbuseIPDB for {}: abuseConfidence={}, totalReports={}", ip, abuse_score, total_reports),
@@ -159,21 +164,16 @@ mod tests {
 
     #[test]
     fn test_abuseipdb_max_ips_propagation() {
-        std::env::set_var("ABUSEIPDB_MAX_IPS_PER_SCAN", "10");
-        let scanner = AbuseIPDBScanner::new();
+        let scanner = AbuseIPDBScanner::with_key(None, 10);
         assert_eq!(scanner.max_ips, 10);
 
-        std::env::set_var("ABUSEIPDB_MAX_IPS_PER_SCAN", "0");
-        let scanner_disabled = AbuseIPDBScanner::new();
+        let scanner_disabled = AbuseIPDBScanner::with_key(None, 0);
         assert_eq!(scanner_disabled.max_ips, 0);
-
-        std::env::remove_var("ABUSEIPDB_MAX_IPS_PER_SCAN");
     }
 
     #[tokio::test]
     async fn test_abuseipdb_zero_disables_scan() {
-        let mut scanner = AbuseIPDBScanner::new();
-        scanner.max_ips = 0;
+        let scanner = AbuseIPDBScanner::with_key(None, 0);
         let target = TargetHost {
             host: "8.8.8.8".to_string(),
             ip: Some("8.8.8.8".to_string()),

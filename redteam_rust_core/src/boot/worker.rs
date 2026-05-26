@@ -287,6 +287,52 @@ pub async fn run_worker_mode(args: &Args) -> Result<()> {
 mod tests {
     use super::*;
     use redteam_rust_core::models::worker_profile::WorkerProfile;
+    use redteam_rust_core::models::{Finding, Category, Severity};
+    use redteam_rust_core::core::sink::DataSink;
+    use async_trait::async_trait;
+
+    /// Mock sink that captures all TargetHosts written for test inspection.
+    struct MockSink {
+        pub targets: std::sync::Arc<std::sync::Mutex<Vec<TargetHost>>>,
+    }
+
+    #[async_trait]
+    impl DataSink for MockSink {
+        async fn write(&mut self, target: &TargetHost) -> Result<()> {
+            self.targets.lock().unwrap().push(target.clone());
+            Ok(())
+        }
+        async fn write_metadata(&mut self, _metadata: &ScanMetadata) -> Result<()> { Ok(()) }
+        async fn close(&mut self) -> Result<()> { Ok(()) }
+    }
+
+    #[tokio::test]
+    async fn test_oob_enriching_sink_injects_id() {
+        let oob_id = "aabbccdd11223344".to_string();
+        let shared = std::sync::Arc::new(std::sync::Mutex::new(Vec::new()));
+        let inner = Box::new(MockSink { targets: shared.clone() });
+        let mut sink = OobEnrichingSink::new(inner, oob_id.clone());
+
+        let finding = Finding::new(
+            "TEST-FINDING",
+            Category::Recon,
+            Severity::Info,
+            "test",
+            serde_json::json!({})
+        );
+        let target = TargetHost {
+            host: "example.com".to_string(),
+            findings: Arc::new(vec![finding]),
+            ..Default::default()
+        };
+
+        sink.write(&target).await.unwrap();
+
+        let captured = shared.lock().unwrap();
+        assert_eq!(captured.len(), 1);
+        assert_eq!(captured[0].findings.len(), 1);
+        assert_eq!(captured[0].findings[0].context.oob_correlation_id, Some(oob_id));
+    }
 
     fn mock_args_with_profile(profile: &str) -> Args {
         Args {
