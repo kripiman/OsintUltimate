@@ -11,8 +11,7 @@ use std::time::Duration;
 use base64::{engine::general_purpose::URL_SAFE, Engine as _};
 
 const FAVICON_TIMEOUT_SECS: u64 = 10;
-const SHODAN_API_TIMEOUT_SECS: u64 = 15;
-const FOFA_API_TIMEOUT_SECS: u64 = 15;
+const API_TIMEOUT_SECS: u64 = 15;
 
 pub struct FaviconHashScanner {
     client: reqwest::Client,
@@ -20,6 +19,10 @@ pub struct FaviconHashScanner {
     fofa_max_hosts: usize,
     fofa_email: Option<String>,
     fofa_key: Option<String>,
+    /// Base URL for Shodan API (injected for testing).
+    shodan_base_url: String,
+    /// Base URL for FOFA API (injected for testing).
+    fofa_base_url: String,
 }
 
 impl Default for FaviconHashScanner {
@@ -35,11 +38,13 @@ impl FaviconHashScanner {
             client: reqwest::Client::builder()
                 .timeout(Duration::from_secs(FAVICON_TIMEOUT_SECS))
                 .build()
-                .unwrap_or_else(|_| reqwest::Client::new()),
+                .expect("reqwest::Client builder must not fail"),
             shodan_max_hosts: config.shodan_paid_max_hosts_per_scan,
             fofa_max_hosts: config.fofa_max_hosts_per_scan,
             fofa_email: config.fofa_email,
             fofa_key: config.fofa_api_key,
+            shodan_base_url: "https://api.shodan.io".to_string(),
+            fofa_base_url: "https://fofa.info".to_string(),
         }
     }
 
@@ -57,7 +62,20 @@ impl FaviconHashScanner {
             fofa_max_hosts,
             fofa_email,
             fofa_key,
+            shodan_base_url: "https://api.shodan.io".to_string(),
+            fofa_base_url: "https://fofa.info".to_string(),
         }
+    }
+
+    #[cfg(test)]
+    pub fn with_base_urls(
+        mut self,
+        shodan_base_url: String,
+        fofa_base_url: String,
+    ) -> Self {
+        self.shodan_base_url = shodan_base_url;
+        self.fofa_base_url = fofa_base_url;
+        self
     }
 
     /// Compute the Shodan-compatible favicon hash (MMH3 signed 32-bit).
@@ -117,18 +135,12 @@ impl FaviconHashScanner {
         }
 
         let query = format!("http.favicon.hash:{}", hash);
-        let url = "https://api.shodan.io/shodan/host/search";
-        let client = match reqwest::Client::builder()
-            .timeout(Duration::from_secs(SHODAN_API_TIMEOUT_SECS))
-            .build()
-        {
-            Ok(c) => c,
-            Err(_) => reqwest::Client::new(),
-        };
+        let url = format!("{}/shodan/host/search", self.shodan_base_url.trim_end_matches('/'));
 
         let mut discovered = Vec::new();
-        if let Ok(resp) = client
-            .get(url)
+        if let Ok(resp) = self.client
+            .get(&url)
+            .timeout(Duration::from_secs(API_TIMEOUT_SECS))
             .query(&[("key", key), ("query", &query), ("minify", "true")])
             .send()
             .await
@@ -181,20 +193,24 @@ impl FaviconHashScanner {
 
         let query = format!("icon_hash=\"{}\"", hash);
         let qbase64 = URL_SAFE.encode(&query);
-        let url = format!(
-            "https://fofa.info/api/v1/search/all?email={}&key={}&qbase64={}&fields=host,ip&size={}&page=1",
-            email, key, qbase64, self.fofa_max_hosts.min(1000)
-        );
-        let client = match reqwest::Client::builder()
-            .timeout(Duration::from_secs(FOFA_API_TIMEOUT_SECS))
-            .build()
-        {
-            Ok(c) => c,
-            Err(_) => reqwest::Client::new(),
-        };
+        let url = format!("{}/api/v1/search/all", self.fofa_base_url.trim_end_matches('/'));
+        let size = self.fofa_max_hosts.min(1000).to_string();
 
         let mut discovered = Vec::new();
-        if let Ok(resp) = client.get(&url).send().await {
+        if let Ok(resp) = self.client
+            .get(&url)
+            .timeout(Duration::from_secs(API_TIMEOUT_SECS))
+            .query(&[
+                ("email", email.as_str()),
+                ("key", key.as_str()),
+                ("qbase64", qbase64.as_str()),
+                ("fields", "host,ip"),
+                ("size", &size),
+                ("page", "1"),
+            ])
+            .send()
+            .await
+        {
             if resp.status().is_success() {
                 #[derive(serde::Deserialize)]
                 struct FofaResp {
@@ -256,7 +272,7 @@ impl DiscoveryPlugin for FaviconHashScanner {
             exploit_difficulty: RiskLevel::Safe,
             blackarch_category: Some("recon".to_string()),
             is_destructive: false,
-            poc_mode: true,
+            poc_mode: false, // Discovery plugin has no PoC concept
             ..Default::default()
         }
     }
@@ -373,13 +389,6 @@ mod tests {
 
     #[tokio::test]
     async fn test_pivot_shodan_respects_max_hosts() {
-        let server = MockServer::start().await;
-        let hash = 12345i32;
-
-        // ShodanKeyring must be initialized for check_dependencies, but pivot_shodan
-        // reads it at runtime. We'll test via mocking the HTTP response path by
-        // injecting a custom client... except pivot_shodan creates its own client.
-        // To avoid relying on the global keyring, we test the max_hosts gate directly.
         let scanner = FaviconHashScanner::with_params(
             reqwest::Client::new(),
             0, // max_hosts = 0 disables Shodan
@@ -387,8 +396,58 @@ mod tests {
             None,
             None,
         );
-        let results = scanner.pivot_shodan(hash).await;
+        let results = scanner.pivot_shodan(12345).await;
         assert!(results.is_empty(), "Shodan pivot should be disabled when max_hosts=0");
+    }
+
+    #[tokio::test]
+    async fn test_pivot_shodan_success() {
+        // Initialize global registries required by pivot_shodan.
+        static INIT: std::sync::Once = std::sync::Once::new();
+        INIT.call_once(|| {
+            let mut config = Config::from_env();
+            config.shodan_api_key = Some("dummy_shodan_key".to_string());
+            ShodanKeyring::init(&config);
+            ApiBudgetRegistry::init(&config, None);
+        });
+
+        let server = MockServer::start().await;
+        let hash = 12345i32;
+        let query = format!("http.favicon.hash:{}", hash);
+
+        Mock::given(method("GET"))
+            .and(path("/shodan/host/search"))
+            .and(query_param("query", &query))
+            .and(query_param("key", "dummy_shodan_key"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+                "matches": [
+                    {"ip_str": "1.2.3.4", "hostnames": ["a.example.com"]},
+                    {"ip_str": "5.6.7.8", "hostnames": null}
+                ]
+            })))
+            .mount(&server)
+            .await;
+
+        let scanner = FaviconHashScanner::with_params(
+            reqwest::Client::new(),
+            5,
+            0,
+            None,
+            None,
+        ).with_base_urls(
+            server.uri(), // shodan base url
+            "https://fofa.info".to_string(),
+        );
+        let results = scanner.pivot_shodan(hash).await;
+        assert_eq!(results.len(), 2, "Shodan pivot should return 2 matches");
+        assert_eq!(results[0].host, "1.2.3.4");
+        assert_eq!(results[0].metadata["source"], "shodan");
+        assert_eq!(results[0].metadata["favicon_hash"], 12345);
+        assert_eq!(
+            results[0].metadata["hostnames"],
+            serde_json::json!(["a.example.com"])
+        );
+        assert_eq!(results[1].host, "5.6.7.8");
     }
 
     #[tokio::test]
@@ -415,6 +474,53 @@ mod tests {
         );
         let results = scanner.pivot_fofa(12345).await;
         assert!(results.is_empty(), "FOFA pivot should return empty when creds missing");
+    }
+
+    #[tokio::test]
+    async fn test_pivot_fofa_success() {
+        // Initialize global budget registry required by pivot_fofa.
+        static INIT: std::sync::Once = std::sync::Once::new();
+        INIT.call_once(|| {
+            let config = Config::from_env();
+            ApiBudgetRegistry::init(&config, None);
+        });
+
+        let server = MockServer::start().await;
+        let hash = 54321i32;
+        let query = format!("icon_hash=\"{}\"", hash);
+        let qbase64 = URL_SAFE.encode(&query);
+
+        Mock::given(method("GET"))
+            .and(path("/api/v1/search/all"))
+            .and(query_param("qbase64", &qbase64))
+            .and(query_param("email", "test@example.com"))
+            .and(query_param("key", "secret"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+                "results": [
+                    ["https://target.example.com", "9.8.7.6"],
+                    ["http://old.example.com", "1.1.1.1"]
+                ]
+            })))
+            .mount(&server)
+            .await;
+
+        let scanner = FaviconHashScanner::with_params(
+            reqwest::Client::new(),
+            0,
+            5,
+            Some("test@example.com".to_string()),
+            Some("secret".to_string()),
+        ).with_base_urls(
+            "https://api.shodan.io".to_string(),
+            server.uri(), // fofa base url
+        );
+        let results = scanner.pivot_fofa(hash).await;
+        assert_eq!(results.len(), 2, "FOFA pivot should return 2 matches");
+        assert_eq!(results[0].host, "target.example.com");
+        assert_eq!(results[0].metadata["source"], "fofa");
+        assert_eq!(results[0].metadata["favicon_hash"], 54321);
+        assert_eq!(results[0].metadata["ip"], "9.8.7.6");
+        assert_eq!(results[1].host, "old.example.com");
     }
 
     #[tokio::test]
