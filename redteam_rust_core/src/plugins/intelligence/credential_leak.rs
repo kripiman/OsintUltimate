@@ -49,7 +49,7 @@ impl CredentialLeakScanner {
         }
     }
 
-    #[cfg(test)]
+    /// Test-only constructor. Exposed as `pub` for integration tests.
     pub fn with_params(
         client: reqwest::Client,
         hibp_api_key: Option<String>,
@@ -67,13 +67,13 @@ impl CredentialLeakScanner {
         }
     }
 
-    #[cfg(test)]
+    /// Test-only: override h8mail binary path.
     pub fn with_h8mail_path(mut self, path: String) -> Self {
         self.h8mail_path = path;
         self
     }
 
-    #[cfg(test)]
+    /// Test-only: inject base URLs for Wiremock integration tests.
     pub fn with_base_urls(
         mut self,
         hibp_pwned_base_url: String,
