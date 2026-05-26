@@ -1,5 +1,4 @@
-use crate::utils::{stealth_http::StealthClientBuilder, proxy::ProxyManager};
-use crate::models::{TargetHost, TargetStatus, TargetType};
+use crate::utils::proxy::ProxyManager;
 use crate::models::constants::*;
 use anyhow::Result;
 use std::sync::Arc;
@@ -25,6 +24,7 @@ struct InteractshPollResponse {
 pub struct OobInteractionManager {
     server_url: String,
     token: Option<String>,
+    #[allow(dead_code)]
     proxy_manager: Arc<ProxyManager>,
 }
 
@@ -39,6 +39,21 @@ impl OobInteractionManager {
             .to_string();
         let token = std::env::var("INTERACTSH_TOKEN").ok();
 
+        Self {
+            server_url,
+            token,
+            proxy_manager,
+        }
+    }
+
+    /// Constructor with explicit server URL (allows mock servers in integration tests).
+    pub fn with_server_url(proxy_manager: Arc<ProxyManager>, server_url: String) -> Self {
+        let token = std::env::var("INTERACTSH_TOKEN").ok();
+        let server_url = server_url
+            .trim_start_matches("https://")
+            .trim_start_matches("http://")
+            .trim_end_matches('/')
+            .to_string();
         Self {
             server_url,
             token,
@@ -68,40 +83,30 @@ impl OobInteractionManager {
         // o via una API REST si el servidor lo soporta.
         // Aquí implementamos la lógica de polling via HTTP (asumiendo interactsh-server API)
         
-        let poll_url = if let Some(ref token) = self.token {
-             format!("https://{}/poll?id={}&token={}", self.server_url, id, token)
+        let scheme = if self.server_url.contains("127.0.0.1") || self.server_url.contains("localhost") {
+            "http"
         } else {
-             format!("https://{}/poll?id={}", self.server_url, id)
+            "https"
+        };
+        let poll_url = if let Some(ref token) = self.token {
+             format!("{}://{}/poll?id={}&token={}", scheme, self.server_url, id, token)
+        } else {
+             format!("{}://{}/poll?id={}", scheme, self.server_url, id)
         };
 
-        // We use a dummy target for the stealth client builder to satisfy proxy requirements
-        let dummy_target = TargetHost {
-            host: self.server_url.clone(),
-            ip: None,
-            resolved_ip: None,
-            status: TargetStatus::Pending,
-            target_type: TargetType::Web,
-            file_path: None,
-            user: None,
-            findings: Arc::new(Vec::new()),
-            tool_suggestions: Arc::new(Vec::new()),
-            tactical_context: Arc::new(serde_json::json!({})),
-            extra_data: Arc::new(serde_json::json!({})),
-            version: 0,
-            skip_heavy_scan: false,
-            scan_id: None,
-            scope_id: String::new(),
-        };
-
-        let client = StealthClientBuilder::build(&dummy_target, &self.proxy_manager)?;
+        // OOB polling uses a plain reqwest client — no stealth required for infra-internal calls.
+        let client = reqwest::Client::builder()
+            .timeout(Duration::from_secs(15))
+            .danger_accept_invalid_certs(true)
+            .build()?;
         
-        let res_val: Result<reqwest::Response, reqwest::Error> = client.get(&poll_url).send().await;
-        match res_val {
-            Ok(res) if res.status().is_success() => {
-                let data: InteractshPollResponse = res.json().await?;
-                Ok(data.interactions)
-            }
-            _ => Ok(Vec::new()),
+        let res = client.get(&poll_url).send().await?;
+        if res.status().is_success() {
+            let data: InteractshPollResponse = res.json().await?;
+            Ok(data.interactions)
+        } else {
+            warn!("[OOB] Poll returned HTTP {}", res.status());
+            Ok(Vec::new())
         }
     }
 
