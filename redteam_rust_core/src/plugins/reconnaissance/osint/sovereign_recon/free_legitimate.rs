@@ -81,7 +81,7 @@ impl SovereignReconScanner {
         let mut success = false;
         if let Ok(client) = self.get_client("leakix.net").await {
             let mut req = client.get(&url);
-            if let Some(ref key) = crate::utils::config::Config::from_env().leakix_api_key {
+            if let Some(ref key) = self.leakix_key {
                 if !key.is_empty() {
                     req = req.header("api-key", key);
                 }
@@ -127,7 +127,7 @@ impl SovereignReconScanner {
             }
         }
 
-        let token = match &crate::utils::config::Config::from_env().github_token {
+        let token = match &self.github_token {
             Some(t) if !t.is_empty() => t.clone(),
             _ => {
                 warn!("GitHub dorks skipped: GITHUB_TOKEN not set.");
