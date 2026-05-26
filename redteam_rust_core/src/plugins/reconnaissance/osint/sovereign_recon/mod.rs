@@ -1,4 +1,5 @@
 mod sources;
+mod free_legitimate;
 use crate::plugins::{DiscoveryPlugin, Capability, PluginMetadata, RiskLevel, TargetType, DiscoveryResult};
 use crate::models::{TargetHost, PLUGIN_SOVEREIGN_RECON};
 use crate::core::capability_layer::ScanLayer;
@@ -27,6 +28,10 @@ pub struct SovereignReconScanner {
     pub shodan_host_ip_max_hosts: usize,
     pub fofa_max_hosts: usize,
     pub securitytrails_max_hosts: usize,
+    pub zoomeye_max_hosts: usize,
+    pub crtsh_max_hosts: usize,
+    pub leakix_max_hosts: usize,
+    pub github_max_dorks: usize,
 }
 impl SovereignReconScanner {
     pub fn new(config: &crate::utils::config::Config, pm: Arc<ProxyManager>) -> Self {
@@ -46,6 +51,10 @@ impl SovereignReconScanner {
             shodan_host_ip_max_hosts: config.shodan_host_ip_max_hosts_per_scan,
             fofa_max_hosts: config.fofa_max_hosts_per_scan,
             securitytrails_max_hosts: config.securitytrails_max_hosts_per_scan,
+            zoomeye_max_hosts: config.zoomeye_max_hosts_per_scan,
+            crtsh_max_hosts: config.crtsh_max_hosts_per_scan,
+            leakix_max_hosts: config.leakix_max_hosts_per_scan,
+            github_max_dorks: config.github_max_dorks_per_scan,
         }
     }
     pub(super) async fn get_client(&self, host: &str) -> Result<Client> {
@@ -62,7 +71,7 @@ impl DiscoveryPlugin for SovereignReconScanner {
     fn metadata(&self) -> PluginMetadata {
         PluginMetadata {
             name: self.name().to_string(),
-            description: "Sentinel Sovereign Orchestrator: Multi-phase optimized OSINT pipeline (Chaos -> Netlas -> Shodan -> FOFA -> ZoomEye).".to_string(),
+            description: "Sentinel Sovereign Orchestrator: Multi-phase optimized OSINT pipeline (Wayback -> HackerTarget -> Chaos -> FreeLegitimate -> Netlas -> Shodan -> CriminalIP).".to_string(),
             target_type: TargetType::Osint,
             risk_level: RiskLevel::Safe,
             layer: ScanLayer::Passive,
@@ -133,18 +142,51 @@ impl DiscoveryPlugin for SovereignReconScanner {
             warn!("  ⚠️ Phase 1: No subdomains found in Chaos.");
         }
 
+        // Phase 1.5: Free Legitimate Sources (root domain only)
+        info!("🆓 Phase 1.5: Free legitimate source sweep for {}...", target.host);
+        let crtsh = self.query_crtsh(&target.host).await;
+        if !crtsh.is_empty() {
+            info!("  ✅ crt.sh found {} unique subdomains", crtsh.len());
+            for s in crtsh {
+                if !self.strict_scope || self.policy.is_target_allowed(&s) {
+                    all_results.insert(s, serde_json::json!({"src": "crtsh", "confidence": 0.85}));
+                }
+            }
+        }
+        let leakix = self.query_leakix(&target.host).await;
+        if !leakix.is_empty() {
+            info!("  ✅ LeakIX found {} unique subdomains", leakix.len());
+            for s in leakix {
+                if !self.strict_scope || self.policy.is_target_allowed(&s) {
+                    all_results.insert(s, serde_json::json!({"src": "leakix", "confidence": 0.75}));
+                }
+            }
+        }
+        let github = self.query_github_dorks(&target.host).await;
+        if !github.is_empty() {
+            info!("  ✅ GitHub dorks found {} leaked hostnames", github.len());
+            for s in github {
+                if !self.strict_scope || self.policy.is_target_allowed(&s) {
+                    all_results.insert(s, serde_json::json!({"src": "github_dorks", "confidence": 0.65}));
+                }
+            }
+        }
+
         // Phase 2-7: Build unique set of in-scope hosts accumulated so far
         let mut in_scope_hosts: Vec<String> = all_results.keys().cloned().collect();
         if !in_scope_hosts.contains(&target.host) {
             in_scope_hosts.push(target.host.clone());
         }
 
-        info!("🛡️ V14.2 SCOPE: Running budget Phases 2-7 for {} in-scope hosts...", in_scope_hosts.len());
+        info!("🛡️ V14.2 SCOPE: Running budget Phases 2-5 for {} in-scope hosts...", in_scope_hosts.len());
 
         for host in in_scope_hosts {
             // 2. SecurityTrails
             self.jitter.sleep().await;
-            info!("🛰️ Phase 2/7: SecurityTrails mapping for {}...", host);
+            if self.securitytrails_max_hosts == 0 {
+                warn!("🛰️ Phase 2/5: SecurityTrails disabled by default (max_hosts=0). Set SECURITYTRAILS_MAX_HOSTS_PER_SCAN > 0 with a paid plan to enable.");
+            }
+            info!("🛰️ Phase 2/5: SecurityTrails mapping for {}...", host);
             let st = self.query_securitytrails(&host).await;
             if !st.is_empty() {
                 info!("  ✅ SecurityTrails captured {} subdomains", st.len());
@@ -157,7 +199,7 @@ impl DiscoveryPlugin for SovereignReconScanner {
 
             // 3. Netlas (Paid - Precision)
             self.jitter.sleep().await;
-            info!("💎 Phase 3/7: Netlas High-Precision Deep Dive for {}...", host);
+            info!("💎 Phase 3/5: Netlas High-Precision Deep Dive for {}...", host);
             let netlas = self.query_netlas(&host).await;
             if !netlas.is_empty() {
                 info!("  ✅ Netlas captured {} subdomains", netlas.len());
@@ -170,7 +212,7 @@ impl DiscoveryPlugin for SovereignReconScanner {
 
             // 4. Shodan
             self.jitter.sleep().await;
-            info!("🔭 Phase 4/7: Shodan infrastructure discovery for {}...", host);
+            info!("🔭 Phase 4/5: Shodan infrastructure discovery for {}...", host);
             let shodan = self.query_shodan(&host).await;
             if !shodan.is_empty() {
                 info!("  ✅ Shodan captured {} subdomains", shodan.len());
@@ -183,7 +225,7 @@ impl DiscoveryPlugin for SovereignReconScanner {
 
             // 5. Criminal IP (Reputation)
             self.jitter.sleep().await;
-            info!("🏴‍☠️ Phase 5/7: Criminal IP reputation scoring for {}...", host);
+            info!("🏴‍☠️ Phase 5/5: Criminal IP reputation scoring for {}...", host);
             let cip_findings = self.query_criminalip(&host).await;
             for finding in cip_findings {
                 info!("  ✅ {}", finding);
@@ -194,9 +236,12 @@ impl DiscoveryPlugin for SovereignReconScanner {
                 }
             }
 
-            // 6. FOFA (Global Coverage)
+            // 6. FOFA (Global Coverage) — disabled by default
             self.jitter.sleep().await;
-            info!("🌍 Phase 6/7: FOFA Global Asset Discovery for {}...", host);
+            if self.fofa_max_hosts == 0 {
+                warn!("🌍 Phase 6: FOFA disabled by default (max_hosts=0). Set FOFA_MAX_HOSTS_PER_SCAN > 0 only if you have verified China TOS compliance.");
+            }
+            info!("🌍 Phase 6: FOFA Global Asset Discovery for {}...", host);
             let fofa = self.query_fofa(&host).await;
             if !fofa.is_empty() {
                 info!("  ✅ FOFA captured {} assets", fofa.len());
@@ -207,9 +252,12 @@ impl DiscoveryPlugin for SovereignReconScanner {
                 }
             }
 
-            // 7. ZoomEye (Network Context)
+            // 7. ZoomEye (Network Context) — disabled by default
             self.jitter.sleep().await;
-            info!("👁️ Phase 7/7: ZoomEye Network Context for {}...", host);
+            if self.zoomeye_max_hosts == 0 {
+                warn!("👁️ Phase 7: ZoomEye disabled by default (max_hosts=0). Set ZOOMEYE_MAX_HOSTS_PER_SCAN > 0 only if you have verified China TOS compliance.");
+            }
+            info!("👁️ Phase 7: ZoomEye Network Context for {}...", host);
             let zoomeye = self.query_zoomeye(&host).await;
             if !zoomeye.is_empty() {
                 info!("  ✅ ZoomEye captured {} assets", zoomeye.len());
@@ -221,7 +269,7 @@ impl DiscoveryPlugin for SovereignReconScanner {
             }
         }
 
-        // 6. Automatic Fallback: Subfinder (Emergency)
+        // Automatic Fallback: Subfinder (Emergency)
         if all_results.is_empty() {
             warn!("⚠️ SOVEREIGN RECON: All primary phases returned ZERO results. Triggering Subfinder Emergency Fallback...");
             use crate::plugins::reconnaissance::osint::subfinder::SubfinderScanner;

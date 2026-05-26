@@ -137,6 +137,7 @@ impl SovereignReconScanner {
         subdomains
     }
 
+    /// TOS RISK: Free tier prohibits commercial/BB use. Only enable with paid plan.
     // --- Phase 2: SecurityTrails ---
     pub(super) async fn query_securitytrails(&self, domain: &str) -> HashSet<String> {
         let limit = self.securitytrails_max_hosts;
@@ -390,6 +391,7 @@ impl SovereignReconScanner {
         findings
     }
 
+    /// TOS RISK: China jurisdiction. Only enable if you have verified compliance.
     // --- Phase 6: FOFA (High Coverage) ---
     pub(super) async fn query_fofa(&self, domain: &str) -> HashSet<String> {
         let limit = self.fofa_max_hosts;
@@ -485,11 +487,17 @@ impl SovereignReconScanner {
         apply_cap(subdomains, limit)
     }
 
+    /// TOS RISK: China jurisdiction. Only enable if you have verified compliance.
     // --- Phase 7: ZoomEye (Network Context) ---
     pub(super) async fn query_zoomeye(&self, domain: &str) -> HashSet<String> {
+        let limit = self.zoomeye_max_hosts;
+        if limit == 0 {
+            return HashSet::new();
+        }
+
         if let Some(cache) = crate::utils::api_cache::ApiCache::global() {
             if let Some(hit) = cache.get::<HashSet<String>>("zoomeye", domain, "subdomains", Duration::from_secs(CACHE_TTL_LONG_SECS)).await {
-                return hit;
+                return apply_cap(hit, limit);
             }
         }
 
@@ -571,7 +579,7 @@ impl SovereignReconScanner {
                 cache.put("zoomeye", domain, "subdomains", &subdomains).await;
             }
         }
-        subdomains
+        apply_cap(subdomains, limit)
     }
 }
 
@@ -596,6 +604,7 @@ mod tests {
         let mut config = Config::from_env();
         config.securitytrails_max_hosts_per_scan = 10;
         config.fofa_max_hosts_per_scan = 20;
+        config.zoomeye_max_hosts_per_scan = 15;
         config.shodan_host_ip_max_hosts_per_scan = 30;
         config.shodan_paid_max_hosts_per_scan = 40;
 
@@ -604,6 +613,7 @@ mod tests {
 
         assert_eq!(scanner.securitytrails_max_hosts, 10);
         assert_eq!(scanner.fofa_max_hosts, 20);
+        assert_eq!(scanner.zoomeye_max_hosts, 15);
         assert_eq!(scanner.shodan_host_ip_max_hosts, 30);
         assert_eq!(scanner.shodan_paid_max_hosts, 40);
     }
@@ -613,6 +623,7 @@ mod tests {
         let mut config = Config::from_env();
         config.securitytrails_max_hosts_per_scan = 0;
         config.fofa_max_hosts_per_scan = 0;
+        config.zoomeye_max_hosts_per_scan = 0;
         config.shodan_host_ip_max_hosts_per_scan = 0;
         config.shodan_paid_max_hosts_per_scan = 0;
 
@@ -626,6 +637,10 @@ mod tests {
         // FOFA
         let fofa = scanner.query_fofa("example.com").await;
         assert!(fofa.is_empty(), "FOFA should be disabled");
+
+        // ZoomEye
+        let zoomeye = scanner.query_zoomeye("example.com").await;
+        assert!(zoomeye.is_empty(), "ZoomEye should be disabled");
 
         // Shodan
         let shodan = scanner.query_shodan("example.com").await;

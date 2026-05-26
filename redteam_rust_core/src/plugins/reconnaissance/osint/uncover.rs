@@ -53,12 +53,12 @@ impl DiscoveryPlugin for UncoverScanner {
     }
     async fn discover(&self, target: &TargetHost) -> Result<Vec<DiscoveryResult>> {
         info!("UncoverScanner: searching OSINT engines for {}", target.host);
-        // uncover -q <target> -e shodan,censys,fofa -silent
+        // uncover -q <target> -e shodan,censys -silent
         let child = Command::new(&self.binary_path)
             .arg("-q")
             .arg(&target.host)
             .arg("-e")
-            .arg("shodan,censys,fofa")
+            .arg("shodan,censys")
             .arg("-silent")
             .stdin(Stdio::null())
             .stdout(Stdio::piped())
