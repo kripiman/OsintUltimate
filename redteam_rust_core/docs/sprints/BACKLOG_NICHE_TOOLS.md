@@ -50,4 +50,51 @@ Revisit this decision if:
 
 ---
 
-*(Section placeholder for Stage 11.E — additional rejected tools and re-evaluation triggers)*
+## Credential Leak Validation — Rejected Alternatives
+
+*Pricing snapshot 2026-05-26 (verify at time-of-decision via vendor pricing page).*
+
+### Dehashed
+**Status**: Rejected.  
+**Cost**: $5.49/mo minimum ($66/yr).  
+**Reason**: Paid mandatory. Coverage overlap with HIBP + IntelX = ~80%. Marginal value vs free tier already implemented (h8mail + HIBP Pwned Passwords + HIBP Breached Account).  
+**Re-evaluation trigger**: If Dehashed offers free tier ≥ 2027-Q1.
+
+### Snusbase
+**Status**: Rejected.  
+**Cost**: $20/mo ($240/yr).  
+**Reason**: Same coverage as h8mail free chain. Cost disproportionate to incremental value.  
+**Re-evaluation trigger**: If price drops below $5/mo or free tier introduced.
+
+### Self-hosted Collection #1-5 Torrent
+**Status**: Rejected.  
+**Cost**: $0 (torrent).  
+**Reason**: 150GB storage requirement; legal grey area in multiple jurisdictions; OPSEC liability for bug bounty operators.  
+**Re-evaluation trigger**: Never — legal risk is a hard block.
+
+### Hunter.io
+**Status**: Rejected.  
+**Cost**: Free tier 25 searches/mo.  
+**Reason**: Email enumeration, not leak validation. Wrong scope for CredentialLeakScanner.  
+**Re-evaluation trigger**: If Hunter.io adds breach correlation API.
+
+---
+
+## Intelligence / Recon — Rejected & Deferred
+
+### Censys Integration
+**Status**: Rejected.  
+**Reason**: Free tier deprecated 2024. Paid only. Redundant with Shodan (already integrated) + FOFA (optional).  
+**Re-evaluation trigger**: If Censys reintroduces free tier ≥ 500 req/mo.
+
+### BinaryEdge
+**Status**: Rejected.  
+**Reason**: Free tier reduced to 250 req/mo — marginal utility. Coverage overlap with Shodan.  
+**Re-evaluation trigger**: If free tier restored to ≥ 1000 req/mo.
+
+### Shodan Monitor API (Live Push)
+**Status**: Deferred — Sprint 12+ candidate.  
+**Decision review deadline**: 2026-12-31.  
+**Cost**: $69/mo.  
+**Reason**: Useful for continuous monitoring (cert/IP change alerts), but violates zero-cost bias for default pipeline.  
+**Re-evaluation trigger**: If Shodan Monitor included in Shodan membership tier or price drops below $20/mo.
