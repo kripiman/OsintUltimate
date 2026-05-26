@@ -74,13 +74,24 @@ impl SovereignReconScanner {
             }
         }
 
+        let url = format!("https://leakix.net/api/subdomains/{domain}");
+        let subdomains = self.query_leakix_raw(domain, &url).await;
+
+        if !subdomains.is_empty() {
+            if let Some(cache) = crate::utils::api_cache::ApiCache::global() {
+                cache.put("leakix", domain, "subdomains", &subdomains).await;
+            }
+        }
+        apply_cap(subdomains, limit)
+    }
+
+    /// Internal: HTTP call + parse. Extracted for Wiremock testability.
+    async fn query_leakix_raw(&self, domain: &str, url: &str) -> HashSet<String> {
         let mut subdomains = HashSet::new();
         debug!("🆓 Phase 1.5b: LeakIX leak intelligence for {}", domain);
-        let url = format!("https://leakix.net/domain/{domain}");
 
-        let mut success = false;
         if let Ok(client) = self.get_client("leakix.net").await {
-            let mut req = client.get(&url);
+            let mut req = client.get(url).header("Accept", "application/json");
             if let Some(ref key) = self.leakix_key {
                 if !key.is_empty() {
                     req = req.header("api-key", key);
@@ -88,30 +99,19 @@ impl SovereignReconScanner {
             }
             if let Ok(resp) = req.send().await {
                 #[derive(Deserialize)]
-                struct LeakIxHost { host: Option<String> }
-                #[derive(Deserialize)]
-                struct LeakIxResp { hosts: Option<Vec<LeakIxHost>> }
-                if let Ok(data) = resp.json::<LeakIxResp>().await {
-                    success = true;
-                    if let Some(hosts) = data.hosts {
-                        for h in hosts {
-                            if let Some(host) = h.host {
-                                if host.ends_with(domain) {
-                                    subdomains.insert(host);
-                                }
-                            }
+                struct LeakIxSubdomain { subdomain: String }
+                if let Ok(data) = resp.json::<Vec<LeakIxSubdomain>>().await {
+                    for entry in data {
+                        let host = entry.subdomain.to_lowercase();
+                        if host.ends_with(domain) {
+                            subdomains.insert(host);
                         }
                     }
                 }
             }
         }
 
-        if success {
-            if let Some(cache) = crate::utils::api_cache::ApiCache::global() {
-                cache.put("leakix", domain, "subdomains", &subdomains).await;
-            }
-        }
-        apply_cap(subdomains, limit)
+        subdomains
     }
 
     // --- Free Legitimate Phase 1.5c: GitHub Dorks (Secret/Hostname Leaks) ---
@@ -223,13 +223,18 @@ mod tests {
     use std::sync::Arc;
     use crate::utils::config::Config;
     use crate::utils::proxy::ProxyManager;
+    use wiremock::{MockServer, Mock, ResponseTemplate};
+    use wiremock::matchers::{method, path};
+
+    fn mock_proxy() -> Arc<ProxyManager> {
+        Arc::new(ProxyManager::new(Vec::new(), false, crate::utils::config::ProxyMode::None, 1))
+    }
 
     #[tokio::test]
     async fn test_crtsh_cap_zero_disables() {
         let mut config = Config::from_env();
         config.crtsh_max_hosts_per_scan = 0;
-        let pm = Arc::new(ProxyManager::new(Vec::new(), false, crate::utils::config::ProxyMode::None, 1));
-        let scanner = SovereignReconScanner::new(&config, pm);
+        let scanner = SovereignReconScanner::new(&config, mock_proxy());
         let result = scanner.query_crtsh("example.com").await;
         assert!(result.is_empty(), "crt.sh should be disabled when max_hosts == 0");
     }
@@ -238,8 +243,7 @@ mod tests {
     async fn test_leakix_cap_zero_disables() {
         let mut config = Config::from_env();
         config.leakix_max_hosts_per_scan = 0;
-        let pm = Arc::new(ProxyManager::new(Vec::new(), false, crate::utils::config::ProxyMode::None, 1));
-        let scanner = SovereignReconScanner::new(&config, pm);
+        let scanner = SovereignReconScanner::new(&config, mock_proxy());
         let result = scanner.query_leakix("example.com").await;
         assert!(result.is_empty(), "LeakIX should be disabled when max_hosts == 0");
     }
@@ -248,9 +252,94 @@ mod tests {
     async fn test_github_dorks_cap_zero_disables() {
         let mut config = Config::from_env();
         config.github_max_dorks_per_scan = 0;
-        let pm = Arc::new(ProxyManager::new(Vec::new(), false, crate::utils::config::ProxyMode::None, 1));
-        let scanner = SovereignReconScanner::new(&config, pm);
+        let scanner = SovereignReconScanner::new(&config, mock_proxy());
         let result = scanner.query_github_dorks("example.com").await;
         assert!(result.is_empty(), "GitHub dorks should be disabled when max_dorks == 0");
+    }
+
+    // ─── LeakIX Wiremock tests (Defect 3 regression) ─────────────────────────
+
+    #[tokio::test]
+    async fn test_leakix_subdomains_parses_fqdn() {
+        let server = MockServer::start().await;
+        Mock::given(method("GET"))
+            .and(path("/api/subdomains/example.com"))
+            .respond_with(ResponseTemplate::new(200)
+                .set_body_json(serde_json::json!([
+                    {"subdomain": "www.example.com", "distinct_ips": 1, "last_seen": "2023-01-20T11:25:41.243Z"},
+                    {"subdomain": "api.example.com", "distinct_ips": 2, "last_seen": "2023-02-15T08:12:00.000Z"}
+                ])))
+            .mount(&server)
+            .await;
+
+        let mut config = Config::from_env();
+        config.leakix_max_hosts_per_scan = 50;
+        let scanner = SovereignReconScanner::new(&config, mock_proxy());
+        let url = format!("{}/api/subdomains/example.com", server.uri());
+        let result = scanner.query_leakix_raw("example.com", &url).await;
+
+        assert_eq!(result.len(), 2);
+        assert!(result.contains("www.example.com"));
+        assert!(result.contains("api.example.com"));
+    }
+
+    #[tokio::test]
+    async fn test_leakix_empty_array() {
+        let server = MockServer::start().await;
+        Mock::given(method("GET"))
+            .and(path("/api/subdomains/example.com"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!([])))
+            .mount(&server)
+            .await;
+
+        let mut config = Config::from_env();
+        config.leakix_max_hosts_per_scan = 50;
+        let scanner = SovereignReconScanner::new(&config, mock_proxy());
+        let url = format!("{}/api/subdomains/example.com", server.uri());
+        let result = scanner.query_leakix_raw("example.com", &url).await;
+
+        assert!(result.is_empty(), "Empty array should yield empty HashSet");
+    }
+
+    #[tokio::test]
+    async fn test_leakix_429_rate_limit() {
+        let server = MockServer::start().await;
+        Mock::given(method("GET"))
+            .and(path("/api/subdomains/example.com"))
+            .respond_with(ResponseTemplate::new(429)
+                .insert_header("x-limited-for", "344.24ms"))
+            .mount(&server)
+            .await;
+
+        let mut config = Config::from_env();
+        config.leakix_max_hosts_per_scan = 50;
+        let scanner = SovereignReconScanner::new(&config, mock_proxy());
+        let url = format!("{}/api/subdomains/example.com", server.uri());
+        let result = scanner.query_leakix_raw("example.com", &url).await;
+
+        assert!(result.is_empty(), "429 should gracefully degrade to empty HashSet");
+    }
+
+    #[tokio::test]
+    async fn test_leakix_old_schema_fails_silently() {
+        let server = MockServer::start().await;
+        // Simulate the old /domain endpoint schema that caused silent failure
+        Mock::given(method("GET"))
+            .and(path("/api/subdomains/example.com"))
+            .respond_with(ResponseTemplate::new(200)
+                .set_body_json(serde_json::json!({
+                    "Services": [{"host": "www.example.com", "ip": "1.2.3.4"}],
+                    "Leaks": null
+                })))
+            .mount(&server)
+            .await;
+
+        let mut config = Config::from_env();
+        config.leakix_max_hosts_per_scan = 50;
+        let scanner = SovereignReconScanner::new(&config, mock_proxy());
+        let url = format!("{}/api/subdomains/example.com", server.uri());
+        let result = scanner.query_leakix_raw("example.com", &url).await;
+
+        assert!(result.is_empty(), "Old /domain schema should fail to parse and return empty (no panic)");
     }
 }
