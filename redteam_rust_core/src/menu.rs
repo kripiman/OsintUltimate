@@ -58,6 +58,8 @@ pub fn show_menu() -> Result<Option<Args>> {
         node_id: None,
         nats_url: None,
         scope_id: None,
+        profile: "scan".to_string(),
+        cve_correlation_only: false,
     };
 
     let scope_id = Text::new("🆔 Introduce el Scope ID (opcional, para aislamiento):")

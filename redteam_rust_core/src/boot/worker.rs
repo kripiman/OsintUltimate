@@ -1,5 +1,6 @@
 use crate::boot::cli::Args;
-use redteam_rust_core::models::{TargetHost, TargetStatus, WorkerProfile};
+use redteam_rust_core::models::{TargetHost, TargetStatus};
+use redteam_rust_core::models::worker_profile::WorkerProfile;
 use redteam_rust_core::core::engine::{RedTeamEngine, app::EngineConfig};
 use redteam_rust_core::core::sink::{MultiSink, PostgresSink};
 use redteam_rust_core::core::capability_layer::ScanLayer;
@@ -10,6 +11,21 @@ use std::time::Duration;
 use std::str::FromStr;
 use std::sync::Arc;
 
+pub fn resolve_worker_profile(args: &Args) -> WorkerProfile {
+    if args.cve_correlation_only {
+        WorkerProfile::CveCorrelation
+    } else {
+        WorkerProfile::from_str(&args.profile).unwrap_or_default()
+    }
+}
+
+pub fn resolve_max_layer(profile: WorkerProfile, cli_layer: &str) -> ScanLayer {
+    match profile {
+        WorkerProfile::Scan => ScanLayer::from_str(cli_layer).unwrap_or(ScanLayer::Scanning),
+        WorkerProfile::Enrich | WorkerProfile::CveCorrelation => ScanLayer::Passive,
+    }
+}
+
 pub async fn run_worker_mode(args: &Args) -> Result<()> {
     let cli_scope_id = Arc::new(args.scope_id.clone().unwrap_or_default());
     let db_url = args.postgres_url.as_ref().context("Postgres URL is required for worker mode (--postgres-url)")?;
@@ -17,11 +33,7 @@ pub async fn run_worker_mode(args: &Args) -> Result<()> {
         format!("node-{}", std::process::id())
     });
 
-    let profile = if args.cve_correlation_only {
-        WorkerProfile::CveCorrelation
-    } else {
-        WorkerProfile::from_str(&args.profile).unwrap_or_default()
-    };
+    let profile = resolve_worker_profile(args);
     info!("🐝 [Worker] Starting in distributed mode. Node ID: {} | Profile: {}", node_id, profile);
     let pool = sqlx::PgPool::connect(db_url).await?;
 
@@ -101,10 +113,7 @@ pub async fn run_worker_mode(args: &Args) -> Result<()> {
                     doh: args_clone.doh,
                     proxies: args_clone.proxies.as_ref().map(|s| s.split(',').map(|i| i.trim().to_string()).collect()),
                     plugins_dir: args_clone.plugins_dir.clone(),
-                    max_layer: match profile {
-                        WorkerProfile::Scan => ScanLayer::from_str(&args_clone.max_layer).unwrap_or(ScanLayer::Scanning),
-                        WorkerProfile::Enrich | WorkerProfile::CveCorrelation => ScanLayer::Passive,
-                    },
+                    max_layer: resolve_max_layer(profile, &args_clone.max_layer),
                     dashboard_port: args_clone.dashboard,
                     readiness_timeout: std::time::Duration::from_secs(60),
                     proxy_mode: utils_config_clone.proxy_mode,
@@ -215,5 +224,69 @@ pub async fn run_worker_mode(args: &Args) -> Result<()> {
                 .execute(&pool)
                 .await;
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use redteam_rust_core::models::worker_profile::WorkerProfile;
+
+    fn mock_args_with_profile(profile: &str) -> Args {
+        Args {
+            profile: profile.to_string(),
+            cve_correlation_only: false,
+            ..Default::default()
+        }
+    }
+
+    fn mock_args_cve_only() -> Args {
+        Args {
+            profile: "scan".to_string(),
+            cve_correlation_only: true,
+            ..Default::default()
+        }
+    }
+
+    #[test]
+    fn test_resolve_profile_scan() {
+        let args = mock_args_with_profile("scan");
+        assert_eq!(resolve_worker_profile(&args), WorkerProfile::Scan);
+    }
+
+    #[test]
+    fn test_resolve_profile_enrich() {
+        let args = mock_args_with_profile("enrich");
+        assert_eq!(resolve_worker_profile(&args), WorkerProfile::Enrich);
+    }
+
+    #[test]
+    fn test_resolve_profile_cve_correlation() {
+        let args = mock_args_with_profile("cve_correlation");
+        assert_eq!(resolve_worker_profile(&args), WorkerProfile::CveCorrelation);
+    }
+
+    #[test]
+    fn test_resolve_profile_cve_alias() {
+        let args = mock_args_cve_only();
+        assert_eq!(resolve_worker_profile(&args), WorkerProfile::CveCorrelation);
+    }
+
+    #[test]
+    fn test_resolve_max_layer_scan_uses_cli() {
+        assert_eq!(resolve_max_layer(WorkerProfile::Scan, "Scanning"), ScanLayer::Scanning);
+        assert_eq!(resolve_max_layer(WorkerProfile::Scan, "Passive"), ScanLayer::Passive);
+    }
+
+    #[test]
+    fn test_resolve_max_layer_enrich_forces_passive() {
+        assert_eq!(resolve_max_layer(WorkerProfile::Enrich, "Scanning"), ScanLayer::Passive);
+        assert_eq!(resolve_max_layer(WorkerProfile::Enrich, "Discovery"), ScanLayer::Passive);
+    }
+
+    #[test]
+    fn test_resolve_max_layer_cve_forces_passive() {
+        assert_eq!(resolve_max_layer(WorkerProfile::CveCorrelation, "Scanning"), ScanLayer::Passive);
+        assert_eq!(resolve_max_layer(WorkerProfile::CveCorrelation, "Exploitation"), ScanLayer::Passive);
     }
 }
