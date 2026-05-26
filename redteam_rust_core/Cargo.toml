@@ -23,6 +23,7 @@ rand_distr = "0.4"
 quick-xml = { version = "0.31", features = ["serialize"] }
 dashmap = "5.5"
 moka = { version = "0.10", features = ["future"] }
+murmur3 = "0.5"
 arc-swap = "1.7"
 crossbeam = "0.8"
 bloomfilter = "1.0"

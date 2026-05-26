@@ -206,6 +206,7 @@ pub const PLUGIN_DNS_VERIFIER: &str = "DnsHijackVerifier";
 pub const PLUGIN_SECRET_VALIDATOR: &str = "SecretValidator";
 pub const PLUGIN_IMDS_BYPASS: &str = "ImdsBypassScanner";
 pub const PLUGIN_GRAPHQL_EXPLOITER: &str = "GraphqlExploiter";
+pub const PLUGIN_FAVICON_HASH: &str = "FaviconHashScanner";
 pub const FINDING_IMDS_CREDENTIALS: &str = "IMDS-CREDENTIALS-EXFIL";
 
 // OOB Verification Defaults

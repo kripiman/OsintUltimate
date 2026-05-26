@@ -13,6 +13,7 @@ pub fn get_all_discovery<M: ExecutorMode>(config: GlobalConfig<M>) -> Vec<Box<dy
     use crate::plugins::reconnaissance::osint::bbscope::BBScopeScanner;
     use crate::plugins::reconnaissance::osint::shuffledns::ShufflednsScanner;
     use crate::plugins::reconnaissance::active::asnmap::AsnmapScanner;
+    use crate::plugins::reconnaissance::passive::favicon_hash::FaviconHashScanner;
 
     vec![
         Box::new(SovereignReconScanner::new(&crate::utils::config::Config::from_env(), config.proxy_manager.clone())),
@@ -25,5 +26,6 @@ pub fn get_all_discovery<M: ExecutorMode>(config: GlobalConfig<M>) -> Vec<Box<dy
         Box::new(BBScopeScanner::new(&config)),
         Box::new(ShufflednsScanner::new(&config)),
         Box::new(AsnmapScanner::new()),
+        Box::new(FaviconHashScanner::new()),
     ]
 }
