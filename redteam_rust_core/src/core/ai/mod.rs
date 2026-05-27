@@ -20,6 +20,10 @@ pub mod claude_code;
 pub mod cli_llm;
 pub mod kimi_cli;
 pub mod templates;
+pub mod groq;
+pub mod google_ai_studio;
+pub mod openrouter;
+pub mod rate_limiter;
 
 pub use types::*;
 pub use traits::*;
@@ -40,3 +44,7 @@ pub use claude_code::*;
 pub use cli_llm::*;
 pub use kimi_cli::*;
 pub use templates::*;
+pub use groq::*;
+pub use google_ai_studio::*;
+pub use openrouter::*;
+pub use rate_limiter::*;

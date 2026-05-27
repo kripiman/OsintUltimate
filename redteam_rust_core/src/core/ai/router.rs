@@ -25,8 +25,8 @@ fn iter_levels_upward(from: RouteLevel) -> impl Iterator<Item = RouteLevel> {
 pub enum RouterError {
     #[error("API Authentication failed (401/Unauthorized)")]
     Unauthorized,
-    #[error("Rate limited by provider (429)")]
-    RateLimited,
+    #[error("Rate limited by provider (429). Retry after: {retry_after:?}. Daily quota: {daily_quota}")]
+    RateLimited { retry_after: Option<Duration>, daily_quota: bool },
     #[error("Provider internal error (500+)")]
     InternalError,
     #[error("Generic analysis failure: {0}")]
@@ -39,12 +39,27 @@ impl RouterError {
         if msg.contains("401") || msg.contains("unauthorized") || msg.contains("invalid") {
             RouterError::Unauthorized
         } else if msg.contains("429") || msg.contains("rate limit") || msg.contains("too many") {
-            RouterError::RateLimited
+            let daily_quota = msg.contains("daily quota") || msg.contains("quota exceeded") || msg.contains("quota limit");
+            let retry_after = Self::parse_retry_after_from_msg(&msg);
+            RouterError::RateLimited { retry_after, daily_quota }
         } else if msg.contains("500") || msg.contains("502") || msg.contains("503") || msg.contains("unreachable") {
             RouterError::InternalError
         } else {
             RouterError::Generic(msg)
         }
+    }
+
+    fn parse_retry_after_from_msg(msg: &str) -> Option<Duration> {
+        // Look for patterns like "retry after: 30" or "retry-after: 60"
+        msg.split(|c: char| !c.is_alphanumeric() && c != ':' && c != '-').find_map(|token| {
+            if let Some(idx) = token.find("retry-after:") {
+                token[idx + "retry-after:".len()..].trim().parse::<u64>().ok().map(Duration::from_secs)
+            } else if let Some(idx) = token.find("retryafter:") {
+                token[idx + "retryafter:".len()..].trim().parse::<u64>().ok().map(Duration::from_secs)
+            } else {
+                None
+            }
+        })
     }
 }
 
@@ -57,6 +72,7 @@ pub struct TieredAIRouter {
     analysis_cache: Cache<String, AIAnalysis>, // TACTICAL CACHE: Prevents Azure credit bleed
     injection_cache: Cache<String, String>,    // V14.8: Caches skill-injection prompts
     metrics: Arc<CacheMetrics>,
+    pub rate_limiter: Option<Arc<super::rate_limiter::ProviderRateLimiter>>,
 }
 
 impl Default for TieredAIRouter {
@@ -79,7 +95,13 @@ impl TieredAIRouter {
                 .time_to_live(Duration::from_secs(1800)) // 30m TTL for ephemeral skills
                 .build(),
             metrics: Arc::new(CacheMetrics::default()),
+            rate_limiter: None,
         }
+    }
+
+    pub fn with_rate_limiter(mut self, rl: Arc<super::rate_limiter::ProviderRateLimiter>) -> Self {
+        self.rate_limiter = Some(rl);
+        self
     }
 
     pub fn with_skills(mut self, sm: Arc<crate::core::skills::SkillManager>) -> Self {
@@ -187,6 +209,16 @@ impl TieredAIRouter {
                         route_level: current_level,
                         caveman,
                     };
+                    // LOCAL RATE LIMIT GUARD
+                    if let Some(ref rl) = self.rate_limiter {
+                        if let Some(wait) = rl.check(&entry.kind) {
+                            let capped = wait.min(Duration::from_secs(30));
+                            tracing::warn!("TieredRouter: Provider {:?} locally rate limited. Waiting {:?}...", entry.kind, capped);
+                            tokio::time::sleep(capped).await;
+                            continue;
+                        }
+                    }
+
                     match entry.client.analyze(config).await {
                         Ok(analysis) => {
                             match current_level {
@@ -203,6 +235,17 @@ impl TieredAIRouter {
                         Err(e) => {
                             let router_err = RouterError::from_anyhow(&e);
                             tracing::warn!("TieredRouter: Provider {:?} in {:?} failed ({:?}). Trying next...", entry.kind, current_level, router_err);
+                            
+                            if let RouterError::RateLimited { retry_after, daily_quota } = &router_err {
+                                if *daily_quota {
+                                    tracing::error!("🚨 [TieredRouter] Daily quota exhausted for {:?}. Skipping.", entry.kind);
+                                }
+                                if let Some(d) = retry_after {
+                                    let capped = (*d).min(Duration::from_secs(30));
+                                    tracing::info!("[TieredRouter] RateLimited on {:?}. Sleeping {:?} before next provider...", entry.kind, capped);
+                                    tokio::time::sleep(capped).await;
+                                }
+                            }
                             
                             if matches!(router_err, RouterError::Unauthorized) {
                                 tracing::error!("🚨 [TieredRouter] 401 Unauthorized detectado en {:?}. Activando Failover Bridge.", entry.kind);
@@ -247,6 +290,16 @@ impl TieredAIRouter {
                         caveman,
                     };
                     
+                    // LOCAL RATE LIMIT GUARD
+                    if let Some(ref rl) = self.rate_limiter {
+                        if let Some(wait) = rl.check(&entry.kind) {
+                            let capped = wait.min(Duration::from_secs(30));
+                            tracing::warn!("TieredRouter: Provider {:?} locally rate limited. Waiting {:?}...", entry.kind, capped);
+                            tokio::time::sleep(capped).await;
+                            continue;
+                        }
+                    }
+
                     match entry.client.decide_action(config).await {
                         Ok(Some((action, context))) => {
                             match current_level {
@@ -259,7 +312,18 @@ impl TieredAIRouter {
                         }
                         Ok(None) => continue,
                         Err(e) => {
-                           tracing::warn!("TieredRouter: Decision failed with provider {:?} in {:?}: {}. Trying next...", entry.kind, current_level, e);
+                            let router_err = RouterError::from_anyhow(&e);
+                            tracing::warn!("TieredRouter: Decision failed with provider {:?} in {:?}: {:?}. Trying next...", entry.kind, current_level, router_err);
+                            if let RouterError::RateLimited { retry_after, daily_quota } = &router_err {
+                                if *daily_quota {
+                                    tracing::error!("🚨 [TieredRouter] Daily quota exhausted for {:?}. Skipping.", entry.kind);
+                                }
+                                if let Some(d) = retry_after {
+                                    let capped = (*d).min(Duration::from_secs(30));
+                                    tracing::info!("[TieredRouter] RateLimited on {:?}. Sleeping {:?} before next provider...", entry.kind, capped);
+                                    tokio::time::sleep(capped).await;
+                                }
+                            }
                         }
                     }
                 }

@@ -34,6 +34,9 @@ pub enum LlmProviderKind {
     Kimi,
     KimiCli,
     ClaudeCode,
+    Groq,
+    GoogleAIStudio,
+    OpenRouter,
 }
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
@@ -121,6 +124,9 @@ impl AsRef<str> for LlmProviderKind {
             LlmProviderKind::Kimi => "kimi",
             LlmProviderKind::KimiCli => "kimi_cli",
             LlmProviderKind::ClaudeCode => "claude_code",
+            LlmProviderKind::Groq => "groq",
+            LlmProviderKind::GoogleAIStudio => "google_ai_studio",
+            LlmProviderKind::OpenRouter => "openrouter",
         }
     }
 }

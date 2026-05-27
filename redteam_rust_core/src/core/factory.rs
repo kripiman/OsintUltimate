@@ -1,7 +1,7 @@
 use std::sync::Arc;
 use anyhow::Result;
 use crate::core::ai::{TieredAIRouter, RouteLevel, LlmProviderKind};
-use crate::core::ai::{OllamaClient, GeminiClient, AnthropicClient, OpenAIClient, AzureOpenAIClient, AntigravityClient, KimiClient, KimiCliClient, ClaudeCodeClient};
+use crate::core::ai::{OllamaClient, GeminiClient, AnthropicClient, OpenAIClient, AzureOpenAIClient, AntigravityClient, KimiClient, KimiCliClient, ClaudeCodeClient, GroqClient, GoogleAIStudioClient, OpenRouterClient, ProviderRateLimiter};
 use crate::utils::{InfrastructureType, HardwareInfo, proxy::ProxyManager};
 
 pub struct EngineFactory;
@@ -23,7 +23,19 @@ impl EngineFactory {
 
     /// Build a pre-configured AI Router based on available environment variables
     pub fn build_default_router(ollama_url: String, pm: Arc<ProxyManager>) -> Result<Arc<TieredAIRouter>> {
-        let mut router = TieredAIRouter::new();
+        // V15.2: Per-provider rate limiting (governor)
+        let rate_limiter = Arc::new(ProviderRateLimiter::new());
+        if let Ok(rpm) = std::env::var("GROQ_RPM") {
+            if let Ok(rpm_u32) = rpm.parse::<u32>() { rate_limiter.register(LlmProviderKind::Groq, rpm_u32); }
+        }
+        if let Ok(rpm) = std::env::var("GOOGLE_AI_STUDIO_RPM") {
+            if let Ok(rpm_u32) = rpm.parse::<u32>() { rate_limiter.register(LlmProviderKind::GoogleAIStudio, rpm_u32); }
+        }
+        if let Ok(rpm) = std::env::var("OPENROUTER_RPM") {
+            if let Ok(rpm_u32) = rpm.parse::<u32>() { rate_limiter.register(LlmProviderKind::OpenRouter, rpm_u32); }
+        }
+
+        let mut router = TieredAIRouter::new().with_rate_limiter(rate_limiter);
         
         // Tier 0: Local (Ollama)
         router.add_provider(RouteLevel::Local, LlmProviderKind::Local, 0, Arc::new(OllamaClient::new(
@@ -98,6 +110,35 @@ impl EngineFactory {
                     pm.clone()
                 )?));
             }
+        }
+
+        // Tier 1: FreeTier (Google AI Studio — gated)
+        if std::env::var("REDTEAM_FREETIER_DISABLED").as_deref() != Ok("1") {
+            if let Ok(key) = std::env::var("GOOGLE_AI_STUDIO_API_KEY") {
+                router.add_provider(RouteLevel::FreeTier, LlmProviderKind::GoogleAIStudio, 0, Arc::new(GoogleAIStudioClient::new(
+                    key,
+                    std::env::var("GOOGLE_AI_STUDIO_MODEL").unwrap_or_else(|_| "gemini-1.5-flash".to_string()),
+                    pm.clone()
+                )?));
+            }
+        }
+
+        // Tier 1: Mid (Groq)
+        if let Ok(key) = std::env::var("GROQ_API_KEY") {
+            router.add_provider(RouteLevel::Mid, LlmProviderKind::Groq, 3, Arc::new(GroqClient::new(
+                key,
+                std::env::var("GROQ_MODEL").unwrap_or_else(|_| "llama-3.1-70b-versatile".to_string()),
+                pm.clone()
+            )?));
+        }
+
+        // Tier 2: Premium (OpenRouter)
+        if let Ok(key) = std::env::var("OPENROUTER_API_KEY") {
+            router.add_provider(RouteLevel::Premium, LlmProviderKind::OpenRouter, 3, Arc::new(OpenRouterClient::new(
+                key,
+                std::env::var("OPENROUTER_MODEL").unwrap_or_else(|_| "anthropic/claude-3.5-sonnet".to_string()),
+                pm.clone()
+            )?));
         }
 
         // Tier 2: Premium Failover (Antigravity Bridge)
