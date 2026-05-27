@@ -13,6 +13,7 @@ pub mod web;
 pub mod filter;
 pub mod lock_free_sink;
 pub mod native_scanner;
+pub mod net_evasion;
 pub mod validation;
 pub mod resource_manager;
 pub mod sandbox;
