@@ -1,7 +1,7 @@
 use std::sync::Arc;
 use anyhow::Result;
 use crate::core::ai::{TieredAIRouter, RouteLevel, LlmProviderKind};
-use crate::core::ai::{OllamaClient, GeminiClient, AnthropicClient, OpenAIClient, AzureOpenAIClient, AntigravityClient, KimiClient, ClaudeCodeClient};
+use crate::core::ai::{OllamaClient, GeminiClient, AnthropicClient, OpenAIClient, AzureOpenAIClient, AntigravityClient, KimiClient, KimiCliClient, ClaudeCodeClient};
 use crate::utils::{InfrastructureType, HardwareInfo, proxy::ProxyManager};
 
 pub struct EngineFactory;
@@ -82,6 +82,12 @@ impl EngineFactory {
             router.add_provider(RouteLevel::Premium, LlmProviderKind::Kimi, 1, Arc::new(KimiClient::new(
                 key,
                 std::env::var("KIMI_MODEL").unwrap_or_else(|_| "kimi-for-coding".to_string()),
+                pm.clone()
+            )?));
+        }
+
+        if std::env::var("KIMI_CLI_ENABLED").ok() == Some("true".to_string()) {
+            router.add_provider(RouteLevel::Premium, LlmProviderKind::KimiCli, 2, Arc::new(KimiCliClient::new(
                 pm.clone()
             )?));
         }

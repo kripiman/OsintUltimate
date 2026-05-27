@@ -8,7 +8,7 @@ pub struct ContextCompressor;
 
 impl ContextCompressor {
     pub fn compress_finding(finding: &Finding, route_level: RouteLevel) -> serde_json::Value {
-        if route_level == RouteLevel::Local || route_level == RouteLevel::Mid {
+        if route_level == RouteLevel::Local || route_level == RouteLevel::FreeTier || route_level == RouteLevel::Mid {
             return Self::compress_finding_dense(finding);
         }
 

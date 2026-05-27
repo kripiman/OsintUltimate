@@ -17,6 +17,9 @@ pub mod openai;
 pub mod antigravity;
 pub mod kimi;
 pub mod claude_code;
+pub mod cli_llm;
+pub mod kimi_cli;
+pub mod templates;
 
 pub use types::*;
 pub use traits::*;
@@ -34,3 +37,6 @@ pub use openai::*;
 pub use antigravity::*;
 pub use kimi::*;
 pub use claude_code::*;
+pub use cli_llm::*;
+pub use kimi_cli::*;
+pub use templates::*;
