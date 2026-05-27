@@ -14,6 +14,12 @@ pub struct NvdMonitor {
     client: reqwest::Client,
 }
 
+impl Default for NvdMonitor {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl NvdMonitor {
     pub fn new() -> Self {
         let cfg = Config::from_env();

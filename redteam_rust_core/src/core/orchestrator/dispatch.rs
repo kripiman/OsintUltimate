@@ -7,6 +7,7 @@ use crate::core::capability_layer::ScanLayerPolicy;
 use crate::core::approval_gate::ApprovalGate;
 use super::{reactive, enrichment, scope_guard};
 
+#[allow(clippy::too_many_arguments)]
 pub async fn dispatch_scan(
     target: Arc<TargetHost>,
     plugins: Arc<Vec<Box<dyn ScannerPlugin>>>,

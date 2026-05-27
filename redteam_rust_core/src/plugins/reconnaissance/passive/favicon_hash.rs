@@ -220,7 +220,7 @@ impl FaviconHashScanner {
                     if let Some(results) = data.results {
                         for row in results {
                             // FOFA fields=host,ip => row[0]=host, row[1]=ip
-                            let host = row.get(0).cloned().unwrap_or_default();
+                            let host = row.first().cloned().unwrap_or_default();
                             let ip = row.get(1).cloned().unwrap_or_default();
                             let clean_host = host
                                 .replace("http://", "")

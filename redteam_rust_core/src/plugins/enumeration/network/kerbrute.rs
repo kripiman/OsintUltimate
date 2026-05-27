@@ -5,7 +5,6 @@ use crate::utils::config::Config;
 use crate::core::capability_layer::ScanLayer;
 use async_trait::async_trait;
 use anyhow::{Result, Context};
-use std::env;
 use tokio::process::Command;
 use tracing::{info, warn};
 

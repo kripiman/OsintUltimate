@@ -188,12 +188,6 @@ impl CredentialLeakScanner {
         hashes
     }
 
-    /// Compute SHA1 and return the 5-char uppercase prefix for k-anonymity.
-    fn sha1_prefix(password: &str) -> String {
-        let hash = sha1::Sha1::digest(password.as_bytes());
-        hex::encode_upper(&hash[..5])
-    }
-
     /// Check if a password's full SHA1 suffix appears in the HIBP range response.
     fn check_pwned_from_response(full_hex: &str, body: &str) -> Option<u64> {
         let suffix = &full_hex[5..];

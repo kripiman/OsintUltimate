@@ -142,7 +142,7 @@ impl SovereignReconScanner {
         let mut hostnames = HashSet::new();
         debug!("🆓 Phase 1.5c: GitHub dork intelligence for {}", domain);
 
-        let dorks = vec![
+        let dorks = [
             format!("org:{} password", domain),
             format!("org:{} api_key", domain),
             format!("org:{} apikey", domain),
