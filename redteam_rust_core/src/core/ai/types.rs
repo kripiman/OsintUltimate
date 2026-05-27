@@ -3,11 +3,12 @@ use std::sync::Arc;
 use crate::core::ai::traits::LlmClient;
 use std::sync::atomic::AtomicU64;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize, strum::EnumCount)]
 pub enum RouteLevel {
-    Local = 0,   // Ollama / Qwen
-    Mid = 1,     // Gemini Flash / GPT-4o-mini
-    Premium = 2, // Gemini Pro / GPT-4o / Claude 3.5
+    Local = 0,      // Ollama / Qwen
+    FreeTier = 1,   // Groq, Google AI Studio, OpenRouter
+    Mid = 2,        // Gemini Flash / GPT-4o-mini
+    Premium = 3,    // Gemini Pro / GPT-4o / Claude 3.5
 }
 
 /// V14 Posture: Represents the operational state of the engagement.
@@ -22,7 +23,7 @@ pub enum Posture {
     Breach,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, strum::EnumCount)]
 pub enum LlmProviderKind {
     Local,
     Gemini,
@@ -31,6 +32,7 @@ pub enum LlmProviderKind {
     AzureOpenAI,
     Antigravity, // V15: OpenSource/Custom Failover Endpoint
     Kimi,
+    KimiCli,
     ClaudeCode,
 }
 
@@ -99,4 +101,26 @@ pub struct PluginIndex {
     pub vectors: Vec<PluginVector>,
     #[serde(skip)]
     pub last_updated: Option<chrono::DateTime<chrono::Utc>>,
+}
+
+impl std::fmt::Display for LlmProviderKind {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.as_ref())
+    }
+}
+
+impl AsRef<str> for LlmProviderKind {
+    fn as_ref(&self) -> &str {
+        match self {
+            LlmProviderKind::Local => "local",
+            LlmProviderKind::Gemini => "gemini",
+            LlmProviderKind::Anthropic => "anthropic",
+            LlmProviderKind::OpenAI => "openai",
+            LlmProviderKind::AzureOpenAI => "azure_openai",
+            LlmProviderKind::Antigravity => "antigravity",
+            LlmProviderKind::Kimi => "kimi",
+            LlmProviderKind::KimiCli => "kimi_cli",
+            LlmProviderKind::ClaudeCode => "claude_code",
+        }
+    }
 }

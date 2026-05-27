@@ -191,6 +191,7 @@ impl TieredAIRouter {
                         Ok(analysis) => {
                             match current_level {
                                 RouteLevel::Local => crate::utils::telemetry::METRIC_LOCAL_QWEN_TRIAGE.fetch_add(1, Ordering::Relaxed),
+                                RouteLevel::FreeTier => crate::utils::telemetry::METRIC_FREETIER_CALLS.fetch_add(1, Ordering::Relaxed),
                                 RouteLevel::Mid => crate::utils::telemetry::METRIC_MID_LLM_CALLS.fetch_add(1, Ordering::Relaxed),
                                 RouteLevel::Premium => crate::utils::telemetry::METRIC_PREMIUM_LLM_CALLS.fetch_add(1, Ordering::Relaxed),
                             };
@@ -256,6 +257,7 @@ impl TieredAIRouter {
                         Ok(Some((action, context))) => {
                             match current_level {
                                 RouteLevel::Local => crate::utils::telemetry::METRIC_LOCAL_QWEN_TRIAGE.fetch_add(1, Ordering::Relaxed),
+                                RouteLevel::FreeTier => crate::utils::telemetry::METRIC_FREETIER_CALLS.fetch_add(1, Ordering::Relaxed),
                                 RouteLevel::Mid => crate::utils::telemetry::METRIC_MID_LLM_CALLS.fetch_add(1, Ordering::Relaxed),
                                 RouteLevel::Premium => crate::utils::telemetry::METRIC_PREMIUM_LLM_CALLS.fetch_add(1, Ordering::Relaxed),
                             };
@@ -287,6 +289,7 @@ impl TieredAIRouter {
         if let Some(ref sm) = self.skill_manager {
             let budget = match level {
                 RouteLevel::Local => 300,
+                RouteLevel::FreeTier => 500,
                 RouteLevel::Mid => 800,
                 RouteLevel::Premium => 1500,
             };

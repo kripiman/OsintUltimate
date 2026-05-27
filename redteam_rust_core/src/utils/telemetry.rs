@@ -18,6 +18,7 @@ use std::sync::atomic::{AtomicU64, Ordering};
 pub static METRIC_FINDINGS_IN: AtomicU64 = AtomicU64::new(0);
 pub static METRIC_FPF_DROPS: AtomicU64 = AtomicU64::new(0);
 pub static METRIC_LOCAL_QWEN_TRIAGE: AtomicU64 = AtomicU64::new(0);
+pub static METRIC_FREETIER_CALLS: AtomicU64 = AtomicU64::new(0);
 pub static METRIC_MID_LLM_CALLS: AtomicU64 = AtomicU64::new(0);
 pub static METRIC_PREMIUM_LLM_CALLS: AtomicU64 = AtomicU64::new(0);
 pub static METRIC_MANUAL_SUBMISSIONS: AtomicU64 = AtomicU64::new(0);
@@ -188,10 +189,11 @@ pub fn shutdown_telemetry() {
 /// Periodically dumps telemetry to logs for ROI baseline collection (Fase 0)
 pub fn dump_metrics() {
     info!(
-        "📊 ROI METRICS: [Findings_In: {}] [FPF_Drops: {}] [Local_Triage: {}] [Mid_Calls: {}] [Premium_Calls: {}] [Manual_Submissions: {}]",
+        "📊 ROI METRICS: [Findings_In: {}] [FPF_Drops: {}] [Local_Triage: {}] [FreeTier_Calls: {}] [Mid_Calls: {}] [Premium_Calls: {}] [Manual_Submissions: {}]",
         METRIC_FINDINGS_IN.load(Ordering::Relaxed),
         METRIC_FPF_DROPS.load(Ordering::Relaxed),
         METRIC_LOCAL_QWEN_TRIAGE.load(Ordering::Relaxed),
+        METRIC_FREETIER_CALLS.load(Ordering::Relaxed),
         METRIC_MID_LLM_CALLS.load(Ordering::Relaxed),
         METRIC_PREMIUM_LLM_CALLS.load(Ordering::Relaxed),
         METRIC_MANUAL_SUBMISSIONS.load(Ordering::Relaxed),
