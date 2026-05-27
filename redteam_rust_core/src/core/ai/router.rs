@@ -15,6 +15,12 @@ use super::compressor::ContextCompressor;
 use super::token_optimizer::{PROMPT_OPTIMIZER, OptimizationLevel};
 use super::types::{RouteLevel, LlmProviderKind, ProviderEntry, AdaptiveContext, CacheMetrics, Posture, CavemanLevel};
 
+const ALL_LEVELS: [RouteLevel; 4] = [RouteLevel::Local, RouteLevel::FreeTier, RouteLevel::Mid, RouteLevel::Premium];
+
+fn iter_levels_upward(from: RouteLevel) -> impl Iterator<Item = RouteLevel> {
+    ALL_LEVELS.iter().copied().filter(move |l| *l as i32 >= from as i32)
+}
+
 #[derive(Error, Debug)]
 pub enum RouterError {
     #[error("API Authentication failed (401/Unauthorized)")]
@@ -167,13 +173,7 @@ impl TieredAIRouter {
 
         self.metrics.misses.fetch_add(1, Ordering::Relaxed);
         
-        for level_val in (target_level as i32)..=2 {
-            let current_level = match level_val {
-                0 => RouteLevel::Local,
-                1 => RouteLevel::Mid,
-                2 => RouteLevel::Premium,
-                _ => break,
-            };
+        for current_level in iter_levels_upward(target_level) {
             let providers_map = self.providers.load();
             if let Some(providers) = providers_map.get(&current_level) {
                 // SKILL INJECTION BRIDGE (ENRICHED)
@@ -226,13 +226,7 @@ impl TieredAIRouter {
     ) -> Result<Option<(String, serde_json::Value)>> {
         let target_level = self.classify(finding, target);
         
-        for level_val in (target_level as i32)..=2 {
-            let current_level = match level_val {
-                0 => RouteLevel::Local,
-                1 => RouteLevel::Mid,
-                2 => RouteLevel::Premium,
-                _ => break,
-            };
+        for current_level in iter_levels_upward(target_level) {
             let providers_map = self.providers.load();
             if let Some(providers) = providers_map.get(&current_level) {
                 let caveman = adaptive_context.map(|c| c.current_caveman).unwrap_or_default();
