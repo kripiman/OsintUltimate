@@ -46,9 +46,8 @@ impl LlmClient for ClaudeCodeClient {
     }
 
     async fn decide_action(&self, config: crate::core::ai::traits::DecisionConfig<'_>) -> Result<Option<(String, serde_json::Value)>> {
-        let _ = crate::core::ai::compressor::ContextCompressor::compress_finding(config.finding, config.route_level);
         let ctx_header = config.attack_context.map(|c| format!("Tactical Path: {}\n", c)).unwrap_or_default();
-        let prompt_raw = format!("### SENTINEL ORCHESTRATOR ###\n{}Decide next step for {}. History: {:?}. Finding: {}. Plugins: {}. Focus on WAF bypass. Return JSON with 'action' (must match a plugin name exactly or 'none') and 'tactical_context' (JSON object).", ctx_header, config.target.host, config.adaptive_context, config.finding.id, config.plugins.len());
+        let prompt_raw = format!("{}Decide next step for {}. History: {:?}. Finding: {}. Plugins: {}. Focus on WAF bypass. Return JSON with 'action' (must match a plugin name exactly or 'none') and 'tactical_context' (JSON object).", ctx_header, config.target.host, config.adaptive_context, config.finding.id, config.plugins.len());
         let prompt = crate::core::ai::caveman::CavemanOptimizer::optimize_prompt(&prompt_raw, config.caveman);
         
         let full_prompt = format!("You are a Sentinel Orchestrator. Return strictly JSON with 'action' and 'tactical_context'.\n\n{}", prompt);

@@ -195,7 +195,11 @@ impl<M: ExecutorMode> SwarmOrchestrator<M> {
     pub(crate) async fn plan_next_step(&self, finding: &Finding, target: &TargetHost) -> Result<AgentRole> {
         let _compressed = crate::core::ai::ContextCompressor::compress_swarm_context(finding, target);
         
-        let level = if finding.core.severity == Severity::Critical { RouteLevel::Premium } else { RouteLevel::Mid };
+        let level = match finding.core.severity {
+            Severity::Critical => RouteLevel::Premium,
+            Severity::High => RouteLevel::Mid,
+            _ => RouteLevel::FreeTier,
+        };
         tracing::info!("🐝 SWARM [Planner]: Routing {} to {:?} tier.", finding.core.id, level);
         
         match finding.core.category {
