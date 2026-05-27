@@ -31,3 +31,9 @@ impl ProviderRateLimiter {
         })
     }
 }
+
+impl Default for ProviderRateLimiter {
+    fn default() -> Self {
+        Self::new()
+    }
+}
