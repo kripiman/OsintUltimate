@@ -205,6 +205,70 @@ impl NetEvasionOrchestrator {
         })
     }
 
+    /// Perform a full QUIC handshake to `target`.
+    /// `target` (SocketAddrV4) is upcast to `SocketAddr` for `endpoint.connect()`.
+    pub async fn quic_full_handshake(
+        &self,
+        target: std::net::SocketAddrV4,
+        server_name: &str,
+    ) -> Result<EvasionResult> {
+        use crate::core::net_evasion::quinn_client::QuinnEvasionClient;
+
+        let start = std::time::Instant::now();
+        let client = QuinnEvasionClient::new()?;
+        let addr = std::net::SocketAddr::V4(target);
+
+        let result = client.connect(addr, server_name).await;
+        let latency_ms = start.elapsed().as_secs_f64() * 1000.0;
+
+        match result {
+            Ok(_conn) => {
+                Ok(EvasionResult {
+                    strategy_used: NetEvasionStrategy::QuicFullHandshake,
+                    success: true,
+                    packets_sent: 1,
+                    response_received: true,
+                    latency_ms,
+                })
+            }
+            Err(_e) => Ok(EvasionResult {
+                strategy_used: NetEvasionStrategy::QuicFullHandshake,
+                success: false,
+                packets_sent: 0,
+                response_received: false,
+                latency_ms,
+            }),
+        }
+    }
+
+    /// Perform an HTTP/3 GET request to `url`.
+    pub async fn http3_request(&self, url: &str) -> Result<EvasionResult> {
+        use crate::core::net_evasion::http3_client::Http3EvasionClient;
+
+        let start = std::time::Instant::now();
+        let client = Http3EvasionClient::new()?;
+
+        let result = client.get(url).await;
+        let latency_ms = start.elapsed().as_secs_f64() * 1000.0;
+
+        match result {
+            Ok(resp) => Ok(EvasionResult {
+                strategy_used: NetEvasionStrategy::Http3Request,
+                success: resp.status >= 200 && resp.status < 300,
+                packets_sent: 1,
+                response_received: true,
+                latency_ms,
+            }),
+            Err(_) => Ok(EvasionResult {
+                strategy_used: NetEvasionStrategy::Http3Request,
+                success: false,
+                packets_sent: 1,
+                response_received: false,
+                latency_ms,
+            }),
+        }
+    }
+
     /// Returns the last known reassembly policy.
     pub fn policy(&self) -> ReassemblyPolicy {
         self.policy

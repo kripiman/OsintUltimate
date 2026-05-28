@@ -38,6 +38,11 @@ addr = "0.15"
 # Network
 reqwest = { version = "0.11", default-features = false, features = ["json", "rustls-tls", "gzip", "stream", "socks", "multipart"] }
 hyper-util = { version = "0.1", features = ["tokio"] }
+quinn = "0.10.2"
+h3 = "0.0.4"
+h3-quinn = "0.0.5"
+http = "1"
+bytes = "1"
 
 # CLI & Interface
 clap = { version = "4.3", features = ["derive"] }

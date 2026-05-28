@@ -26,6 +26,8 @@ pub mod ja4_http_client;
 #[cfg(target_os = "linux")]
 pub mod af_xdp_channel;
 pub mod quic_forge;
+pub mod quinn_client;
+pub mod http3_client;
 
 use serde::{Deserialize, Serialize};
 
@@ -82,6 +84,8 @@ pub enum NetEvasionStrategy {
     // L7 / TLS Evasion
     Ja4Spoofing,
     QuicProbe,
+    QuicFullHandshake,
+    Http3Request,
     
     // Meta / FW Stress
     #[cfg(feature = "sovereign")]

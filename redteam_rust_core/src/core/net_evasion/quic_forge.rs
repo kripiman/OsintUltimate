@@ -229,7 +229,7 @@ impl QuicInitialForge {
         let current_total = fixed_overhead + payload.len();
         if current_total < MIN_INITIAL_SIZE {
             let pad_len = MIN_INITIAL_SIZE - current_total;
-            payload.extend(std::iter::repeat(0x00).take(pad_len));
+            payload.extend(std::iter::repeat_n(0x00, pad_len));
         }
 
         // Length = pn_len + payload_len + tag_len
