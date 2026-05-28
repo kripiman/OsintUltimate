@@ -269,6 +269,75 @@ impl NetEvasionOrchestrator {
         }
     }
 
+    /// Attempt a 0-RTT QUIC connection to `target`.
+    /// Returns whether 0-RTT was accepted by the server.
+    pub async fn quic_0rtt_probe(
+        &self,
+        target: std::net::SocketAddrV4,
+        server_name: &str,
+    ) -> Result<EvasionResult> {
+        use crate::core::net_evasion::quinn_client::QuinnEvasionClient;
+
+        let start = std::time::Instant::now();
+        let client = QuinnEvasionClient::with_early_data()?;
+        let addr = std::net::SocketAddr::V4(target);
+
+        let result = client.connect_0rtt(addr, server_name).await;
+        let latency_ms = start.elapsed().as_secs_f64() * 1000.0;
+
+        match result {
+            Ok(conn) => {
+                // Give the background task a moment to poll acceptance
+                tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+                let accepted = conn.was_0rtt_accepted();
+                Ok(EvasionResult {
+                    strategy_used: NetEvasionStrategy::QuicZeroRtt,
+                    success: accepted,
+                    packets_sent: 1,
+                    response_received: true,
+                    latency_ms,
+                })
+            }
+            Err(_e) => Ok(EvasionResult {
+                strategy_used: NetEvasionStrategy::QuicZeroRtt,
+                success: false,
+                packets_sent: 1,
+                response_received: false,
+                latency_ms,
+            }),
+        }
+    }
+
+    /// Probe a QUIC server for Retry token handling (statelessness check).
+    pub async fn quic_retry_probe(
+        &self,
+        target: std::net::SocketAddrV4,
+        version: u32,
+    ) -> Result<EvasionResult> {
+        use crate::core::net_evasion::quic_evasion::retry_token_probe;
+
+        let start = std::time::Instant::now();
+        let result = retry_token_probe(target, version).await;
+        let latency_ms = start.elapsed().as_secs_f64() * 1000.0;
+
+        match result {
+            Ok(probe) => Ok(EvasionResult {
+                strategy_used: NetEvasionStrategy::QuicRetryProbe,
+                success: probe.retry_received && probe.token_extracted,
+                packets_sent: if probe.retry_received { 2 } else { 1 },
+                response_received: probe.handshake_completed,
+                latency_ms,
+            }),
+            Err(_) => Ok(EvasionResult {
+                strategy_used: NetEvasionStrategy::QuicRetryProbe,
+                success: false,
+                packets_sent: 1,
+                response_received: false,
+                latency_ms,
+            }),
+        }
+    }
+
     /// Returns the last known reassembly policy.
     pub fn policy(&self) -> ReassemblyPolicy {
         self.policy

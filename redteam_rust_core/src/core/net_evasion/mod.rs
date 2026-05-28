@@ -28,6 +28,7 @@ pub mod af_xdp_channel;
 pub mod quic_forge;
 pub mod quinn_client;
 pub mod http3_client;
+pub mod quic_evasion;
 
 use serde::{Deserialize, Serialize};
 
@@ -86,6 +87,8 @@ pub enum NetEvasionStrategy {
     QuicProbe,
     QuicFullHandshake,
     Http3Request,
+    QuicZeroRtt,
+    QuicRetryProbe,
     
     // Meta / FW Stress
     #[cfg(feature = "sovereign")]

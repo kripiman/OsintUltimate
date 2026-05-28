@@ -162,6 +162,7 @@ pub struct QuicInitialForge {
     version: u32,
     dst_cid: Vec<u8>,
     src_cid: Vec<u8>,
+    token: Vec<u8>,
     payload: Vec<u8>,
 }
 
@@ -174,8 +175,15 @@ impl QuicInitialForge {
             version: QUIC_VERSION_1,
             dst_cid: dst_cid.to_vec(),
             src_cid: src_cid.to_vec(),
+            token: Vec::new(),
             payload: Vec::new(),
         }
+    }
+
+    /// Set a Retry token to include in the Initial packet.
+    pub fn with_token(mut self, token: &[u8]) -> Self {
+        self.token = token.to_vec();
+        self
     }
 
     /// Embed a CRYPTO frame containing `data` (typically a TLS ClientHello).
@@ -216,7 +224,8 @@ impl QuicInitialForge {
         header.extend_from_slice(&self.dst_cid);
         header.push(scil);
         header.extend_from_slice(&self.src_cid);
-        header.push(0x00); // Token length = 0 (varint)
+        header.extend_from_slice(&encode_varint(self.token.len() as u64));
+        header.extend_from_slice(&self.token);
 
         // We need to compute the final Length and payload size.
         // Total packet = header + length_varint + pn + payload + tag
