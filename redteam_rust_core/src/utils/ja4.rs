@@ -10,22 +10,35 @@ pub fn calculate_ja4(bytes: &[u8]) -> Result<String> {
     
     for msg in packet.msg {
         if let TlsMessage::Handshake(TlsMessageHandshake::ClientHello(hello)) = msg {
+            // Parse extensions early — needed for version, SNI, ALPN, counts, and hashes.
+            let parsed_exts = hello.ext
+                .and_then(|raw| parse_tls_extensions(raw).ok().map(|(_, e)| e))
+                .unwrap_or_default();
+
             // 1. Version (b)
-            let protocol = match hello.version.0 {
+            // For TLS 1.3, the legacy ClientHello version is 0x0303 (TLS 1.2).
+            // JA4 checks the supported_versions extension (type 43) for TLS 1.3.
+            let mut protocol = match hello.version.0 {
                 0x0304 => "13",
                 0x0303 => "12",
                 0x0302 => "11",
                 0x0301 => "10",
                 _ => "00",
             };
-            
+
+            // Override with supported_versions if present (TLS 1.3 detection)
+            for ext in &parsed_exts {
+                if let TlsExtension::SupportedVersions(versions) = ext {
+                    if versions.iter().any(|v| v.0 == 0x0304) {
+                        protocol = "13";
+                        break;
+                    }
+                }
+            }
+
             // 2. SNI (c) & ALPN (d)
             let mut sni_type = "x";
             let mut alpn_prefix = "00";
-            
-            let parsed_exts = hello.ext
-                .and_then(|raw| parse_tls_extensions(raw).ok().map(|(_, e)| e))
-                .unwrap_or_default();
 
             for ext in &parsed_exts {
                 match ext {
@@ -44,12 +57,12 @@ pub fn calculate_ja4(bytes: &[u8]) -> Result<String> {
                     _ => {}
                 }
             }
-            
+
             // 3. Counts (e, f)
             let ext_count = format!("{:02}", parsed_exts.len().min(99));
             let cipher_count = format!("{:02}", hello.ciphers.len().min(99));
             
-            let ja4_a = format!("t{}{}{}{}{}", protocol, sni_type, alpn_prefix, ext_count, cipher_count);
+            let ja4_a = format!("t{}{}{}{}{}", protocol, sni_type, ext_count, cipher_count, alpn_prefix);
 
             // 4. JA4_b: Cipher Suites Hash (Sorted, excluding GREASE)
             let mut ciphers: Vec<u16> = hello.ciphers.iter()
@@ -74,6 +87,74 @@ pub fn calculate_ja4(bytes: &[u8]) -> Result<String> {
     }
     
     anyhow::bail!("No ClientHello found in bytes")
+}
+
+/// Parsed components of a JA4 fingerprint string.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Ja4Components {
+    /// 't' (TCP) or 'q' (QUIC).
+    pub protocol: char,
+    /// TLS version code: "13", "12", "11", "10", or "00".
+    pub tls_version: String,
+    /// 'd' (domain SNI) or 'i' (IP SNI).
+    pub sni_type: char,
+    /// Number of extensions (capped at 99).
+    pub ext_count: u8,
+    /// Number of cipher suites (capped at 99).
+    pub cipher_count: u8,
+    /// First two chars of ALPN, or "00" if absent.
+    pub alpn: String,
+    /// 12-char hex hash of sorted ciphers (JA4_b).
+    pub cipher_hash: String,
+    /// 12-char hex hash of sorted extensions (JA4_c).
+    pub ext_hash: String,
+}
+
+/// Parse a JA4 fingerprint string into structured components.
+///
+/// Expected format: `[t|q][Version][SNI][ExtCount][CipherCount][ALPN]_[CipherHash]_[ExtHash]`
+pub fn parse_ja4(ja4: &str) -> Result<Ja4Components> {
+    let parts: Vec<&str> = ja4.split('_').collect();
+    if parts.len() != 3 {
+        anyhow::bail!(
+            "Invalid JA4 format: expected 3 underscore-separated parts, got {}",
+            parts.len()
+        );
+    }
+
+    let ja4_a = parts[0];
+    if ja4_a.len() != 10 {
+        anyhow::bail!(
+            "Invalid JA4_a segment: expected exactly 10 chars, got {}",
+            ja4_a.len()
+        );
+    }
+
+    let mut chars = ja4_a.chars();
+    let protocol = chars.next().unwrap();
+    let tls_version: String = chars.by_ref().take(2).collect();
+    let sni_type = chars.next().unwrap();
+    let ext_count_str: String = chars.by_ref().take(2).collect();
+    let cipher_count_str: String = chars.by_ref().take(2).collect();
+    let alpn: String = chars.by_ref().take(2).collect();
+
+    let ext_count = ext_count_str
+        .parse::<u8>()
+        .map_err(|_| anyhow::anyhow!("Invalid extension count: {}", ext_count_str))?;
+    let cipher_count = cipher_count_str
+        .parse::<u8>()
+        .map_err(|_| anyhow::anyhow!("Invalid cipher count: {}", cipher_count_str))?;
+
+    Ok(Ja4Components {
+        protocol,
+        tls_version,
+        sni_type,
+        ext_count,
+        cipher_count,
+        alpn,
+        cipher_hash: parts[1].to_string(),
+        ext_hash: parts[2].to_string(),
+    })
 }
 
 /// Calculates a JA4H fingerprint from HTTP request metadata.

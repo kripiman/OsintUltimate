@@ -20,6 +20,12 @@ pub mod tcp_urgent_abuse;
 pub mod tcp_zero_window;
 #[cfg(target_os = "linux")]
 pub mod tcp_fast_open;
+pub mod ja4_spoofer;
+pub mod tls_raw_forge;
+pub mod ja4_http_client;
+#[cfg(target_os = "linux")]
+pub mod af_xdp_channel;
+pub mod quic_forge;
 
 use serde::{Deserialize, Serialize};
 
@@ -72,6 +78,10 @@ pub enum NetEvasionStrategy {
     DnsTunnel,
     GreTunnel,
     QuicTunnel,
+    
+    // L7 / TLS Evasion
+    Ja4Spoofing,
+    QuicProbe,
     
     // Meta / FW Stress
     #[cfg(feature = "sovereign")]

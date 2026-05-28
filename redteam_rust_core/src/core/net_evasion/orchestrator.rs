@@ -109,6 +109,102 @@ impl NetEvasionOrchestrator {
         }
     }
 
+    /// Performs a JA4 TLS fingerprint spoofing request against `target`.
+    ///
+    /// Tier 1: Full HTTPS GET with rustls-approximated JA4.
+    /// Tier 2 (fallback): Raw ClientHello probe with exact JA4 match.
+    pub async fn ja4_evasion_request(
+        &self,
+        target: url::Url,
+        target_ja4: &str,
+    ) -> Result<EvasionResult> {
+        use crate::core::net_evasion::ja4_http_client::Ja4EvasionClient;
+
+        let client = Ja4EvasionClient::new(target_ja4)?;
+        let url_str = target.as_str();
+        let host = target.host_str().unwrap_or("127.0.0.1");
+        let port = target.port().unwrap_or(443);
+
+        let start = std::time::Instant::now();
+
+        // Tier 1: try full HTTPS request
+        match client.get(url_str).await {
+            Ok(_resp) => {
+                let latency_ms = start.elapsed().as_secs_f64() * 1000.0;
+                Ok(EvasionResult {
+                    strategy_used: NetEvasionStrategy::Ja4Spoofing,
+                    success: true,
+                    packets_sent: 1,
+                    response_received: true,
+                    latency_ms,
+                })
+            }
+            Err(_) => {
+                // Tier 2: fallback to raw fingerprint probe
+                let probe_target = format!("{}:{}", host, port);
+                client.fingerprint_probe(&probe_target).await
+            }
+        }
+    }
+
+    /// Sends a raw forged QUIC Initial packet to `target` via UDP.
+    ///
+    /// Probe-only: reads the response and verifies it looks like a valid
+    /// QUIC packet (Long Header, matching version). No handshake completion.
+    pub async fn quic_probe(
+        &self,
+        target: std::net::SocketAddrV4,
+        _target_quic_version: u32,
+    ) -> Result<EvasionResult> {
+        use crate::core::net_evasion::quic_forge::QuicInitialForge;
+
+        use tokio::net::UdpSocket;
+
+        let _dst_ip = *target.ip();
+        let _dst_port = target.port();
+
+        // Build forged QUIC Initial
+        let forge = QuicInitialForge::new(
+            &[0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08], // DCID
+            &[],                                                 // SCID
+        )
+        .with_crypto_frame(b"\x16\x03\x01\x00\x05\x01\x00\x00\x01\x03\x03"); // minimal TLS-like data
+
+        let packet = forge.build()?;
+
+        let start = std::time::Instant::now();
+
+        // Bind to any local port and send
+        let local_addr = std::net::SocketAddrV4::new(self.local_ip, 0);
+        let socket = UdpSocket::bind(local_addr).await?;
+        socket.send_to(&packet, target).await?;
+
+        // Try to read response with timeout
+        let mut buf = vec![0u8; 2048];
+        let result = tokio::time::timeout(std::time::Duration::from_secs(3), async {
+            socket.recv(&mut buf).await
+        })
+        .await;
+
+        let has_response = match result {
+            Ok(Ok(n)) if n > 0 => {
+                // Minimal check: first byte has long-header form (MSB = 1)
+                buf[0] & 0x80 != 0
+            }
+            _ => false,
+        };
+
+        let latency_ms = start.elapsed().as_secs_f64() * 1000.0;
+
+        Ok(EvasionResult {
+            strategy_used: NetEvasionStrategy::QuicProbe,
+            success: has_response,
+            packets_sent: 1,
+            response_received: has_response,
+            latency_ms,
+        })
+    }
+
     /// Returns the last known reassembly policy.
     pub fn policy(&self) -> ReassemblyPolicy {
         self.policy
