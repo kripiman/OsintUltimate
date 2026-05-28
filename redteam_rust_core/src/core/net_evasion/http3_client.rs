@@ -78,13 +78,13 @@ impl Http3EvasionClient {
         });
 
         // 5. Build HTTP request
+        let full_uri = format!("https://{}:{}{}", host, port, path);
         let mut request = http::Request::builder()
             .method(method)
-            .uri(path)
+            .uri(&full_uri)
             .version(http::Version::HTTP_3)
             .body(())?;
         *request.headers_mut() = headers;
-        request.headers_mut().insert("host", host.parse()?);
 
         // 6. Send request
         let mut req_stream = send_request.send_request(request).await?;
