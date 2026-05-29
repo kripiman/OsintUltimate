@@ -13,6 +13,7 @@ pub struct NetEvasionOrchestrator {
     channel: RawChannel,
     policy: ReassemblyPolicy,
     local_ip: Ipv4Addr,
+    quic_0rtt_client: std::sync::OnceLock<crate::core::net_evasion::quinn_client::QuinnEvasionClient>,
 }
 
 impl NetEvasionOrchestrator {
@@ -26,6 +27,7 @@ impl NetEvasionOrchestrator {
             channel,
             policy: ReassemblyPolicy::Unknown,
             local_ip,
+            quic_0rtt_client: std::sync::OnceLock::new(),
         })
     }
 
@@ -279,7 +281,9 @@ impl NetEvasionOrchestrator {
         use crate::core::net_evasion::quinn_client::QuinnEvasionClient;
 
         let start = std::time::Instant::now();
-        let client = QuinnEvasionClient::with_early_data()?;
+        let client = self
+            .quic_0rtt_client
+            .get_or_init(|| QuinnEvasionClient::with_early_data().expect("0-RTT client init"));
         let addr = std::net::SocketAddr::V4(target);
 
         let result = client.connect_0rtt(addr, server_name).await;
