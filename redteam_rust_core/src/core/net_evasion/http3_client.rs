@@ -59,6 +59,10 @@ impl Http3EvasionClient {
         let host = parsed.host_str().unwrap_or("localhost");
         let port = parsed.port().unwrap_or(443);
         let path = parsed.path();
+        let path_and_query = match parsed.query() {
+            Some(q) => format!("{}?{}", path, q),
+            None => path.to_string(),
+        };
 
         let addr = format!("{}:{}", host, port).parse()?;
 
@@ -78,7 +82,7 @@ impl Http3EvasionClient {
         });
 
         // 5. Build HTTP request
-        let full_uri = format!("https://{}:{}{}", host, port, path);
+        let full_uri = format!("https://{}:{}{}", host, port, path_and_query);
         let mut request = http::Request::builder()
             .method(method)
             .uri(&full_uri)

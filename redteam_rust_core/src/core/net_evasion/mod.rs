@@ -29,6 +29,7 @@ pub mod quic_forge;
 pub mod quinn_client;
 pub mod http3_client;
 pub mod quic_evasion;
+pub mod doh3_client;
 
 use serde::{Deserialize, Serialize};
 
