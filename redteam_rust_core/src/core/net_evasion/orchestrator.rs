@@ -342,6 +342,39 @@ impl NetEvasionOrchestrator {
         }
     }
 
+    /// Perform a domain-fronted HTTP/3 GET request.
+    pub async fn domain_front_request(
+        &self,
+        front_domain: &str,
+        target_domain: &str,
+        path: &str,
+    ) -> Result<EvasionResult> {
+        use crate::core::net_evasion::domain_front::DomainFrontClient;
+
+        let start = std::time::Instant::now();
+        let client = DomainFrontClient::new(front_domain, target_domain)?;
+
+        let result = client.get(path).await;
+        let latency_ms = start.elapsed().as_secs_f64() * 1000.0;
+
+        match result {
+            Ok(resp) => Ok(EvasionResult {
+                strategy_used: NetEvasionStrategy::DomainFronting,
+                success: resp.status >= 200 && resp.status < 300,
+                packets_sent: 1,
+                response_received: true,
+                latency_ms,
+            }),
+            Err(_) => Ok(EvasionResult {
+                strategy_used: NetEvasionStrategy::DomainFronting,
+                success: false,
+                packets_sent: 1,
+                response_received: false,
+                latency_ms,
+            }),
+        }
+    }
+
     /// Returns the last known reassembly policy.
     pub fn policy(&self) -> ReassemblyPolicy {
         self.policy

@@ -30,6 +30,7 @@ pub mod quinn_client;
 pub mod http3_client;
 pub mod quic_evasion;
 pub mod doh3_client;
+pub mod domain_front;
 
 use serde::{Deserialize, Serialize};
 
@@ -90,6 +91,7 @@ pub enum NetEvasionStrategy {
     Http3Request,
     QuicZeroRtt,
     QuicRetryProbe,
+    DomainFronting,
     
     // Meta / FW Stress
     #[cfg(feature = "sovereign")]
