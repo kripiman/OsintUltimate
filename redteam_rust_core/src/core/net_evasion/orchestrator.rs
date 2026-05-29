@@ -375,6 +375,36 @@ impl NetEvasionOrchestrator {
         }
     }
 
+    /// Probe the network topology to find the firewall hop count.
+    #[cfg(target_os = "linux")]
+    pub async fn probe_firewall_hops(
+        &self,
+        target: Ipv4Addr,
+    ) -> Result<EvasionResult> {
+        use crate::core::net_evasion::topology_prober::traceroute_to_firewall;
+
+        let start = std::time::Instant::now();
+        let result = traceroute_to_firewall(self.channel.clone(), target, 30).await;
+        let latency_ms = start.elapsed().as_secs_f64() * 1000.0;
+
+        match result {
+            Ok(hops) => Ok(EvasionResult {
+                strategy_used: NetEvasionStrategy::TtlInsertion,
+                success: true,
+                packets_sent: hops as u32,
+                response_received: true,
+                latency_ms,
+            }),
+            Err(_) => Ok(EvasionResult {
+                strategy_used: NetEvasionStrategy::TtlInsertion,
+                success: false,
+                packets_sent: 0,
+                response_received: false,
+                latency_ms,
+            }),
+        }
+    }
+
     /// Returns the last known reassembly policy.
     pub fn policy(&self) -> ReassemblyPolicy {
         self.policy

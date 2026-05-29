@@ -31,6 +31,8 @@ pub mod http3_client;
 pub mod quic_evasion;
 pub mod doh3_client;
 pub mod domain_front;
+#[cfg(target_os = "linux")]
+pub mod topology_prober;
 
 use serde::{Deserialize, Serialize};
 

@@ -38,8 +38,13 @@ impl TcpEvasionStrategy for TcpStateDesync {
         let mut session = TcpSession::connect(channel.clone(), local_ip, target).await?;
 
         // Step 2: TTL-calibrated RST → dies AT firewall, never reaches host.
-        // TODO Sprint 6: Replace with topology_prober::traceroute_to_firewall() measurement.
-        let fw_hop_count: u8 = 3;
+        let fw_hop_count = crate::core::net_evasion::topology_prober::traceroute_to_firewall(
+            channel.clone(),
+            *target.ip(),
+            30,
+        )
+        .await
+        .unwrap_or(3);
 
         let rst_tcp = TcpBuilder::new(session.local_port, session.remote_port)
             .with_seq(session.local_seq)
