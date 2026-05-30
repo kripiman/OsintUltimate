@@ -480,6 +480,75 @@ impl NetEvasionOrchestrator {
         }
     }
 
+    /// Probe `target:port` for HTTP/2 cleartext (h2c) upgrade support.
+    pub async fn h2c_probe(
+        &self,
+        target: &str,
+        port: u16,
+    ) -> Result<EvasionResult> {
+        use crate::core::net_evasion::h2c_probe::H2cProbeClient;
+
+        let start = std::time::Instant::now();
+        let result = H2cProbeClient::probe_h2c(target, port).await;
+        let latency_ms = start.elapsed().as_secs_f64() * 1000.0;
+
+        match result {
+            Ok(probe) => Ok(EvasionResult {
+                strategy_used: NetEvasionStrategy::H2cUpgradeProbe,
+                success: probe.h2c_accepted,
+                packets_sent: 1,
+                response_received: true,
+                latency_ms,
+            }),
+            Err(_) => Ok(EvasionResult {
+                strategy_used: NetEvasionStrategy::H2cUpgradeProbe,
+                success: false,
+                packets_sent: 1,
+                response_received: false,
+                latency_ms,
+            }),
+        }
+    }
+
+    /// Probe `target:port` for HTTP request smuggling (CL.TE / TE.CL).
+    pub async fn smuggle_probe(
+        &self,
+        target: &str,
+        port: u16,
+        variant: crate::core::net_evasion::http_smuggle::SmuggleVariant,
+    ) -> Result<EvasionResult> {
+        use crate::core::net_evasion::http_smuggle::SmuggleProbe;
+
+        let start = std::time::Instant::now();
+        let result = match variant {
+            crate::core::net_evasion::http_smuggle::SmuggleVariant::ClTe => {
+                SmuggleProbe::probe_cl_te(target, port).await
+            }
+            crate::core::net_evasion::http_smuggle::SmuggleVariant::TeCl => {
+                SmuggleProbe::probe_te_cl(target, port).await
+            }
+        };
+        let latency_ms = start.elapsed().as_secs_f64() * 1000.0;
+
+        match result {
+            Ok(probe) => Ok(EvasionResult {
+                strategy_used: NetEvasionStrategy::HttpRequestSmuggling,
+                success: probe.vulnerable,
+                packets_sent: 1,
+                response_received: probe.confidence
+                    != crate::core::net_evasion::http_smuggle::Confidence::Ambiguous,
+                latency_ms,
+            }),
+            Err(_) => Ok(EvasionResult {
+                strategy_used: NetEvasionStrategy::HttpRequestSmuggling,
+                success: false,
+                packets_sent: 1,
+                response_received: false,
+                latency_ms,
+            }),
+        }
+    }
+
     /// Connect to `target:port` over TCP with TLS 1.3 0-RTT.
     ///
     /// Reuses the same `Tls13ZeroRttClient` across calls so that PSK tickets

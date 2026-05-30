@@ -32,6 +32,8 @@ pub mod quic_evasion;
 pub mod doh3_client;
 pub mod domain_front;
 pub mod ech_client;
+pub mod h2c_probe;
+pub mod http_smuggle;
 pub mod ech_dns_fetcher;
 pub mod tls13_0rtt;
 #[cfg(target_os = "linux")]
@@ -100,6 +102,8 @@ pub enum NetEvasionStrategy {
     EchConnect,
     EchDnsFetch,
     Tls13ZeroRtt,
+    H2cUpgradeProbe,
+    HttpRequestSmuggling,
     
     // Meta / FW Stress
     #[cfg(feature = "sovereign")]
