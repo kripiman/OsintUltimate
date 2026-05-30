@@ -401,7 +401,7 @@ Dashboard allows live mission injection (new targets added mid-scan).
 ## Active Audit Status
 - **Status**: Sprint 8 complete (ECH DNS fetcher + ECH client + TLS 1.3 0-RTT, 210 tests pass)
 - **Next**: Sprint 9
-- **HEAD**: [SHA after commit]
+- **HEAD**: ec907b3
 - **Baseline SHA256**: *to be refreshed in Sprint 8 audit*
 - **Violations cumulative**: 22 (Sprint 7=13, Sprint 7.5=5, Sprint 11=2, Sprint 4+5a bundling=1, Sprint 5a=1)
 
