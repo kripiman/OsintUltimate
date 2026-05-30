@@ -429,6 +429,57 @@ impl NetEvasionOrchestrator {
         }
     }
 
+    /// Fetch ECH config from DNS and connect to `target:port` with ECH.
+    pub async fn ech_dns_fetch_connect(
+        &self,
+        target: &str,
+        port: u16,
+    ) -> Result<EvasionResult> {
+        use crate::core::net_evasion::ech_dns_fetcher::EchDnsFetcher;
+
+        let start = std::time::Instant::now();
+
+        let fetcher = match EchDnsFetcher::new().await {
+            Ok(f) => f,
+            Err(_) => {
+                return Ok(EvasionResult {
+                    strategy_used: NetEvasionStrategy::EchDnsFetch,
+                    success: false,
+                    packets_sent: 0,
+                    response_received: false,
+                    latency_ms: 0.0,
+                });
+            }
+        };
+
+        let result = fetcher.fetch_and_connect(target, port).await;
+        let latency_ms = start.elapsed().as_secs_f64() * 1000.0;
+
+        match result {
+            Ok(conn) => {
+                let accepted = matches!(
+                    conn.ech_status(),
+                    rustls_ech::client::EchStatus::Accepted
+                        | rustls_ech::client::EchStatus::Offered
+                );
+                Ok(EvasionResult {
+                    strategy_used: NetEvasionStrategy::EchDnsFetch,
+                    success: accepted,
+                    packets_sent: 1,
+                    response_received: true,
+                    latency_ms,
+                })
+            }
+            Err(_) => Ok(EvasionResult {
+                strategy_used: NetEvasionStrategy::EchDnsFetch,
+                success: false,
+                packets_sent: 1,
+                response_received: false,
+                latency_ms,
+            }),
+        }
+    }
+
     /// Connect to `target:port` over TCP with TLS 1.3 0-RTT.
     ///
     /// Reuses the same `Tls13ZeroRttClient` across calls so that PSK tickets
