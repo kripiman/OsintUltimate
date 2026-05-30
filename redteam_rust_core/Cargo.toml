@@ -83,7 +83,7 @@ aes = "0.9"
 
 # Sprint 7: ECH + TLS 1.3 0-RTT (renamed deps to coexist with rustls 0.21)
 rustls-ech = { package = "rustls", version = "0.23" }
-tokio-rustls = "0.26"
+tokio-rustls = { version = "0.26", features = ["early-data"] }
 webpki-roots-ech = { package = "webpki-roots", version = "1.0" }
 
 

@@ -31,6 +31,8 @@ pub mod http3_client;
 pub mod quic_evasion;
 pub mod doh3_client;
 pub mod domain_front;
+pub mod ech_client;
+pub mod tls13_0rtt;
 #[cfg(target_os = "linux")]
 pub mod topology_prober;
 
@@ -94,6 +96,8 @@ pub enum NetEvasionStrategy {
     QuicZeroRtt,
     QuicRetryProbe,
     DomainFronting,
+    EchConnect,
+    Tls13ZeroRtt,
     
     // Meta / FW Stress
     #[cfg(feature = "sovereign")]

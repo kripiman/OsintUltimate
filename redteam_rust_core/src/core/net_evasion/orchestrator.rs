@@ -14,6 +14,7 @@ pub struct NetEvasionOrchestrator {
     policy: ReassemblyPolicy,
     local_ip: Ipv4Addr,
     quic_0rtt_client: std::sync::OnceLock<crate::core::net_evasion::quinn_client::QuinnEvasionClient>,
+    tls13_0rtt_client: std::sync::OnceLock<crate::core::net_evasion::tls13_0rtt::Tls13ZeroRttClient>,
 }
 
 impl NetEvasionOrchestrator {
@@ -28,6 +29,7 @@ impl NetEvasionOrchestrator {
             policy: ReassemblyPolicy::Unknown,
             local_ip,
             quic_0rtt_client: std::sync::OnceLock::new(),
+            tls13_0rtt_client: std::sync::OnceLock::new(),
         })
     }
 
@@ -367,6 +369,98 @@ impl NetEvasionOrchestrator {
             }),
             Err(_) => Ok(EvasionResult {
                 strategy_used: NetEvasionStrategy::DomainFronting,
+                success: false,
+                packets_sent: 1,
+                response_received: false,
+                latency_ms,
+            }),
+        }
+    }
+
+    /// Connect to `target:port` over TCP with Encrypted Client Hello (ECH).
+    pub async fn ech_connect(
+        &self,
+        target: &str,
+        port: u16,
+        ech_config_bytes: &[u8],
+    ) -> Result<EvasionResult> {
+        use crate::core::net_evasion::ech_client::EchClient;
+
+        let start = std::time::Instant::now();
+
+        let client = match EchClient::with_ech_config(ech_config_bytes) {
+            Ok(c) => c,
+            Err(_) => {
+                return Ok(EvasionResult {
+                    strategy_used: NetEvasionStrategy::EchConnect,
+                    success: false,
+                    packets_sent: 0,
+                    response_received: false,
+                    latency_ms: 0.0,
+                });
+            }
+        };
+
+        let result = client.connect(target, port).await;
+        let latency_ms = start.elapsed().as_secs_f64() * 1000.0;
+
+        match result {
+            Ok(conn) => {
+                let accepted = matches!(
+                    conn.ech_status(),
+                    rustls_ech::client::EchStatus::Accepted
+                        | rustls_ech::client::EchStatus::Offered
+                );
+                Ok(EvasionResult {
+                    strategy_used: NetEvasionStrategy::EchConnect,
+                    success: accepted,
+                    packets_sent: 1,
+                    response_received: true,
+                    latency_ms,
+                })
+            }
+            Err(_) => Ok(EvasionResult {
+                strategy_used: NetEvasionStrategy::EchConnect,
+                success: false,
+                packets_sent: 1,
+                response_received: false,
+                latency_ms,
+            }),
+        }
+    }
+
+    /// Connect to `target:port` over TCP with TLS 1.3 0-RTT.
+    ///
+    /// Reuses the same `Tls13ZeroRttClient` across calls so that PSK tickets
+    /// are cached and subsequent connections may benefit from 0-RTT.
+    pub async fn tls13_0rtt_send(
+        &self,
+        target: &str,
+        port: u16,
+    ) -> Result<EvasionResult> {
+        use crate::core::net_evasion::tls13_0rtt::Tls13ZeroRttClient;
+
+        let start = std::time::Instant::now();
+        let client = self
+            .tls13_0rtt_client
+            .get_or_init(|| Tls13ZeroRttClient::new().expect("TLS 1.3 0-RTT client init"));
+
+        let result = client.connect(target, port).await;
+        let latency_ms = start.elapsed().as_secs_f64() * 1000.0;
+
+        match result {
+            Ok(conn) => {
+                let accepted = conn.is_early_data_accepted();
+                Ok(EvasionResult {
+                    strategy_used: NetEvasionStrategy::Tls13ZeroRtt,
+                    success: accepted,
+                    packets_sent: 1,
+                    response_received: true,
+                    latency_ms,
+                })
+            }
+            Err(_) => Ok(EvasionResult {
+                strategy_used: NetEvasionStrategy::Tls13ZeroRtt,
                 success: false,
                 packets_sent: 1,
                 response_received: false,
