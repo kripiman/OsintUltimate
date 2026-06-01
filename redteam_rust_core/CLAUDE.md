@@ -341,14 +341,13 @@ Dashboard allows live mission injection (new targets added mid-scan).
 - **Sink interface** — `src/core/sink.rs::DataSink` trait for output backends
 
 ## Active Audit Status
-- **Status**: Sprint 10 complete (Stage A Probe→Finding + Stage B H2Preface)
-- **Next**: Sprint 11 (Web Cache Deception)
-- **HEAD**: 7b8ce6c
+- **Status**: Sprint 11 Stage A complete (Web Cache Deception probe, 225 tests pass)
+- **Next**: Sprint 11 Stage B
+- **HEAD**: 40c1faf
 - **Baseline SHA256**: *pending*
 - **Violations cumulative**: 22 (Sprint 7=13, Sprint 7.5=5, Sprint 11=2, Sprint 4+5a bundling=1, Sprint 5a=1)
 
 ## Backlog (carried forward)
-- `response_time_ms` hardcoded `0.0` in `probe_h2_preface()` — non-blocking, flag for Sprint 11+ refinement
 - `Baseline SHA256` — pending refresh since Sprint 8, to be resolved in Sprint 11 audit
 - WCD cross-user refinement: req2 unauthenticated drop-cookie → sensitive match = `Confidence::Definite`
 
