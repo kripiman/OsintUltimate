@@ -341,13 +341,12 @@ Dashboard allows live mission injection (new targets added mid-scan).
 - **Sink interface** — `src/core/sink.rs::DataSink` trait for output backends
 
 ## Active Audit Status
-- **Status**: Sprint 11 Stage A complete (Web Cache Deception probe, 225 tests pass)
-- **Next**: Sprint 11 Stage B
-- **HEAD**: 40c1faf
-- **Baseline SHA256**: *pending*
+- **Status**: Sprint 11 Stage C complete (Baseline SHA256 refresh, 248 tests pass)
+- **Next**: Sprint 11 Stage D (TBD)
+- **HEAD**: 10159a2
+- **Baseline SHA256**: 9f32dc5ffbd7e996b4ea308dcf703734e04c571b3fbe6c553b9864787b22f82a
 - **Violations cumulative**: 22 (Sprint 7=13, Sprint 7.5=5, Sprint 11=2, Sprint 4+5a bundling=1, Sprint 5a=1)
 
 ## Backlog (carried forward)
-- `Baseline SHA256` — pending refresh since Sprint 8, to be resolved in Sprint 11 audit
 - WCD cross-user refinement: req2 unauthenticated drop-cookie → sensitive match = `Confidence::Definite`
 - Reporting discipline: always run `cargo test --package redteam_rust_core` (documented cmd), not `--lib` subset
