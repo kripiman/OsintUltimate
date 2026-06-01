@@ -245,4 +245,21 @@ mod tests {
         assert_eq!(&body[..4], "5\r\nG");
         assert_eq!(body[..4].len(), 4);
     }
+
+    #[test]
+    fn test_h2_preface_payload() {
+        // The HTTP/2 connection preface is exactly 24 bytes.
+        let preface = b"PRI * HTTP/2.0\r\n\r\nSM\r\n\r\n";
+        assert_eq!(preface.len(), 24);
+    }
+
+    #[tokio::test]
+    async fn test_h2_preface_no_server() {
+        let result = SmuggleProbe::probe_h2_preface("127.0.0.1", 59999).await;
+        assert!(
+            result.is_err(),
+            "h2 preface probe to nothing should fail: {:?}",
+            result.ok()
+        );
+    }
 }

@@ -563,11 +563,17 @@ impl NetEvasionOrchestrator {
         match result {
             Ok(probe) => {
                 if probe.vulnerable {
+                    let (sev, title) = match probe.variant {
+                        crate::core::net_evasion::http_smuggle::SmuggleVariant::H2Preface => {
+                            (Severity::High, "HTTP/2 Preface Poisoning")
+                        }
+                        _ => (Severity::Critical, "HTTP Request Smuggling Detected"),
+                    };
                     self.push_finding(
                         "HRS-001",
                         Category::Vulnerability,
-                        Severity::Critical,
-                        "HTTP Request Smuggling Detected",
+                        sev,
+                        title,
                         serde_json::json!({
                             "variant": format!("{:?}", probe.variant),
                             "confidence": format!("{:?}", probe.confidence),
