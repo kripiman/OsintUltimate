@@ -401,7 +401,7 @@ Dashboard allows live mission injection (new targets added mid-scan).
 ## Active Audit Status
 - **Status**: Sprint 10 complete (Stage A Probe→Finding + Stage B H2Preface)
 - **Next**: Sprint 11 (Web Cache Deception)
-- **HEAD**: PLACEHOLDER
+- **HEAD**: 7b8ce6c
 - **Baseline SHA256**: *pending*
 - **Violations cumulative**: 22 (Sprint 7=13, Sprint 7.5=5, Sprint 11=2, Sprint 4+5a bundling=1, Sprint 5a=1)
 
