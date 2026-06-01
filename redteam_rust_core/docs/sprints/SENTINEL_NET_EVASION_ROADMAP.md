@@ -143,3 +143,77 @@ format!("t{}{}{}{}{}", protocol, sni_type, ext_count, cipher_count, alpn_prefix)
 - **Sprint discipline**: 1 stage por turn. Auditor veredicto entre stages.
 - **Verification**: Siempre pegar output completo de `cargo check`, `clippy -D warnings`, `cargo test`.
 - **Scope isolation**: Cambios fuera del sprint scope = VIOLACIÓN. Commit separado requerido.
+
+---
+
+# ADDENDUM — Auditoría de Vigencia Técnica 2026
+
+> Auditor: Claude (code-auditor role). Fecha: 2026-05-30.
+> Estado: corrección a evaluación "Técnicas vigentes 2026" presentada por ejecutor.
+> Naturaleza: documental (no toca código). Cutoff de conocimiento auditor: Ago-2025 — el estado de *despliegue* 2026 no es verificable; los hechos técnicos/históricos sí.
+
+## A. Divergencia Roadmap-vs-Ejecución (hallazgo de auditoría)
+
+La tabla de "Estado Actual" (arriba) describe el **plan original**. La ejecución real divergió en numeración y contenido:
+
+| Sprint | Roadmap original | Ejecución real | Nota |
+|--------|------------------|----------------|------|
+| 7 | ECH + 0-RTT + JA4 dynamic DB | ECH client + TLS 1.3 0-RTT over TCP | ✅ parcial (JA4 DB no hecho) |
+| 8 | Conjure / Refraction Networking | ECH DNS fetcher (`ech_dns_fetcher.rs`) | ⚠️ contenido distinto |
+| 9 | Oblivious HTTP (RFC 9458) | h2c probe + HTTP request smuggling | ⚠️ contenido distinto |
+| 10 | FwStress (sovereign, DoS) | Probe→Finding integration (en curso) | ⚠️ contenido distinto |
+
+**Implicación**: Conjure, OHTTP y FwStress del plan original **NO ejecutados**. La numeración de sprint ya no mapea al roadmap. Violaciones acumuladas: roadmap dice 21, `CLAUDE.md` raíz dice **22** — usar 22.
+
+## B. Correcciones fácticas a la evaluación 2026
+
+| # | Afirmación evaluada | Veredicto | Corrección |
+|---|---------------------|-----------|------------|
+| 1 | "ECH (RFC 9460)" | ❌ Impreciso | RFC 9460 = registros DNS **SVCB/HTTPS** únicamente. ECH = `draft-ietf-tls-esni` (draft del TLS WG, no RFC completo a cutoff). RFC 9460 solo **transporta** el `ECHConfig` vía `SvcParamKey=5`. Confunde contenedor con contenido. Error arrastrado desde Sprint 7. |
+| 2 | CONTINUATION flood "DoS / potencial RCE" | ❌ Overclaim | CONTINUATION flood (B. Nowotarski, Abr-2024) = **solo DoS** (agotamiento memoria/CPU por frames CONTINUATION sin HEADERS terminador). Ningún writeup serio reclama RCE. `CVE-2024-27983` = variante **Node.js** específica; el flood tuvo CVEs múltiples por implementación (Apache httpd, Envoy, Go net/http, etc.). |
+| 3 | Browser-in-the-Browser "2024-2025" | ❌ Mal fechado | BitB = **mr.d0x, 2022**. Es UI phishing (iframe falso de ventana OAuth). "BitB + ECH" **no es técnica establecida** — especulación. Además phishing = **fuera de scope** `net_evasion`. Descartar del roadmap. |
+| 4 | TLS 1.3 0-RTT vigente | ✅ Correcto | Estándar consolidado. Replay surface real. |
+| 5 | HTTP Request Smuggling + HTTP/2→1.1 downgrade vigente | ✅ Correcto | Investigación continua Kettle/PortSwigger. |
+| 6 | h2c desync útil en proxy mal configurado | ✅ Correcto | Bishop Fox 2020. Legacy pero válido. |
+| 7 | Rapid Reset `CVE-2023-44487` | ✅ Correcto | L7 DDoS, Oct-2023, ya mitigado en stacks 2026. |
+| 8 | OHTTP "RFC 9458" | ✅ Correcto | Fecha y RFC correctos. |
+
+## C. Error estratégico — "novedad 2025" ≠ "rentable bug bounty"
+
+Las 3 técnicas recomendadas como "más rentables para bug bounty" son **DoS/evasión → los programas no las pagan**:
+
+| Recomendada | Tipo real | Payout bug bounty |
+|-------------|-----------|-------------------|
+| CONTINUATION flood | DoS | ❌ DoS out-of-scope en ~todo HackerOne/Bugcrowd |
+| QUIC fingerprint rotation | Evasión de tráfico | ❌ No es vulnerabilidad; sin bounty directo |
+| CT logs + ECH correlation | Recon/OSINT | ❌ Informativo; no paga |
+
+Son **ejes distintos**: novedad técnica vs rentabilidad en programa. DoS excluido de scope en la mayoría de programas; peor, un flood puede **tumbar el target → baneo del programa**.
+
+### Rentables reales faltantes (web-layer, en scope)
+
+1. **Web Cache Deception / Poisoning** — Kettle 2024; paga alto; en scope casi siempre.
+2. **HTTP/2 downgrade desync avanzado** — extiende `http_smuggle.rs` existente; ROI directo, reusa código Sprint 9.
+3. **mTLS pinning bypass** — alto valor en target mobile/API; en scope.
+
+## D. Constraint de seguridad (vinculante)
+
+Técnicas destructivas (CONTINUATION flood, Rapid Reset, QUIC flood) **NO** son probes normales:
+
+1. Requieren `feature sovereign` (compilación aislada).
+2. Doble gate: `allow_destructive_probes: true` + `REDTEAM_DESTRUCTIVE=1`.
+3. **Ejecución EXCLUSIVA en workers DigitalOcean ephemeral — JAMÁS Oracle** (ban inmediato de cuenta).
+
+**Detección acotada ≠ flood.** Verificar si un server acepta CONTINUATION sin límite se hace con test **bounded** (unos pocos frames), no con flood. No confundir un *probe de detección* con un *ataque de agotamiento*.
+
+## E. Dirección recomendada Sprint 10 Stage B+
+
+| Opción | Tipo | Scope bounty | Gating | Recomendación |
+|--------|------|--------------|--------|---------------|
+| HTTP/2 downgrade desync | Vuln web | ✅ En scope | Normal | 🟢 **Prioridad** — reusa `http_smuggle.rs` |
+| mTLS pinning bypass | Vuln mobile/API | ✅ En scope | Normal | 🟢 Alto valor si hay target mobile |
+| Web Cache Deception | Vuln web | ✅ En scope | Normal | 🟡 Nuevo módulo, ROI alto |
+| CONTINUATION (detección acotada) | Detección | ⚠️ DoS marginal | sovereign + DO | 🔴 Solo si gated, no flood |
+| FwStress (roadmap original S10) | DoS | ❌ Out-of-scope | sovereign + DO | 🔴 No para bug bounty |
+
+**Veredicto auditor**: priorizar HTTP/2 desync (extiende Sprint 9) o mTLS bypass. Evitar floods DoS como stage normal; si se implementan, van en `sovereign` aparte, gated, DO-only.

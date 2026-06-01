@@ -24,6 +24,8 @@ pub enum SmuggleVariant {
     ClTe,
     /// Front-end uses Transfer-Encoding, back-end uses Content-Length.
     TeCl,
+    /// Server mishandles HTTP/2 preface followed by HTTP/1.1.
+    H2Preface,
 }
 
 /// Confidence level of the detection result.
@@ -102,6 +104,58 @@ impl SmuggleProbe {
         );
 
         Self::send_probe(target, port, &payload, SmuggleVariant::TeCl).await
+    }
+
+    /// Probe for HTTP/2 preface poisoning.
+    ///
+    /// Sends the HTTP/2 connection preface (24 bytes) followed immediately
+    /// by an HTTP/1.1 GET request. If the server ignores the preface and
+    /// processes the HTTP/1.1 request (returning 200 OK), it indicates
+    /// protocol boundary confusion.
+    pub async fn probe_h2_preface(target: &str, port: u16) -> Result<SmuggleResult> {
+        let stream = tokio::net::TcpStream::connect((target, port)).await?;
+        let (mut rx, mut tx) = stream.into_split();
+
+        let preface = b"PRI * HTTP/2.0\r\n\r\nSM\r\n\r\n";
+        let http1 = format!("GET / HTTP/1.1\r\nHost: {target}\r\n\r\n");
+
+        tokio::io::AsyncWriteExt::write_all(&mut tx, preface).await?;
+        tokio::io::AsyncWriteExt::write_all(&mut tx, http1.as_bytes()).await?;
+        tokio::io::AsyncWriteExt::flush(&mut tx).await?;
+
+        let mut buf = vec![0u8; 4096];
+        let read_result = tokio::time::timeout(Duration::from_secs(10), rx.read(&mut buf)).await;
+        drop(tx);
+
+        match read_result {
+            Ok(Ok(n)) => {
+                let response = String::from_utf8_lossy(&buf[..n]);
+                let is_http1_ok = response.starts_with("HTTP/1.1 2");
+                let is_http1_reject = response.starts_with("HTTP/1.1 4");
+
+                let (vulnerable, confidence) = if is_http1_ok {
+                    (true, Confidence::Definite)
+                } else if is_http1_reject {
+                    (false, Confidence::Definite)
+                } else {
+                    (false, Confidence::Ambiguous)
+                };
+
+                Ok(SmuggleResult {
+                    vulnerable,
+                    variant: SmuggleVariant::H2Preface,
+                    confidence,
+                    response_time_ms: 0.0,
+                })
+            }
+            Ok(Err(e)) => Err(anyhow::anyhow!("h2 preface probe read error: {e:?}")),
+            Err(_) => Ok(SmuggleResult {
+                vulnerable: false,
+                variant: SmuggleVariant::H2Preface,
+                confidence: Confidence::Timeout,
+                response_time_ms: 0.0,
+            }),
+        }
     }
 
     async fn send_probe(

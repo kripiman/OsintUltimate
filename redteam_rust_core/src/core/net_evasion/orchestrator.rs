@@ -554,6 +554,9 @@ impl NetEvasionOrchestrator {
             crate::core::net_evasion::http_smuggle::SmuggleVariant::TeCl => {
                 SmuggleProbe::probe_te_cl(target, port).await
             }
+            crate::core::net_evasion::http_smuggle::SmuggleVariant::H2Preface => {
+                SmuggleProbe::probe_h2_preface(target, port).await
+            }
         };
         let latency_ms = start.elapsed().as_secs_f64() * 1000.0;
 
