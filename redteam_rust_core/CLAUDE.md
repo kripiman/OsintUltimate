@@ -341,10 +341,10 @@ Dashboard allows live mission injection (new targets added mid-scan).
 - **Sink interface** — `src/core/sink.rs::DataSink` trait for output backends
 
 ## Active Audit Status
-- **Status**: Sprint 9 complete (Production Hardening)
+- **Status**: Sprint 9 complete (h2c probe + HTTP smuggling, 219 tests pass)
 - **Next**: Sprint 10
-- **HEAD**: ad14f09
-- **Baseline SHA256**: f65085dc14e274afb071dec17774ed49bc5c58b92cdf739dec87f256445da058
-- **Violations cumulative**: 18 (Sprint 7=13, Sprint 7.5=5)
+- **HEAD**: 58223f9
+- **Baseline SHA256**: *to be refreshed in Sprint 10 audit*
+- **Violations cumulative**: 22 (Sprint 7=13, Sprint 7.5=5, Sprint 11=2, Sprint 4+5a bundling=1, Sprint 5a=1)
 
 

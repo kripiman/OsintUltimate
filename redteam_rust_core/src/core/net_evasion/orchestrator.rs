@@ -2,6 +2,8 @@ use crate::core::net_evasion::fragment_assembler::FragmentAssembler;
 use crate::core::net_evasion::fragment_prober::FragmentProber;
 use crate::core::net_evasion::raw_socket::RawChannel;
 use crate::core::net_evasion::{EvasionResult, NetEvasionStrategy, OverlapStrategy, ReassemblyPolicy};
+use crate::models::findings::classification::{Category, Severity};
+use crate::models::Finding;
 use anyhow::Result;
 use std::net::Ipv4Addr;
 
@@ -15,6 +17,7 @@ pub struct NetEvasionOrchestrator {
     local_ip: Ipv4Addr,
     quic_0rtt_client: std::sync::OnceLock<crate::core::net_evasion::quinn_client::QuinnEvasionClient>,
     tls13_0rtt_client: std::sync::OnceLock<crate::core::net_evasion::tls13_0rtt::Tls13ZeroRttClient>,
+    findings_buffer: std::sync::Mutex<Vec<Finding>>,
 }
 
 impl NetEvasionOrchestrator {
@@ -30,6 +33,7 @@ impl NetEvasionOrchestrator {
             local_ip,
             quic_0rtt_client: std::sync::OnceLock::new(),
             tls13_0rtt_client: std::sync::OnceLock::new(),
+            findings_buffer: std::sync::Mutex::new(Vec::new()),
         })
     }
 
@@ -411,6 +415,15 @@ impl NetEvasionOrchestrator {
                     rustls_ech::client::EchStatus::Accepted
                         | rustls_ech::client::EchStatus::Offered
                 );
+                if matches!(conn.ech_status(), rustls_ech::client::EchStatus::Accepted) {
+                    self.push_finding(
+                        "ECH-001",
+                        Category::TechnologyStack,
+                        Severity::Info,
+                        "ECH Accepted",
+                        serde_json::json!({"ech_status": "Accepted"}),
+                    );
+                }
                 Ok(EvasionResult {
                     strategy_used: NetEvasionStrategy::EchConnect,
                     success: accepted,
@@ -493,13 +506,27 @@ impl NetEvasionOrchestrator {
         let latency_ms = start.elapsed().as_secs_f64() * 1000.0;
 
         match result {
-            Ok(probe) => Ok(EvasionResult {
-                strategy_used: NetEvasionStrategy::H2cUpgradeProbe,
-                success: probe.h2c_accepted,
-                packets_sent: 1,
-                response_received: true,
-                latency_ms,
-            }),
+            Ok(probe) => {
+                if probe.h2c_accepted {
+                    self.push_finding(
+                        "H2C-001",
+                        Category::WafDetected,
+                        Severity::High,
+                        "h2c Cleartext Upgrade Accepted",
+                        serde_json::json!({
+                            "server": probe.server_header,
+                            "status": probe.response_status,
+                        }),
+                    );
+                }
+                Ok(EvasionResult {
+                    strategy_used: NetEvasionStrategy::H2cUpgradeProbe,
+                    success: probe.h2c_accepted,
+                    packets_sent: 1,
+                    response_received: true,
+                    latency_ms,
+                })
+            }
             Err(_) => Ok(EvasionResult {
                 strategy_used: NetEvasionStrategy::H2cUpgradeProbe,
                 success: false,
@@ -531,14 +558,29 @@ impl NetEvasionOrchestrator {
         let latency_ms = start.elapsed().as_secs_f64() * 1000.0;
 
         match result {
-            Ok(probe) => Ok(EvasionResult {
-                strategy_used: NetEvasionStrategy::HttpRequestSmuggling,
-                success: probe.vulnerable,
-                packets_sent: 1,
-                response_received: probe.confidence
-                    != crate::core::net_evasion::http_smuggle::Confidence::Ambiguous,
-                latency_ms,
-            }),
+            Ok(probe) => {
+                if probe.vulnerable {
+                    self.push_finding(
+                        "HRS-001",
+                        Category::Vulnerability,
+                        Severity::Critical,
+                        "HTTP Request Smuggling Detected",
+                        serde_json::json!({
+                            "variant": format!("{:?}", probe.variant),
+                            "confidence": format!("{:?}", probe.confidence),
+                            "response_time_ms": probe.response_time_ms,
+                        }),
+                    );
+                }
+                Ok(EvasionResult {
+                    strategy_used: NetEvasionStrategy::HttpRequestSmuggling,
+                    success: probe.vulnerable,
+                    packets_sent: 1,
+                    response_received: probe.confidence
+                        != crate::core::net_evasion::http_smuggle::Confidence::Ambiguous,
+                    latency_ms,
+                })
+            }
             Err(_) => Ok(EvasionResult {
                 strategy_used: NetEvasionStrategy::HttpRequestSmuggling,
                 success: false,
@@ -616,6 +658,24 @@ impl NetEvasionOrchestrator {
                 response_received: false,
                 latency_ms,
             }),
+        }
+    }
+
+    /// Drain all buffered findings and return them.
+    ///
+    /// Callers should push returned findings to a `DataSink`.
+    pub fn drain_findings(&self) -> Vec<Finding> {
+        self.findings_buffer
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .drain(..)
+            .collect()
+    }
+
+    fn push_finding(&self, id: &str, category: Category, severity: Severity, title: &str, evidence: serde_json::Value) {
+        let finding = Finding::new(id, category, severity, title, evidence);
+        if let Ok(mut buf) = self.findings_buffer.lock() {
+            buf.push(finding);
         }
     }
 
