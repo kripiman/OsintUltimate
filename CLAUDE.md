@@ -399,9 +399,9 @@ Dashboard allows live mission injection (new targets added mid-scan).
 - **Git Hygiene**: `redteam_rust_core/examples/audit_tools/` is added to `.gitignore` (no generator code committed).
 
 ## Active Audit Status
-- **Status**: Sprint 10 Stage B complete (H2Preface probe + orchestrator wiring, 219 tests pass)
+- **Status**: Sprint 10 Stage B complete (H2Preface probe + 2 tests + variant severity, 221 tests pass)
 - **Next**: Sprint 10 audit
-- **HEAD**: 7721b69
+- **HEAD**: e4cec37
 - **Baseline SHA256**: *to be refreshed in Sprint 10 audit*
 - **Violations cumulative**: 22 (Sprint 7=13, Sprint 7.5=5, Sprint 11=2, Sprint 4+5a bundling=1, Sprint 5a=1)
 
