@@ -193,7 +193,7 @@ Son **ejes distintos**: novedad técnica vs rentabilidad en programa. DoS exclui
 ### Rentables reales faltantes (web-layer, en scope)
 
 1. **Web Cache Deception / Poisoning** — Kettle 2024; paga alto; en scope casi siempre.
-2. **HTTP/2 downgrade desync avanzado** — extiende `http_smuggle.rs` existente; ROI directo, reusa código Sprint 9.
+2. **HTTP/2 downgrade desync avanzado** — alto ROI, PERO **NO reusa `http_smuggle.rs`** (corrección 2026-06-01). Requiere forge de frames HTTP/2 + encoder HPACK propio (~300-500 LOC, módulo dedicado tipo `tls_raw_forge.rs`). El crate `h2` es compliant RFC 9113 y **rechaza** las malformaciones necesarias (H2.TE/H2.CL/CRLF) → no sirve. Raw TCP no puede expresar requests H2 post-upgrade (HPACK binario). Tratar como **sprint propio**, no como stage barato. Stage B (H2Preface) ya agotó la señal raw-TCP.
 3. **mTLS pinning bypass** — alto valor en target mobile/API; en scope.
 
 ## D. Constraint de seguridad (vinculante)
@@ -210,10 +210,10 @@ Técnicas destructivas (CONTINUATION flood, Rapid Reset, QUIC flood) **NO** son 
 
 | Opción | Tipo | Scope bounty | Gating | Recomendación |
 |--------|------|--------------|--------|---------------|
-| HTTP/2 downgrade desync | Vuln web | ✅ En scope | Normal | 🟢 **Prioridad** — reusa `http_smuggle.rs` |
+| Web Cache Deception | Vuln web | ✅ En scope | Normal | 🟢 **Prioridad** — HTTP/1.1 puro, reusa `reqwest`, ~100-150 LOC |
 | mTLS pinning bypass | Vuln mobile/API | ✅ En scope | Normal | 🟢 Alto valor si hay target mobile |
-| Web Cache Deception | Vuln web | ✅ En scope | Normal | 🟡 Nuevo módulo, ROI alto |
+| HTTP/2 downgrade desync | Vuln web | ✅ En scope | Normal | 🟠 Alto ROI pero **sprint propio** — frame forge H2 + HPACK (~300-500 LOC), NO stage barato (corrección 2026-06-01) |
 | CONTINUATION (detección acotada) | Detección | ⚠️ DoS marginal | sovereign + DO | 🔴 Solo si gated, no flood |
 | FwStress (roadmap original S10) | DoS | ❌ Out-of-scope | sovereign + DO | 🔴 No para bug bounty |
 
-**Veredicto auditor**: priorizar HTTP/2 desync (extiende Sprint 9) o mTLS bypass. Evitar floods DoS como stage normal; si se implementan, van en `sovereign` aparte, gated, DO-only.
+**Veredicto auditor (rev. 2026-06-01)**: para Stage C barato priorizar **Web Cache Deception** (HTTP/1.1, reusa `reqwest`) o **mTLS bypass**. HTTP/2 desync es alto ROI pero NO es extensión de `http_smuggle.rs` — requiere forge H2+HPACK propio (el crate `h2` compliant no sirve); tratar como sprint dedicado. Evitar floods DoS como stage normal; si se implementan, `sovereign` aparte, gated, DO-only.
