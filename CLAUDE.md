@@ -341,12 +341,13 @@ Dashboard allows live mission injection (new targets added mid-scan).
 - **Sink interface** — `src/core/sink.rs::DataSink` trait for output backends
 
 ## Active Audit Status
-- **Status**: Sprint 11 Stage C complete (Baseline SHA256 refresh, 248 tests pass)
-- **Next**: Sprint 11 Stage D (TBD)
-- **HEAD**: 10159a2
-- **Baseline SHA256**: 9f32dc5ffbd7e996b4ea308dcf703734e04c571b3fbe6c553b9864787b22f82a
-- **Violations cumulative**: 22 (Sprint 7=13, Sprint 7.5=5, Sprint 11=2, Sprint 4+5a bundling=1, Sprint 5a=1)
+- **Status**: Sprint 11 Stage C ❌ FAIL — baseline captured in tool-absent env (nuclei/kiterunner/dnsx missing)
+- **Next**: Sprint 11 Stage C re-submit (re-capture on DO worker with full toolchain)
+- **HEAD**: f40f7b5
+- **Baseline SHA256**: 9f32dc5ffbd7e996b4ea308dcf703734e04c571b3fbe6c553b9864787b22f82a ⚠️ DEGRADED (all 6 findings = PLUGIN_ERROR, not real scan output)
+- **Violations cumulative**: 23 (Sprint 7=13, Sprint 7.5=5, Sprint 11=2, Sprint 4+5a bundling=1, Sprint 5a=1, Stage-C false-report=1)
 
 ## Backlog (carried forward)
+- `Baseline SHA256` (DEGRADED) — SHA refreshed in f40f7b5 but baseline anchors tool-absence errors (PLUGIN_ERROR ×6), not real findings. Re-capture required on DO ephemeral worker with nuclei+kiterunner+dnsx installed against real DVWA/Samba targets. Sprint 8 debt NOT closed.
 - WCD cross-user refinement: req2 unauthenticated drop-cookie → sensitive match = `Confidence::Definite`
 - Reporting discipline: always run `cargo test --package redteam_rust_core` (documented cmd), not `--lib` subset
