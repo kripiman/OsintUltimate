@@ -1,57 +1,4 @@
-新問題發現 — 先前審計測試設計有誤。
-
-  SovereignReconScanner無Default impl。..Default::default()不編譯：
-
-  - Arc<ProxyManager> → new(proxies, insecure, mode, pool_size) 重型構造
-  - Arc<dyn PolicyProvider> → 需具體類型
-
-  ---
-  剩餘實現清單 (精確)
-  
-  B11 — 修正後測試方案
-
-  ..Default::default()不可行。兩條路：
-
-  路徑A（推薦）— 測試放sources.rs，測純邏輯：
-
-  #[cfg(test)]
-  mod tests {
-      use std::collections::HashSet;
-
-      #[test]
-      fn test_per_api_cap_truncates_at_limit() {
-          let results: HashSet<String> = (0..10).map(|i| format!("h{}", i)).collect();
-          let out: HashSet<String> = if results.len() > limit {
-              results.into_iter().take(limit).collect() 
-          } else { results };
-          assert_eq!(out.len(), 3);
-      }
-      
-      #[test]
-      fn test_per_api_cap_respects_zero_disables() {
-          let limit = 0usize;
-          let out: HashSet<String> = if limit == 0 {
-              HashSet::new()
-          } else {
-              ["x".to_string()].into()
-          };  
-          assert!(out.is_empty());
-      }   
-  }
-
-  路徑B — mod.rs測struct wire，需完整構造ProxyManager，成本高，Stage 1.5.B範圍外。
-
-  B12 — sources.rs:241加注釋 (1行):
-  // min防止paid search與host enrichment兩路合計超出單次掃描預算
-  let limit = std::cmp::min(self.shodan_paid_max_hosts, self.shodan_host_ip_max_hosts);
-
-  B13 — 驗證命令:
-  cargo check --package redteam_rust_core 2>&1 | tail -5
-  cargo test --package redteam_rust_core 2>&1 | tail -20
-  git status
-
-  ---
-剩餘量：3項，全在sources.rs，無新檔案。 B12+B11路徑A合計約10行代碼 + B13輸出。HOLD解除後Commit X+1准入。# CLAUDE.md
+# CLAUDE.md
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
@@ -393,11 +340,6 @@ Dashboard allows live mission injection (new targets added mid-scan).
 - **Engine config** — `src/core/engine/app.rs::EngineConfig` struct
 - **Sink interface** — `src/core/sink.rs::DataSink` trait for output backends
 
-## Sprint Workflow Discipline (Post-Sprint 6)
-- **1-Stage-Per-Turn**: Strict limit of 1 stage per turn containing source changes; Auditor verdict must be issued between stages.
-- **Temp Generators & Audit Tools**: All temporary tools/scripts must reside in `redteam_rust_core/examples/audit_tools/`.
-- **Git Hygiene**: `redteam_rust_core/examples/audit_tools/` is added to `.gitignore` (no generator code committed).
-
 ## Active Audit Status
 - **Status**: Sprint 11 Stage A complete (Web Cache Deception probe, 225 tests pass)
 - **Next**: Sprint 11 Stage B
@@ -410,4 +352,3 @@ Dashboard allows live mission injection (new targets added mid-scan).
 - WCD cross-user refinement: req2 unauthenticated drop-cookie → sensitive match = `Confidence::Definite`
 - `tls_raw_forge.rs:7` doctest E0433 (`ClientHelloForge` undeclared) — Sprint 4+5a debt, fix in own stage
 - Reporting discipline: always run `cargo test --package redteam_rust_core` (documented cmd), not `--lib` subset
-
