@@ -408,4 +408,6 @@ Dashboard allows live mission injection (new targets added mid-scan).
 ## Backlog (carried forward)
 - `Baseline SHA256` — pending refresh since Sprint 8, to be resolved in Sprint 11 audit
 - WCD cross-user refinement: req2 unauthenticated drop-cookie → sensitive match = `Confidence::Definite`
+- `tls_raw_forge.rs:7` doctest E0433 (`ClientHelloForge` undeclared) — Sprint 4+5a debt, fix in own stage
+- Reporting discipline: always run `cargo test --package redteam_rust_core` (documented cmd), not `--lib` subset
 
