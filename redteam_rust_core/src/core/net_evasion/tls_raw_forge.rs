@@ -5,6 +5,7 @@
 ///
 /// # Usage
 /// ```
+/// # use redteam_rust_core::core::net_evasion::tls_raw_forge::ClientHelloForge;
 /// let forge = ClientHelloForge::new();
 /// let bytes = forge.build();
 /// // Send bytes over raw TCP socket

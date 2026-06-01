@@ -513,7 +513,7 @@ impl ScannerPlugin for CredentialLeakScanner {
 mod tests {
     use super::*;
     use wiremock::{MockServer, Mock, ResponseTemplate};
-    use wiremock::matchers::{method, path, path_regex};
+    use wiremock::matchers::{method, path};
 
     #[test]
     fn test_sanitize_id() {
@@ -683,7 +683,7 @@ mod tests {
     async fn test_hibp_breached_account_success() {
         let server = MockServer::start().await;
         let email = "test@example.com";
-        let encoded = utf8_percent_encode(email, NON_ALPHANUMERIC).to_string();
+        let _encoded = utf8_percent_encode(email, NON_ALPHANUMERIC).to_string();
 
         Mock::given(method("GET"))
             .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!([
