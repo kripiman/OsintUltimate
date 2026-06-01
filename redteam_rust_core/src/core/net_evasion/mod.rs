@@ -34,6 +34,7 @@ pub mod domain_front;
 pub mod ech_client;
 pub mod h2c_probe;
 pub mod http_smuggle;
+pub mod cache_deception;
 pub mod ech_dns_fetcher;
 pub mod tls13_0rtt;
 #[cfg(target_os = "linux")]
@@ -104,6 +105,7 @@ pub enum NetEvasionStrategy {
     Tls13ZeroRtt,
     H2cUpgradeProbe,
     HttpRequestSmuggling,
+    WebCacheDeception,
     
     // Meta / FW Stress
     #[cfg(feature = "sovereign")]

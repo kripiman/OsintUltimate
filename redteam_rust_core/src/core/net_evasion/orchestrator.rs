@@ -600,6 +600,54 @@ impl NetEvasionOrchestrator {
         }
     }
 
+    /// Probe `target:port` for Web Cache Deception.
+    pub async fn cache_deception_probe(
+        &self,
+        target: &str,
+        port: u16,
+        base_path: &str,
+        config: crate::core::net_evasion::cache_deception::CacheDeceptionConfig,
+    ) -> Result<EvasionResult> {
+        use crate::core::net_evasion::cache_deception::CacheDeceptionProbe;
+
+        let start = std::time::Instant::now();
+        let result = CacheDeceptionProbe::probe(target, port, base_path, &config).await;
+        let latency_ms = start.elapsed().as_secs_f64() * 1000.0;
+
+        match result {
+            Ok(probe) => {
+                if probe.vulnerable {
+                    self.push_finding(
+                        "WCD-001",
+                        Category::Vulnerability,
+                        Severity::High,
+                        "Web Cache Deception",
+                        serde_json::json!({
+                            "cache_headers": probe.cache_headers,
+                            "confidence": format!("{:?}", probe.confidence),
+                            "response_time_ms": probe.response_time_ms,
+                        }),
+                    );
+                }
+                Ok(EvasionResult {
+                    strategy_used: NetEvasionStrategy::WebCacheDeception,
+                    success: probe.vulnerable,
+                    packets_sent: 2,
+                    response_received: probe.confidence
+                        != crate::core::net_evasion::http_smuggle::Confidence::Ambiguous,
+                    latency_ms,
+                })
+            }
+            Err(_) => Ok(EvasionResult {
+                strategy_used: NetEvasionStrategy::WebCacheDeception,
+                success: false,
+                packets_sent: 0,
+                response_received: false,
+                latency_ms,
+            }),
+        }
+    }
+
     /// Connect to `target:port` over TCP with TLS 1.3 0-RTT.
     ///
     /// Reuses the same `Tls13ZeroRttClient` across calls so that PSK tickets
