@@ -341,9 +341,9 @@ Dashboard allows live mission injection (new targets added mid-scan).
 - **Sink interface** — `src/core/sink.rs::DataSink` trait for output backends
 
 ## Active Audit Status
-- **Status**: Sprint 11 Stage C ❌ FAIL — baseline captured in tool-absent env (nuclei/kiterunner/dnsx missing)
+- **Status**: Sprint 11 Stage C 🟡 IN PROGRESS — Engine bugs fixed (DNS pinning, allowlist). Awaiting DO worker re-capture for real findings.
 - **Next**: Sprint 11 Stage C re-submit (re-capture on DO worker with full toolchain)
-- **HEAD**: f40f7b5
+- **HEAD**: c999977
 - **Baseline SHA256**: 9f32dc5ffbd7e996b4ea308dcf703734e04c571b3fbe6c553b9864787b22f82a ⚠️ DEGRADED (all 6 findings = PLUGIN_ERROR, not real scan output)
 - **Violations cumulative**: 23 (Sprint 7=13, Sprint 7.5=5, Sprint 11=2, Sprint 4+5a bundling=1, Sprint 5a=1, Stage-C false-report=1)
 
