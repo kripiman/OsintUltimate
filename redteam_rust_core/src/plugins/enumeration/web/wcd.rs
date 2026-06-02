@@ -62,8 +62,10 @@ impl ScannerPlugin for WcdScanner {
         let mut findings = Vec::new();
         let base_url_str = if target.host.starts_with("http") {
             target.host.clone()
-        } else {
+        } else if target.host.ends_with(":443") || target.host.ends_with(":8443") {
             format!("https://{}", target.host)
+        } else {
+            format!("http://{}", target.host)
         };
 
         let parsed_url = match Url::parse(&base_url_str) {
