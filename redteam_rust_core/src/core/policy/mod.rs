@@ -151,6 +151,7 @@ impl StaticPolicy {
             "katana", "nuclei", "interactsh-client", "amass", "subfinder",
             "httpx", "ppmap", "corsy", "linkfinder", "secretfinder", "jsluice",
             "snallygaster", "wpsec", "tsunami", "crlfuzz", "arjun", "x8",
+            "dnsx", "kr", "kiterunner",
         ].into_iter().map(String::from).collect();
             
         let allowed_nmap_flags = vec![

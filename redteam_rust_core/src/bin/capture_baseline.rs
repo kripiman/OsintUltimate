@@ -40,7 +40,7 @@ async fn main() -> Result<()> {
         let target = Arc::new(TargetHost {
             host: host.clone(),
             ip: Some(host.split(':').next().unwrap().to_string()),
-            resolved_ip: None,
+            resolved_ip: Some(host.split(':').next().unwrap().to_string()),
             target_type: TargetType::Host,
             file_path: None,
             user: None,

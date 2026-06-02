@@ -4,7 +4,7 @@ Module: `src/core/net_evasion/`
 Baseline: Ptacek & Newsham (1998) + 2026 SOTA NGFW bypass
 
 Auditor: Claude (code-auditor role). Ejecutor: Kimi/antigravity-cli.
-Violaciones acumuladas: 21 (Sprint 7=13, 7.5=5, Sprint 11=2, Sprint 3-remediation=1)
+Violaciones acumuladas: 23 (Sprint 7=13, 7.5=5, Sprint 11=2, Sprint 3-remediation=1, Stage-C false-report=1)
 
 ---
 

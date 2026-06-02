@@ -19,7 +19,7 @@ impl Default for KiterunnerScanner {
 
 impl KiterunnerScanner {
     pub fn new() -> Self {
-        let path = detect_tool("kr");
+        let path = detect_tool("kiterunner");
         Self {
             binary_path: path,
         }
