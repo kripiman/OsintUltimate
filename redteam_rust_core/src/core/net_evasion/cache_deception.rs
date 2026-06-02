@@ -33,6 +33,7 @@ impl CacheDeceptionProbe {
     pub async fn probe(
         target: &str,
         port: u16,
+        scheme: &str,
         base_path: &str,
         config: &CacheDeceptionConfig,
     ) -> Result<CacheDeceptionResult> {
@@ -47,9 +48,9 @@ impl CacheDeceptionProbe {
             .map(char::from)
             .collect();
         let path = Self::build_cache_path(base_path, &format!("{suffix}.css"));
-        let url = format!("https://{target}:{port}{path}");
+        let url = format!("{scheme}://{target}:{port}{path}");
 
-        // --- Request 1: populate cache ---
+        // --- Request 1: populate cache (Victim) ---
         let mut req1 = client.get(&url);
         if let Some(cookie) = &config.session_cookie {
             req1 = req1.header("Cookie", cookie);
@@ -58,34 +59,16 @@ impl CacheDeceptionProbe {
         let headers1 = Self::extract_cache_headers(&resp1);
         let _body1 = resp1.text().await.unwrap_or_default();
 
-        // --- Request 2: confirm cache behaviour ---
-        let mut req2 = client.get(&url);
-        if let Some(cookie) = &config.session_cookie {
-            req2 = req2.header("Cookie", cookie);
-        }
+        // --- Request 2: confirm cache behaviour (Attacker) ---
+        // DELIBERATELY DROP COOKIE to prove unauthenticated cross-user caching
+        let req2 = client.get(&url);
         let resp2 = req2.send().await?;
         let headers2 = Self::extract_cache_headers(&resp2);
         let body2 = resp2.text().await.unwrap_or_default();
 
         let response_time_ms = start.elapsed().as_secs_f64() * 1000.0;
 
-        // Determine cache confirmation
-        let cache_confirmed = Self::cache_hit_confirmed(&headers1, &headers2);
-
-        let (vulnerable, confidence) = if cache_confirmed {
-            let has_sensitive = Self::body_contains_sensitive(&body2, &config.sensitive_markers);
-            if has_sensitive {
-                if config.session_cookie.is_some() {
-                    (true, Confidence::Definite)
-                } else {
-                    (true, Confidence::Likely)
-                }
-            } else {
-                (false, Confidence::Definite)
-            }
-        } else {
-            (false, Confidence::Ambiguous)
-        };
+        let (vulnerable, confidence) = Self::evaluate_wcd(config, &headers1, &headers2, &body2);
 
         let mut all_headers = headers1;
         all_headers.extend(headers2);
@@ -96,6 +79,37 @@ impl CacheDeceptionProbe {
             cache_headers: all_headers,
             response_time_ms,
         })
+    }
+
+    /// Pure evaluation logic for WCD to allow offline unit testing.
+    /// Returns (vulnerable, confidence).
+    pub fn evaluate_wcd(
+        config: &CacheDeceptionConfig,
+        headers1: &HashMap<String, String>,
+        headers2: &HashMap<String, String>,
+        body2: &str,
+    ) -> (bool, Confidence) {
+        let cache_confirmed = Self::cache_hit_confirmed(headers1, headers2);
+        
+        if cache_confirmed {
+            let has_sensitive = Self::body_contains_sensitive(body2, &config.sensitive_markers);
+            if has_sensitive {
+                if config.session_cookie.is_some() {
+                    // Since req2 is STRICTLY unauthenticated (dropped cookies), a cache hit
+                    // with sensitive data AND an original session cookie is absolute proof.
+                    (true, Confidence::Definite)
+                } else {
+                    // We hit sensitive data but without session_cookie, we can't prove cross-user.
+                    (true, Confidence::Likely)
+                }
+            } else {
+                // Cache hit, but no sensitive data leaked. Not vulnerable.
+                (false, Confidence::Ambiguous)
+            }
+        } else {
+            // No cache hit.
+            (false, Confidence::Ambiguous)
+        }
     }
 
     /// Build the cache-deception path from a base path and a file suffix.
@@ -176,7 +190,7 @@ mod tests {
     #[tokio::test]
     async fn test_cache_deception_no_server() {
         let config = CacheDeceptionConfig::default();
-        let result = CacheDeceptionProbe::probe("127.0.0.1", 59999, "/profile", &config).await;
+        let result = CacheDeceptionProbe::probe("127.0.0.1", 59999, "http", "/profile", &config).await;
         assert!(
             result.is_err(),
             "cache deception probe to nothing should fail: {:?}",
@@ -226,5 +240,39 @@ mod tests {
 
         let body2 = "<html><body>Login</body></html>";
         assert!(!CacheDeceptionProbe::body_contains_sensitive(body2, &markers));
+    }
+
+    #[test]
+    fn test_evaluate_wcd_logic() {
+        let mut config = CacheDeceptionConfig::default();
+        config.sensitive_markers = vec!["supersecret_token".to_string()];
+        config.session_cookie = Some("test_cookie".to_string());
+        
+        let h1 = HashMap::new();
+        let mut h2 = HashMap::new();
+        h2.insert("x-cache".to_string(), "HIT".to_string());
+        
+        // 1. Cache HIT and sensitive data present -> Definite
+        let (vulnerable, confidence) = CacheDeceptionProbe::evaluate_wcd(&config, &h1, &h2, "body has supersecret_token inside");
+        assert!(vulnerable);
+        assert_eq!(confidence, Confidence::Definite);
+
+        // 2. Cache HIT but NO sensitive data -> Ambiguous (not vulnerable)
+        let (vuln2, conf2) = CacheDeceptionProbe::evaluate_wcd(&config, &h1, &h2, "body has normal data");
+        assert!(!vuln2);
+        assert_eq!(conf2, Confidence::Ambiguous);
+
+        // 3. Cache HIT, sensitive data present, but NO session cookie -> Likely
+        config.session_cookie = None;
+        let (vuln3, conf3) = CacheDeceptionProbe::evaluate_wcd(&config, &h1, &h2, "body has supersecret_token inside");
+        assert!(vuln3);
+        assert_eq!(conf3, Confidence::Likely);
+
+        // 4. No Cache HIT -> Ambiguous
+        let mut h2_miss = HashMap::new();
+        h2_miss.insert("x-cache".to_string(), "MISS".to_string());
+        let (vuln3, conf3) = CacheDeceptionProbe::evaluate_wcd(&config, &h1, &h2_miss, "body has supersecret_token inside");
+        assert!(!vuln3);
+        assert_eq!(conf3, Confidence::Ambiguous);
     }
 }

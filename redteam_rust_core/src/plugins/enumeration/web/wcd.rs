@@ -1,17 +1,15 @@
 use crate::plugins::{ScannerPlugin, Capability, PluginMetadata, RiskLevel, TargetType};
 use crate::models::{TargetHost, Finding, Severity, Category};
 use crate::core::capability_layer::ScanLayer;
-use crate::utils::tool_detection::detect_tool;
+use crate::core::net_evasion::cache_deception::{CacheDeceptionProbe, CacheDeceptionConfig};
+use crate::core::net_evasion::http_smuggle::Confidence;
 use async_trait::async_trait;
 use anyhow::Result;
 use tracing::{info, warn};
-use tokio::process::Command;
-use std::process::Stdio;
+use url::Url;
 use crate::models::constants::*;
 
-pub struct WcdScanner {
-    binary_path: String,
-}
+pub struct WcdScanner {}
 
 impl Default for WcdScanner {
     fn default() -> Self {
@@ -21,11 +19,7 @@ impl Default for WcdScanner {
 
 impl WcdScanner {
     pub fn new() -> Self {
-        // We'll use httpx as a backend for header analysis
-        let path = detect_tool("httpx");
-        Self {
-            binary_path: path,
-        }
+        Self {}
     }
 }
 
@@ -58,23 +52,31 @@ impl ScannerPlugin for WcdScanner {
     }
 
     async fn check_dependencies(&self) -> Result<bool> {
-        Ok(crate::utils::check_tool_availability("httpx").await)
+        // Native Rust implementation using reqwest. No external binary needed.
+        Ok(true)
     }
 
     async fn scan(&self, target: &TargetHost) -> Result<Vec<Finding>> {
         info!("WcdScanner: scanning {}", target.host);
         
-        if !self.check_dependencies().await.unwrap_or(false) {
-            warn!("WcdScanner: httpx required for WCD scanning. Skipping.");
-            return Ok(Vec::new());
-        }
-
         let mut findings = Vec::new();
-        let base_url = if target.host.starts_with("http") {
+        let base_url_str = if target.host.starts_with("http") {
             target.host.clone()
         } else {
             format!("https://{}", target.host)
         };
+
+        let parsed_url = match Url::parse(&base_url_str) {
+            Ok(u) => u,
+            Err(e) => {
+                warn!("WcdScanner: invalid URL {}: {}", base_url_str, e);
+                return Ok(findings);
+            }
+        };
+
+        let scheme = parsed_url.scheme();
+        let host = parsed_url.host_str().unwrap_or(&target.host);
+        let port = parsed_url.port().unwrap_or_else(|| if scheme == "http" { 80 } else { 443 });
 
         // 1. Identify sensitive paths to probe
         let mut paths_to_probe = vec![
@@ -87,58 +89,76 @@ impl ScannerPlugin for WcdScanner {
             "/account".to_string(),
         ];
 
+        let mut sensitive_markers = Vec::new();
+
         for f in target.findings.iter() {
              if let Some(ev) = &f.evidence.primary {
                  if let Some(path) = ev.data.get("path").and_then(|v| v.as_str()) {
                      if !path.contains(".") && path.len() > 1 { paths_to_probe.push(path.to_string()); }
+                 }
+                 // Extract dynamic markers from evidence (e.g. emails, usernames, UUIDs)
+                 if let Some(email) = ev.data.get("email").and_then(|v| v.as_str()) {
+                     sensitive_markers.push(email.to_string());
+                 }
+                 if let Some(uuid) = ev.data.get("uuid").and_then(|v| v.as_str()) {
+                     sensitive_markers.push(uuid.to_string());
+                 }
+                 if let Some(token) = ev.data.get("token").and_then(|v| v.as_str()) {
+                     sensitive_markers.push(token.to_string());
                  }
              }
         }
         paths_to_probe.sort();
         paths_to_probe.dedup();
 
+        // If no dynamic markers found, we will just proceed with empty markers.
+        // It's better to not flag than to false-positive on generic words.
+
+        // Configure the probe
+        let config = CacheDeceptionConfig {
+            session_cookie: target.tactical_context.get("session_cookie").and_then(|v| v.as_str()).map(|s| s.to_string()),
+            sensitive_markers,
+        };
+
         // 2. Perform probing with static extensions
         let extensions = [".css", ".jpg", ".js", ".v14"];
         
         for path in paths_to_probe.into_iter().take(15) {
             let normalized_path = if path.starts_with('/') { path } else { format!("/{}", path) };
-            let target_path = format!("{}{}", base_url.trim_end_matches('/'), normalized_path);
             
+            // We do a single extension probe per path to avoid spamming
+            // In a real scenario we'd test all extensions, but we'll stick to a subset or loop.
             for ext in &extensions {
-                let probe_url = format!("{}{}", target_path, ext);
-                
-                let output_res = tokio::time::timeout(
-                    std::time::Duration::from_secs(10),
-                    Command::new(&self.binary_path)
-                        .args(["-u", &probe_url, "-silent", "-status-code", "-include-response-headers"])
-                        .stdin(Stdio::null())
-                        .stdout(Stdio::piped())
-                        .stderr(Stdio::null())
-                        .output(),
+                // Call the native cache deception probe
+                let result = CacheDeceptionProbe::probe(
+                    host,
+                    port,
+                    scheme,
+                    &format!("{}{}", normalized_path, ext),
+                    &config
                 ).await;
 
-                let output = match output_res {
-                    Ok(Ok(o)) => o,
-                    Ok(Err(e)) => { warn!("WcdScanner: httpx error for {}: {}", probe_url, e); continue; }
-                    Err(_) => { warn!("WcdScanner: timeout for {}", probe_url); continue; }
-                };
-
-                if output.status.success() {
-                    let stdout = String::from_utf8_lossy(&output.stdout);
-
-                    // HIT is unambiguous: CDN/proxy confirmed cached response for this URL
-                    if stdout.contains("200") && stdout.contains("HIT") {
-                        findings.push(Finding::new(
-                            FINDING_WEB_CACHE_DECEPTION,
-                            Category::Vulnerability,
-                            Severity::Medium,
-                            &format!("Potential Web Cache Deception at {}", probe_url),
-                            serde_json::json!({
-                                "url": probe_url,
-                                "evidence_headers": stdout.trim(),
-                            })
-                        ).with_tactical_path("Verify if authenticated sensitive data is cached when accessed with static extensions. This could lead to account takeover or PII leakage via shared caches (CDN)."));
-                        break; 
+                match result {
+                    Ok(probe_res) => {
+                        if probe_res.vulnerable && probe_res.confidence == Confidence::Definite {
+                            let probe_url = format!("{}://{}:{}{}{}", scheme, host, port, normalized_path, ext);
+                            findings.push(Finding::new(
+                                FINDING_WEB_CACHE_DECEPTION,
+                                Category::Vulnerability,
+                                Severity::High, // Elevated to High due to cross-user definite leak
+                                &format!("Cross-user Web Cache Deception proven at {}", probe_url),
+                                serde_json::json!({
+                                    "url": probe_url,
+                                    "response_time_ms": probe_res.response_time_ms,
+                                    "cache_headers": probe_res.cache_headers,
+                                    "markers_leaked": config.sensitive_markers,
+                                })
+                            ).with_tactical_path("Unauthenticated attacker successfully retrieved authenticated cached sensitive data. Mitigate by enforcing Cache-Control: no-store on sensitive endpoints and validating extensions on the backend."));
+                            break; // Move to next path
+                        }
+                    }
+                    Err(e) => {
+                        warn!("WcdScanner: probe error for {}{}: {}", normalized_path, ext, e);
                     }
                 }
             }
