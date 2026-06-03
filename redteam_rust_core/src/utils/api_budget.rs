@@ -294,21 +294,33 @@ mod tests {
             }
         };
 
-        let test_key = "budget:test_source:";
+        // DB-BUDGET-001 fix: use a unique key per test run to prevent cross-run
+        // stat_value pollution from prior runs that crashed before cleanup.
+        let run_id = uuid::Uuid::new_v4().to_string();
+        let test_source = format!("test_source_{}", &run_id[..8]);
+        let test_key_prefix = format!("budget:{}:", test_source);
+
+        // Cleanup any prior remnants (defensive, shouldn't exist with unique key)
         let _ = sqlx::query("DELETE FROM mcp_stats WHERE stat_key LIKE $1")
-            .bind(format!("{}%", test_key))
+            .bind(format!("{}%", test_key_prefix))
             .execute(&pool)
             .await;
 
         let manager = CreditManager::new(5, BudgetWindow::Monthly);
-        
-        let ok1 = manager.can_spend_db(&pool, "test_source", 3).await;
-        assert!(ok1);
 
-        let ok2 = manager.can_spend_db(&pool, "test_source", 2).await;
-        assert!(ok2);
+        let ok1 = manager.can_spend_db(&pool, &test_source, 3).await;
+        assert!(ok1, "First spend (3 of 5) should succeed");
 
-        let ok3 = manager.can_spend_db(&pool, "test_source", 1).await;
-        assert!(!ok3);
+        let ok2 = manager.can_spend_db(&pool, &test_source, 2).await;
+        assert!(ok2, "Second spend (2 of 5, total=5) should succeed");
+
+        let ok3 = manager.can_spend_db(&pool, &test_source, 1).await;
+        assert!(!ok3, "Third spend (1, total would be 6 > 5) should fail");
+
+        // Teardown: always clean up test rows
+        let _ = sqlx::query("DELETE FROM mcp_stats WHERE stat_key LIKE $1")
+            .bind(format!("{}%", test_key_prefix))
+            .execute(&pool)
+            .await;
     }
 }

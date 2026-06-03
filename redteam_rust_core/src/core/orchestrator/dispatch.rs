@@ -107,7 +107,25 @@ pub async fn dispatch_scan(
                     std::time::Duration::from_secs(600),
                 );
 
-                match p.check_dependencies().await {
+                // ENGINE-TIMEOUT-002: dep-check also bounded (30s).
+                // NucleiScanner.check_dependencies calls execute_and_wait("-update-templates")
+                // which performs a network round-trip — unbounded without this guard.
+                const DEP_CHECK_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(30);
+                let dep_result = match timeout(DEP_CHECK_TIMEOUT, p.check_dependencies()).await {
+                    Ok(r) => r,
+                    Err(_) => {
+                        warn!(
+                            "Plugin '{}' check_dependencies timed out after 30s on target '{}'",
+                            p.name(), target_snapshot.host
+                        );
+                        Err(anyhow::anyhow!(
+                            "PLUGIN_TIMEOUT: '{}' check_dependencies exceeded 30s",
+                            p.name()
+                        ))
+                    }
+                };
+
+                match dep_result {
                     Ok(true) => {
                         let scan_fut = p.execute_safe_scan(
                             &target_snapshot,
