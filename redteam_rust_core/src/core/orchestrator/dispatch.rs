@@ -1,6 +1,7 @@
 use std::sync::Arc;
 use tokio::task::JoinSet;
-use tracing::error;
+use tokio::time::timeout;
+use tracing::{error, warn};
 use crate::models::{TargetHost, Finding, Category, Severity, TargetStatus, FINDING_PLUGIN_ERROR, FINDING_PLUGIN_PANIC};
 use crate::plugins::ScannerPlugin;
 use crate::core::capability_layer::ScanLayerPolicy;
@@ -98,8 +99,37 @@ pub async fn dispatch_scan(
                 let _concurrency_permit = concurrency_semaphore_clone.acquire().await;
                 let _permit = memory_semaphore_clone.acquire_many(permits_needed).await;
                 
+                // Per-plugin hard timeout: 2× expected_duration, capped at 10 min.
+                // Prevents any single plugin from hanging the entire scan indefinitely
+                // (root cause of Samba:445 20-min hang — fix ticket: ENGINE-TIMEOUT-001).
+                let plugin_timeout = std::cmp::min(
+                    meta.expected_duration.saturating_mul(2),
+                    std::time::Duration::from_secs(600),
+                );
+
                 match p.check_dependencies().await {
-                    Ok(true) => (p.name().to_string(), p.execute_safe_scan(&target_snapshot, policy_clone, strict_scope_val, approval_gate, approval_timeout_secs).await),
+                    Ok(true) => {
+                        let scan_fut = p.execute_safe_scan(
+                            &target_snapshot,
+                            policy_clone,
+                            strict_scope_val,
+                            approval_gate,
+                            approval_timeout_secs,
+                        );
+                        match timeout(plugin_timeout, scan_fut).await {
+                            Ok(result) => (p.name().to_string(), result),
+                            Err(_elapsed) => {
+                                warn!(
+                                    "Plugin '{}' timed out after {:?} on target '{}'",
+                                    p.name(), plugin_timeout, target_snapshot.host
+                                );
+                                (p.name().to_string(), Err(anyhow::anyhow!(
+                                    "PLUGIN_TIMEOUT: '{}' exceeded {:?} on '{}'",
+                                    p.name(), plugin_timeout, target_snapshot.host
+                                )))
+                            }
+                        }
+                    }
                     Ok(false) => (p.name().to_string(), Ok(Vec::new())),
                     Err(e) => (p.name().to_string(), Err(e)),
                 }
