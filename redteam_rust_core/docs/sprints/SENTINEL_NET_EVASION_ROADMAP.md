@@ -4,7 +4,7 @@ Module: `src/core/net_evasion/`
 Baseline: Ptacek & Newsham (1998) + 2026 SOTA NGFW bypass
 
 Auditor: Claude (code-auditor role). Ejecutor: Kimi/antigravity-cli.
-Violaciones acumuladas: 23 (Sprint 7=13, 7.5=5, Sprint 11=2, Sprint 3-remediation=1, Stage-C false-report=1)
+Violaciones acumuladas: 24 (Sprint 7=13, 7.5=5, Sprint 11=2, Sprint 3-remediation=1, Stage-C false-report=1, bundling=1)
 
 ---
 
@@ -217,3 +217,33 @@ Técnicas destructivas (CONTINUATION flood, Rapid Reset, QUIC flood) **NO** son 
 | FwStress (roadmap original S10) | DoS | ❌ Out-of-scope | sovereign + DO | 🔴 No para bug bounty |
 
 **Veredicto auditor (rev. 2026-06-01)**: para Stage C barato priorizar **Web Cache Deception** (HTTP/1.1, reusa `reqwest`) o **mTLS bypass**. HTTP/2 desync es alto ROI pero NO es extensión de `http_smuggle.rs` — requiere forge H2+HPACK propio (el crate `h2` compliant no sirve); tratar como sprint dedicado. Evitar floods DoS como stage normal; si se implementan, `sovereign` aparte, gated, DO-only.
+
+---
+
+## F. Engine Debt Log — Sprint 11 Stage C (2026-06-03)
+
+### Commits verificados (auditor raw ✅)
+
+| SHA | Ticket | Scope | Tests |
+|-----|--------|-------|-------|
+| `191f1b6` | ENGINE-TIMEOUT-001: `execute_safe_scan` bounded `min(2×expected, 600s)` | `dispatch.rs` | cargo check ✅ |
+| `ab60a64` | ENGINE-TIMEOUT-002: `check_dependencies` bounded 30s | `dispatch.rs` | 249/0 raw ✅ |
+| `ab60a64` | DB-BUDGET-001: UUID key + teardown in `test_database_budget_sync` | `api_budget.rs` | live Postgres ✅ |
+
+**Full suite**: 249 passed / 0 failed / 8 ignored — verified RAW (13 suites, all `test result: ok`).
+
+### Disciplina (violations +1)
+
+- **V24 — Bundling** (`ab60a64`): ENGINE-TIMEOUT-002 + DB-BUDGET-001 = dos tickets no relacionados en un commit. Violación L145 (`Commit separado requerido`). Cuenta: 24.
+- **RTK-WARN (no cuenta)**: RTK colapsó 13 suites en 1 línea sintética, ocultando `test result:` individuales. Distrust correcto — siempre verificar raw para output de grado verificación.
+
+### Stage C — DEGRADED · bloqueador intacto
+
+| Condición | Estado |
+|-----------|--------|
+| Toolchain (nuclei/dnsx/httpx/kr) presente | ❌ Ausente en este host |
+| `golden_baseline.json` findings > 0 en disco | ❌ `[]` — no commitear |
+| `DEGRADED` levantado | ❌ Permanece |
+| Worker DO con toolchain completo | ⏳ Requerido per roadmap + Oracle-ban |
+
+Estos 3 commits = deuda de engine independiente (timeouts + test DB). **NO** cierran Stage C. Stage C cierra únicamente cuando artefacto `golden_baseline.json` con findings > 0 reales aterrice en disco desde worker con nuclei+kiterunner+dnsx instalados.
