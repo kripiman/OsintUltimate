@@ -4,7 +4,7 @@ Module: `src/core/net_evasion/`
 Baseline: Ptacek & Newsham (1998) + 2026 SOTA NGFW bypass
 
 Auditor: Claude (code-auditor role). Ejecutor: Kimi/antigravity-cli.
-Violaciones acumuladas: 24 (Sprint 7=13, 7.5=5, Sprint 11=2, Sprint 3-remediation=1, Stage-C false-report=1, bundling=1)
+Violaciones acumuladas: 24 (Sprint 7=13, Sprint 7.5=5, Sprint 11=2, Sprint 4+5a-bundling=1, Sprint 5a=1, Stage-C-false-report=1, V24-bundling=1)
 
 ---
 
@@ -163,7 +163,7 @@ La tabla de "Estado Actual" (arriba) describe el **plan original**. La ejecució
 | 9 | Oblivious HTTP (RFC 9458) | h2c probe + HTTP request smuggling | ⚠️ contenido distinto |
 | 10 | FwStress (sovereign, DoS) | Probe→Finding integration (en curso) | ⚠️ contenido distinto |
 
-**Implicación**: Conjure, OHTTP y FwStress del plan original **NO ejecutados**. La numeración de sprint ya no mapea al roadmap. Violaciones acumuladas: roadmap dice 21, `CLAUDE.md` raíz dice **22** — usar 22.
+**Implicación**: Conjure, OHTTP y FwStress del plan original **NO ejecutados**. La numeración de sprint ya no mapea al roadmap. *(Snapshot 2026-05-30: roadmap decía 21, `CLAUDE.md` raíz decía 22 — se usó 22. Actual a 2026-06-03: **24**. Ver L7.)*
 
 ## B. Correcciones fácticas a la evaluación 2026
 
