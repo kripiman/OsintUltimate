@@ -175,7 +175,7 @@ mod tests {
             let flags_offset = u16::from_be_bytes([frag[6], frag[7]]);
             let mf = (flags_offset & 0x2000) != 0;
             let offset = (flags_offset & 0x1FFF) as usize;
-            assert_eq!(offset, i * 1); // 8 bytes = 1 unit
+            assert_eq!(offset, i); // 8 bytes = 1 unit
             assert_eq!(mf, i < 2);
         }
     }

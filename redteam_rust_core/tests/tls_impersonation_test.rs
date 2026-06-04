@@ -19,7 +19,7 @@ mod tests {
             let client = StealthClientBuilder::build_impersonated_chrome(&pm)
                 .expect("Failed to build impersonated client");
             
-            let res = client.get(&mock_server.uri()).send().await.expect("Failed to send request");
+            let res = client.get(mock_server.uri()).send().await.expect("Failed to send request");
             assert_eq!(res.status(), 200);
         }
 

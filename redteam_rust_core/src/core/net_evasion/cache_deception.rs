@@ -244,9 +244,10 @@ mod tests {
 
     #[test]
     fn test_evaluate_wcd_logic() {
-        let mut config = CacheDeceptionConfig::default();
-        config.sensitive_markers = vec!["supersecret_token".to_string()];
-        config.session_cookie = Some("test_cookie".to_string());
+        let mut config = CacheDeceptionConfig {
+            sensitive_markers: vec!["supersecret_token".to_string()],
+            session_cookie: Some("test_cookie".to_string()),
+        };
         
         let h1 = HashMap::new();
         let mut h2 = HashMap::new();
