@@ -18,7 +18,11 @@ pub async fn run_sink_stage(
     while let Some(mut target) = rx.recv().await {
         enrich_target_findings_static(&mut target).await;
         Arc::make_mut(&mut target.findings).retain(|f| fp_filter.evaluate(f));
-        v4_sink.enqueue(target);
+        // CONC-001 FIX: Backpressure — if sink queue is full, sleep and retry instead of dropping silently.
+        while let Err(t) = v4_sink.enqueue(target) {
+            target = *t;
+            tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+        }
     }
     
     v4_sink.stop();
