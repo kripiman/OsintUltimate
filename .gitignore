@@ -185,3 +185,7 @@ redteam_rust_core/src/scratch.rs
 redteam_rust_core/examples/audit_tools/
 
 rust_context.txt
+
+# Auditor-added: recurring junk dirs
+redteam_rust_core/.nuclei-cache/
+redteam_rust_core/dnsx/
