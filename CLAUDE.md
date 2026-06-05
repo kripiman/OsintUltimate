@@ -341,13 +341,16 @@ Dashboard allows live mission injection (new targets added mid-scan).
 - **Sink interface** — `src/core/sink.rs::DataSink` trait for output backends
 
 ## Active Audit Status
-- **Status**: Sprint 11 Stage C 🟡 IN PROGRESS — Engine bugs fixed (DNS pinning, allowlist). Awaiting DO worker re-capture for real findings.
-- **Next**: Sprint 11 Stage C re-submit (re-capture on DO worker with full toolchain)
-- **HEAD**: 98d92a2 (ENGINE-TIMEOUT-001/002 + DB-BUDGET-001 + roadmap sync)
-- **Baseline SHA256**: 9f32dc5ffbd7e996b4ea308dcf703734e04c571b3fbe6c553b9864787b22f82a ⚠️ DEGRADED (all 6 findings = PLUGIN_ERROR, not real scan output)
+- **Status**: ✅ AUDIT COMPLETE — All production blockers closed. Post-audit debt tracking in Phase 5–6.
+- **Closed blockers**: MEM-002 (WasmPlugin leak-once), MEM-001 (FFI leak contract), SEC-001 (LruCache bounded), SEC-002 (read_unaligned FFI), PERF-002 (dotenv→dotenvy), SEC-004 (sandbox spike doc), Arc Refactor (name interner)
+- **Deferred**: PERF-001 (rustls 0.21+0.23 dup — risk register), Stage C (DEGRADED — recovery path documented)
+- **HEAD**: 7492de5 (name interner — bounds future hot-reload leakage)
+- **Baseline SHA256**: 9f32dc5ffbd7e996b4ea308dcf703734e04c571b3fbe6c553b9864787b22f82a ⚠️ DEGRADED (see `tests/baselines/DEGRADED_STATUS.md` for recovery path)
 - **Violations cumulative**: 25 (Sprint 7=13, Sprint 7.5=5, Sprint 11=2, Sprint 4+5a bundling=1, Sprint 5a=1, Stage-C false-report=1, V24-bundling=1, V25-bundling=1)
 
 ## Backlog (carried forward)
-- `Baseline SHA256` (DEGRADED) — SHA refreshed in f40f7b5 but baseline anchors tool-absence errors (PLUGIN_ERROR ×6), not real findings. Re-capture required on DO ephemeral worker with nuclei+kiterunner+dnsx installed against real DVWA/Samba targets. Sprint 8 debt NOT closed.
+- `Baseline SHA256` (DEGRADED) — Root causes documented in `tests/baselines/DEGRADED_STATUS.md`: DNS pinning violations, missing external tools (nuclei, kiterunner, dnsx), V14.1 security blocks. Recovery requires: (1) install external tools, (2) configure local DNS for 127.0.0.1, (3) relax ApprovalGate for baseline capture.
 - WCD cross-user refinement: req2 unauthenticated drop-cookie → sensitive match = `Confidence::Definite`
 - Reporting discipline: always run `cargo test --package redteam_rust_core` (documented cmd), not `--lib` subset
+- PERF-001 (rustls duplication) — defer until reqwest 0.12 required (see `docs/performance/PERF-001_rustls_dup.md`)
+- once_cell → LazyLock — ~63 usages, defer to Phase 7 (low ROI)
