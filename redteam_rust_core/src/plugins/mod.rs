@@ -15,6 +15,7 @@ pub mod reporting;
 pub mod triage;
 
 pub mod ffi;
+pub(crate) mod intern;
 
 // New flat factories/submodules
 pub mod config;

@@ -275,8 +275,9 @@ impl DynamicPluginLoader {
         Self::verify_signature_from_bytes(path, &bytes)?;
 
         let name = path.file_stem().unwrap_or_default().to_string_lossy().into_owned();
-        // MEM-002 FIX: leak-once at construction, not on every name() call
-        let cached_name = Box::leak(name.clone().into_boxed_str());
+        // MEM-002 FIX: intern name so distinct plugin names leak only once,
+        // bounding leakage even if the same WASM plugin is reloaded in future loops.
+        let cached_name = crate::plugins::intern::intern_name(&name);
 
         Ok(Box::new(WasmPlugin {
             name,
