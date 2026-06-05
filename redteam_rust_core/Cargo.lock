@@ -2838,6 +2838,9 @@ name = "lru"
 version = "0.13.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "227748d55f2f0ab4735d87fd623798cb6b664512fe979705f829c9f81c934465"
+dependencies = [
+ "hashbrown 0.15.5",
+]
 
 [[package]]
 name = "lru-cache"
@@ -4073,6 +4076,7 @@ dependencies = [
  "io-uring",
  "libc",
  "libloading 0.9.0",
+ "lru",
  "mime_guess",
  "moka",
  "murmur3",

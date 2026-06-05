@@ -128,6 +128,7 @@ strum = { version = "0.26", features = ["derive"] }
 toml = "1.1.2"
 async-nats = "0.35"
 hmac = "0.12.1"
+lru = "0.13"
 
 # Persistence & Swarm
 # RocksDB and Chitchat removed as they were not used in the final v4.0 architecture and caused build failures.

@@ -1,5 +1,7 @@
-use std::collections::{BTreeMap, HashMap};
+use std::collections::HashMap;
+use std::num::NonZeroUsize;
 use std::sync::{Arc, RwLock};
+use lru::LruCache;
 use regex::Regex;
 use once_cell::sync::Lazy;
 use crate::core::ai::scrubber::SCRUBBER;
@@ -197,9 +199,16 @@ impl OutputFilter {
     }
 }
 
+/// SEC-001 FIX: Bounded LRU caches prevent unbounded memory growth.
+/// Each cache is capped at 10_000 entries; oldest entries are evicted.
+const MASK_CACHE_CAPACITY: NonZeroUsize = match NonZeroUsize::new(10_000) {
+    Some(n) => n,
+    None => panic!("MASK_CACHE_CAPACITY must be non-zero"),
+};
+
 pub struct DataSanitizer {
-    mask_to_real: Arc<RwLock<BTreeMap<String, String>>>,
-    real_to_mask: Arc<RwLock<BTreeMap<String, String>>>,
+    mask_to_real: Arc<RwLock<LruCache<String, String>>>,
+    real_to_mask: Arc<RwLock<LruCache<String, String>>>,
     filter: OutputFilter,
 }
 
@@ -212,8 +221,8 @@ impl Default for DataSanitizer {
 impl DataSanitizer {
     pub fn new() -> Self {
         Self {
-            mask_to_real: Arc::new(RwLock::new(BTreeMap::new())),
-            real_to_mask: Arc::new(RwLock::new(BTreeMap::new())),
+            mask_to_real: Arc::new(RwLock::new(LruCache::new(MASK_CACHE_CAPACITY))),
+            real_to_mask: Arc::new(RwLock::new(LruCache::new(MASK_CACHE_CAPACITY))),
             filter: OutputFilter::new(),
         }
     }
@@ -272,16 +281,25 @@ impl DataSanitizer {
     fn get_or_create_mask(&self, real: &str, prefix: &str) -> String {
         {
             let r2m = self.real_to_mask.read().unwrap();
-            if let Some(mask) = r2m.get(real) {
+            // peek() does not require &mut self (get() updates LRU order)
+            if let Some(mask) = r2m.peek(real) {
                 return mask.clone();
             }
         }
         let mut r2m = self.real_to_mask.write().unwrap();
         let mut m2r = self.mask_to_real.write().unwrap();
-        let count = r2m.len() + 1;
+
+        // Double-check after upgrading to write lock
+        if let Some(mask) = r2m.get(real) {
+            return mask.clone();
+        }
+
+        let count = r2m.len().saturating_add(1);
         let mask = format!("{}_{}", prefix, count);
-        r2m.insert(real.to_string(), mask.clone());
-        m2r.insert(mask.clone(), real.to_string());
+
+        // SEC-001: Bounded insertion via LruCache. Oldest entry auto-evicted at cap.
+        r2m.put(real.to_string(), mask.clone());
+        m2r.put(mask.clone(), real.to_string());
         mask
     }
 }
