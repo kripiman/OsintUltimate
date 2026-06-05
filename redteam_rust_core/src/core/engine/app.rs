@@ -94,7 +94,7 @@ pub struct RedTeamEngine<M: ExecutorMode = crate::utils::executor::GhostMode> {
 impl RedTeamEngine<crate::utils::executor::GhostMode> {
     pub fn new(config: EngineConfig, soft_limit: usize, hard_limit: usize) -> Self {
         let shutdown_token = CancellationToken::new();
-        let memory_monitor = Arc::new(MemoryMonitor::new(soft_limit as u32, hard_limit as u32));
+        let memory_monitor = Arc::new(MemoryMonitor::new(soft_limit as u32, hard_limit as u32, Some(Arc::new(shutdown_token.clone()))));
         let res_mgr = SysResourceManager::new();
         let policy = Arc::new(crate::core::policy::ReloadablePolicy::new(None));
         let approval_gate = Arc::new(ApprovalGate::for_red_team());
@@ -133,7 +133,8 @@ impl RedTeamEngine<crate::utils::executor::GhostMode> {
         let correlation_engine = Arc::new(tokio::sync::Mutex::new(crate::core::correlation::CorrelationEngine::new()));
         let memory_monitor = Arc::new(MemoryMonitor::new(
             utils_config.soft_memory_limit_mb as u32, 
-            utils_config.hard_memory_limit_mb as u32
+            utils_config.hard_memory_limit_mb as u32,
+            Some(Arc::new(shutdown_token.clone()))
         ));
         let res_mgr = SysResourceManager::new();
         let policy = Arc::new(crate::core::policy::ReloadablePolicy::new(utils_config.policy_file.as_deref()));
