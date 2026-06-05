@@ -28,21 +28,30 @@ async fn main() -> Result<()> {
     let memory_semaphore = Arc::new(Semaphore::new(1024)); // 1024 permits
     
     // 2. Define Controlled Targets (matches docker-compose.test.yml)
-    let target_hosts = vec![
-        "127.0.0.1:8081".to_string(), // DVWA
-        "127.0.0.1:445".to_string(),  // Samba
+    let targets = vec![
+        // DVWA — web app target for HTTP scanners
+        ("http://127.0.0.1:8081".to_string(), TargetType::Web),
+        // Samba — host target for network scanners
+        ("127.0.0.1:445".to_string(), TargetType::Host),
     ];
     
     let mut all_findings = Vec::new();
 
     // 3. Run Scans via dispatch_scan
-    for host in target_hosts {
-        println!("🔍 Scanning: {}", host);
+    for (host, target_type) in targets {
+        println!("🔍 Scanning: {} (type: {:?})", host, target_type);
+        let ip = host.strip_prefix("http://")
+            .or_else(|| host.strip_prefix("https://"))
+            .unwrap_or(&host)
+            .split(':')
+            .next()
+            .unwrap_or(&host)
+            .to_string();
         let target = Arc::new(TargetHost {
             host: host.clone(),
-            ip: Some(host.split(':').next().unwrap_or(&host).to_string()),
-            resolved_ip: Some(host.split(':').next().unwrap_or(&host).to_string()),
-            target_type: TargetType::Host,
+            ip: Some(ip.clone()),
+            resolved_ip: Some(ip),
+            target_type,
             file_path: None,
             user: None,
             status: TargetStatus::Pending,
