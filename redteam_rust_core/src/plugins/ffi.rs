@@ -116,7 +116,11 @@ impl FFIPluginWrapper {
                 std::ffi::CStr::from_ptr(c_str).to_string_lossy().into_owned()
             }
         };
-        // V12: satisfy &'static str requirement for dynamic plugins
+        // MEM-001: Leak-once contract — the plugin name is leaked exactly once
+        // at construction time to satisfy the ScannerPlugin::name() -> &'static str
+        // trait bound. This is bounded by the number of loaded plugins (not per-call).
+        // If hot-reload loops are introduced in the future, this becomes cumulative
+        // leakage and requires architectural change (e.g. Arc<str> trait refactor).
         let cached_name = Box::leak(name_str.into_boxed_str());
         Ok(Self { ffi, cached_name, sync_lock: Mutex::new(()) })
     }
