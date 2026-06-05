@@ -67,15 +67,13 @@ impl ExternalToolGuard {
 // Ensure cleanup if dropped during async execution
 impl Drop for ExternalToolGuard {
     fn drop(&mut self) {
-        // RADICAL CLEANUP: If the guard is dropped and the PID is still set, 
-        // it means the task was cancelled or panicked. We MUST spawn a cleanup.
+        // V14.2 FIX: Use synchronous kill instead of tokio::spawn in Drop.
+        // If the runtime is shutting down, tokio::spawn may not execute,
+        // leaving zombie child processes. Synchronous kill is immediate and reliable.
         if let Ok(mut pid_guard) = self.child_pid.try_lock() {
             if let Some(pid) = pid_guard.take() {
                 warn!("ExternalToolGuard dropped while tool {} (PID {}) was still running. Terminating...", self.tool_name, pid);
-                // Since drop is sync, we spawn a fire-and-forget cleanup task
-                tokio::spawn(async move {
-                    let _ = crate::utils::common::kill_pgid(pid).await;
-                });
+                crate::utils::common::kill_pgid_sync(pid);
             }
         }
     }
