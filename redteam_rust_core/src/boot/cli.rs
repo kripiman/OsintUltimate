@@ -84,7 +84,7 @@ pub struct Args {
 }
 
 pub fn parse() -> Args {
-    dotenv::dotenv().ok();
+    dotenvy::dotenv().ok();
     let mut args = Args::parse();
     if std::env::args().len() <= 1 {
         // We use unwrap or default fallback here, since the original code exited if menu failed.
