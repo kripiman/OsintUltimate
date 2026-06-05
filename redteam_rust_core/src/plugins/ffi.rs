@@ -217,8 +217,11 @@ impl crate::plugins::ScannerPlugin for FFIPluginWrapper {
 
         unsafe {
             use std::ffi::CStr;
-            // V11 HARDENING (CRIT-002): Read the struct via pointer. 
-            let ffi_findings = std::ptr::read(findings_ptr);
+            // SEC-002 FIX: Use read_unaligned because cross-FFI pointer alignment
+            // cannot be trusted. A malicious plugin could return a misaligned pointer;
+            // read_unaligned is always safe, whereas assert! would be a self-DoS.
+            // Residual risk: dangling pointer provenance cannot be fully validated.
+            let ffi_findings = std::ptr::read_unaligned(findings_ptr);
             
             // Validation of pointers and length before slice creation
             if ffi_findings.data.is_null() && ffi_findings.len > 0 {
