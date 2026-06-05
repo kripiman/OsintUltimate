@@ -13,7 +13,6 @@ use tokio::sync::Semaphore;
 
 #[tokio::main]
 async fn main() -> Result<()> {
-    tracing_subscriber::fmt::init();
     println!("🚀 Starting REAL Golden Scan Baseline Capture (V15 Architecture)...");
     
     // 1. Setup Environment Dependencies (Explicit GhostMode for baseline)
@@ -24,7 +23,7 @@ async fn main() -> Result<()> {
     let layer_policy = ScanLayerPolicy::preset_authorized_red_team(); 
     let approval_gate = Arc::new(ApprovalGate::for_red_team()); 
     
-    let memory_monitor = Arc::new(MemoryMonitor::new(1024, 2048, None)); // 1GB/2GB limits, no shutdown token for baseline capture
+    let memory_monitor = Arc::new(MemoryMonitor::new(1024, 2048)); // 1GB/2GB limits
     let memory_semaphore = Arc::new(Semaphore::new(1024)); // 1024 permits
     
     // 2. Define Controlled Targets (matches docker-compose.test.yml)
@@ -40,8 +39,8 @@ async fn main() -> Result<()> {
         println!("🔍 Scanning: {}", host);
         let target = Arc::new(TargetHost {
             host: host.clone(),
-            ip: Some(host.clone()),
-            resolved_ip: Some(host.clone()),
+            ip: Some(host.split(':').next().unwrap().to_string()),
+            resolved_ip: Some(host.split(':').next().unwrap().to_string()),
             target_type: TargetType::Host,
             file_path: None,
             user: None,

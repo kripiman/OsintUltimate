@@ -3,24 +3,21 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use std::fs;
 use std::time::Duration;
 use tracing::{info, warn, error};
-use tokio_util::sync::CancellationToken;
 
 pub struct MemoryMonitor {
     soft_limit_mb: u32,
     hard_limit_mb: u32,
     current: Arc<AtomicU64>,
     peak: Arc<AtomicU64>,
-    shutdown_token: Option<Arc<CancellationToken>>,
 }
 
 impl MemoryMonitor {
-    pub fn new(soft_limit_mb: u32, hard_limit_mb: u32, shutdown_token: Option<Arc<CancellationToken>>) -> Self {
+    pub fn new(soft_limit_mb: u32, hard_limit_mb: u32) -> Self {
         let monitor = Self {
             soft_limit_mb,
             hard_limit_mb,
             current: Arc::new(AtomicU64::new(0)),
             peak: Arc::new(AtomicU64::new(0)),
-            shutdown_token,
         };
 
         // Spawn background monitoring task
@@ -90,7 +87,6 @@ impl MemoryMonitor {
         let peak_atom = Arc::clone(&self.peak);
         let soft = self.soft_limit_mb;
         let hard = self.hard_limit_mb;
-        let shutdown_token = self.shutdown_token.clone();
 
         tokio::spawn(async move {
             loop {
@@ -100,12 +96,7 @@ impl MemoryMonitor {
                 
                 if curr > hard {
                     error!("CRITICAL: Memory {}MB/{}MB, triggering shutdown signal", curr, hard);
-                    if let Some(ref token) = shutdown_token {
-                        token.cancel();
-                    } else {
-                        warn!("MemoryMonitor: No shutdown token configured. Falling back to process::exit(1). This may leave zombie resources.");
-                        std::process::exit(1);
-                    }
+                    std::process::exit(1);
                 } else if curr > soft {
                     warn!("Memory warning: {}MB/{}MB, activating backpressure", curr, soft);
                 }

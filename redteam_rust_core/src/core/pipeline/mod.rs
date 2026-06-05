@@ -62,8 +62,7 @@ impl<M: ExecutorMode> Pipeline<M> {
         policy: Option<Arc<dyn crate::core::policy::PolicyProvider>>,
         memory_monitor: Option<Arc<crate::utils::memory_monitor::MemoryMonitor>>,
     ) -> Self {
-        let shutdown_token = CancellationToken::new();
-        let monitor = memory_monitor.unwrap_or_else(|| Arc::new(crate::utils::memory_monitor::MemoryMonitor::new(100, 200, Some(Arc::new(shutdown_token.clone())))));
+        let monitor = memory_monitor.unwrap_or_else(|| Arc::new(crate::utils::memory_monitor::MemoryMonitor::new(100, 200)));
         let policy = policy.unwrap_or_else(|| Arc::new(crate::core::policy::StaticPolicy::new()));
         
         Self {
@@ -71,7 +70,7 @@ impl<M: ExecutorMode> Pipeline<M> {
             discovery_plugins: Arc::new(Vec::new()),
             plugins,
             sink: None, 
-            shutdown_token,
+            shutdown_token: CancellationToken::new(),
             liveness_checker: LivenessChecker::new(None, false),
             command_line: "minimal".to_string(),
             layer_policy: ScanLayerPolicy::preset_audit(),

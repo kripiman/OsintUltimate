@@ -68,16 +68,11 @@ impl LockFreeResultSink {
         });
     }
 
-    /// Enqueue a target for batch writing.
-    /// Returns `Ok(())` on success, or `Err(Box<TargetHost>)` if the queue is full.
-    /// Callers should apply backpressure (e.g., sleep and retry) on `Err`.
-    pub fn enqueue(&self, target: TargetHost) -> Result<(), Box<TargetHost>> {
+    pub fn enqueue(&self, target: TargetHost) {
         if let Err(t) = self.queue.push(target) {
-            error!("⚠️  v4-SINK: Results queue is FULL (capacity reached). Backpressure required for target {}.", t.host);
-            Err(Box::new(t))
+            error!("⚠️  v4-SINK: Results queue is FULL (capacity reached). Dropping target {} to prevent OOM.", t.host);
         } else {
             self.notify.notify_one();
-            Ok(())
         }
     }
 
@@ -120,7 +115,7 @@ mod tests {
             sink.enqueue(TargetHost {
                 host: format!("host-{}", i),
                 ..Default::default()
-            }).expect("enqueue should succeed on empty queue");
+            });
         }
 
         // Wait for batcher (approx 50ms should be enough for tokio)
