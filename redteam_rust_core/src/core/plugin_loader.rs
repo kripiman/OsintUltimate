@@ -274,8 +274,13 @@ impl DynamicPluginLoader {
         // V13 Signature Verification (WASM plugins also need .sig)
         Self::verify_signature_from_bytes(path, &bytes)?;
 
+        let name = path.file_stem().unwrap_or_default().to_string_lossy().into_owned();
+        // MEM-002 FIX: leak-once at construction, not on every name() call
+        let cached_name = Box::leak(name.clone().into_boxed_str());
+
         Ok(Box::new(WasmPlugin {
-            name: path.file_stem().unwrap_or_default().to_string_lossy().into_owned(),
+            name,
+            cached_name,
             bytes,
             rt: crate::core::sandbox::wasm::WasmRuntime::new(),
         }))
@@ -284,6 +289,7 @@ impl DynamicPluginLoader {
 
 pub struct WasmPlugin {
     name: String,
+    cached_name: &'static str,
     bytes: Vec<u8>,
     rt: crate::core::sandbox::wasm::WasmRuntime,
 }
@@ -291,7 +297,7 @@ pub struct WasmPlugin {
 #[async_trait::async_trait]
 impl ScannerPlugin for WasmPlugin {
     fn name(&self) -> &'static str {
-        Box::leak(self.name.clone().into_boxed_str())
+        self.cached_name
     }
 
     fn metadata(&self) -> crate::plugins::PluginMetadata {
