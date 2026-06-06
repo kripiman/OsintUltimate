@@ -342,9 +342,9 @@ Dashboard allows live mission injection (new targets added mid-scan).
 
 ## Active Audit Status
 - **Status**: ✅ AUDIT COMPLETE — All production blockers closed. Post-audit debt tracking in Phase 5–6.
-- **Closed blockers**: MEM-002 (WasmPlugin leak-once), MEM-001 (FFI leak contract), SEC-001 (LruCache bounded), SEC-002 (read_unaligned FFI), PERF-002 (dotenv→dotenvy), SEC-004 (sandbox spike doc), Arc Refactor (name interner)
+- **Closed blockers**: MEM-002 (WasmPlugin leak-once), MEM-001 (FFI leak contract), SEC-001 (LruCache bounded), SEC-002 (read_unaligned FFI), PERF-002 (dotenv→dotenvy), SEC-004 (sandbox spike doc), name interner (Option A, Arc<str> rejected by auditor)
 - **Deferred**: PERF-001 (rustls 0.21+0.23 dup — risk register), Stage C (DEGRADED — recovery path documented)
-- **HEAD**: 7492de5 (name interner — bounds future hot-reload leakage)
+- **HEAD**: c0f58b0 (baseline target-type fix + recovery docs)
 - **Baseline SHA256**: 9f32dc5ffbd7e996b4ea308dcf703734e04c571b3fbe6c553b9864787b22f82a ⚠️ DEGRADED (see `tests/baselines/DEGRADED_STATUS.md` for recovery path)
 - **Violations cumulative**: 25 (Sprint 7=13, Sprint 7.5=5, Sprint 11=2, Sprint 4+5a bundling=1, Sprint 5a=1, Stage-C false-report=1, V24-bundling=1, V25-bundling=1)
 
