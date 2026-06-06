@@ -1,6 +1,8 @@
 # Engine Core: Sovereign Pipeline
  
- > Source-verified. Replaces `engine_core.original.md`. See `ARCHITECTURE.md` for full diagrams. Last verified: 2026-05-13 (V15.1 Hardened).
+ > Source-verified. See [`README.md`](README.md) for the documentation index and [`ARCHITECTURE.md`](ARCHITECTURE.md) for full diagrams. Last verified: 2026-06-05.
+ >
+ > **Module layout note:** the pipeline and orchestrator are decomposed into directories, not single files. Stage functions live in `src/core/pipeline/stages/`; the orchestrator lives in `src/core/orchestrator/`.
  
  ---
  
@@ -14,7 +16,7 @@
  
  ## Stage 1: Discovery
  
- **File:** `src/core/pipeline.rs` → `spawn_discovery_stage`
+ **File:** `src/core/pipeline/stages/discovery.rs` → `spawn_discovery_stage` (wired in `pipeline/mod.rs::run`)
  
  - Bloom filter (1M capacity, 1% FP rate) deduplicates hosts without locking.
  - All `DiscoveryPlugin` instances run concurrently via `tokio::task::JoinSet`.
@@ -28,7 +30,7 @@
  
  ## Stage 2: Liveness Verification
  
- **File:** `src/core/pipeline.rs` → `spawn_liveness_stage`
+ **File:** `src/core/pipeline/stages/liveness.rs` → `spawn_liveness_stage`
  
  Three sequential checks before a target proceeds to scanning:
  
@@ -42,7 +44,7 @@
  
  ## Stage 3: Scanning (Orchestrator)
  
- **File:** `src/core/orchestrator.rs`
+ **Files:** `src/core/pipeline/stages/scanning.rs` (stage wrapper) → `src/core/orchestrator/` (`lifecycle/` run loop, `dispatch.rs` two-round priority, `scope_guard.rs`, `reactive.rs`, `swarm/`)
  
  Runs all scanner plugins against each live target. Key mechanisms:
  
@@ -78,7 +80,7 @@
  
  ## Stage 4: Sink (Lock-Free)
  
- **File:** `src/core/pipeline.rs` → `run_sink_stage` / `src/core/lock_free_sink.rs`
+ **File:** `src/core/pipeline/stages/sink.rs` → `run_sink_stage` / `src/core/lock_free_sink.rs`
  
  - `LockFreeResultSink` runs a background worker thread with a crossbeam queue. The pipeline never blocks waiting for I/O writes.
  - Before writing, each target goes through:

@@ -1,6 +1,6 @@
 # Stealth & OPSEC Architecture
 
-> Source-verified from `src/core/sandbox.rs`, `src/core/capability_layer.rs`, `src/utils/executor.rs`, `src/infrastructure/digital_ocean.rs`. Last verified: 2026-05-08.
+> Source-verified from `src/core/sandbox/mod.rs`, `src/core/capability_layer.rs`, `src/utils/executor.rs`, `src/infrastructure/digital_ocean.rs`. Last verified: 2026-06-05. Index: [`README.md`](README.md).
 
 ---
 
@@ -42,7 +42,7 @@ flowchart TD
 
 ## 2. SandboxDispatcher — Two-Tier Isolation
 
-**File:** `src/core/sandbox.rs`
+**File:** `src/core/sandbox/mod.rs`
 
 ```mermaid
 flowchart LR

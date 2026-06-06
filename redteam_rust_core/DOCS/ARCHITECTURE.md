@@ -1,29 +1,45 @@
 # Mimikri Core — System Architecture Reference
 
-> Derived from source code (`src/`). Authoritative. Last verified: 2026-05-13 (V15.1 Hardened).
+> Derived from source code (`src/`). Authoritative. Last verified: 2026-06-05.
+>
+> Start at [`README.md`](README.md) for the documentation index, module map, and reverse-engineering reading order. This document is the full reference with diagrams.
 
 ---
 
 ## 1. Bootstrap & Configuration Flow
 
+`main.rs` is a thin shim. All bootstrap logic is decomposed into the `src/boot/` module; the order below is the literal call sequence of `main()` → `boot::runtime::dispatch()`.
+
 ```mermaid
 flowchart TD
-    A["main.rs: tokio::main"] --> B{"args.len == 1?"}
-    B -- yes --> C["menu::show_menu<br/>interactive TUI"]
-    B -- no --> D["Args::parse via clap"]
-    C & D --> E["init_telemetry<br/>OTEL + JSON logs"]
-    E --> F["binary_health_check<br/>P0: bbscope asnmap cdncheck tlsx clairvoyance"]
-    F --> G["EngineFactory::detect_infrastructure_limits<br/>UltraLow / LocalPC / Hybrid / Server"]
-    G --> H["Config::from_env<br/>70+ env vars, typed Config struct"]
-    H --> I["Build EngineConfig<br/>bridge: Config to Engine"]
+    A["main.rs: tokio::main"] --> B["boot::cli::binary_health_check<br/>P0 preflight: bbscope asnmap cdncheck tlsx clairvoyance"]
+    B --> C["boot::cli::parse<br/>clap Args — or menu::show_menu if no args"]
+    C --> D["boot::telemetry::init<br/>OTEL + JSON logs"]
+    D --> E["boot::runtime::dispatch"]
+    E --> K{"--worker flag?"}
+    K -- yes --> L["boot::worker::run_worker_mode<br/>scan_queue polling (PostgreSQL)"]
+    K -- no --> G["EngineFactory::detect_infrastructure_limits<br/>UltraLow / LocalPC / Hybrid / Server"]
+    G --> H["Config::from_env<br/>typed Config struct, single env read point"]
+    H --> I["Build EngineConfig<br/>bridge: Config + Args to Engine"]
     I --> J["RedTeamEngine::from_config"]
-    J --> K{"--worker flag?"}
-    K -- yes --> L["run_worker_mode<br/>NATS + scan_queue polling"]
-    K -- no --> M["Normal scan + sink assembly"]
+    J --> M["scope sync → stealth init → sink_setup → dashboard → targets → run mode"]
 ```
 
+**Bootstrap module map** (`src/boot/`):
+
+| File | Responsibility |
+|---|---|
+| `cli.rs` | clap `Args`, `parse()`, `binary_health_check()` (P0 preflight tools) |
+| `telemetry.rs` | `tracing` + OpenTelemetry (OTLP) init |
+| `runtime.rs` | `dispatch()` — the wiring: builds `EngineConfig`, runs the selected mode |
+| `stealth.rs` | stealth-infrastructure init (DigitalOcean egress, kill-switch) |
+| `sink_setup.rs` | `build_multi_sink()` — assembles the `MultiSink` fan-out |
+| `dashboard.rs` | Axum dashboard + live mission injection |
+| `targets.rs` | `build_target_stream()` — CLI / file / APK / image / CertStream / dashboard |
+| `worker.rs` | `run_worker_mode()` — distributed `scan_queue` consumer |
+
 **Key invariants:**
-- `Config::from_env()` is the single env-var read point. Engine never reads env directly.
+- `Config::from_env()` is the single env-var read point. Engine never reads env directly. CLI args override env values.
 - `MIMIKRI_WORKSPACE` controls all output paths. Default: `./workspace`.
 - Hardware profiles set auto-concurrency: UltraLow=10, LocalPC=30, Hybrid=60, Server=150.
 
@@ -228,6 +244,10 @@ All steps logged to `ActivityLog` → `workspace/logs/timeline.jsonl` (JSONL app
 
 ## 8. Plugin Taxonomy
 
+Registered in `src/plugins/scanner_factory.rs` (**137** scanner registrations) and `src/plugins/discovery_factory.rs` (**11** discovery registrations). `sovereign`-gated categories are compiled out of default builds, so the effective default-build set is smaller.
+
+| Category dir | Build | Layer | Representative tools |
+|---|---|---|---|
 | `reconnaissance` | always | 1-2 | cdncheck, tlsx, shodan, netlas, certstream, waymore, gitleaks, subfinder |
 | `enumeration` | always | 2 | nuclei, katana, ffuf, shuffledns, s3scanner, cloudenum, rustscan |
 | `exploitation` | always | 4 | gopherus, ssrfmap, ghauri, kxss, sqlmap, dalfox, hydra, impacket |
@@ -312,11 +332,13 @@ erDiagram
     }
 ```
 
-3 migrations:
-- `20260428` — core schema (scans, targets, findings, objectives, agent_sessions, plugin_cache, mcp_stats, checkpoints, deduplication, cve_cache)
-- `20260506` — distributed worker queue (workers, scan_queue + priority index)
-- `20260508` — bug bounty program targets (program_targets, h1/bc/intigriti platform column)
-- `20260508000003` — [V14.7] bug bounty submission deduplication (`submitted_reports`)
+6 migrations (`migrations/`, applied in filename order):
+- `20260428000000_initial_pg_schema` — core schema (scans, targets, findings, objectives, agent_sessions, plugin_cache, mcp_stats, checkpoints, deduplication, cve_cache)
+- `20260506000000_distributed_worker_queue` — distributed worker queue (workers, scan_queue + priority index)
+- `20260508000000_program_targets` — bug bounty program targets (program_targets, h1/bc/intigriti platform column)
+- `20260508000002_temporal_diff_fixes` — temporal diff corrections
+- `20260508000003_submitted_reports` — [V14.7] bug bounty submission deduplication (`submitted_reports`)
+- `20260525000000_worker_profile` — worker profile capabilities
 
 ---
 

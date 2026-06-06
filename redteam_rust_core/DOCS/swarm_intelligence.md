@@ -1,6 +1,6 @@
 # Swarm Intelligence & Multi-Agent System
 
-> Source-verified from `src/core/swarm/orchestrator.rs` and `src/core/swarm/budget.rs`. Last verified: 2026-05-13 (V15.1 Hardened).
+> Source-verified from `src/core/orchestrator/swarm/` (`coordinator.rs`, `agent.rs`, `budget.rs`, `correlation.rs`, `inventory.rs`). Last verified: 2026-06-05. Index: [`README.md`](README.md).
 
 ---
 
@@ -44,7 +44,7 @@ flowchart TD
 
 ## 2. Token Budget (`TokenBudget`)
 
-**File:** `src/core/swarm/budget.rs`
+**File:** `src/core/orchestrator/swarm/budget.rs`
 
 All atomic operations — no mutex required. Race-condition safe via `compare_exchange_weak` CAS loop.
 

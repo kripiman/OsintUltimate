@@ -369,7 +369,7 @@ This document describes the **target architecture**. Current state:
 | Cloud-init worker bootstrap script | **Not yet written** — must point to Box2 Postgres |
 | Droplet janitor cron (Box3) | **Not yet written** |
 | `age` + YubiKey secrets workflow | **Documented in `08_SECRETS_MANAGEMENT.md`** — secrets unlock on **Box2** |
-| Object Storage findings archive sink (Box1) | **Not yet implemented** — extend `core/sink.rs` |
+| Object Storage findings archive sink (Box1) | **Not yet implemented** — extend `core/sink/` (new backend module) |
 | Box2→Box3 Postgres streaming replication | **Not yet configured** (was Box1→Box3, now Box2→Box3) |
 | Box1 binary distribution cache fallback on Box2 | **Not yet implemented** |
 
@@ -385,9 +385,9 @@ Implementation order proposed (post Sprint 7.5 closure):
 ## 12. References
 
 - `infrastructure/digital_ocean.rs` — DO API client, kill-switch
-- `core/engine.rs` — `RedTeamEngine` initialization
+- `core/engine/app.rs` — `RedTeamEngine` initialization
 - `utils/config.rs` — Env loading (reads `/run/mimikri/secrets.env` via systemd `EnvironmentFile`)
-- `core/sink.rs` — `DataSink` trait (target for Object Storage backend)
+- `core/sink/mod.rs` — `DataSink` trait (target for Object Storage backend)
 - `stealth_opsec.md` — Stealth infrastructure principles
 - `multi_vps_deployment.original.md` — Prior multi-VPS thinking
 - DigitalOcean Acceptable Use Policy: https://www.digitalocean.com/legal/acceptable-use-policy
