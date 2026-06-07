@@ -54,7 +54,7 @@ struct CreateDropletRequest {
 
 use crate::utils::config::ProxyMode;
 
-fn generate_proxy_user_data(mode: ProxyMode, user: &str, pass: &str) -> String {
+fn generate_user_data(mode: ProxyMode, user: &str, pass: &str) -> String {
     match mode {
         ProxyMode::Dante => format!(r#"#cloud-config
 package_update: true
@@ -111,6 +111,100 @@ runcmd:
   - hysteria server -c /etc/hysteria.yaml &
   - shutdown -h +120
 "#, pass = pass),
+        ProxyMode::Worker => {
+            let binary_url = std::env::var("DO_WORKER_BINARY_URL")
+                .expect("DO_WORKER_BINARY_URL env var must be set for Worker mode");
+            let ts_key = std::env::var("TAILSCALE_AUTH_KEY")
+                .expect("TAILSCALE_AUTH_KEY env var must be set for Worker mode");
+            let do_token = std::env::var("DIGITALOCEAN_TOKEN")
+                .expect("DIGITALOCEAN_TOKEN env var must be set for Worker mode");
+            let db_url = std::env::var("DATABASE_URL").unwrap_or_default();
+            let scope_id = std::env::var("SCOPE_ID").unwrap_or_default();
+            let interactsh_url = std::env::var("INTERACTSH_URL").unwrap_or_default();
+            // INTERACTSH_SERVER_URL (bare host) is read by OobInteractionManager::new() inside the worker.
+            // We derive it from INTERACTSH_URL by stripping the scheme, so the host only needs INTERACTSH_URL set.
+            let interactsh_server_url = std::env::var("INTERACTSH_SERVER_URL")
+                .unwrap_or_else(|_| {
+                    interactsh_url
+                        .trim_start_matches("https://")
+                        .trim_start_matches("http://")
+                        .trim_end_matches('/')
+                        .to_string()
+                });
+            let interactsh_token = std::env::var("INTERACTSH_TOKEN").unwrap_or_default();
+            let node_id = format!("do-{}", uuid::Uuid::new_v4().to_string()[..8].to_string());
+            format!(r#"#cloud-config
+package_update: true
+packages:
+  - nmap
+  - masscan
+  - curl
+  - ca-certificates
+write_files:
+  - path: /usr/local/sbin/self-destruct.sh
+    permissions: '0700'
+    content: |
+      #!/bin/sh
+      # Self-destruct via DO API using metadata service droplet ID
+      DROPLET_ID=$(curl -fsSL http://169.254.169.254/metadata/v1/id)
+      curl -fsSL -X DELETE \
+        -H "Content-Type: application/json" \
+        -H "Authorization: Bearer {do_token}" \
+        "https://api.digitalocean.com/v2/droplets/$DROPLET_ID" || true
+      # Belt-and-suspenders: poweroff even if API call fails
+      sleep 5
+      poweroff -f
+runcmd:
+  - mkdir -p /usr/local/bin /var/lib/mimikri
+  - curl -fsSL -o /usr/local/bin/redteam_rust_core {binary_url} || (echo "Binary download failed" && /usr/local/sbin/self-destruct.sh)
+  - chmod 755 /usr/local/bin/redteam_rust_core
+  - curl -fsSL https://tailscale.com/install.sh | sh
+  - tailscale up --auth-key={ts_key} --hostname={node_id} --ephemeral --accept-routes=false --accept-dns=false --ssh=false
+  - |
+    cat > /etc/systemd/system/redteam-worker.service <<EOF
+    [Unit]
+    Description=Mimikri Worker
+    After=network-online.target
+    Wants=network-online.target
+    [Service]
+    Type=simple
+    User=root
+    Environment="DATABASE_URL={db_url}"
+    Environment="RUST_LOG=info"
+    Environment="SCOPE_ID={scope_id}"
+    Environment="REDTEAM_AUTHORIZED_SCOPE={scope_id}"
+    Environment="INTERACTSH_SERVER_URL={interactsh_server_url}"
+    Environment="INTERACTSH_URL={interactsh_url}"
+    Environment="INTERACTSH_TOKEN={interactsh_token}"
+    ExecStart=/usr/local/bin/redteam_rust_core --worker --postgres-url {db_url} --node-id {node_id} --concurrency 4 --soft-mem-limit-mb 600
+    Restart=no
+    TimeoutStopSec=60s
+    RuntimeMaxSec=21600
+    ExecStopPost=/usr/local/sbin/self-destruct.sh
+    NoNewPrivileges=yes
+    ProtectSystem=strict
+    ProtectHome=yes
+    PrivateTmp=yes
+    ProtectKernelTunables=yes
+    ProtectKernelModules=yes
+    ProtectKernelLogs=yes
+    ProtectControlGroups=yes
+    LockPersonality=yes
+    RestrictRealtime=yes
+    ReadWritePaths=/var/lib/mimikri /tmp
+    SystemCallArchitectures=native
+    SystemCallFilter=@system-service
+    AmbientCapabilities=CAP_NET_RAW CAP_NET_ADMIN CAP_NET_BIND_SERVICE
+    CapabilityBoundingSet=CAP_NET_RAW CAP_NET_ADMIN CAP_NET_BIND_SERVICE
+    MemoryMax=900M
+    LimitNOFILE=8192
+    [Install]
+    WantedBy=multi-user.target
+    EOF
+  - systemctl daemon-reload
+  - systemctl enable --now redteam-worker
+"#)
+        }
         ProxyMode::None => String::new(),
     }
 }
@@ -143,26 +237,39 @@ impl DigitalOceanClient {
         Ok(headers)
     }
 
+    pub async fn create_worker_droplet(&self, name: &str, region: &str) -> Result<Droplet> {
+        if std::env::var("DO_WORKER_BINARY_URL").is_err() {
+            anyhow::bail!("DO_WORKER_BINARY_URL env var is required to spawn worker droplets. Set it to the HTTPS URL of the pre-built x86_64 musl binary.");
+        }
+        self.create_droplet(name, region, ProxyMode::Worker).await
+    }
+
     pub async fn create_droplet(&self, name: &str, region: &str, mode: ProxyMode) -> Result<Droplet> {
         let socks_user = "operator"; 
-        let socks_pass = uuid::Uuid::new_v4().to_string()[..12].to_string(); // Professional entropy
+        let socks_pass = uuid::Uuid::new_v4().to_string()[..12].to_string();
 
         let mut ssh_keys = vec![];
         if let Ok(key) = std::env::var("DO_SSH_KEY_ID") {
             ssh_keys.push(key);
         }
 
+        let size = if mode == ProxyMode::Worker {
+            std::env::var("DO_DROPLET_SIZE").unwrap_or_else(|_| "s-1vcpu-1gb".to_string())
+        } else {
+            std::env::var("DO_DROPLET_SIZE").unwrap_or_else(|_| "s-1vcpu-512mb".to_string())
+        };
+
         let request = CreateDropletRequest {
             name: name.to_string(),
             region: region.to_string(),
-            size: "s-1vcpu-512mb".to_string(),
+            size,
             image: "ubuntu-22-04-x64".to_string(),
             ssh_keys, 
             backups: false,
             ipv6: false,
             monitoring: true,
             tags: vec!["osint-ultimate".to_string(), "ephemeral".to_string()],
-            user_data: Some(generate_proxy_user_data(mode, socks_user, &socks_pass)),
+            user_data: Some(generate_user_data(mode, socks_user, &socks_pass)),
         };
 
         let response = self.get_client()?
@@ -249,5 +356,29 @@ impl DigitalOceanClient {
             let _ = self.destroy_droplet(d.id).await;
         }
         Ok(())
+    }
+
+    /// Reaper: destroy droplets that are off or exceeded TTL (6h).
+    pub async fn reap_stale_droplets(&self) -> Result<u32> {
+        let droplets = self.list_droplets().await?;
+        let mut destroyed = 0u32;
+        let _now = chrono::Utc::now();
+        for d in droplets {
+            let should_destroy = d.status == "off" || {
+                // If droplet has been active for > 6h, destroy it
+                // DO API does not give created_at in this struct, so we rely on status=off
+                // and a conservative kill. For TTL-based kill, see self-destruct.sh on the droplet.
+                false
+            };
+            if should_destroy {
+                info!("🛡️ REAPER: Destroying stale/off droplet {} (ID: {}, status: {})", d.name, d.id, d.status);
+                if let Err(e) = self.destroy_droplet(d.id).await {
+                    tracing::error!("❌ REAPER: Failed to destroy droplet {}: {}", d.id, e);
+                } else {
+                    destroyed += 1;
+                }
+            }
+        }
+        Ok(destroyed)
     }
 }
