@@ -173,7 +173,7 @@ pub fn get_all_scanners<M: ExecutorMode>(config: GlobalConfig<M>) -> Vec<Box<dyn
         Box::new(NucleiScanner::new(config.clone())), 
         Box::new(FfufScanner::new(None)), 
         Box::new(ArjunScanner::new()), 
-        Box::new(RustScanScanner::new()), 
+        Box::new(RustScanScanner::new(config.executor.clone())), 
         Box::new(KerbruteScanner::new()),
         Box::new(Enum4LinuxScanner::new()), 
         Box::new(NetExecScanner::new()), 

@@ -1,33 +1,39 @@
 use crate::plugins::{ScannerPlugin, Capability};
 use crate::models::{TargetHost, Finding, Severity, Category};
 use crate::utils::tool_detection::detect_tool;
+use crate::utils::executor::{StealthExecutor, ExecutorMode};
 use async_trait::async_trait;
 use anyhow::{Result, Context};
 use tracing::info;
-use std::process::Stdio;
-use tokio::process::Command;
+use std::sync::Arc;
 
-pub struct RustScanScanner {
+pub struct RustScanScanner<M: ExecutorMode> {
     binary_path: String,
+    executor: Arc<StealthExecutor<M>>,
 }
 
-impl Default for RustScanScanner {
+impl<M: ExecutorMode> Default for RustScanScanner<M> {
     fn default() -> Self {
-        Self::new()
+        Self::new(Arc::new(StealthExecutor::new(
+            Arc::new(crate::core::policy::ReloadablePolicy::new(None)),
+            None,
+            false,
+        )))
     }
 }
 
-impl RustScanScanner {
-    pub fn new() -> Self {
+impl<M: ExecutorMode> RustScanScanner<M> {
+    pub fn new(executor: Arc<StealthExecutor<M>>) -> Self {
         let path = detect_tool("rustscan");
         Self {
             binary_path: path,
+            executor,
         }
     }
 }
 
 #[async_trait]
-impl ScannerPlugin for RustScanScanner {
+impl<M: ExecutorMode> ScannerPlugin for RustScanScanner<M> {
     fn name(&self) -> &'static str {
         crate::models::PLUGIN_RUSTSCAN
     }
@@ -63,21 +69,16 @@ impl ScannerPlugin for RustScanScanner {
         let target_addr = target.pinned_addr()?;
         info!("RustScanScanner: scanning ports for {}", target_addr);
 
-        // RustScan is extremely fast. We pass -a target and let it find open ports.
-        // Then we can optionally pass those to nmap, but here we'll just report open ports found by rustscan.
-        let child = Command::new(&self.binary_path)
-            .arg("-a").arg(target_addr)
-            .arg("--ulimit").arg("5000")
-            .arg("--quiet")
-            .arg("--") // RustScan flags end here, then come nmap flags
-            .arg("-sV") // Service version detection in the final nmap scan
-            .stdin(Stdio::null())
-            .stdout(Stdio::piped())
-            .stderr(Stdio::null())
-            .spawn()
-            .context("Failed to spawn rustscan")?;
+        let args = vec![
+            "-a".to_string(), target_addr.to_string(),
+            "--ulimit".to_string(), "5000".to_string(),
+            "--quiet".to_string(),
+            "--".to_string(),
+            "-sV".to_string(),
+        ];
 
-        let output = child.wait_with_output().await.context("Failed to wait for rustscan")?;
+        let output = self.executor.execute_and_wait(&self.binary_path, args).await
+            .context("RustScan execution failed via StealthExecutor")?;
 
         let mut findings = Vec::new();
         let content = String::from_utf8_lossy(&output.stdout);
