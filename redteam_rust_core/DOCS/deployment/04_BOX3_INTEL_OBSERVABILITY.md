@@ -232,9 +232,9 @@ set -euo pipefail
 NOW=$(date +%s)
 TTL_SECONDS=21600    # 6 hours
 
-# List all droplets tagged purpose:redteam-ephemeral
+# List all droplets tagged osint-ultimate (the tag set by digital_ocean.rs)
 DROPLETS=$(curl -s -H "Authorization: Bearer $DO_TOKEN" \
-  "https://api.digitalocean.com/v2/droplets?tag_name=purpose:redteam-ephemeral&per_page=200")
+  "https://api.digitalocean.com/v2/droplets?tag_name=osint-ultimate&per_page=200")
 
 echo "$DROPLETS" | jq -c '.droplets[] | {id, created_at, tags}' | while read -r d; do
   ID=$(echo "$d" | jq -r .id)
@@ -605,7 +605,7 @@ done
 | Pitfall | Symptom | Fix |
 |---|---|---|
 | Replication slot fills disk on Box1 | `WAL files accumulating` | Verify Box3 connected: `pg_replication_slots.active = t` |
-| Janitor authenticated but lists 0 droplets | DO tag mismatch | `purpose:redteam-ephemeral` not `purpose=redteam-ephemeral` in DO tag syntax |
+| Janitor authenticated but lists 0 droplets | DO tag mismatch | Query `tag_name=osint-ultimate` — the tag `digital_ocean.rs` actually sets (`["osint-ultimate","ephemeral"]`); the `purpose:redteam-ephemeral` tag from older drafts is never applied by code |
 | Grafana admin password committed | Secret leak | Use `$__file{}` indirection (above), never inline |
 | Loki ingestion rate exceeded | Logs lost | Increase `ingestion_rate_mb` or shorten retention |
 | Tempo OTLP port collision | Box1 also wants 4317 | OTEL endpoint always points to Box3 — Box1 doesn't listen for OTLP |

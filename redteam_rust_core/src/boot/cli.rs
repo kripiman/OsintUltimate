@@ -81,6 +81,8 @@ pub struct Args {
     pub profile: String,
     #[arg(long, default_value_t = false, help = "Alias for --profile=cve_correlation (Box3 mode)")]
     pub cve_correlation_only: bool,
+    #[arg(long, default_value_t = false, help = "Enqueue targets to scan_queue for DO workers instead of scanning locally. Requires --postgres-url.")]
+    pub enqueue_only: bool,
 }
 
 pub fn parse() -> Args {

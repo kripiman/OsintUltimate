@@ -4,6 +4,31 @@
 
 **Prerequisites**: `03_BOX2_COORDINATOR.md`, `05_BOX4_INTERACTSH.md`, `05_TAILSCALE_MESH.md`, `08_SECRETS_MANAGEMENT.md`. Worker auth-key and interactsh token in secrets bundle.
 
+> [!IMPORTANT]
+> **Implementation status (verified against `src/` 2026-06-05).** V15.6 UPDATE: Core gaps closed. The worker binary runs **on** the DO droplet so `nmap -sS`, UDP, OS-detection and exploitation plugins execute from DO's IP (they need raw sockets and cannot traverse a SOCKS5 egress proxy).
+>
+> | Component | Status |
+> |---|---|
+> | Worker binary `--worker` consuming `scan_queue` | **Implemented** (`src/boot/worker.rs`) |
+> | `--enqueue-only` (queue targets from Oracle without scanning) | **Implemented** (`src/boot/runtime.rs`) |
+> | Oracle ban-prevention gate (`is_oracle_cloud()` → blocks Scanning+) | **Implemented** (`src/boot/runtime.rs`) |
+> | DO droplet auto-provisioning as **proxy** | **Implemented** — `create_droplet` installs SOCKS5/Shadowsocks/Hysteria |
+> | DO droplet auto-provisioning as **worker** | **Implemented** — `create_worker_droplet()` renders inline cloud-init with systemd + nmap + masscan + binary download. No Tailscale auto-join yet. |
+> | Oracle coordinator auto-spawns DO workers on pending jobs | **Implemented** — `runtime.rs` spawns a polling task that checks `scan_queue` and calls `create_worker_droplet()` when `pending > 0 && active_workers == 0`. |
+> | `DO_DROPLET_SIZE` env var | **Implemented** — read by `create_droplet`. Defaults to `s-1vcpu-1gb` for workers, `s-1vcpu-512mb` for proxies. |
+> | NATS as worker task transport | **PLANNED** — NATS is still **output sink only**. |
+>
+> **Required env vars for worker spawn:**
+> - `DIGITALOCEAN_TOKEN` — DO API token
+> - `DATABASE_URL` — PostgreSQL URL for workers to connect
+> - `DO_WORKER_BINARY_URL` — HTTPS URL to pre-built x86_64 musl binary
+> - `DO_DROPLET_SIZE` — e.g. `s-1vcpu-1gb` (optional)
+> - `SCOPE_ID`, `INTERACTSH_URL`, `INTERACTSH_TOKEN` — injected into worker env
+>
+> **To deploy today:**
+> 1. **Manual (C):** bake snapshot (§1), spawn droplet, run `--worker`.
+> 2. **Auto (A):** run coordinator on Oracle with `--max-layer passive` + `DIGITALOCEAN_TOKEN` + `DATABASE_URL`. Use `--enqueue-only` to queue targets. Coordinator auto-spawns DO workers when queue is non-empty.
+
 ---
 
 ## 1. Pre-baked snapshot — preferred bootstrap
@@ -84,7 +109,9 @@ augenrules --load
 ### 1.4 Install worker binary
 
 ```bash
-# Transfer pre-built ARM64 musl binary from Box1 Object Storage
+# Transfer pre-built x86_64 musl binary from Box1 Object Storage
+# NOTE: DO standard droplets are x86_64 (ubuntu-22-04-x64 in §1.1), NOT ARM.
+# Build target: x86_64-unknown-linux-musl. The Oracle boxes are ARM64; the DO worker is a separate x86_64 artifact.
 curl -fsSL -o /usr/local/bin/redteam_rust_core \
   "https://objectstorage.<region>.oraclecloud.com/p/<signed-url>/redteam_rust_core-v0.1.0"
 chmod 755 /usr/local/bin/redteam_rust_core
@@ -160,7 +187,8 @@ doctl compute droplet delete <template-droplet-id> --force
 
 ## 2. Cloud-init user-data (per spawn)
 
-`infrastructure/digital_ocean.rs` injects a cloud-init script when calling `POST /v2/droplets`. Template stored in `redteam_rust_core/infrastructure/cloud-init-worker.yaml`:
+> [!NOTE]
+> **IMPLEMENTED (V15.6).** `digital_ocean.rs::generate_user_data(ProxyMode::Worker)` now renders an inline worker cloud-config directly. No separate `infrastructure/cloud-init-worker.yaml` file is required. The systemd unit below is the **reference template** that the code renders automatically. Use it for hand-tweaked deployments or snapshot baking.
 
 ```yaml
 #cloud-config
@@ -188,11 +216,8 @@ runcmd:
   - swapoff -a
   - sed -i '/swap/s/^/#/' /etc/fstab
 
-  # Self-destruct timer — UNCONDITIONAL
-  # Even if scan hangs, droplet dies at 6h
-  - at -M now + 6 hours <<< 'poweroff -f'
-
   # Tailscale join
+  - curl -fsSL https://tailscale.com/install.sh | sh
   - tailscale up
       --auth-key=${TAILSCALE_AUTH_KEY}
       --advertise-tags=tag:redteam-worker
@@ -239,9 +264,10 @@ runcmd:
       --node-id do-${DROPLET_ID} \
       --concurrency 4 \
       --soft-mem-limit-mb 600
-    ExecStopPost=/usr/local/sbin/worker-finalize.sh
+    ExecStopPost=/usr/local/sbin/self-destruct.sh
     Restart=no
     TimeoutStopSec=60s
+    RuntimeMaxSec=21600
 
     NoNewPrivileges=yes
     ProtectSystem=strict
@@ -268,35 +294,33 @@ runcmd:
     systemctl daemon-reload
     systemctl enable --now redteam-worker
 
-# Finalize script: when worker exits, shut down
+# Self-destruct script: DELETE droplet via DO API on exit
 write_files:
-  - path: /usr/local/sbin/worker-finalize.sh
+  - path: /usr/local/sbin/self-destruct.sh
     permissions: '0700'
     owner: root:root
     content: |
-      #!/usr/bin/env bash
-      # Worker exited (queue drained or fatal). Drain pending NATS,
-      # then power off so Box1 can clean up the droplet record.
-      sleep 30
-      tailscale logout || true
+      #!/bin/sh
+      DROPLET_ID=$(curl -fsSL http://169.254.169.254/metadata/v1/id)
+      curl -fsSL -X DELETE \
+        -H "Content-Type: application/json" \
+        -H "Authorization: Bearer ${DO_TOKEN}" \
+        "https://api.digitalocean.com/v2/droplets/$DROPLET_ID" || true
+      sleep 5
       poweroff -f
-
-# Final lockdown
-power_state:
-  delay: 'now'
-  mode: poweroff
-  message: 'Worker shutdown via finalize'
-  condition: 'test ! -f /etc/redteam-active'
 ```
 
 > [!NOTE]
-> The cloud-init template is rendered by `infrastructure/digital_ocean.rs` with the campaign-specific values (`DROPLET_ID`, `TAILSCALE_AUTH_KEY`, `DATABASE_URL`, `SCOPE_ID`, `INTERACTSH_URL`, `INTERACTSH_TOKEN`). These values come from `/run/mimikri/secrets.env` on **Box2** (tmpfs, populated by the operator-side `unlock-remote.sh` flow in `08_SECRETS_MANAGEMENT.md`). They are never embedded in the snapshot and never written to Box2 disk.
+> **IMPLEMENTED (V15.6).** `generate_user_data(ProxyMode::Worker)` renders the inline worker cloud-config directly. Values (`TAILSCALE_AUTH_KEY`, `DATABASE_URL`, `SCOPE_ID`, `INTERACTSH_URL`, `INTERACTSH_TOKEN`, `DO_TOKEN`) are sourced from environment variables on **Box2** at spawn time. The `self-destruct.sh` script (injected via `write_files`) uses the DO metadata service (`169.254.169.254/metadata/v1/id`) and the injected `DO_TOKEN` to DELETE the droplet upon worker exit.
 
 ---
 
 ### Spawn flow (**Box2** → DO)
 
-`infrastructure/digital_ocean.rs::spawn()` performs:
+> [!NOTE]
+> **IMPLEMENTED (V15.6).** `digital_ocean.rs::create_worker_droplet(name, region)` renders worker cloud-init, reads `DO_DROPLET_SIZE` from env (default `s-1vcpu-1gb`), tags `["osint-ultimate","ephemeral"]`, and auto-installs nmap/masscan/Tailscale. The kill-switch and reaper enumerate droplets via `GET /v2/droplets?tag_name=osint-ultimate`.
+
+The intended worker spawn performs:
 
 1. Pull `DO_TOKEN` from Vault
 2. Pull `TAILSCALE_AUTH_KEY` (worker ephemeral) from Vault
@@ -312,7 +336,7 @@ power_state:
      "backups": false,
      "ipv6": false,
      "monitoring": false,
-     "tags": ["purpose:redteam-ephemeral", "campaign:${SCOPE_ID}", "spawned-by:box2"],
+     "tags": ["osint-ultimate", "ephemeral", "campaign:${SCOPE_ID}"],
      "user_data": "${BASE64_CLOUD_INIT}",
      "vpc_uuid": null
    }
@@ -320,6 +344,8 @@ power_state:
 5. Record droplet_id in Postgres `workers` table
 6. Wait for tailnet appearance (poll `tailscale status` for `mimikri-worker-${id}`)
 7. Worker begins polling `scan_queue`
+
+> Tag note: the code's destroy/kill-switch path keys off the **`osint-ultimate`** tag, so any worker spawn must include it (not the legacy `purpose:redteam-ephemeral` shown in older drafts) or the janitor will not find the droplet.
 
 ---
 
@@ -329,25 +355,28 @@ power_state:
 
 1. Worker drains `scan_queue` jobs for its `claimed_by` filter
 2. `redteam_rust_core --worker` exits with status 0
-3. `worker-finalize.sh` runs (ExecStopPost), `poweroff -f`
-4. Droplet enters `off` state
-5. **Box2** polling loop detects `off` → calls DELETE on droplet
+3. `self-destruct.sh` runs (ExecStopPost):
+   - Reads droplet ID from `169.254.169.254/metadata/v1/id`
+   - Calls `DELETE /v2/droplets/${id}` via DO API
+   - Falls back to `poweroff -f` if API call fails
+4. Droplet destroyed (billing stops immediately)
+5. If self-destruct fails → reaper task on coordinator detects `off` droplet and destroys it within 5 min
 6. Tailnet device entry auto-expires (ephemeral key)
 
-### 4.2 TTL-forced — 6h cloud-init `at` timer
+### 4.2 TTL-forced — 6h systemd hard limit
 
-1. `at +6h shutdown -h now` fires regardless of scan state
-2. Droplet powers off
-3. Box1 or Box3 janitor (`04_BOX3 §5`) issues DELETE
+1. `RuntimeMaxSec=21600` in systemd service → SIGTERM at 6h regardless of scan state
+2. `ExecStopPost=self-destruct.sh` fires → DELETE droplet via DO API
+3. Belt-and-suspenders: coordinator reaper task also scans for stale/off droplets every 5 min
 
 ### 4.3 Kill-switch — operator interrupt
 
 1. Operator sends SIGINT (Ctrl+C) to `redteam-coordinator` on Box1
 2. `KillSignal=SIGINT` in systemd → `tokio::signal::ctrl_c()` handler
 3. Coordinator calls `destroy_all_ephemeral_droplets()`:
-   - `GET /v2/droplets?tag_name=campaign:${SCOPE_ID}`
+   - `GET /v2/droplets?tag_name=osint-ultimate`
    - For each: `DELETE /v2/droplets/${id}`
-4. Verify in DO console no droplets remain with the campaign tag
+4. Verify in DO console no droplets remain with the `osint-ultimate` tag
 
 > [!IMPORTANT]
 > Drill the kill-switch quarterly. Confirmed working = all droplets gone within 30s of Ctrl+C, no orphan billing the next day.
@@ -430,7 +459,7 @@ doctl compute droplet list --tag-name campaign:test-001
 | Worker dies before tailnet up | Becomes orphan | `at +6h shutdown` still fires; janitor cleans up |
 | DO spending alert ignored | Surprise bill | Audit weekly via `doctl compute droplet list --format Name,Created,Memory,VCPUs` |
 | Region selected outside scope geo | Latency / target geo policies | Spawn in region near target |
-| `purpose:redteam-ephemeral` tag forgotten | Janitor cannot find droplet | Validate in spawn() code: `assert!(tags.contains("purpose:redteam-ephemeral"))` |
+| `osint-ultimate` tag forgotten | Janitor/kill-switch cannot find droplet (queries `tag_name=osint-ultimate`) | Validate in spawn code: `assert!(tags.contains("osint-ultimate"))` |
 | Worker exposes SSH momentarily before disable | Brief attack window | UFW default-deny inbound before SSH service starts |
 | interactsh token not injected in cloud-init | Workers generate payloads but Box4 rejects them | Verify `INTERACTSH_TOKEN` in `secrets.env` and cloud-init env block |
 | interactsh server down (Box4) | OOB callbacks missed; scans continue but blind findings unconfirmed | Restart interactsh on Box4; restart scan session to re-inject fresh payloads |

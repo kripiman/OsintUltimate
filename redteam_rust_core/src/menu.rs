@@ -60,6 +60,7 @@ pub fn show_menu() -> Result<Option<Args>> {
         scope_id: None,
         profile: "scan".to_string(),
         cve_correlation_only: false,
+        enqueue_only: false,
     };
 
     let scope_id = Text::new("🆔 Introduce el Scope ID (opcional, para aislamiento):")

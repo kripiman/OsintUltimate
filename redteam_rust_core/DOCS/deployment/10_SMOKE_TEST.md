@@ -249,22 +249,26 @@ ssh opsec@mimikri-box1 'sudo journalctl -t cf-access --since "-5 min" | tail -5'
 
 ---
 
-## 10. Validate ROI baseline collection
+## 10. Validate ROI ranking
 
-Phase 0 telemetry should populate `mcp_stats`:
+> [!NOTE]
+> **Corrected against `src/` 2026-06-05.** ROI ranking is **not** stored in `mcp_stats`. The `mcp_stats` table is a flat key/value counter (`stat_key TEXT`, `stat_value BIGINT`) — it has no `program`, `findings_per_hour`, or `success_rate` columns, and there is no `boot/telemetry.rs` "Phase 0 baseline" job. ROI is computed **on demand** from `config/programs.json` by `ProgramAnalyzer` (`src/core/selection/`, `calculate_roi_score`) and served by the dashboard.
+
+Confirm the ranking endpoint responds. The real route is `GET /api/v1/roi/rankings`; auth is the dashboard token as an `Authorization: Bearer <token-hex>` header (the token file is hex). Response is a JSON array of `[program, score]` pairs.
 
 ```bash
-sudo -u mimikri psql -h mimikri-box1 -U mimikri redteam \
-  -c "SELECT program, findings_per_hour, success_rate, last_updated FROM mcp_stats WHERE program='smoke-test-2026';"
+TOKEN=$(ssh opsec@mimikri-box1 'sudo -u mimikri cat /opt/mimikri/workspace/logs/dashboard.token')
+curl -fsSL http://mimikri-box1:8080/api/v1/roi/rankings \
+  -H "Authorization: Bearer ${TOKEN}" \
+  | jq '.'
 ```
 
-**Expected**: row exists with non-zero `findings_per_hour`. If empty → `boot/telemetry.rs` Phase 0 baseline not running.
+**Expected**: a JSON array (e.g. `[["acme-2024", 8.3], ["smoke-test-2026", 1.0]]`). Empty array (`[]`) means `config/programs.json` is missing or unreadable on Box-with-dashboard — check the `ProgramAnalyzer: Failed to load config/programs.json` warning in logs.
 
-ROI score should be computable:
+`mcp_stats` counters (separate concern) can be inspected directly:
 ```bash
-curl -fsSL http://mimikri-box1:8080/api/roi/ranking \
-  -H "X-Dashboard-Token: $(ssh opsec@mimikri-box1 'sudo -u mimikri cat /opt/mimikri/workspace/logs/dashboard.token')" \
-  | jq '.[] | select(.program=="smoke-test-2026")'
+sudo -u mimikri psql -h mimikri-box1 -U mimikri redteam \
+  -c "SELECT stat_key, stat_value FROM mcp_stats ORDER BY stat_value DESC LIMIT 20;"
 ```
 
 ---

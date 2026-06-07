@@ -7,13 +7,74 @@ use redteam_rust_core::utils::config::Config;
 use redteam_rust_core::plugins::reporting::platform_client::PlatformClient;
 use redteam_rust_core::models::ReportPlatform;
 use tracing::{info, error};
-use anyhow::Result;
+use anyhow::{Result, Context};
 use std::sync::Arc;
 use std::time::Duration;
 
 pub async fn dispatch(args: Args) -> Result<()> {
     if args.worker {
         return crate::boot::worker::run_worker_mode(&args).await;
+    }
+
+    // --- ENQUEUE-ONLY MODE (V15.6): Queue targets for DO workers without local scanning ---
+    if args.enqueue_only {
+        let db_url = args.postgres_url.clone()
+            .or_else(|| std::env::var("DATABASE_URL").ok())
+            .context("--enqueue-only requires --postgres-url or DATABASE_URL env var")?;
+        let pool = sqlx::PgPool::connect(&db_url).await?;
+        let scope_id = args.scope_id.clone().unwrap_or_default();
+        let tactical_context = serde_json::json!({"scope_id": scope_id});
+
+        let mut targets: Vec<(String, String)> = Vec::new();
+        if let Some(input_path) = &args.input {
+            let file = tokio::fs::File::open(input_path).await?;
+            let reader = tokio::io::BufReader::new(file);
+            let mut lines = tokio::io::AsyncBufReadExt::lines(reader);
+            while let Ok(Some(line)) = lines.next_line().await {
+                let t = line.trim();
+                if t.is_empty() { continue; }
+                if !redteam_rust_core::utils::validate_target(t) {
+                    error!("❌ Skipping invalid target: {}", t);
+                    continue;
+                }
+                let target_type = if t.contains("://") || t.contains('.') { "Web".to_string() }
+                    else if t.contains(':') { "Network".to_string() }
+                    else { "Host".to_string() };
+                targets.push((t.to_string(), target_type));
+            }
+        } else if let Some(target) = &args.target {
+            if !redteam_rust_core::utils::validate_target(target) {
+                anyhow::bail!("Invalid target provided: {}", target);
+            }
+            let target_type = if target.contains("://") || target.contains('.') { "Web".to_string() }
+                else if target.contains(':') { "Network".to_string() }
+                else { "Host".to_string() };
+            targets.push((target.clone(), target_type));
+        } else {
+            anyhow::bail!("--enqueue-only requires --target or --input");
+        }
+
+        let mut enqueued = 0u64;
+        for (host, target_type) in targets {
+            let res = sqlx::query(
+                "INSERT INTO scan_queue (host, target_type, tactical_context, priority, status, worker_profile) VALUES ($1, $2, $3, $4, 'pending', 'scan')"
+            )
+            .bind(&host)
+            .bind(&target_type)
+            .bind(&tactical_context)
+            .bind(1i32)
+            .execute(&pool)
+            .await;
+            match res {
+                Ok(_) => {
+                    info!("📦 ENQUEUED: {} ({}) -> scan_queue", host, target_type);
+                    enqueued += 1;
+                }
+                Err(e) => error!("❌ FAILED to enqueue {}: {}", host, e),
+            }
+        }
+        info!("✅ ENQUEUE COMPLETE: {} targets queued for DO workers. Exiting.", enqueued);
+        return Ok(());
     }
 
     // --- ENGINE INITIALIZATION ---
@@ -56,6 +117,27 @@ pub async fn dispatch(args: Args) -> Result<()> {
         "post-exploitation" | "post-exp" => ScanLayer::PostExploitation,
         _ => ScanLayer::Scanning,
     };
+
+    // V15.6 ORACLE BAN-PREVENTION GATE: Fail-closed on OCI for active layers
+    let oracle_override = std::env::var("ORACLE_OVERRIDE").map(|v| v == "1").unwrap_or(false);
+    if !oracle_override && !args.worker && !args.enqueue_only {
+        if redteam_rust_core::utils::stealth_detect::is_oracle_cloud().await {
+            if max_layer >= ScanLayer::Scanning {
+                anyhow::bail!(
+                    "🚨 ORACLE BAN-PREVENTION GATE: Active scan layer '{}' is BLOCKED on Oracle Cloud. \
+                    nmap/raw sockets violate OCI TOS. \
+                    Options: (1) --enqueue-only to queue for DO workers, (2) --max-layer passive|discovery, (3) run on DO droplet with --worker, (4) ORACLE_OVERRIDE=1 to bypass (DANGER).",
+                    max_layer.description()
+                );
+            }
+            if args.target.is_some() || args.input.is_some() {
+                tracing::warn!(
+                    "⚠️ ORACLE OPSEC: Target/input specified on Oracle Cloud. Traffic will originate from OCI IP. \
+                    Use --enqueue-only to delegate to DO workers, or ensure --max-layer is passive/discovery only."
+                );
+            }
+        }
+    }
 
     let (dashboard_findings_tx, _) = tokio::sync::broadcast::channel::<redteam_rust_core::models::Finding>(1024);
     let dashboard_targets = std::sync::Arc::new(dashmap::DashMap::<String, TargetHost>::new());
@@ -170,6 +252,60 @@ pub async fn dispatch(args: Args) -> Result<()> {
     }
 
     crate::boot::stealth::init(&engine, &args, &utils_config).await?;
+
+    // V15.6 ORACLE COORDINATOR: Auto-spawn DO workers when queue has pending jobs
+    if !args.worker && !args.enqueue_only {
+        if redteam_rust_core::utils::stealth_detect::is_oracle_cloud().await {
+            if let (Some(db_url), Ok(do_token)) = (args.postgres_url.clone().or_else(|| std::env::var("DATABASE_URL").ok()), utils_config.require_do_token()) {
+                let db_url_clone = db_url.clone();
+                let do_token_clone = do_token.clone();
+                let pm_clone = engine.proxy_manager().clone();
+                let do_client = Arc::new(redteam_rust_core::infrastructure::digital_ocean::DigitalOceanClient::new(do_token_clone, pm_clone));
+                let do_client_reap = do_client.clone();
+
+                // Auto-spawn task
+                tokio::spawn(async move {
+                    let mut interval = tokio::time::interval(std::time::Duration::from_secs(30));
+                    loop {
+                        interval.tick().await;
+                        let pool_res = sqlx::PgPool::connect(&db_url_clone).await;
+                        if let Ok(pool) = pool_res {
+                            let pending: Option<(i64,)> = sqlx::query_as("SELECT COUNT(*) FROM scan_queue WHERE status = 'pending'")
+                                .fetch_optional(&pool).await.ok().flatten();
+                            let workers: Option<(i64,)> = sqlx::query_as("SELECT COUNT(*) FROM workers WHERE status = 'active' AND last_seen > NOW() - INTERVAL '2 minutes'")
+                                .fetch_optional(&pool).await.ok().flatten();
+                            if let (Some((pending_count,)), Some((worker_count,))) = (pending, workers) {
+                                if pending_count > 0 && worker_count == 0 {
+                                    tracing::info!("🚀 ORACLE COORDINATOR: {} pending jobs, 0 active workers. Spawning DO ephemeral worker...", pending_count);
+                                    match do_client.create_worker_droplet(&format!("mimikri-worker-{:x}", rand::random::<u32>()), "nyc1").await {
+                                        Ok(droplet) => {
+                                            tracing::info!("✅ ORACLE COORDINATOR: Spawned worker droplet {} (ID: {})", droplet.name, droplet.id);
+                                        }
+                                        Err(e) => {
+                                            tracing::error!("❌ ORACLE COORDINATOR: Failed to spawn DO worker: {}", e);
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                });
+
+                // Reaper task: destroy off/orphan droplets every 5 min
+                tokio::spawn(async move {
+                    let mut interval = tokio::time::interval(std::time::Duration::from_secs(300));
+                    loop {
+                        interval.tick().await;
+                        match do_client_reap.reap_stale_droplets().await {
+                            Ok(0) => {}
+                            Ok(n) => tracing::info!("🛡️ REAPER: Destroyed {} stale/off DO droplets", n),
+                            Err(e) => tracing::error!("❌ REAPER: Failed to reap droplets: {}", e),
+                        }
+                    }
+                });
+            }
+        }
+    }
 
     let sink = crate::boot::sink_setup::build_multi_sink(&args, &engine_config, &utils_config, &engine).await?;
 

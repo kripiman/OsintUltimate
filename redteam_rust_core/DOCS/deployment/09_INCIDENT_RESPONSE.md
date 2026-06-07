@@ -45,11 +45,11 @@ ssh opsec@mimikri-box1 'sudo systemctl stop redteam-coordinator'
 ### Verification
 ```bash
 # Within 30s
-doctl compute droplet list --tag-name purpose:redteam-ephemeral
+doctl compute droplet list --tag-name osint-ultimate
 # Expected: empty
 
 # If NOT empty after 60s — manual destruction:
-for id in $(doctl compute droplet list --tag-name purpose:redteam-ephemeral --format ID --no-header); do
+for id in $(doctl compute droplet list --tag-name osint-ultimate --format ID --no-header); do
   doctl compute droplet delete $id --force
 done
 ```
@@ -236,10 +236,10 @@ ssh opsec@mimikri-box1 'sudo -u mimikri bash -c ". /run/mimikri/secrets.env && c
 ### Fallback (manual cleanup)
 ```bash
 # Listing
-doctl compute droplet list --tag-name purpose:redteam-ephemeral --format ID,Name,Created
+doctl compute droplet list --tag-name osint-ultimate --format ID,Name,Created
 
 # Parallel destruction
-doctl compute droplet list --tag-name purpose:redteam-ephemeral --format ID --no-header \
+doctl compute droplet list --tag-name osint-ultimate --format ID --no-header \
   | xargs -P 10 -I{} doctl compute droplet delete {} --force
 
 # If doctl also fails — DO web console

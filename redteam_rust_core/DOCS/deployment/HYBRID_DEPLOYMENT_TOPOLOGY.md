@@ -1,9 +1,9 @@
 # Hybrid Deployment Topology — Oracle Control Plane + DigitalOcean Ephemeral Data Plane
 
-**Status**: Architectural design — pre-implementation
+**Status**: Architectural design — partially implemented (see code-status notes below)
 **Author**: Auditor (Sprint 7.5 inter-sprint stabilization)
-**Date**: 2026-05-20
-**Related**: `stealth_opsec.md`, `multi_vps_deployment.original.md`, `infrastructure/digital_ocean.rs`
+**Date**: 2026-05-20 · last verified against `src/`: 2026-06-05
+**Related**: [`../README.md`](../README.md) (doc index), [`../stealth_opsec.md`](../stealth_opsec.md), `06_DO_EPHEMERAL_WORKERS.md`, `src/infrastructure/digital_ocean.rs`
 
 ---
 
@@ -78,7 +78,9 @@ This topology separates the **control plane** (orchestration, queueing, intel ag
 | DO Droplets | DigitalOcean | 1c / 1GB (typical) | Ephemeral worker | **TTL ≤ 6h** | Active scan worker (nmap, exploitation, scanning plugins), OOB payload delivery |
 
 > [!NOTE]
-> DO droplets are **not** pre-provisioned inventory. They are spawned on-demand via the DO API by the janitor (`infrastructure/digital_ocean.rs`) and destroyed immediately after job completion. The `1c/1GB` spec is the default worker size; larger droplets (`2c/4GB`, `4c/8GB`) can be requested per-campaign via the `DO_DROPLET_SIZE` env var. All droplets join the Tailscale mesh before accepting NATS tasks.
+> DO droplets are **not** pre-provisioned inventory. They are spawned on-demand via the DO API (`src/infrastructure/digital_ocean.rs`) and destroyed after job completion.
+>
+> **Code-status (verified 2026-06-05):** `create_droplet` currently hardcodes size **`s-1vcpu-512mb`**, region passed by caller (`nyc1` in the stealth path), and tags **`["osint-ultimate","ephemeral"]`**. The `DO_DROPLET_SIZE` env var and `2c/4GB · 4c/8GB` selection are **PLANNED — not read by code**. Today the auto-provisioned droplet boots as a **SOCKS5/Shadowsocks egress proxy**, not a scan worker; the worker-on-droplet model (run `--worker` on the droplet) is the chosen target — see `06_DO_EPHEMERAL_WORKERS.md`. Task transport is **PostgreSQL `scan_queue`**, not NATS (NATS = output sink only).
 
 ## 3. Plane Responsibilities
 
@@ -116,7 +118,7 @@ This topology separates the **control plane** (orchestration, queueing, intel ag
 - `mcp_stats` analytics consumer
 - Loki + Grafana + Tempo self-hosted (observability stack receiving traces via `OTEL_ENDPOINT` from Box1/Box2)
 - NATS secondary node (control plane resilience)
-- **Droplet janitor cron**: lists DO droplets every 15min via API, force-destroys any tagged `purpose=redteam-ephemeral` exceeding `TTL=6h`
+- **Droplet janitor cron**: lists DO droplets every 15min via API, force-destroys any tagged `osint-ultimate` (the tag `digital_ocean.rs` sets) exceeding `TTL=6h`
 
 **Box4 — Interactsh OOB Server (Azure Africa VPS ✅ — persistent)**
 - **PERSISTENT**: Azure Student VPS, personal account. Not tied to Oracle AUP. Stable public IP + DNS authority.
@@ -166,7 +168,7 @@ This topology separates the **control plane** (orchestration, queueing, intel ag
    - Downloads worker binary from **Box1** Object Storage (signed URL, 1h TTL; if Box1 offline, fallback to Box2 local cache)
    - Sets `at +6h shutdown -h now`
    - Starts `redteam_rust_core --worker --postgres-url postgres://box2-tailscale-ip:5432/...`
-4. Droplet tagged `purpose=redteam-ephemeral`, `spawned-by=box2`, `campaign=<scope_id>`
+4. Droplet tagged `osint-ultimate`, `ephemeral` (code defaults) + target adds `campaign:<scope_id>`
 
 ### Execution
 - Worker polls `scan_queue` on **Box2** Postgres via Tailscale-tunneled connection
@@ -177,7 +179,7 @@ This topology separates the **control plane** (orchestration, queueing, intel ag
 ### Destroy
 - **Normal**: worker exits cleanly after job pool drained → cloud-init shutdown timer or explicit `poweroff` → **Box2** detects droplet stopped, calls DO API `DELETE /v2/droplets/{id}`
 - **Forced**: Box3 janitor cron detects droplet > TTL → DO API destroy
-- **Kill-switch**: Ctrl+C on **Box2** triggers `infrastructure/digital_ocean.rs` cleanup → enumerate all droplets tagged `purpose=redteam-ephemeral` for current campaign, destroy in parallel
+- **Kill-switch**: Ctrl+C on **Box2** triggers `infrastructure/digital_ocean.rs` cleanup → enumerate all droplets tagged `osint-ultimate` (code queries `GET /v2/droplets?tag_name=osint-ultimate`), destroy in parallel
 
 ## 6. Traffic Patterns and OPSEC Visibility
 
@@ -388,7 +390,7 @@ Implementation order proposed (post Sprint 7.5 closure):
 - `core/engine/app.rs` — `RedTeamEngine` initialization
 - `utils/config.rs` — Env loading (reads `/run/mimikri/secrets.env` via systemd `EnvironmentFile`)
 - `core/sink/mod.rs` — `DataSink` trait (target for Object Storage backend)
-- `stealth_opsec.md` — Stealth infrastructure principles
-- `multi_vps_deployment.original.md` — Prior multi-VPS thinking
+- `../stealth_opsec.md` — Stealth infrastructure principles
+- `06_DO_EPHEMERAL_WORKERS.md` — DO worker bootstrap + spawn/destroy + code-status notes
 - DigitalOcean Acceptable Use Policy: https://www.digitalocean.com/legal/acceptable-use-policy
 - Oracle Cloud Acceptable Use Policy: https://www.oracle.com/legal/cloud-services.html

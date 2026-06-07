@@ -65,13 +65,13 @@ age-plugin-yubikey --generate \
 
 ### 2.2 Store the recipient
 
-`infrastructure/recipients.txt` in the repo (committed):
+Create `infrastructure/recipients.txt` and commit it (this file is **not** in the repo yet — it is generated per operator in this step):
 ```
 # Mimikri operator master recipient — encrypts to YubiKey
 age1yubikey1qx...
 ```
 
-The recipient is not secret. The corresponding private key never leaves the YubiKey hardware.
+The recipient is not secret (safe to commit). The corresponding private key never leaves the YubiKey hardware.
 
 ### 2.3 Save identity handle
 

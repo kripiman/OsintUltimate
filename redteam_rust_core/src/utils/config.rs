@@ -9,11 +9,15 @@ pub enum ProxyMode {
     Dante,
     Shadowsocks,
     Hysteria,
+    Worker,
 }
 
 pub struct Config {
     pub do_token: Option<String>,
     pub do_ssh_key_id: Option<String>,
+    pub do_droplet_size: String,
+    pub do_worker_binary_url: Option<String>,
+    pub tailscale_auth_key: Option<String>,
     pub database_url: String,
     pub ollama_url: String,
     pub max_tokens: u32,
@@ -115,6 +119,9 @@ impl Config {
         Self {
             do_token: env::var("DIGITALOCEAN_TOKEN").ok(),
             do_ssh_key_id: env::var("DO_SSH_KEY_ID").ok(),
+            do_droplet_size: env::var("DO_DROPLET_SIZE").unwrap_or_else(|_| "s-1vcpu-1gb".to_string()),
+            do_worker_binary_url: env::var("DO_WORKER_BINARY_URL").ok(),
+            tailscale_auth_key: env::var("TAILSCALE_AUTH_KEY").ok(),
             database_url: env::var("DATABASE_URL").unwrap_or_else(|_| "postgres://osintuser:WENYANULTRA_SECURE_PASS@localhost:5432/osintdb".to_string()),
             ollama_url: env::var("OLLAMA_URL").unwrap_or_else(|_| "http://localhost:11434".to_string()),
             max_tokens: env::var("MAX_TOKENS")
