@@ -83,6 +83,8 @@ pub struct Args {
     pub cve_correlation_only: bool,
     #[arg(long, default_value_t = false, help = "Enqueue targets to scan_queue for DO workers instead of scanning locally. Requires --postgres-url.")]
     pub enqueue_only: bool,
+    #[arg(long, default_value_t = false, help = "One-shot execution to update CVE cache from NVD and exit")]
+    pub update_cve_cache: bool,
 }
 
 pub fn parse() -> Args {

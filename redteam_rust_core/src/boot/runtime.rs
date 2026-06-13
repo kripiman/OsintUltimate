@@ -10,8 +10,22 @@ use tracing::{info, error};
 use anyhow::{Result, Context};
 use std::sync::Arc;
 use std::time::Duration;
+use redteam_rust_core::plugins::intelligence::nvd_monitor::NvdMonitor;
+use redteam_rust_core::utils::cve_cache::CveCacheManager;
 
 pub async fn dispatch(args: Args) -> Result<()> {
+    if args.update_cve_cache {
+        let db_url = args.postgres_url.clone()
+            .or_else(|| std::env::var("DATABASE_URL").ok())
+            .context("--update-cve-cache requires --postgres-url or DATABASE_URL env var")?;
+        let pool = sqlx::PgPool::connect(&db_url).await?;
+        CveCacheManager::init(pool);
+        let monitor = NvdMonitor::new();
+        let findings = monitor.poll().await?;
+        info!("CVE cache updated: {} new CVEs", findings.len());
+        return Ok(());
+    }
+
     if args.worker {
         return crate::boot::worker::run_worker_mode(&args).await;
     }
