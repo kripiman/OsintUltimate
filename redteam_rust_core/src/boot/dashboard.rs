@@ -96,7 +96,9 @@ pub async fn setup_dashboard(
                     version: 0,
                     skip_heavy_scan: false,
                     scan_id: None, 
-                    scope_id: (*cli_scope_id).clone(),
+                    scope_id: mission.authorized_scope
+                        .filter(|s| !s.trim().is_empty())
+                        .unwrap_or_else(|| (*cli_scope_id).clone()),
                 };
 
                 if let Err(e) = injection_tx_for_dashboard.send(host).await {

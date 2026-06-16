@@ -316,6 +316,7 @@ document.getElementById('missionForm').addEventListener('submit', async (e) => {
     const payload = {
         target: document.getElementById('m-target').value.trim(),
         program_name: document.getElementById('m-program').value.trim(),
+        authorized_scope: document.getElementById('m-authorized-scope').value.trim(),
         in_scope: document.getElementById('m-inscope').value.split('\n').map(s => s.trim()).filter(Boolean),
         out_of_scope: document.getElementById('m-outscope').value.split('\n').map(s => s.trim()).filter(Boolean),
         profile: document.getElementById('m-profile').value,

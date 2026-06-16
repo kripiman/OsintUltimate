@@ -258,6 +258,18 @@ runcmd:
     Environment="REDTEAM_AUTHORIZED_SCOPE=${SCOPE_ID}"
     Environment="INTERACTSH_URL=${INTERACTSH_URL}"
     Environment="INTERACTSH_TOKEN=${INTERACTSH_TOKEN}"
+    Environment="SHUFFLEDNS_PATH=/usr/bin/shuffledns"
+    Environment="MASSDNS_PATH=/usr/bin/massdns"
+    Environment="SHUFFLEDNS_RESOLVERS=/opt/mimikri-ai/etc/resolvers.txt"
+    Environment="SHUFFLEDNS_WORDLIST=/opt/mimikri-ai/etc/subdomains.txt"
+    Environment="S3SCANNER_PATH=/usr/local/bin/s3scanner"
+    Environment="S3SCANNER_WORDLIST=/opt/mimikri-ai/etc/buckets.txt"
+    Environment="KXSS_PATH=/usr/bin/kxss"
+    Environment="GHAURI_PATH=/usr/local/bin/ghauri"
+    Environment="SSRFMAP_PATH=/opt/mimikri-ai/bin/ssrfmap/ssrfmap.py"
+    Environment="NOSQLMAP_PATH=/opt/mimikri-ai/bin/nosqlmap/nosqlmap.py"
+    Environment="GOPHERUS_PATH=/opt/mimikri-ai/bin/gopherus/gopherus.py"
+    Environment="CLAIRVOYANCE_WORDLIST=/opt/mimikri-ai/etc/graphql.txt"
     ExecStart=/usr/local/bin/redteam_rust_core \
       --worker \
       --postgres-url \${DATABASE_URL} \

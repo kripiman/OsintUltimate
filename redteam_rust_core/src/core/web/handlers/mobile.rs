@@ -104,6 +104,7 @@ pub async fn submit_mobile_scan(
         target: None,
         apk: Some(path),
         program_name: "Mobile Audit".to_string(),
+        authorized_scope: None,
         in_scope: vec![],
         out_of_scope: vec![],
         profile: "Mobile".to_string(),

@@ -196,7 +196,7 @@ Budget 7-10 days for first deploy. Subsequent re-deploys with snapshots: 4 hours
 - **OOB (Out-of-Band)** — Interaction captured by Box4 interactsh when a target makes a callback (DNS/HTTP/SMTP) to a payload the worker injected.
 - **Tailnet** — Tailscale virtual private mesh. `100.x.x.x/8` address space. All 4 boxes + workers joined.
 - **Kill-switch** — Ctrl+C / SIGTERM on **Box2** coordinator → triggers `destroy_all_ephemeral_droplets()`.
-- **Scope** — Authorized target set defined in `policy.json` + `--scope-id`.
+- **Scope** — Authorized target set defined in `policy.json` + `--scope-id`. When using the web Dashboard, the `authorized_scope` is passed dynamically per-mission and injected directly into the worker's environment variable `REDTEAM_AUTHORIZED_SCOPE`, bypassing the `.env` fallback.
 - **Campaign** — One scan session with a unique `scope_id`. Maps to one DO droplet pool.
 
 ---

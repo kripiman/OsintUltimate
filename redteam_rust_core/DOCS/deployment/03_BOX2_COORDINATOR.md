@@ -386,17 +386,31 @@ Runs as a subsystem of `redteam-enrichment`. When findings reach severity ≥ Hi
 
 Configuration via `runtime.env`:
 ```env
+# Bug bounty auto-submission (false=dry-run, true=live)
 H1_HANDLE=your_handle
 BB_AUTO_SUBMIT=false                # set to true after dry-run validation
 BB_MIN_SEVERITY=High
 BB_REQUIRE_OPERATOR_ACK=true        # operator must click "approve" in dashboard
+
+# --- 10. TOOL BINARY PATHS (P0 Arsenal) ---
+# Caminos para binarios y wordlists del arsenal de explotación
+SHUFFLEDNS_PATH=/usr/bin/shuffledns
+MASSDNS_PATH=/usr/bin/massdns
+SHUFFLEDNS_RESOLVERS=/opt/mimikri-ai/etc/resolvers.txt
+SHUFFLEDNS_WORDLIST=/opt/mimikri-ai/etc/subdomains.txt
+S3SCANNER_PATH=/usr/local/bin/s3scanner
+S3SCANNER_WORDLIST=/opt/mimikri-ai/etc/buckets.txt
+KXSS_PATH=/usr/bin/kxss
+GHAURI_PATH=/usr/local/bin/ghauri
+SSRFMAP_PATH=/opt/mimikri-ai/bin/ssrfmap/ssrfmap.py
+NOSQLMAP_PATH=/opt/mimikri-ai/bin/nosqlmap/nosqlmap.py
+GOPHERUS_PATH=/opt/mimikri-ai/bin/gopherus/gopherus.py
+CLAIRVOYANCE_WORDLIST=/opt/mimikri-ai/etc/graphql.txt
+
+# Callback para C2 autónomo
+C2_URL=
+C2_TOKEN=
 ```
-
-The "approve" UI is the existing Dashboard ROI tab — operator sees pending submissions and clicks approve.
-
----
-
-## 7. Model integrity verification
 
 Ollama models are downloaded over HTTPS but Ollama does not pin a known-good SHA. Lock manifests:
 

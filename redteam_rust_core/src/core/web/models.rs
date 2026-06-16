@@ -48,6 +48,7 @@ pub struct MissionRequest {
     pub target: Option<String>,
     pub apk: Option<String>,
     pub program_name: String,
+    pub authorized_scope: Option<String>,
     pub in_scope: Vec<String>,
     pub out_of_scope: Vec<String>,
     pub profile: String,
