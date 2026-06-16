@@ -61,13 +61,14 @@ Passive and active surface mapping.
 | Netlas lookup (Integrated) | sovereign_recon.rs | `NETLAS_API_KEY`, `NETLAS_DAILY_BUDGET` |
 | SecurityTrails (Integrated) | sovereign_recon.rs | `SECURITYTRAILS_API_KEY` |
 | CriminalIP (Integrated) | sovereign_recon.rs | `CRIMINALIP_API_KEY` |
+| Censys (Integrated) | sovereign_recon.rs | `CENSYS_API_ID`, `CENSYS_API_SECRET`, `CENSYS_MAX_HOSTS_PER_SCAN` |
 | Scope extraction | bbscope | — |
 | GitHub dorking | github-dorks | `GITHUB_TOKEN` |
 | Historical URLs | waymore, wayback | — |
 | Secret scanning | gitleaks, trufflehog | — |
 | Subdomain takeover | subzy | — |
 | Altered subdomains | alterx | — |
-| Internet-wide search | uncover | `SHODAN_API_KEY`, `CENSYS_API_KEY`, etc. |
+| Internet-wide search | uncover | `SHODAN_API_KEY` (via CLI wrapper) |
 | Pure DNS resolution | puredns | — |
 
 ---

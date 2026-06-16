@@ -339,6 +339,77 @@ impl SovereignReconScanner {
         apply_cap(results, combined_limit)
     }
 
+    // --- Phase 4.5: Censys (Dual-credential API) ---
+    pub(super) async fn query_censys(&self, domain: &str) -> HashSet<String> {
+        let limit = self.censys_max_hosts;
+        if limit == 0 {
+            return HashSet::new();
+        }
+
+        if let Some(cache) = crate::utils::api_cache::ApiCache::global() {
+            if let Some(hit) = cache.get::<HashSet<String>>("censys", domain, "subdomains", Duration::from_secs(CACHE_TTL_LONG_SECS)).await {
+                return apply_cap(hit, limit);
+            }
+        }
+
+        let mut subdomains = HashSet::new();
+        let (api_id, api_secret) = match (&self.censys_api_id, &self.censys_api_secret) {
+            (Some(id), Some(secret)) if !id.is_empty() && !secret.is_empty() => (id, secret),
+            _ => return subdomains,
+        };
+
+        if !ApiBudgetRegistry::get().can_spend("censys", 1).await {
+            return subdomains;
+        }
+
+        debug!("🔍 Phase 4.5: Censys TLS certificate search for {}", domain);
+        let query = format!("services.tls.certificates.leaf_data.subject.common_name:{}", domain);
+        let url = format!("https://search.censys.io/api/v2/hosts/search?q={}&per_page=100", urlencoding::encode(&query));
+        
+        let mut success = false;
+        if let Ok(client) = self.get_client("search.censys.io").await {
+            if let Ok(resp) = client.get(&url)
+                .basic_auth(api_id, Some(api_secret))
+                .send().await
+            {
+                #[derive(Deserialize)]
+                struct CensysDns { names: Option<Vec<String>> }
+                #[derive(Deserialize)]
+                struct CensysHit { dns: Option<CensysDns> }
+                #[derive(Deserialize)]
+                struct CensysSearchResult { hits: Option<Vec<CensysHit>> }
+                #[derive(Deserialize)]
+                struct CensysResp { result: Option<CensysSearchResult> }
+                
+                if let Ok(data) = resp.json::<CensysResp>().await {
+                    success = true;
+                    if let Some(result) = data.result {
+                        if let Some(hits) = result.hits {
+                            for hit in hits {
+                                if let Some(dns) = hit.dns {
+                                    if let Some(names) = dns.names {
+                                        for name in names {
+                                            if name.ends_with(domain) {
+                                                subdomains.insert(name);
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        if success {
+            if let Some(cache) = crate::utils::api_cache::ApiCache::global() {
+                cache.put("censys", domain, "subdomains", &subdomains).await;
+            }
+        }
+        apply_cap(subdomains, limit)
+    }
+
     // --- Phase 5: Crimina    // --- Phase 5: Criminal IP (Reputation) ---
     pub(super) async fn query_criminalip(&self, host: &str) -> Vec<String> {
         if let Some(cache) = crate::utils::api_cache::ApiCache::global() {
@@ -607,6 +678,7 @@ mod tests {
         config.zoomeye_max_hosts_per_scan = 15;
         config.shodan_host_ip_max_hosts_per_scan = 30;
         config.shodan_paid_max_hosts_per_scan = 40;
+        config.censys_max_hosts_per_scan = 50;
 
         let pm = Arc::new(ProxyManager::new(Vec::new(), false, crate::utils::config::ProxyMode::None, 1));
         let scanner = SovereignReconScanner::new(&config, pm);
@@ -616,6 +688,7 @@ mod tests {
         assert_eq!(scanner.zoomeye_max_hosts, 15);
         assert_eq!(scanner.shodan_host_ip_max_hosts, 30);
         assert_eq!(scanner.shodan_paid_max_hosts, 40);
+        assert_eq!(scanner.censys_max_hosts, 50);
     }
 
     #[tokio::test]
@@ -626,6 +699,7 @@ mod tests {
         config.zoomeye_max_hosts_per_scan = 0;
         config.shodan_host_ip_max_hosts_per_scan = 0;
         config.shodan_paid_max_hosts_per_scan = 0;
+        config.censys_max_hosts_per_scan = 0;
 
         let pm = Arc::new(ProxyManager::new(Vec::new(), false, crate::utils::config::ProxyMode::None, 1));
         let scanner = SovereignReconScanner::new(&config, pm);
@@ -645,5 +719,9 @@ mod tests {
         // Shodan
         let shodan = scanner.query_shodan("example.com").await;
         assert!(shodan.is_empty(), "Shodan should be disabled");
+
+        // Censys
+        let censys = scanner.query_censys("example.com").await;
+        assert!(censys.is_empty(), "Censys should be disabled");
     }
 }

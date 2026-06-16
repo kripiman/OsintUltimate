@@ -102,6 +102,9 @@ pub struct Config {
     pub leakix_max_hosts_per_scan: usize,
     pub github_token: Option<String>,
     pub github_max_dorks_per_scan: usize,
+    pub censys_api_id: Option<String>,
+    pub censys_api_secret: Option<String>,
+    pub censys_max_hosts_per_scan: usize,
     pub alienvault_otx_api_key: Option<String>,
     pub alienvault_otx_max_ips_per_scan: usize,
     pub abuseipdb_api_key: Option<String>,
@@ -282,6 +285,12 @@ impl Config {
                 .ok()
                 .and_then(|s| s.parse().ok())
                 .unwrap_or(10),
+            censys_api_id: env::var("CENSYS_API_ID").ok(),
+            censys_api_secret: env::var("CENSYS_API_SECRET").ok(),
+            censys_max_hosts_per_scan: env::var("CENSYS_MAX_HOSTS_PER_SCAN")
+                .ok()
+                .and_then(|s| s.parse().ok())
+                .unwrap_or(50),
             alienvault_otx_api_key: env::var("ALIENVAULT_OTX_API_KEY").ok(),
             alienvault_otx_max_ips_per_scan: env::var("ALIENVAULT_OTX_MAX_IPS_PER_SCAN")
                 .ok()

@@ -26,6 +26,8 @@ pub struct SovereignReconScanner {
     zoomeye_key: Option<String>,
     leakix_key: Option<String>,
     github_token: Option<String>,
+    censys_api_id: Option<String>,
+    censys_api_secret: Option<String>,
     pub shodan_paid_max_hosts: usize,
     pub shodan_host_ip_max_hosts: usize,
     pub fofa_max_hosts: usize,
@@ -34,6 +36,7 @@ pub struct SovereignReconScanner {
     pub crtsh_max_hosts: usize,
     pub leakix_max_hosts: usize,
     pub github_max_dorks: usize,
+    pub censys_max_hosts: usize,
 }
 impl SovereignReconScanner {
     pub fn new(config: &crate::utils::config::Config, pm: Arc<ProxyManager>) -> Self {
@@ -51,6 +54,8 @@ impl SovereignReconScanner {
             zoomeye_key: config.zoomeye_api_key.clone(),
             leakix_key: config.leakix_api_key.clone(),
             github_token: config.github_token.clone(),
+            censys_api_id: config.censys_api_id.clone(),
+            censys_api_secret: config.censys_api_secret.clone(),
             shodan_paid_max_hosts: config.shodan_paid_max_hosts_per_scan,
             shodan_host_ip_max_hosts: config.shodan_host_ip_max_hosts_per_scan,
             fofa_max_hosts: config.fofa_max_hosts_per_scan,
@@ -59,6 +64,7 @@ impl SovereignReconScanner {
             crtsh_max_hosts: config.crtsh_max_hosts_per_scan,
             leakix_max_hosts: config.leakix_max_hosts_per_scan,
             github_max_dorks: config.github_max_dorks_per_scan,
+            censys_max_hosts: config.censys_max_hosts_per_scan,
         }
     }
     pub(super) async fn get_client(&self, host: &str) -> Result<Client> {
@@ -75,7 +81,7 @@ impl DiscoveryPlugin for SovereignReconScanner {
     fn metadata(&self) -> PluginMetadata {
         PluginMetadata {
             name: self.name().to_string(),
-            description: "Sentinel Sovereign Orchestrator: Multi-phase optimized OSINT pipeline (Wayback -> HackerTarget -> Chaos -> FreeLegitimate -> Netlas -> Shodan -> CriminalIP).".to_string(),
+            description: "Sentinel Sovereign Orchestrator: Multi-phase optimized OSINT pipeline (Wayback -> HackerTarget -> Chaos -> FreeLegitimate -> Censys -> Netlas -> Shodan -> CriminalIP).".to_string(),
             target_type: TargetType::Osint,
             risk_level: RiskLevel::Safe,
             layer: ScanLayer::Passive,
@@ -172,6 +178,15 @@ impl DiscoveryPlugin for SovereignReconScanner {
             for s in github {
                 if !self.strict_scope || self.policy.is_target_allowed(&s) {
                     all_results.insert(s, serde_json::json!({"src": "github_dorks", "confidence": 0.65}));
+                }
+            }
+        }
+        let censys = self.query_censys(&target.host).await;
+        if !censys.is_empty() {
+            info!("  ✅ Censys found {} unique subdomains", censys.len());
+            for s in censys {
+                if !self.strict_scope || self.policy.is_target_allowed(&s) {
+                    all_results.insert(s, serde_json::json!({"src": "censys", "confidence": 0.8}));
                 }
             }
         }
