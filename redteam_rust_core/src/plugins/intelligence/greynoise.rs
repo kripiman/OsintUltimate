@@ -6,6 +6,12 @@ use anyhow::Result;
 use tracing::{info, warn, error};
 use crate::models::constants::*;
 use std::time::Duration;
+use tokio::sync::Mutex;
+use std::sync::Arc;
+
+lazy_static::lazy_static! {
+    static ref GREYNOISE_RATE_LIMITER: Arc<Mutex<()>> = Arc::new(Mutex::new(()));
+}
 
 pub struct GreyNoiseScanner {
     api_key: Option<String>,
@@ -93,8 +99,10 @@ impl ScannerPlugin for GreyNoiseScanner {
         let client = &self.client;
         let url = format!("https://api.greynoise.io/v3/community/{}", ip);
         
-        // Strict Rate Limiting (OPSEC): 2-second delay to protect Student/Free API accounts
-        // Previene baneos al evitar lanzar hilos masivos simultáneos contra la API de GreyNoise
+        // Strict Rate Limiting (OPSEC): Global lock across all worker threads.
+        // Even with --concurrency 4, only one thread can hold this lock at a time.
+        // It holds the lock, sleeps for 2 seconds, then releases it, guaranteeing max 30 RPM globally.
+        let _lock = GREYNOISE_RATE_LIMITER.lock().await;
         tokio::time::sleep(Duration::from_secs(2)).await;
         
         let response = match client.get(&url)
