@@ -93,6 +93,10 @@ impl ScannerPlugin for GreyNoiseScanner {
         let client = &self.client;
         let url = format!("https://api.greynoise.io/v3/community/{}", ip);
         
+        // Strict Rate Limiting (OPSEC): 2-second delay to protect Student/Free API accounts
+        // Previene baneos al evitar lanzar hilos masivos simultáneos contra la API de GreyNoise
+        tokio::time::sleep(Duration::from_secs(2)).await;
+        
         let response = match client.get(&url)
             .header("key", api_key)
             .send()
