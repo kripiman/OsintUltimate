@@ -325,17 +325,19 @@ pub async fn dispatch(args: Args) -> Result<()> {
 
     // --- DASHBOARD ---
     let (injection_tx, injection_rx) = tokio::sync::mpsc::channel::<TargetHost>(100);
+    let (certstream_kws_tx, certstream_kws_rx) = tokio::sync::mpsc::channel::<Vec<String>>(10);
     crate::boot::dashboard::setup_dashboard(
         &args,
         &utils_config,
         &engine,
         dashboard_findings_tx,
         dashboard_targets,
-        injection_tx
+        injection_tx,
+        Some(certstream_kws_tx)
     ).await;
 
     // --- TARGETS ---
-    let target_hosts = crate::boot::targets::build_target_stream(&args, &utils_config, injection_rx).await?;
+    let target_hosts = crate::boot::targets::build_target_stream(&args, &utils_config, injection_rx, Some(certstream_kws_rx)).await?;
 
     // --- EXECUTION ---
     if args.autonomous {

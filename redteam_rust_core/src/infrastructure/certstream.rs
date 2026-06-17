@@ -11,24 +11,25 @@ const RECONNECT_MAX_SECS: u64 = 120;
 pub struct CertStreamDaemon {
     keywords: Vec<String>,
     tx: mpsc::Sender<String>,
+    kws_rx: Option<mpsc::Receiver<Vec<String>>>,
 }
 
 impl CertStreamDaemon {
-    pub fn new(keywords: Vec<String>, tx: mpsc::Sender<String>) -> Self {
-        Self { keywords, tx }
+    pub fn new(keywords: Vec<String>, tx: mpsc::Sender<String>, kws_rx: Option<mpsc::Receiver<Vec<String>>>) -> Self {
+        Self { keywords, tx, kws_rx }
     }
 
     /// Spawn as background task. Returns immediately.
-    pub fn spawn(keywords: Vec<String>) -> mpsc::Receiver<String> {
+    pub fn spawn(keywords: Vec<String>, kws_rx: Option<mpsc::Receiver<Vec<String>>>) -> mpsc::Receiver<String> {
         let (tx, rx) = mpsc::channel(256);
-        let daemon = Self::new(keywords, tx);
+        let daemon = Self::new(keywords, tx, kws_rx);
         tokio::spawn(async move {
             daemon.run().await;
         });
         rx
     }
 
-    async fn run(self) {
+    async fn run(mut self) {
         let mut backoff = RECONNECT_BASE_SECS;
         loop {
             info!("CertStreamDaemon: connecting to {}", CERTSTREAM_URL);
@@ -51,26 +52,49 @@ impl CertStreamDaemon {
         }
     }
 
-    async fn process_stream<S>(&self, mut ws: S) -> bool
+    async fn process_stream<S>(&mut self, mut ws: S) -> bool
     where
         S: StreamExt<Item = Result<tokio_tungstenite::tungstenite::Message, tokio_tungstenite::tungstenite::Error>> + Unpin,
     {
-        while let Some(msg_result) = ws.next().await {
-            let msg = match msg_result {
-                Ok(m) => m,
-                Err(e) => {
-                    warn!("CertStreamDaemon: ws error: {}", e);
-                    break;
-                }
-            };
-
-            if let tokio_tungstenite::tungstenite::Message::Text(text) = msg {
-                if let Some(domains) = self.extract_matching_domains(&text) {
-                    for domain in domains {
-                        // Exit if receiver is gone (main engine shutdown)
-                        if self.tx.send(domain).await.is_err() {
-                            return false;
+        loop {
+            if let Some(rx) = &mut self.kws_rx {
+                tokio::select! {
+                    msg_result = ws.next() => {
+                        if !self.handle_ws_result(msg_result).await { return false; }
+                    }
+                    kws = rx.recv() => {
+                        if let Some(new_kws) = kws {
+                            info!("CertStreamDaemon: Dynamic keywords update: {:?}", new_kws);
+                            for kw in new_kws {
+                                if !self.keywords.contains(&kw) {
+                                    self.keywords.push(kw);
+                                }
+                            }
                         }
+                    }
+                }
+            } else {
+                let msg_result = ws.next().await;
+                if !self.handle_ws_result(msg_result).await { return false; }
+            }
+        }
+    }
+
+    async fn handle_ws_result(&self, msg_result: Option<Result<tokio_tungstenite::tungstenite::Message, tokio_tungstenite::tungstenite::Error>>) -> bool {
+        let msg = match msg_result {
+            Some(Ok(m)) => m,
+            Some(Err(e)) => {
+                warn!("CertStreamDaemon: ws error: {}", e);
+                return false;
+            }
+            None => return false,
+        };
+
+        if let tokio_tungstenite::tungstenite::Message::Text(text) = msg {
+            if let Some(domains) = self.extract_matching_domains(&text) {
+                for domain in domains {
+                    if self.tx.send(domain).await.is_err() {
+                        return false;
                     }
                 }
             }

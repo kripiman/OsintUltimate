@@ -10,13 +10,14 @@ use futures::StreamExt;
 pub async fn build_target_stream(
     args: &Args,
     utils_config: &Config,
-    injection_rx: tokio::sync::mpsc::Receiver<TargetHost>
+    injection_rx: tokio::sync::mpsc::Receiver<TargetHost>,
+    certstream_kws_rx: Option<tokio::sync::mpsc::Receiver<Vec<String>>>
 ) -> Result<futures::stream::BoxStream<'static, TargetHost>> {
     let cli_scope_id = Arc::new(args.scope_id.clone().unwrap_or_default());
     
-    let certstream_rx = if !utils_config.certstream_keywords.is_empty() {
+    let certstream_rx = if !utils_config.certstream_keywords.is_empty() || certstream_kws_rx.is_some() {
         info!("🔱 V14.2 SOVEREIGN: Activating CertStream Daemon for keywords: {:?}", utils_config.certstream_keywords);
-        Some(redteam_rust_core::infrastructure::certstream::CertStreamDaemon::spawn(utils_config.certstream_keywords.clone()))
+        Some(redteam_rust_core::infrastructure::certstream::CertStreamDaemon::spawn(utils_config.certstream_keywords.clone(), certstream_kws_rx))
     } else {
         None
     };

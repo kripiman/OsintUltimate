@@ -11,7 +11,8 @@ pub async fn setup_dashboard(
     engine: &RedTeamEngine,
     dashboard_findings_tx: tokio::sync::broadcast::Sender<redteam_rust_core::models::Finding>,
     dashboard_targets: Arc<dashmap::DashMap<String, TargetHost>>,
-    injection_tx: tokio::sync::mpsc::Sender<TargetHost>
+    injection_tx: tokio::sync::mpsc::Sender<TargetHost>,
+    certstream_kws_tx: Option<tokio::sync::mpsc::Sender<Vec<String>>>
 ) {
     if let Some(port) = args.dashboard {
         use redteam_rust_core::core::web::{DashboardState, DashboardAuth, MissionRequest, generate_dashboard_token};
@@ -60,12 +61,27 @@ pub async fn setup_dashboard(
             let cli_scope_id = cli_scope_id_mission;
             while let Some(mission) = mission_rx.recv().await {
                 let target = match mission.target {
-                    Some(t) if !t.is_empty() => t,
+                    Some(ref t) if !t.is_empty() => t.clone(),
                     _ => {
                         warn!("⚠️ [MISSION-QUEUE] Received mission without target. Skipping.");
                         continue;
                     }
                 };
+
+                if let Some(cs_tx) = &certstream_kws_tx {
+                    let mut kws = Vec::new();
+                    for scope in &mission.in_scope {
+                        let clean = scope.trim_start_matches("*.").to_lowercase();
+                        if let Some(base) = clean.split('.').next() {
+                            if !base.is_empty() {
+                                kws.push(base.to_string());
+                            }
+                        }
+                    }
+                    if !kws.is_empty() {
+                        let _ = cs_tx.send(kws).await;
+                    }
+                }
 
                 info!("📡 [MISSION-QUEUE] Received mission for: {}. Injecting into pipeline...", target);
                 
