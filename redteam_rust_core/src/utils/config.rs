@@ -148,6 +148,8 @@ impl Config {
                 .map(|s| match s.to_lowercase().as_str() {
                     "shadowsocks" => ProxyMode::Shadowsocks,
                     "hysteria" => ProxyMode::Hysteria,
+                    "none" | "direct" | "disabled" => ProxyMode::None,
+                    "worker" => ProxyMode::Worker,
                     _ => ProxyMode::Dante,
                 })
                 .unwrap_or(ProxyMode::Dante),
