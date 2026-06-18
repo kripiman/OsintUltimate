@@ -291,9 +291,9 @@ impl<M: ExecutorMode> RedTeamEngine<M> {
                 let current_exits = pm.get_managed_exits().len();
                 let pool_size = pm.proxy_pool_size as usize;
                 
-                if current_exits < pool_size || (current_exits == 0 && pool_size == 0) {
+                if current_exits < pool_size && pool_size > 0 {
                     let mode = pm.proxy_mode;
-                    let target = if pool_size == 0 { 1 } else { pool_size };
+                    let target = pool_size;
                     info!("🚀 STEALTH: Maintaining pool (Current: {}, Target: {}). Provisioning new DigitalOcean droplet (nyc1) in mode {:?}...", current_exits, target, mode);
                     match do_client.create_droplet(&format!("stealth-exit-{:x}", rand::random::<u32>()), "nyc1", mode).await {
                         Ok(droplet) => {
