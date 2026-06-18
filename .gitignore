@@ -189,3 +189,5 @@ rust_context.txt
 # Auditor-added: recurring junk dirs
 redteam_rust_core/.nuclei-cache/
 redteam_rust_core/dnsx/
+.gemini/
+redteam_rust_core/.uncover-config/
