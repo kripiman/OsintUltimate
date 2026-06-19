@@ -158,6 +158,14 @@ runcmd:
   - mkdir -p /usr/local/bin /var/lib/mimikri
   - curl -fsSL -o /usr/local/bin/redteam_rust_core {binary_url} || (echo "Binary download failed" && /usr/local/sbin/self-destruct.sh)
   - chmod 755 /usr/local/bin/redteam_rust_core
+  - |
+    cat > /usr/local/bin/nuclei-config.yaml << 'NUCLEICFG'
+header:
+  - "X-Bug-Bounty: Intigriti-kripiman"
+rate-limit: 45
+bulk-size: 10
+concurrency: 5
+NUCLEICFG
   - curl -fsSL https://tailscale.com/install.sh | sh
   - tailscale up --auth-key={ts_key} --hostname={node_id} --ephemeral --accept-routes=false --accept-dns=false --ssh=false
   - |
