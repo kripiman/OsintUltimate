@@ -40,7 +40,7 @@ impl EngineFactory {
         // Tier 0: Local (Ollama)
         router.add_provider(RouteLevel::Local, LlmProviderKind::Local, 0, Arc::new(OllamaClient::new(
             ollama_url,
-            "qwen2.5-coder:7b".to_string(),
+            std::env::var("OLLAMA_MODEL").unwrap_or_else(|_| "qwen2.5:14b-instruct-q4_K_M".to_string()),
             pm.clone()
         )?));
 
@@ -69,14 +69,14 @@ impl EngineFactory {
             if !keys.is_empty() {
                 router.add_provider(RouteLevel::Premium, LlmProviderKind::Gemini, 0, Arc::new(GeminiClient::new(
                     keys, 
-                    "gemini-1.5-pro".to_string(),
+                    std::env::var("GEMINI_PRO_MODEL").unwrap_or_else(|_| "gemini-1.5-pro-latest".to_string()),
                     pm.clone()
                 )?));
                 
                 // Also add Flash for Mid-tier if Gemini is available
                 router.add_provider(RouteLevel::Mid, LlmProviderKind::Gemini, 2, Arc::new(GeminiClient::new(
                     vec![std::env::var("GEMINI_API_KEYS").unwrap().split(',').next().unwrap().to_string()],
-                    "gemini-1.5-flash".to_string(),
+                    std::env::var("GEMINI_FLASH_MODEL").unwrap_or_else(|_| "gemini-1.5-flash-latest".to_string()),
                     pm.clone()
                 )?));
             }
@@ -85,7 +85,7 @@ impl EngineFactory {
         if let Ok(key) = std::env::var("ANTHROPIC_API_KEY") {
             router.add_provider(RouteLevel::Premium, LlmProviderKind::Anthropic, 1, Arc::new(AnthropicClient::new(
                 key,
-                "claude-3-5-sonnet-20240620".to_string(),
+                std::env::var("ANTHROPIC_MODEL").unwrap_or_else(|_| "claude-3-5-sonnet-20241022".to_string()),
                 pm.clone()
             )?));
         }
@@ -117,7 +117,7 @@ impl EngineFactory {
             if let Ok(key) = std::env::var("GOOGLE_AI_STUDIO_API_KEY") {
                 router.add_provider(RouteLevel::FreeTier, LlmProviderKind::GoogleAIStudio, 0, Arc::new(GoogleAIStudioClient::new(
                     key,
-                    std::env::var("GOOGLE_AI_STUDIO_MODEL").unwrap_or_else(|_| "gemini-1.5-flash".to_string()),
+                    std::env::var("GOOGLE_AI_STUDIO_MODEL").unwrap_or_else(|_| "gemini-1.5-flash-latest".to_string()),
                     pm.clone()
                 )?));
             }
