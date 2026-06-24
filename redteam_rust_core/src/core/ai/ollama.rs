@@ -42,7 +42,8 @@ impl LlmClient for OllamaClient {
             .json(&json!({ "model": self.model, "prompt": prompt, "stream": false, "format": "json" }))
             .send().await?.json().await?;
 
-        let response_text = res["response"].as_str().context("Ollama response missing text")?;
+        let raw_res = res.clone();
+        let response_text = res["response"].as_str().context(format!("Ollama response missing text. Raw response: {}", raw_res))?;
         let mut analysis: AIAnalysis = serde_json::from_value(self.base.parse_extraction(response_text)?)?;
         
         if let Some(prompt_tokens) = res["prompt_eval_count"].as_u64() {
@@ -79,7 +80,8 @@ impl LlmClient for OllamaClient {
             .json(&json!({ "model": self.model, "prompt": prompt, "stream": false, "format": "json" }))
             .send().await?.json().await?;
 
-        let text = res["response"].as_str().context("Ollama decision missing text")?;
+        let raw_res = res.clone();
+        let text = res["response"].as_str().context(format!("Ollama decision missing text. Raw response: {}", raw_res))?;
         let json_val: serde_json::Value = self.base.parse_extraction(text)?;
         let action = json_val["action"].as_str().unwrap_or("none");
         
