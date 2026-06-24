@@ -38,7 +38,7 @@ impl LlmClient for GoogleAIStudioClient {
                 "generationConfig": { "response_mime_type": "application/json" }
             })).send().await?.json::<serde_json::Value>().await?;
 
-        let text = res["candidates"][0]["content"]["parts"][0]["text"].as_str().context("Google AI Studio response format error")?;
+        let text = res["candidates"][0]["content"]["parts"][0]["text"].as_str().context(format!("Google AI Studio response format error. Raw response: {:?}", res.clone()))?;
         let mut analysis: AIAnalysis = serde_json::from_value(self.base.parse_extraction(text)?)?;
 
         if let Some(usage) = res["usageMetadata"].as_object() {

@@ -40,7 +40,8 @@ impl LlmClient for AnthropicClient {
                 "messages": [{ "role": "user", "content": prompt }],
             })).send().await?.json::<serde_json::Value>().await?;
         
-        let text = res["content"][0]["text"].as_str().context("Anthropic response format error")?;
+        let raw_res = res.clone();
+        let text = res["content"][0]["text"].as_str().context(format!("Anthropic response format error. Raw response: {:?}", raw_res))?;
         Ok(serde_json::from_value(self.base.parse_extraction(text)?)?)
     }
 

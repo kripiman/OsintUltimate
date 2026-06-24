@@ -44,7 +44,8 @@ impl LlmClient for AzureOpenAIClient {
             ],
             "response_format": { "type": "json_object" }
         })).send().await?.json::<serde_json::Value>().await?;
-        let text = res["choices"][0]["message"]["content"].as_str().context("Azure response format error")?;
+        let raw_res = res.clone();
+        let text = res["choices"][0]["message"]["content"].as_str().context(format!("Azure response format error. Raw response: {:?}", raw_res))?;
         Ok(serde_json::from_value(self.base.parse_extraction(text)?)?)
     }
 
@@ -64,7 +65,8 @@ impl LlmClient for AzureOpenAIClient {
             ],
             "response_format": { "type": "json_object" }
         })).send().await?.json::<serde_json::Value>().await?;
-        let text = res["choices"][0]["message"]["content"].as_str().context("Azure decision format error")?;
+        let raw_res = res.clone();
+        let text = res["choices"][0]["message"]["content"].as_str().context(format!("Azure decision format error. Raw response: {:?}", raw_res))?;
         let json_val: serde_json::Value = self.base.parse_extraction(text)?;
         let action = json_val["action"].as_str().unwrap_or("none");
         if action == "none" || !config.plugins.iter().any(|p| p.name == action) { Ok(None) }
