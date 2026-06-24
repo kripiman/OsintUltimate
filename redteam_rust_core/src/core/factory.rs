@@ -46,11 +46,13 @@ impl EngineFactory {
 
         // Tier 1: Mid
         if let (Ok(endpoint), Ok(key)) = (std::env::var("AZURE_OPENAI_ENDPOINT"), std::env::var("AZURE_OPENAI_KEY")) {
+            let deployment = std::env::var("AZURE_OPENAI_DEPLOYMENT").unwrap_or_else(|_| "gpt-4o-mini".to_string());
+            let api_version = std::env::var("AZURE_OPENAI_API_VERSION").unwrap_or_else(|_| "2024-02-01".to_string());
             router.add_provider(RouteLevel::Mid, LlmProviderKind::AzureOpenAI, 0, Arc::new(AzureOpenAIClient::new(
                 endpoint,
                 key,
-                "gpt-4o-mini".to_string(),
-                "2024-02-01".to_string(),
+                deployment,
+                api_version,
                 pm.clone()
             )?));
         }
