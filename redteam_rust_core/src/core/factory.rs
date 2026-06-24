@@ -58,9 +58,11 @@ impl EngineFactory {
         }
 
         if let Ok(key) = std::env::var("OPENAI_API_KEY") {
+            let base_url = std::env::var("OPENAI_BASE_URL").ok();
             router.add_provider(RouteLevel::Mid, LlmProviderKind::OpenAI, 1, Arc::new(OpenAIClient::new(
                 key,
                 "gpt-4o-mini".to_string(),
+                base_url,
                 pm.clone()
             )?));
         }

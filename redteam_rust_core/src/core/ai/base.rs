@@ -6,11 +6,15 @@ use crate::utils::proxy::ProxyManager;
 /// Centralizes proxy management and secure transport creation.
 pub struct BaseLlmClient {
     pub proxy_manager: Arc<ProxyManager>,
+    pub base_url: String,
 }
 
 impl BaseLlmClient {
     pub fn new(pm: Arc<ProxyManager>) -> Self {
-        Self { proxy_manager: pm }
+        Self { 
+            proxy_manager: pm,
+            base_url: String::new(),
+        }
     }
 
     /// Creates a secured reqwest::Client using the ProxyManager.
