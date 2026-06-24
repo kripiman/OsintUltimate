@@ -234,7 +234,7 @@ impl TieredAIRouter {
                         }
                         Err(e) => {
                             let router_err = RouterError::from_anyhow(&e);
-                            tracing::warn!("TieredRouter: Provider {:?} in {:?} failed ({:?}). Trying next...", entry.kind, current_level, router_err);
+                            tracing::warn!("TieredRouter: Provider {:?} in {:?} failed ({:?}). Original error: {:#?}. Trying next...", entry.kind, current_level, router_err, e);
                             
                             if let RouterError::RateLimited { retry_after, daily_quota } = &router_err {
                                 if *daily_quota {
