@@ -43,7 +43,8 @@ impl LlmClient for GroqClient {
                 "response_format": { "type": "json_object" }
             })).send().await?.json::<serde_json::Value>().await?;
 
-        let text = res["choices"][0]["message"]["content"].as_str().context("Groq response format error")?;
+        let raw_res = res.clone();
+        let text = res["choices"][0]["message"]["content"].as_str().context(format!("Groq response format error. Raw response: {:?}", raw_res))?;
         Ok(serde_json::from_value(self.base.parse_extraction(text)?)?)
     }
 
