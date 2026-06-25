@@ -112,8 +112,16 @@ runcmd:
   - shutdown -h +120
 "#, pass = pass),
         ProxyMode::Worker => {
-            let binary_url = std::env::var("DO_WORKER_BINARY_URL")
-                .expect("DO_WORKER_BINARY_URL env var must be set for Worker mode");
+            let gh_user = std::env::var("GH_USER")
+                .expect("GH_USER env var must be set to compile worker from source");
+            let gh_token = std::env::var("GH_TOKEN")
+                .expect("GH_TOKEN env var must be set to compile worker from source");
+            let gh_repo = std::env::var("GH_REPO_URL")
+                .expect("GH_REPO_URL env var must be set (e.g. https://github.com/user/OsintUltimate)");
+            
+            // Extract the domain path without scheme for the git clone command
+            let gh_repo_clean = gh_repo.trim_start_matches("https://").trim_start_matches("http://");
+            
             let ts_key = std::env::var("TAILSCALE_AUTH_KEY")
                 .expect("TAILSCALE_AUTH_KEY env var must be set for Worker mode");
             let do_token = std::env::var("DIGITALOCEAN_TOKEN")
@@ -156,7 +164,12 @@ write_files:
       poweroff -f
 runcmd:
   - mkdir -p /usr/local/bin /var/lib/mimikri
-  - curl -fsSL -o /usr/local/bin/redteam_rust_core {binary_url} || (echo "Binary download failed" && /usr/local/sbin/self-destruct.sh)
+  - apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y git build-essential pkg-config libssl-dev cmake curl
+  - curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
+  - source $HOME/.cargo/env
+  - git clone https://{gh_user}:{gh_token}@{gh_repo_clean} /tmp/OsintUltimate
+  - cd /tmp/OsintUltimate/redteam_rust_core && $HOME/.cargo/bin/cargo build --release
+  - cp /tmp/OsintUltimate/redteam_rust_core/target/release/redteam_rust_core /usr/local/bin/redteam_rust_core || (echo "Binary build failed" && /usr/local/sbin/self-destruct.sh)
   - chmod 755 /usr/local/bin/redteam_rust_core
   - |
     cat > /usr/local/bin/nuclei-config.yaml << 'NUCLEICFG'
@@ -246,9 +259,6 @@ impl DigitalOceanClient {
     }
 
     pub async fn create_worker_droplet(&self, name: &str, region: &str) -> Result<Droplet> {
-        if std::env::var("DO_WORKER_BINARY_URL").is_err() {
-            anyhow::bail!("DO_WORKER_BINARY_URL env var is required to spawn worker droplets. Set it to the HTTPS URL of the pre-built x86_64 musl binary.");
-        }
         self.create_droplet(name, region, ProxyMode::Worker).await
     }
 

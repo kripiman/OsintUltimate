@@ -69,8 +69,8 @@ pub fn spawn_discovery_stage(
                                 data
                             ));
                             
-                            let _ = liveness_tx.send(TargetHost { 
-                                host: res.host, 
+                            let new_host = TargetHost { 
+                                host: res.host.clone(), 
                                 ip: None, 
                                 resolved_ip: None,
                                 status: TargetStatus::Pending, 
@@ -88,7 +88,36 @@ pub fn spawn_discovery_stage(
                                 skip_heavy_scan: false,
                                 scan_id: target.scan_id,
                                 scope_id: String::new(),
-                            }).await;
+                            };
+
+                            let is_oracle = std::env::var("ORACLE_OVERRIDE").is_err() && 
+                                          tokio::fs::metadata("/run/mimikri/oracle_detected").await.is_ok();
+                            let mut pushed_to_db = false;
+
+                            if is_oracle {
+                                if let Ok(db_url) = std::env::var("DATABASE_URL") {
+                                    if let Ok(pool) = sqlx::PgPool::connect(&db_url).await {
+                                        let res = sqlx::query(
+                                            "INSERT INTO scan_queue (host, target_type, tactical_context, priority, status, worker_profile) VALUES ($1, $2, $3, $4, 'pending', 'scan')"
+                                        )
+                                        .bind(&new_host.host)
+                                        .bind(format!("{:?}", new_host.target_type))
+                                        .bind(&*new_host.tactical_context)
+                                        .bind(1i32)
+                                        .execute(&pool)
+                                        .await;
+                                        
+                                        if res.is_ok() {
+                                            tracing::info!("📦 [OSINT-DB] Enqueued discovered subdomain to DB for DO Swarm: {}", new_host.host);
+                                            pushed_to_db = true;
+                                        }
+                                    }
+                                }
+                            }
+
+                            if !pushed_to_db {
+                                let _ = liveness_tx.send(new_host).await;
+                            }
                         }
                     }
                 }

@@ -117,6 +117,35 @@ pub async fn setup_dashboard(
                         .unwrap_or_else(|| (*cli_scope_id).clone()),
                 };
 
+                // Determine if we should push to local stream OR to database queue
+                let is_oracle = std::env::var("ORACLE_OVERRIDE").is_err() && 
+                                tokio::fs::metadata("/run/mimikri/oracle_detected").await.is_ok();
+                
+                if let Ok(db_url) = std::env::var("DATABASE_URL") {
+                    let pool_res = sqlx::PgPool::connect(&db_url).await;
+                    if let Ok(pool) = pool_res {
+                        let res = sqlx::query(
+                            "INSERT INTO scan_queue (host, target_type, tactical_context, priority, status, worker_profile) VALUES ($1, $2, $3, $4, 'pending', 'scan')"
+                        )
+                        .bind(&host.host)
+                        .bind(format!("{:?}", host.target_type))
+                        .bind(&*host.tactical_context)
+                        .bind(1i32)
+                        .execute(&pool)
+                        .await;
+                        
+                        match res {
+                            Ok(_) => {
+                                info!("📦 [MISSION-QUEUE] Saved mission directly to Postgres for Distributed Swarm: {}", host.host);
+                                continue;
+                            }
+                            Err(e) => {
+                                warn!("⚠️ [MISSION-QUEUE] Failed DB insert, falling back to local stream: {}", e);
+                            }
+                        }
+                    }
+                }
+
                 if let Err(e) = injection_tx_for_dashboard.send(host).await {
                     error!("❌ [MISSION-QUEUE] Failed to inject target into pipeline: {}", e);
                 }
