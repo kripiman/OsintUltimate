@@ -91,7 +91,7 @@ pub fn spawn_discovery_stage(
                             };
 
                             let is_oracle = std::env::var("ORACLE_OVERRIDE").is_err() && 
-                                          tokio::fs::metadata("/run/mimikri/oracle_detected").await.is_ok();
+                                          crate::utils::stealth_detect::is_oracle_cloud().await;
                             let mut pushed_to_db = false;
 
                             if is_oracle {

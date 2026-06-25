@@ -119,7 +119,7 @@ pub async fn setup_dashboard(
 
                 // Determine if we should push to local stream OR to database queue
                 let is_oracle = std::env::var("ORACLE_OVERRIDE").is_err() && 
-                                tokio::fs::metadata("/run/mimikri/oracle_detected").await.is_ok();
+                                redteam_rust_core::utils::stealth_detect::is_oracle_cloud().await;
                 
                 if let Ok(db_url) = std::env::var("DATABASE_URL") {
                     let pool_res = sqlx::PgPool::connect(&db_url).await;
