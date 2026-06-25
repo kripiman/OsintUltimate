@@ -198,6 +198,41 @@ pub async fn dispatch_scan(
         }
     }
 
+    // Alert Discord if there was a critical failure
+    if plugin_error {
+        if let Ok(webhook_url) = std::env::var("DISCORD_ERROR_WEBHOOK_URL") {
+            if webhook_url.starts_with("https://discord.com/api/webhooks/") {
+                let payload = serde_json::json!({
+                    "username": "Mimikri Sentinel",
+                    "avatar_url": "https://raw.githubusercontent.com/kripiman/OsintUltimate/main/mimicry_logo.png",
+                    "embeds": [{
+                        "title": format!("🚨 Plugin Failure on {}", target.host),
+                        "color": 0xFF0000,
+                        "description": "A scanner plugin panicked or encountered a critical error during execution.",
+                        "fields": [
+                            {
+                                "name": "🎯 Target",
+                                "value": format!("`{}`", target.host),
+                                "inline": true
+                            }
+                        ],
+                        "footer": {
+                            "text": "Sovereign Audit Mode • Error Alert"
+                        }
+                    }]
+                });
+                
+                tokio::spawn(async move {
+                    let _ = reqwest::Client::new()
+                        .post(&webhook_url)
+                        .json(&payload)
+                        .send()
+                        .await;
+                });
+            }
+        }
+    }
+
     (all_findings, plugin_error)
 }
 
