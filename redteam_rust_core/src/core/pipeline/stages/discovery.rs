@@ -98,7 +98,7 @@ pub fn spawn_discovery_stage(
                                 if let Ok(db_url) = std::env::var("DATABASE_URL") {
                                     if let Ok(pool) = sqlx::PgPool::connect(&db_url).await {
                                         let res = sqlx::query(
-                                            "INSERT INTO scan_queue (host, target_type, tactical_context, priority, status, worker_profile) VALUES ($1, $2, $3, $4, 'pending', 'scan')"
+                                            "INSERT INTO scan_queue (host, target_type, tactical_context, priority, status, worker_profile) VALUES ($1, $2, $3, $4, 'pending', 'scan') ON CONFLICT (host) DO NOTHING"
                                         )
                                         .bind(&new_host.host)
                                         .bind(format!("{:?}", new_host.target_type))
@@ -107,8 +107,12 @@ pub fn spawn_discovery_stage(
                                         .execute(&pool)
                                         .await;
                                         
-                                        if res.is_ok() {
-                                            tracing::info!("📦 [OSINT-DB] Enqueued discovered subdomain to DB for DO Swarm: {}", new_host.host);
+                                        if let Ok(result) = res {
+                                            if result.rows_affected() > 0 {
+                                                tracing::info!("📦 [OSINT-DB] Enqueued discovered subdomain to DB for DO Swarm: {}", new_host.host);
+                                            }
+                                            // Always set pushed_to_db to true so Oracle doesn't try to scan it locally,
+                                            // even if it was a duplicate (it's already in the DB being processed by a DO worker).
                                             pushed_to_db = true;
                                         }
                                     }
