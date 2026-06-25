@@ -300,6 +300,8 @@ pub async fn dispatch(args: Args) -> Result<()> {
                                             tracing::error!("❌ ORACLE COORDINATOR: Failed to spawn DO worker: {}", e);
                                         }
                                     }
+                                } else if pending_count > 0 && worker_count > 0 {
+                                    tracing::info!("📡 ORACLE COORDINATOR: {} pending jobs in queue. Delegating to {} active and responsive DO worker(s)...", pending_count, worker_count);
                                 }
                             }
                         }
