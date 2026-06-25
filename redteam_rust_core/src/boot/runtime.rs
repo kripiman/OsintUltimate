@@ -270,9 +270,10 @@ pub async fn dispatch(args: Args) -> Result<()> {
     // V15.6 ORACLE COORDINATOR: Auto-spawn DO workers when queue has pending jobs
     if !args.worker && !args.enqueue_only {
         if redteam_rust_core::utils::stealth_detect::is_oracle_cloud().await {
-            if let (Some(db_url), Ok(do_token)) = (args.postgres_url.clone().or_else(|| std::env::var("DATABASE_URL").ok()), utils_config.require_do_token()) {
-                let db_url_clone = db_url.clone();
-                let do_token_clone = do_token.clone();
+            let db_url = args.postgres_url.clone().or_else(|| std::env::var("DATABASE_URL").ok());
+            let do_token = std::env::var("DIGITALOCEAN_TOKEN").ok();
+            
+            if let (Some(db_url_clone), Some(do_token_clone)) = (db_url, do_token) {
                 let pm_clone = engine.proxy_manager().clone();
                 let do_client = Arc::new(redteam_rust_core::infrastructure::digital_ocean::DigitalOceanClient::new(do_token_clone, pm_clone));
                 let do_client_reap = do_client.clone();
