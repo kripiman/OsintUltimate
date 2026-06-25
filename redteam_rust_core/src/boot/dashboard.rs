@@ -137,7 +137,7 @@ pub async fn setup_dashboard(
                         match res {
                             Ok(_) => {
                                 info!("📦 [MISSION-QUEUE] Saved mission directly to Postgres for Distributed Swarm: {}", host.host);
-                                continue;
+                                // REMOVED 'continue' - we WANT to fall through to inject into the local stream
                             }
                             Err(e) => {
                                 warn!("⚠️ [MISSION-QUEUE] Failed DB insert, falling back to local stream: {}", e);
