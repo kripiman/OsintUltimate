@@ -221,6 +221,7 @@ impl TieredAIRouter {
 
                     match entry.client.analyze(config).await {
                         Ok(analysis) => {
+                            tracing::info!("🧠 [TieredRouter] Provider {:?} ({:?}) successfully analyzed finding {}", entry.kind, current_level, finding.core.id);
                             match current_level {
                                 RouteLevel::Local => crate::utils::telemetry::METRIC_LOCAL_QWEN_TRIAGE.fetch_add(1, Ordering::Relaxed),
                                 RouteLevel::FreeTier => crate::utils::telemetry::METRIC_FREETIER_CALLS.fetch_add(1, Ordering::Relaxed),
@@ -302,6 +303,7 @@ impl TieredAIRouter {
 
                     match entry.client.decide_action(config).await {
                         Ok(Some((action, context))) => {
+                            tracing::info!("🤖 [TieredRouter] Provider {:?} ({:?}) selected action '{}' for {}", entry.kind, current_level, action, finding.core.id);
                             match current_level {
                                 RouteLevel::Local => crate::utils::telemetry::METRIC_LOCAL_QWEN_TRIAGE.fetch_add(1, Ordering::Relaxed),
                                 RouteLevel::FreeTier => crate::utils::telemetry::METRIC_FREETIER_CALLS.fetch_add(1, Ordering::Relaxed),
@@ -310,7 +312,7 @@ impl TieredAIRouter {
                             };
                             return Ok(Some((action, context)));
                         }
-                        Ok(None) => continue,
+                        Ok(None) => return Ok(None),
                         Err(e) => {
                             let router_err = RouterError::from_anyhow(&e);
                             tracing::warn!("TieredRouter: Decision failed with provider {:?} in {:?}: {:?}. Trying next...", entry.kind, current_level, router_err);
