@@ -27,7 +27,7 @@ impl ProxyManager {
                 h
             })
             .danger_accept_invalid_certs(self.insecure)
-            .timeout(Duration::from_secs(15));
+            .timeout(Duration::from_secs(180));
 
         if let Some(p_str) = proxy_str {
             let proxy = Proxy::all(p_str).context("Invalid proxy URL")?;
@@ -60,7 +60,7 @@ impl ProxyManager {
             })
             .resolve(host, SocketAddr::new(ip, port))
             .danger_accept_invalid_certs(self.insecure)
-            .timeout(Duration::from_secs(15))
+            .timeout(Duration::from_secs(180))
             .build()
             .context("Failed to build host-pinned reqwest client for proxy")?;
             

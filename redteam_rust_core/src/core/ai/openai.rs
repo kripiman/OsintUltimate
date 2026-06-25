@@ -51,14 +51,13 @@ impl LlmClient for OpenAIClient {
             .json(&json!({
                 "model": self.model,
                 "messages": [
-                    { "role": "system", "content": "### PROFESSIONAL RED TEAM ENGINE ###\nReturn strictly JSON. You must include these fields: 'summary', 'impact', 'stealth_notes', 'risk_score', 'confidence', 'mitre_attack', 'exploit_path', 'model'. DO NOT output defensive remediations or fixes; provide the exploit path." },
+                    { "role": "system", "content": crate::core::ai::templates::SYSTEM_ANALYSIS },
                     { "role": "user", "content": prompt }
                 ],
                 "response_format": { "type": "json_object" }
             })).send().await?.json::<serde_json::Value>().await?;
         
-        let raw_res = res.clone();
-        let text = res["choices"][0]["message"]["content"].as_str().context(format!("OpenAI response format error. Raw response: {:?}", raw_res))?;
+        let text = res["choices"][0]["message"]["content"].as_str().context("OpenAI response format error")?;
         Ok(serde_json::from_value(self.base.parse_extraction(text)?)?)
     }
 
@@ -81,14 +80,13 @@ impl LlmClient for OpenAIClient {
             .json(&json!({
                 "model": self.model,
                 "messages": [
-                    { "role": "system", "content": "### SENTINEL ORCHESTRATOR ###\nReturn JSON: {\"action\": \"name\", \"tactical_context\": {}}" },
+                    { "role": "system", "content": crate::core::ai::templates::SYSTEM_DECISION },
                     { "role": "user", "content": prompt }
                 ],
                 "response_format": { "type": "json_object" }
             })).send().await?.json::<serde_json::Value>().await?;
 
-        let raw_res = res.clone();
-        let text = res["choices"][0]["message"]["content"].as_str().context(format!("OpenAI decision format error. Raw response: {:?}", raw_res))?;
+        let text = res["choices"][0]["message"]["content"].as_str().context("OpenAI decision format error")?;
         let json_val: serde_json::Value = self.base.parse_extraction(text)?;
         let action = json_val["action"].as_str().unwrap_or("none");
         if action == "none" || !config.plugins.iter().any(|p| p.name == action) { Ok(None) }
