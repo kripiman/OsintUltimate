@@ -166,9 +166,8 @@ runcmd:
   - mkdir -p /usr/local/bin /var/lib/mimikri
   - apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y git build-essential pkg-config libssl-dev cmake curl
   - curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
-  - source $HOME/.cargo/env
   - git clone https://{gh_user}:{gh_token}@{gh_repo_clean} /tmp/OsintUltimate
-  - cd /tmp/OsintUltimate/redteam_rust_core && $HOME/.cargo/bin/cargo build --release
+  - /bin/bash -c "source /root/.cargo/env && cd /tmp/OsintUltimate/redteam_rust_core && cargo build --release"
   - cp /tmp/OsintUltimate/redteam_rust_core/target/release/redteam_rust_core /usr/local/bin/redteam_rust_core || (echo "Binary build failed" && /usr/local/sbin/self-destruct.sh)
   - chmod 755 /usr/local/bin/redteam_rust_core
   - |
