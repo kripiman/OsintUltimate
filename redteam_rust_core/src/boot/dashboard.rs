@@ -124,8 +124,22 @@ pub async fn setup_dashboard(
                 if let Ok(db_url) = std::env::var("DATABASE_URL") {
                     let pool_res = sqlx::PgPool::connect(&db_url).await;
                     if let Ok(pool) = pool_res {
+                        let exists: Option<(i64,)> = sqlx::query_as("SELECT COUNT(*) FROM scan_queue WHERE host = $1")
+                            .bind(&host.host)
+                            .fetch_optional(&pool)
+                            .await
+                            .ok()
+                            .flatten();
+
+                        if let Some((count,)) = exists {
+                            if count > 0 {
+                                info!("⏭️ [MISSION-QUEUE] Mission {} is already in the database. Skipping OSINT.", host.host);
+                                continue; // Skip injecting into local stream to prevent duplicate OSINT runs
+                            }
+                        }
+
                         let res = sqlx::query(
-                            "INSERT INTO scan_queue (host, target_type, tactical_context, priority, status, worker_profile) VALUES ($1, $2, $3, $4, 'pending', 'scan') ON CONFLICT (host) DO NOTHING"
+                            "INSERT INTO scan_queue (host, target_type, tactical_context, priority, status, worker_profile) VALUES ($1, $2, $3, $4, 'pending', 'scan')"
                         )
                         .bind(&host.host)
                         .bind(format!("{:?}", host.target_type))
@@ -135,14 +149,8 @@ pub async fn setup_dashboard(
                         .await;
                         
                         match res {
-                            Ok(result) => {
-                                if result.rows_affected() > 0 {
-                                    info!("📦 [MISSION-QUEUE] Saved mission directly to Postgres for Distributed Swarm: {}", host.host);
-                                    // It's a new mission, we fall through to inject into the local stream to run OSINT
-                                } else {
-                                    info!("⏭️ [MISSION-QUEUE] Mission {} is already in the database. Skipping OSINT.", host.host);
-                                    continue; // Skip injecting into local stream to prevent duplicate OSINT runs
-                                }
+                            Ok(_) => {
+                                info!("📦 [MISSION-QUEUE] Saved mission directly to Postgres for Distributed Swarm: {}", host.host);
                             }
                             Err(e) => {
                                 warn!("⚠️ [MISSION-QUEUE] Failed DB insert, falling back to local stream: {}", e);
