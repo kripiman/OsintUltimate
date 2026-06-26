@@ -590,9 +590,9 @@ impl SovereignReconScanner {
         let mut success = false;
         
         loop {
-            let url = format!("https://api.zoomeye.org/web/search?query=site:{}&page={}", domain, page);
+            let url = format!("https://api.zoomeye.ai/web/search?query=site:{}&page={}", domain, page);
             
-            match self.get_client("api.zoomeye.org").await {
+            match self.get_client("api.zoomeye.ai").await {
                 Ok(client) => match client.get(&url).header("API-KEY", key).send().await {
                     Ok(resp) => {
                         if !resp.status().is_success() {
