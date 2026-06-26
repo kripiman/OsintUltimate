@@ -590,38 +590,28 @@ impl SovereignReconScanner {
         let mut success = false;
         
         loop {
-            let url = "https://api.zoomeye.ai/v2/search";
-            let query_str = format!("site:{}", domain);
-            let qbase64 = base64::engine::general_purpose::STANDARD.encode(query_str);
-            
-            let body = serde_json::json!({
-                "qbase64": qbase64,
-                "page": page
-            });
+            let url = format!("https://api.zoomeye.ai/domain/search?q={}&type=1&page={}", domain, page);
 
             match self.get_client("api.zoomeye.ai").await {
-                Ok(client) => match client.post(url).header("API-KEY", key).json(&body).send().await {
+                Ok(client) => match client.get(&url).header("API-KEY", key).send().await {
                     Ok(resp) => {
                         if !resp.status().is_success() {
                             warn!("⚠️ ZoomEye API error at page {}: HTTP {}", page, resp.status());
                             break;
                         }
                         #[derive(Deserialize)]
-                        struct ZoomEyeHit { domain: Option<String>, hostname: Option<String>, ip: Option<String> }
+                        struct ZoomEyeItem { name: Option<String> }
                         #[derive(Deserialize)]
-                        struct ZoomEyeResp { data: Option<Vec<ZoomEyeHit>>, total: Option<usize> }
+                        struct ZoomEyeResp { list: Option<Vec<ZoomEyeItem>>, total: Option<usize> }
                         match resp.json::<ZoomEyeResp>().await {
                             Ok(res) => {
                                 success = true;
-                                if let Some(data) = res.data {
-                                    let count = data.len();
+                                if let Some(list) = res.list {
+                                    let count = list.len();
                                     if count == 0 { break; }
-                                    for hit in data {
-                                        if let Some(mut d) = hit.domain {
-                                            if d.ends_with(domain) { subdomains.insert(d); }
-                                        }
-                                        if let Some(mut h) = hit.hostname {
-                                            if h.ends_with(domain) { subdomains.insert(h); }
+                                    for item in list {
+                                        if let Some(name) = item.name {
+                                            if name.ends_with(domain) { subdomains.insert(name); }
                                         }
                                     }
                                     
