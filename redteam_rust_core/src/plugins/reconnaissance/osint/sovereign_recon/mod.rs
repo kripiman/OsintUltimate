@@ -192,12 +192,42 @@ impl DiscoveryPlugin for SovereignReconScanner {
         }
 
         // Phase 2-7: Build unique set of in-scope hosts accumulated so far
-        let mut in_scope_hosts: Vec<String> = all_results.keys().cloned().collect();
-        if !in_scope_hosts.contains(&target.host) {
-            in_scope_hosts.push(target.host.clone());
+        let mut raw_in_scope_hosts: Vec<String> = all_results.keys().cloned().collect();
+        if !raw_in_scope_hosts.contains(&target.host) {
+            raw_in_scope_hosts.push(target.host.clone());
         }
 
-        info!("🛡️ V14.2 SCOPE: Running budget Phases 2-5 for {} in-scope hosts...", in_scope_hosts.len());
+        // Deduplicate against database to prevent re-querying expensive APIs for targets we already know about
+        let mut in_scope_hosts = Vec::new();
+        if let Ok(db_url) = std::env::var("DATABASE_URL") {
+            if let Ok(pool) = sqlx::PgPool::connect(&db_url).await {
+                for host in raw_in_scope_hosts {
+                    let exists: Option<(i64,)> = sqlx::query_as("SELECT COUNT(*) FROM scan_queue WHERE host = $1")
+                        .bind(&host)
+                        .fetch_optional(&pool)
+                        .await
+                        .ok()
+                        .flatten();
+                    
+                    if let Some((count,)) = exists {
+                        if count == 0 {
+                            in_scope_hosts.push(host);
+                        } else {
+                            // If it exists in DB, it's a duplicate, we skip expensive OSINT retro-feeding for it
+                            info!("⏭️ Skipping OSINT enrichment for duplicate host: {}", host);
+                        }
+                    } else {
+                        in_scope_hosts.push(host);
+                    }
+                }
+            } else {
+                in_scope_hosts = raw_in_scope_hosts;
+            }
+        } else {
+            in_scope_hosts = raw_in_scope_hosts;
+        }
+
+        info!("🛡️ V14.2 SCOPE: Running budget Phases 2-5 for {} new in-scope hosts...", in_scope_hosts.len());
 
         for host in in_scope_hosts {
             // 2. SecurityTrails
