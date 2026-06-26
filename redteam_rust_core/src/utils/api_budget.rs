@@ -161,6 +161,7 @@ impl ApiBudgetRegistry {
         let crtsh_budget = std::env::var("CRTSH_BUDGET").ok().and_then(|v| v.parse().ok()).unwrap_or(1000);
         let leakix_budget = std::env::var("LEAKIX_BUDGET").ok().and_then(|v| v.parse().ok()).unwrap_or(1000);
         let github_budget = std::env::var("GITHUB_BUDGET").ok().and_then(|v| v.parse().ok()).unwrap_or(5000);
+        let censys_budget = std::env::var("CENSYS_BUDGET").ok().and_then(|v| v.parse().ok()).unwrap_or(250);
 
         managers.insert(
             "netlas".to_string(),
@@ -209,6 +210,10 @@ impl ApiBudgetRegistry {
         managers.insert(
             "github".to_string(),
             CreditManager::new(github_budget, BudgetWindow::Daily),
+        );
+        managers.insert(
+            "censys".to_string(),
+            CreditManager::new(censys_budget, BudgetWindow::Monthly),
         );
 
         let registry = Self { managers, pool };
