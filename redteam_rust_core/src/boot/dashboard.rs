@@ -133,27 +133,27 @@ pub async fn setup_dashboard(
 
                         if let Some((count,)) = exists {
                             if count > 0 {
-                                info!("⏭️ [MISSION-QUEUE] Mission {} is already in the database. Skipping OSINT.", host.host);
-                                continue; // Skip injecting into local stream to prevent duplicate OSINT runs
-                            }
-                        }
-
-                        let res = sqlx::query(
-                            "INSERT INTO scan_queue (host, target_type, tactical_context, priority, status, worker_profile) VALUES ($1, $2, $3, $4, 'pending', 'scan')"
-                        )
-                        .bind(&host.host)
-                        .bind(format!("{:?}", host.target_type))
-                        .bind(&*host.tactical_context)
-                        .bind(1i32)
-                        .execute(&pool)
-                        .await;
-                        
-                        match res {
-                            Ok(_) => {
-                                info!("📦 [MISSION-QUEUE] Saved mission directly to Postgres for Distributed Swarm: {}", host.host);
-                            }
-                            Err(e) => {
-                                warn!("⚠️ [MISSION-QUEUE] Failed DB insert, falling back to local stream: {}", e);
+                                info!("⏭️ [MISSION-QUEUE] Mission {} is already in the queue. Skipping DB insert, but WILL run OSINT for new subdomains.", host.host);
+                                // We don't 'continue' here anymore. We want to fall through and run the OSINT pipeline!
+                            } else {
+                                let res = sqlx::query(
+                                    "INSERT INTO scan_queue (host, target_type, tactical_context, priority, status, worker_profile) VALUES ($1, $2, $3, $4, 'pending', 'scan')"
+                                )
+                                .bind(&host.host)
+                                .bind(format!("{:?}", host.target_type))
+                                .bind(&*host.tactical_context)
+                                .bind(1i32)
+                                .execute(&pool)
+                                .await;
+                                
+                                match res {
+                                    Ok(_) => {
+                                        info!("📦 [MISSION-QUEUE] Saved mission directly to Postgres for Distributed Swarm: {}", host.host);
+                                    }
+                                    Err(e) => {
+                                        warn!("⚠️ [MISSION-QUEUE] Failed DB insert, falling back to local stream: {}", e);
+                                    }
+                                }
                             }
                         }
                     }
