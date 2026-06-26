@@ -196,7 +196,7 @@ NUCLEICFG
     Environment="INTERACTSH_SERVER_URL={interactsh_server_url}"
     Environment="INTERACTSH_URL={interactsh_url}"
     Environment="INTERACTSH_TOKEN={interactsh_token}"
-    ExecStart=/usr/local/bin/redteam_rust_core --worker --postgres-url {db_url} --node-id {node_id} --profile scan --concurrency 4 --soft-mem-limit-mb 600
+    ExecStart=/usr/local/bin/redteam_rust_core --worker --max-layer Verification --vuln-scan --postgres-url {db_url} --node-id {node_id} --profile scan --concurrency 4 --soft-mem-limit-mb 600
     Restart=no
     TimeoutStopSec=60s
     RuntimeMaxSec=21600
