@@ -590,32 +590,42 @@ impl SovereignReconScanner {
         let mut success = false;
         
         loop {
-            let url = format!("https://api.zoomeye.ai/web/search?query=site:{}&page={}", domain, page);
+            let url = "https://api.zoomeye.ai/v2/search";
+            let query_str = format!("site:{}", domain);
+            let qbase64 = base64::engine::general_purpose::STANDARD.encode(query_str);
             
+            let body = serde_json::json!({
+                "qbase64": qbase64,
+                "page": page
+            });
+
             match self.get_client("api.zoomeye.ai").await {
-                Ok(client) => match client.get(&url).header("API-KEY", key).send().await {
+                Ok(client) => match client.post(url).header("API-KEY", key).json(&body).send().await {
                     Ok(resp) => {
                         if !resp.status().is_success() {
                             warn!("⚠️ ZoomEye API error at page {}: HTTP {}", page, resp.status());
                             break;
                         }
                         #[derive(Deserialize)]
-                        struct ZoomEyeMatch { site: Option<String> }
+                        struct ZoomEyeHit { domain: Option<String>, hostname: Option<String>, ip: Option<String> }
                         #[derive(Deserialize)]
-                        struct ZoomEyeResp { matches: Option<Vec<ZoomEyeMatch>>, total: Option<usize> }
+                        struct ZoomEyeResp { data: Option<Vec<ZoomEyeHit>>, total: Option<usize> }
                         match resp.json::<ZoomEyeResp>().await {
-                            Ok(data) => {
+                            Ok(res) => {
                                 success = true;
-                                if let Some(matches) = data.matches {
-                                    let count = matches.len();
+                                if let Some(data) = res.data {
+                                    let count = data.len();
                                     if count == 0 { break; }
-                                    for m in matches {
-                                        if let Some(site) = m.site {
-                                            subdomains.insert(site);
+                                    for hit in data {
+                                        if let Some(mut d) = hit.domain {
+                                            if d.ends_with(domain) { subdomains.insert(d); }
+                                        }
+                                        if let Some(mut h) = hit.hostname {
+                                            if h.ends_with(domain) { subdomains.insert(h); }
                                         }
                                     }
                                     
-                                    let total = data.total.unwrap_or(0);
+                                    let total = res.total.unwrap_or(0);
                                     let total_pages = total.div_ceil(page_size);
  
                                     if count < page_size || page >= total_pages || page >= max_pages {
