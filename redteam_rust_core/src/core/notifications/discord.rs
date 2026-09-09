@@ -63,7 +63,6 @@ impl DataSink for DiscordSink {
 
             let payload = json!({
                 "username": "Mimikri Sentinel",
-                "avatar_url": "https://raw.githubusercontent.com/kripiman/OsintUltimate/main/mimicry_logo.png",
                 "embeds": [{
                     "title": format!("🔱 Potential Vulnerability: {}", target.host),
                     "color": color,

@@ -193,8 +193,10 @@ redteam_rust_core/dnsx/
 redteam_rust_core/.uncover-config/
 
 
-# graphify
-graphify-out/
-
 # agents
 .agents/
+
+# graphify cache and timestamp archives
+graphify-out/cache/
+graphify-out/20*
+

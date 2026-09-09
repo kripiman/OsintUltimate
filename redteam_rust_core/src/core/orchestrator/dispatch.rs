@@ -204,7 +204,6 @@ pub async fn dispatch_scan(
             if webhook_url.starts_with("https://discord.com/api/webhooks/") {
                 let payload = serde_json::json!({
                     "username": "Mimikri Sentinel",
-                    "avatar_url": "https://raw.githubusercontent.com/kripiman/OsintUltimate/main/mimicry_logo.png",
                     "embeds": [{
                         "title": format!("🚨 Plugin Failure on {}", target.host),
                         "color": 0xFF0000,

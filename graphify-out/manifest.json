@@ -1,0 +1,2702 @@
+{
+  "redteam_rust_core/.nuclei-config/nuclei/.templates-config.json": {
+    "mtime": 1783348311.8247266,
+    "ast_hash": "02f4ad7657b5b27c7e118888e1a1d2fc",
+    "semantic_hash": "02f4ad7657b5b27c7e118888e1a1d2fc"
+  },
+  "redteam_rust_core/benches/sprint_7_5.rs": {
+    "mtime": 1783348311.827503,
+    "ast_hash": "64c99bfe78607dbfed6cc3dc8ee5fd67",
+    "semantic_hash": "64c99bfe78607dbfed6cc3dc8ee5fd67"
+  },
+  "redteam_rust_core/build.rs": {
+    "mtime": 1783348311.827575,
+    "ast_hash": "b3f482dae049a85457285101a2605c72",
+    "semantic_hash": "b3f482dae049a85457285101a2605c72"
+  },
+  "redteam_rust_core/check_output.json": {
+    "mtime": 1783348311.8279755,
+    "ast_hash": "1e3cd00110eee1c3b829d6b5122c7be1",
+    "semantic_hash": "1e3cd00110eee1c3b829d6b5122c7be1"
+  },
+  "redteam_rust_core/migrations/20260428000000_initial_pg_schema.sql": {
+    "mtime": 1783348311.8289735,
+    "ast_hash": "0ef4f1cddc05052ad4451712cd9d0bcb",
+    "semantic_hash": "0ef4f1cddc05052ad4451712cd9d0bcb"
+  },
+  "redteam_rust_core/migrations/20260506000000_distributed_worker_queue.sql": {
+    "mtime": 1783348311.8290021,
+    "ast_hash": "78d397bef00cf4b8fb5713b0112024a1",
+    "semantic_hash": "78d397bef00cf4b8fb5713b0112024a1"
+  },
+  "redteam_rust_core/migrations/20260508000000_program_targets.sql": {
+    "mtime": 1783348311.8290274,
+    "ast_hash": "6a8ac46011dfef5ea6570dcb9ba0ef30",
+    "semantic_hash": "6a8ac46011dfef5ea6570dcb9ba0ef30"
+  },
+  "redteam_rust_core/migrations/20260508000002_temporal_diff_fixes.sql": {
+    "mtime": 1783348311.8290505,
+    "ast_hash": "db1921227b8e641e21a117fb7ca4d7ed",
+    "semantic_hash": "db1921227b8e641e21a117fb7ca4d7ed"
+  },
+  "redteam_rust_core/migrations/20260508000003_submitted_reports.sql": {
+    "mtime": 1783348311.8290756,
+    "ast_hash": "cf6c5eb98d026ed1adf95bcd608a3b4f",
+    "semantic_hash": "cf6c5eb98d026ed1adf95bcd608a3b4f"
+  },
+  "redteam_rust_core/migrations/20260525000000_worker_profile.sql": {
+    "mtime": 1783348311.829106,
+    "ast_hash": "02107de3dbcbae1a1f5796732a898c0b",
+    "semantic_hash": "02107de3dbcbae1a1f5796732a898c0b"
+  },
+  "redteam_rust_core/package.json": {
+    "mtime": 1783348311.829197,
+    "ast_hash": "92d74ea3a90daf6992b24a56079904fb",
+    "semantic_hash": "92d74ea3a90daf6992b24a56079904fb"
+  },
+  "redteam_rust_core/schema.sql": {
+    "mtime": 1783348311.8294034,
+    "ast_hash": "d601f01ab9c7d09ac2a175ae2875eb22",
+    "semantic_hash": "d601f01ab9c7d09ac2a175ae2875eb22"
+  },
+  "redteam_rust_core/src/bin/capture_baseline.rs": {
+    "mtime": 1783348311.8295794,
+    "ast_hash": "536e3dbd06aa760e883f78880f88a35f",
+    "semantic_hash": "536e3dbd06aa760e883f78880f88a35f"
+  },
+  "redteam_rust_core/src/bin/verify_parity.rs": {
+    "mtime": 1783348311.8296394,
+    "ast_hash": "86c8f75a4ff537d4d34fac637c9cbecf",
+    "semantic_hash": "86c8f75a4ff537d4d34fac637c9cbecf"
+  },
+  "redteam_rust_core/src/boot/cli.rs": {
+    "mtime": 1783348311.8296394,
+    "ast_hash": "870144aa45470d9be032b17eb908938e",
+    "semantic_hash": "870144aa45470d9be032b17eb908938e"
+  },
+  "redteam_rust_core/src/boot/dashboard.rs": {
+    "mtime": 1783348311.8297057,
+    "ast_hash": "984ba28661947895e03c5ecd356677c3",
+    "semantic_hash": "984ba28661947895e03c5ecd356677c3"
+  },
+  "redteam_rust_core/src/boot/mod.rs": {
+    "mtime": 1783348311.8297057,
+    "ast_hash": "63297f5505046f364c955ec56f35c1ba",
+    "semantic_hash": "63297f5505046f364c955ec56f35c1ba"
+  },
+  "redteam_rust_core/src/boot/runtime.rs": {
+    "mtime": 1783348311.8297057,
+    "ast_hash": "834f34843c5fb1c5127020f05a76abff",
+    "semantic_hash": "834f34843c5fb1c5127020f05a76abff"
+  },
+  "redteam_rust_core/src/boot/sink_setup.rs": {
+    "mtime": 1783348311.8297057,
+    "ast_hash": "9ddc2b6479fe74773bace9ded548654b",
+    "semantic_hash": "9ddc2b6479fe74773bace9ded548654b"
+  },
+  "redteam_rust_core/src/boot/stealth.rs": {
+    "mtime": 1783348311.8297057,
+    "ast_hash": "cef0c0b12430c3afe1fd2f76b44c0c13",
+    "semantic_hash": "cef0c0b12430c3afe1fd2f76b44c0c13"
+  },
+  "redteam_rust_core/src/boot/targets.rs": {
+    "mtime": 1783348311.8297057,
+    "ast_hash": "28a5623be528490014a63033fc9ed1d4",
+    "semantic_hash": "28a5623be528490014a63033fc9ed1d4"
+  },
+  "redteam_rust_core/src/boot/telemetry.rs": {
+    "mtime": 1783348311.8297057,
+    "ast_hash": "8ccdd489ee6a6279bee56416f3dc46d3",
+    "semantic_hash": "8ccdd489ee6a6279bee56416f3dc46d3"
+  },
+  "redteam_rust_core/src/boot/worker.rs": {
+    "mtime": 1783348311.8297057,
+    "ast_hash": "1acce7132e75d54aff8a17dbe9c1b576",
+    "semantic_hash": "1acce7132e75d54aff8a17dbe9c1b576"
+  },
+  "redteam_rust_core/src/core/agent.rs": {
+    "mtime": 1783348311.8297057,
+    "ast_hash": "5a123c578caaa0e832ca5eadf983c27e",
+    "semantic_hash": "5a123c578caaa0e832ca5eadf983c27e"
+  },
+  "redteam_rust_core/src/core/ai/anthropic.rs": {
+    "mtime": 1783348311.8300436,
+    "ast_hash": "af9d20f2e9cd31a176da178a2b71f860",
+    "semantic_hash": "af9d20f2e9cd31a176da178a2b71f860"
+  },
+  "redteam_rust_core/src/core/ai/antigravity.rs": {
+    "mtime": 1783348311.83008,
+    "ast_hash": "3e9692da58097dfe9048782bf646ba0f",
+    "semantic_hash": "3e9692da58097dfe9048782bf646ba0f"
+  },
+  "redteam_rust_core/src/core/ai/azure.rs": {
+    "mtime": 1783348311.8301048,
+    "ast_hash": "cda2300dc373d5bad3ca8ec06ecd7091",
+    "semantic_hash": "cda2300dc373d5bad3ca8ec06ecd7091"
+  },
+  "redteam_rust_core/src/core/ai/base.rs": {
+    "mtime": 1783348311.8301048,
+    "ast_hash": "2a68f62e458a7d49bd8a7dd7bf339734",
+    "semantic_hash": "2a68f62e458a7d49bd8a7dd7bf339734"
+  },
+  "redteam_rust_core/src/core/ai/caveman.rs": {
+    "mtime": 1783348311.8301408,
+    "ast_hash": "0f24438cb7beb977db8793bfe87d96ba",
+    "semantic_hash": "0f24438cb7beb977db8793bfe87d96ba"
+  },
+  "redteam_rust_core/src/core/ai/claude_code.rs": {
+    "mtime": 1783348311.8301408,
+    "ast_hash": "e27f2d42bce46b16f3a1effcd895a0f1",
+    "semantic_hash": "e27f2d42bce46b16f3a1effcd895a0f1"
+  },
+  "redteam_rust_core/src/core/ai/cli_llm.rs": {
+    "mtime": 1783348311.8301408,
+    "ast_hash": "74b6fef93218f78344b73a67c8c87f09",
+    "semantic_hash": "74b6fef93218f78344b73a67c8c87f09"
+  },
+  "redteam_rust_core/src/core/ai/compressor.rs": {
+    "mtime": 1783348311.8302023,
+    "ast_hash": "1f51d2b920c3d45f6e1d933a4f625e22",
+    "semantic_hash": "1f51d2b920c3d45f6e1d933a4f625e22"
+  },
+  "redteam_rust_core/src/core/ai/gemini.rs": {
+    "mtime": 1783348311.8302379,
+    "ast_hash": "751d02c936294826233bd79ca10dc91b",
+    "semantic_hash": "751d02c936294826233bd79ca10dc91b"
+  },
+  "redteam_rust_core/src/core/ai/google_ai_studio.rs": {
+    "mtime": 1783348311.8302617,
+    "ast_hash": "7574710fa98e6ab1430fef9a82d34566",
+    "semantic_hash": "7574710fa98e6ab1430fef9a82d34566"
+  },
+  "redteam_rust_core/src/core/ai/groq.rs": {
+    "mtime": 1783348311.8302832,
+    "ast_hash": "e852f6cf303ed8f7456fb935ce210a62",
+    "semantic_hash": "e852f6cf303ed8f7456fb935ce210a62"
+  },
+  "redteam_rust_core/src/core/ai/kimi.rs": {
+    "mtime": 1783348311.8303022,
+    "ast_hash": "4eda692516f09ffbe307bf70630aa413",
+    "semantic_hash": "4eda692516f09ffbe307bf70630aa413"
+  },
+  "redteam_rust_core/src/core/ai/kimi_cli.rs": {
+    "mtime": 1783348311.8303287,
+    "ast_hash": "9f7f575e05eaf530c3172cb4a7e27f92",
+    "semantic_hash": "9f7f575e05eaf530c3172cb4a7e27f92"
+  },
+  "redteam_rust_core/src/core/ai/mod.rs": {
+    "mtime": 1783348311.830348,
+    "ast_hash": "68ab4ea56e3ed16ac159ecd99e546a56",
+    "semantic_hash": "68ab4ea56e3ed16ac159ecd99e546a56"
+  },
+  "redteam_rust_core/src/core/ai/off_path.rs": {
+    "mtime": 1783348311.8303788,
+    "ast_hash": "010c7c5ad3a020d32c6f842873344961",
+    "semantic_hash": "010c7c5ad3a020d32c6f842873344961"
+  },
+  "redteam_rust_core/src/core/ai/ollama.rs": {
+    "mtime": 1783348311.8304036,
+    "ast_hash": "fbdfc42d15fef6fa0ae8c011c2ea0514",
+    "semantic_hash": "fbdfc42d15fef6fa0ae8c011c2ea0514"
+  },
+  "redteam_rust_core/src/core/ai/openai.rs": {
+    "mtime": 1783348311.8304365,
+    "ast_hash": "3cc6fa981d8d40a963c1b711e32701a1",
+    "semantic_hash": "3cc6fa981d8d40a963c1b711e32701a1"
+  },
+  "redteam_rust_core/src/core/ai/openrouter.rs": {
+    "mtime": 1783348311.8304489,
+    "ast_hash": "8896974fcb5ca2a1a06ec36e9c322dcc",
+    "semantic_hash": "8896974fcb5ca2a1a06ec36e9c322dcc"
+  },
+  "redteam_rust_core/src/core/ai/plugin_rag.rs": {
+    "mtime": 1783348311.8304672,
+    "ast_hash": "c1e0fa9f3c99188e698687ceb8b0ed59",
+    "semantic_hash": "c1e0fa9f3c99188e698687ceb8b0ed59"
+  },
+  "redteam_rust_core/src/core/ai/rate_limiter.rs": {
+    "mtime": 1783348311.830486,
+    "ast_hash": "95ffbd525f237f3f5f74e4ab1e93a642",
+    "semantic_hash": "95ffbd525f237f3f5f74e4ab1e93a642"
+  },
+  "redteam_rust_core/src/core/ai/router.rs": {
+    "mtime": 1783348311.8305316,
+    "ast_hash": "6341bfc5173e18b5b785d86c1adebd01",
+    "semantic_hash": "6341bfc5173e18b5b785d86c1adebd01"
+  },
+  "redteam_rust_core/src/core/ai/scrubber.rs": {
+    "mtime": 1783348311.8305604,
+    "ast_hash": "b13ba5d8612aebf8ead033b5334c8032",
+    "semantic_hash": "b13ba5d8612aebf8ead033b5334c8032"
+  },
+  "redteam_rust_core/src/core/ai/templates.rs": {
+    "mtime": 1783348311.8305776,
+    "ast_hash": "40dff183689ad39faf66f70980009b56",
+    "semantic_hash": "40dff183689ad39faf66f70980009b56"
+  },
+  "redteam_rust_core/src/core/ai/token_optimizer/mod.rs": {
+    "mtime": 1783348311.8305776,
+    "ast_hash": "f2222f606c28a18cabac617d6181acdf",
+    "semantic_hash": "f2222f606c28a18cabac617d6181acdf"
+  },
+  "redteam_rust_core/src/core/ai/token_optimizer/optimizer.rs": {
+    "mtime": 1783348311.8306625,
+    "ast_hash": "e149090e9f2fcf4b14db3ba2b47ad344",
+    "semantic_hash": "e149090e9f2fcf4b14db3ba2b47ad344"
+  },
+  "redteam_rust_core/src/core/ai/token_optimizer/ranker.rs": {
+    "mtime": 1783348311.8306797,
+    "ast_hash": "8a940e1c21af0b69114550e52926a506",
+    "semantic_hash": "8a940e1c21af0b69114550e52926a506"
+  },
+  "redteam_rust_core/src/core/ai/token_optimizer/strategies.rs": {
+    "mtime": 1783348311.8306997,
+    "ast_hash": "59ae68f0059f9f2cb281bc653e29f255",
+    "semantic_hash": "59ae68f0059f9f2cb281bc653e29f255"
+  },
+  "redteam_rust_core/src/core/ai/traits.rs": {
+    "mtime": 1783348311.8306997,
+    "ast_hash": "098b9ff7a17d30378f5849c0ff424ba9",
+    "semantic_hash": "098b9ff7a17d30378f5849c0ff424ba9"
+  },
+  "redteam_rust_core/src/core/ai/types.rs": {
+    "mtime": 1783348311.8307393,
+    "ast_hash": "bc06836a95fff0dca86b64f4f0b311bb",
+    "semantic_hash": "bc06836a95fff0dca86b64f4f0b311bb"
+  },
+  "redteam_rust_core/src/core/approval_gate.rs": {
+    "mtime": 1783348311.8307393,
+    "ast_hash": "e5542d93b04acfa4ab69fca0576c82cb",
+    "semantic_hash": "e5542d93b04acfa4ab69fca0576c82cb"
+  },
+  "redteam_rust_core/src/core/blackarch/bridge.rs": {
+    "mtime": 1783348311.8308136,
+    "ast_hash": "121e8e03a57e294ccedf512fa6ff1780",
+    "semantic_hash": "121e8e03a57e294ccedf512fa6ff1780"
+  },
+  "redteam_rust_core/src/core/blackarch/mod.rs": {
+    "mtime": 1783348311.8308249,
+    "ast_hash": "0d93ee1bc2372e83e4daf5fa5774b12b",
+    "semantic_hash": "0d93ee1bc2372e83e4daf5fa5774b12b"
+  },
+  "redteam_rust_core/src/core/blackarch/parser.rs": {
+    "mtime": 1783348311.830845,
+    "ast_hash": "c8e0c728729c9b0827d7497c228caa55",
+    "semantic_hash": "c8e0c728729c9b0827d7497c228caa55"
+  },
+  "redteam_rust_core/src/core/blackarch/schema.rs": {
+    "mtime": 1783348311.8308592,
+    "ast_hash": "2618415906325b541a26c826d35712a2",
+    "semantic_hash": "2618415906325b541a26c826d35712a2"
+  },
+  "redteam_rust_core/src/core/capability_layer.rs": {
+    "mtime": 1783348311.8308592,
+    "ast_hash": "782ca3aa9c50ad88fde595575f961de3",
+    "semantic_hash": "782ca3aa9c50ad88fde595575f961de3"
+  },
+  "redteam_rust_core/src/core/correlation/ad_ingestor.rs": {
+    "mtime": 1783348311.8309207,
+    "ast_hash": "f1a9347ef604097c3bc2cc7a577e2b77",
+    "semantic_hash": "f1a9347ef604097c3bc2cc7a577e2b77"
+  },
+  "redteam_rust_core/src/core/correlation/analyzer.rs": {
+    "mtime": 1783348311.8309414,
+    "ast_hash": "70f807f67d3bfed25d73877059e0927e",
+    "semantic_hash": "70f807f67d3bfed25d73877059e0927e"
+  },
+  "redteam_rust_core/src/core/correlation/ingestor.rs": {
+    "mtime": 1783348311.830963,
+    "ast_hash": "2503d49a135277e4cdcc829446a755e9",
+    "semantic_hash": "2503d49a135277e4cdcc829446a755e9"
+  },
+  "redteam_rust_core/src/core/correlation/mod.rs": {
+    "mtime": 1783348311.8309927,
+    "ast_hash": "dfb4fe4ee4a04a62ebced03f9d3b0e06",
+    "semantic_hash": "dfb4fe4ee4a04a62ebced03f9d3b0e06"
+  },
+  "redteam_rust_core/src/core/engine/app.rs": {
+    "mtime": 1783348311.8310406,
+    "ast_hash": "bd8d32915c89d1695e953d2f0ca7e014",
+    "semantic_hash": "bd8d32915c89d1695e953d2f0ca7e014"
+  },
+  "redteam_rust_core/src/core/engine/mod.rs": {
+    "mtime": 1783348311.831056,
+    "ast_hash": "a5ae4fa8894b331929624000a173ad1b",
+    "semantic_hash": "a5ae4fa8894b331929624000a173ad1b"
+  },
+  "redteam_rust_core/src/core/factory.rs": {
+    "mtime": 1783348311.831056,
+    "ast_hash": "00311bf5a499ba98da4e2b95adc25903",
+    "semantic_hash": "00311bf5a499ba98da4e2b95adc25903"
+  },
+  "redteam_rust_core/src/core/filter.rs": {
+    "mtime": 1783348311.8311105,
+    "ast_hash": "89b1b577d16c262b3b227a0e69ea64cd",
+    "semantic_hash": "89b1b577d16c262b3b227a0e69ea64cd"
+  },
+  "redteam_rust_core/src/core/lock_free_sink.rs": {
+    "mtime": 1783348311.831135,
+    "ast_hash": "fb57340fc6432df31ef9979a931eac96",
+    "semantic_hash": "fb57340fc6432df31ef9979a931eac96"
+  },
+  "redteam_rust_core/src/core/mcp/mod.rs": {
+    "mtime": 1783348311.8311515,
+    "ast_hash": "d180c9974d4228fc075240cae10af54c",
+    "semantic_hash": "d180c9974d4228fc075240cae10af54c"
+  },
+  "redteam_rust_core/src/core/mcp/protocol.rs": {
+    "mtime": 1783348311.8311782,
+    "ast_hash": "7538551482c256714deb46e5c724b231",
+    "semantic_hash": "7538551482c256714deb46e5c724b231"
+  },
+  "redteam_rust_core/src/core/mcp/sanitizer.rs": {
+    "mtime": 1783348311.8312228,
+    "ast_hash": "9fb365a432755a05e1cc876c42418cef",
+    "semantic_hash": "9fb365a432755a05e1cc876c42418cef"
+  },
+  "redteam_rust_core/src/core/mcp/server.rs": {
+    "mtime": 1783348311.8313115,
+    "ast_hash": "b63fc0adb9d01c5134a572e0a7b27bd6",
+    "semantic_hash": "b63fc0adb9d01c5134a572e0a7b27bd6"
+  },
+  "redteam_rust_core/src/core/mcp/server/execute.rs": {
+    "mtime": 1783348311.8313322,
+    "ast_hash": "cf82837ceb538598d4fa8ece43a9d3e7",
+    "semantic_hash": "cf82837ceb538598d4fa8ece43a9d3e7"
+  },
+  "redteam_rust_core/src/core/mcp/server/handlers.rs": {
+    "mtime": 1783348311.8314369,
+    "ast_hash": "1101519809a4c48ec564741b5a8a411f",
+    "semantic_hash": "1101519809a4c48ec564741b5a8a411f"
+  },
+  "redteam_rust_core/src/core/mcp/server/tools.rs": {
+    "mtime": 1783348311.8314824,
+    "ast_hash": "592adf08a05d014e442f12291f92fc98",
+    "semantic_hash": "592adf08a05d014e442f12291f92fc98"
+  },
+  "redteam_rust_core/src/core/mcp/tests.rs": {
+    "mtime": 1783348311.8314824,
+    "ast_hash": "9693baf51ae0f1d00bb28e8338b8a6fa",
+    "semantic_hash": "9693baf51ae0f1d00bb28e8338b8a6fa"
+  },
+  "redteam_rust_core/src/core/middleware.rs": {
+    "mtime": 1783348311.8314824,
+    "ast_hash": "1449577864e1a0fe06f4dc3a691f1b0c",
+    "semantic_hash": "1449577864e1a0fe06f4dc3a691f1b0c"
+  },
+  "redteam_rust_core/src/core/mod.rs": {
+    "mtime": 1783348311.83155,
+    "ast_hash": "c63285ad393d428384a04a97904a8326",
+    "semantic_hash": "c63285ad393d428384a04a97904a8326"
+  },
+  "redteam_rust_core/src/core/native_scanner.rs": {
+    "mtime": 1783348311.8315864,
+    "ast_hash": "5c1388b086077ec17d4f67f5618253ea",
+    "semantic_hash": "5c1388b086077ec17d4f67f5618253ea"
+  },
+  "redteam_rust_core/src/core/net_evasion/af_xdp_channel.rs": {
+    "mtime": 1783348311.8316257,
+    "ast_hash": "5e793ca0d699989fa02f856ecba5c6a2",
+    "semantic_hash": "5e793ca0d699989fa02f856ecba5c6a2"
+  },
+  "redteam_rust_core/src/core/net_evasion/cache_deception.rs": {
+    "mtime": 1783348311.8316574,
+    "ast_hash": "ddf4e5e9934449ff7ef638676f938bf3",
+    "semantic_hash": "ddf4e5e9934449ff7ef638676f938bf3"
+  },
+  "redteam_rust_core/src/core/net_evasion/doh3_client.rs": {
+    "mtime": 1783348311.8316805,
+    "ast_hash": "e5c677d3221e3e52474530340c356dee",
+    "semantic_hash": "e5c677d3221e3e52474530340c356dee"
+  },
+  "redteam_rust_core/src/core/net_evasion/domain_front.rs": {
+    "mtime": 1783348311.831703,
+    "ast_hash": "48bfd9e9f6deedf94969a3c7981bd4d0",
+    "semantic_hash": "48bfd9e9f6deedf94969a3c7981bd4d0"
+  },
+  "redteam_rust_core/src/core/net_evasion/ech_client.rs": {
+    "mtime": 1783348311.8317358,
+    "ast_hash": "dea07be53fed45adf10aec11760261e3",
+    "semantic_hash": "dea07be53fed45adf10aec11760261e3"
+  },
+  "redteam_rust_core/src/core/net_evasion/ech_dns_fetcher.rs": {
+    "mtime": 1783348311.8317597,
+    "ast_hash": "501a26cacb75d322ab5c4fe1fd64f673",
+    "semantic_hash": "501a26cacb75d322ab5c4fe1fd64f673"
+  },
+  "redteam_rust_core/src/core/net_evasion/fragment_assembler.rs": {
+    "mtime": 1783348311.8317857,
+    "ast_hash": "5d6204af49c2216c8c9d09a5333d91ef",
+    "semantic_hash": "5d6204af49c2216c8c9d09a5333d91ef"
+  },
+  "redteam_rust_core/src/core/net_evasion/fragment_prober.rs": {
+    "mtime": 1783348311.831811,
+    "ast_hash": "3a7d391856a480cd845c34dde983545c",
+    "semantic_hash": "3a7d391856a480cd845c34dde983545c"
+  },
+  "redteam_rust_core/src/core/net_evasion/h2c_probe.rs": {
+    "mtime": 1783348311.831833,
+    "ast_hash": "38acc569d51fce38e386b51ae8a4c266",
+    "semantic_hash": "38acc569d51fce38e386b51ae8a4c266"
+  },
+  "redteam_rust_core/src/core/net_evasion/http3_client.rs": {
+    "mtime": 1783348311.8318655,
+    "ast_hash": "8f5d5e2f02c71305f598f97368fbdbf5",
+    "semantic_hash": "8f5d5e2f02c71305f598f97368fbdbf5"
+  },
+  "redteam_rust_core/src/core/net_evasion/http_smuggle.rs": {
+    "mtime": 1783348311.831894,
+    "ast_hash": "6f49d8cd1ad02c1147efe50af47a5f7a",
+    "semantic_hash": "6f49d8cd1ad02c1147efe50af47a5f7a"
+  },
+  "redteam_rust_core/src/core/net_evasion/ja4_http_client.rs": {
+    "mtime": 1783348311.8319192,
+    "ast_hash": "26fb53c0b62ce2c931c7f58231f7b3fc",
+    "semantic_hash": "26fb53c0b62ce2c931c7f58231f7b3fc"
+  },
+  "redteam_rust_core/src/core/net_evasion/ja4_spoofer.rs": {
+    "mtime": 1783348311.831958,
+    "ast_hash": "52fd5910ee32a00e2f8d78c4837c7107",
+    "semantic_hash": "52fd5910ee32a00e2f8d78c4837c7107"
+  },
+  "redteam_rust_core/src/core/net_evasion/l2_parser.rs": {
+    "mtime": 1783348311.8319788,
+    "ast_hash": "713314bedf32cf4eeaa5697ef8dab386",
+    "semantic_hash": "713314bedf32cf4eeaa5697ef8dab386"
+  },
+  "redteam_rust_core/src/core/net_evasion/mod.rs": {
+    "mtime": 1783348311.8320038,
+    "ast_hash": "ba53e8e5bdde366ed55ee210f4daf01c",
+    "semantic_hash": "ba53e8e5bdde366ed55ee210f4daf01c"
+  },
+  "redteam_rust_core/src/core/net_evasion/orchestrator.rs": {
+    "mtime": 1783348311.832059,
+    "ast_hash": "914ac9ada9617358363753e5273c8bb2",
+    "semantic_hash": "914ac9ada9617358363753e5273c8bb2"
+  },
+  "redteam_rust_core/src/core/net_evasion/packet_forge.rs": {
+    "mtime": 1783348311.832093,
+    "ast_hash": "633d913fec71e5f01cf654e862c7f18d",
+    "semantic_hash": "633d913fec71e5f01cf654e862c7f18d"
+  },
+  "redteam_rust_core/src/core/net_evasion/quic_evasion.rs": {
+    "mtime": 1783348311.8321247,
+    "ast_hash": "4d0332157aa9a98fea51f8a87b559ed4",
+    "semantic_hash": "4d0332157aa9a98fea51f8a87b559ed4"
+  },
+  "redteam_rust_core/src/core/net_evasion/quic_forge.rs": {
+    "mtime": 1783348311.8321638,
+    "ast_hash": "162fd5f2b0c57a92eee2f241689bb7ff",
+    "semantic_hash": "162fd5f2b0c57a92eee2f241689bb7ff"
+  },
+  "redteam_rust_core/src/core/net_evasion/quinn_client.rs": {
+    "mtime": 1783348311.832194,
+    "ast_hash": "05a7bd560f5ae5bef40ba59c87f2f3bd",
+    "semantic_hash": "05a7bd560f5ae5bef40ba59c87f2f3bd"
+  },
+  "redteam_rust_core/src/core/net_evasion/raw_socket.rs": {
+    "mtime": 1783348311.8322191,
+    "ast_hash": "396ce6db9cbf2154ed411924d8badeeb",
+    "semantic_hash": "396ce6db9cbf2154ed411924d8badeeb"
+  },
+  "redteam_rust_core/src/core/net_evasion/tcp_evasion.rs": {
+    "mtime": 1783348311.8322496,
+    "ast_hash": "f1c61872d7ef84f63eff903a2ea21704",
+    "semantic_hash": "f1c61872d7ef84f63eff903a2ea21704"
+  },
+  "redteam_rust_core/src/core/net_evasion/tcp_fast_open.rs": {
+    "mtime": 1783348311.8322701,
+    "ast_hash": "8b6ab4bc94ec85dcbf604a7dca193869",
+    "semantic_hash": "8b6ab4bc94ec85dcbf604a7dca193869"
+  },
+  "redteam_rust_core/src/core/net_evasion/tcp_micro_segmentation.rs": {
+    "mtime": 1783348311.8322701,
+    "ast_hash": "ced4a2e61d1b9f8ce208c5b715ccd4e9",
+    "semantic_hash": "ced4a2e61d1b9f8ce208c5b715ccd4e9"
+  },
+  "redteam_rust_core/src/core/net_evasion/tcp_session.rs": {
+    "mtime": 1783348311.8323226,
+    "ast_hash": "b4dfad182073d72ea1240e4f7df017f5",
+    "semantic_hash": "b4dfad182073d72ea1240e4f7df017f5"
+  },
+  "redteam_rust_core/src/core/net_evasion/tcp_state_desync.rs": {
+    "mtime": 1783348311.8323538,
+    "ast_hash": "29b00cca67d91d3d452fdc696a8a67ea",
+    "semantic_hash": "29b00cca67d91d3d452fdc696a8a67ea"
+  },
+  "redteam_rust_core/src/core/net_evasion/tcp_urgent_abuse.rs": {
+    "mtime": 1783348311.832374,
+    "ast_hash": "493822d03e2fdd02e88f0acb6be54b1b",
+    "semantic_hash": "493822d03e2fdd02e88f0acb6be54b1b"
+  },
+  "redteam_rust_core/src/core/net_evasion/tcp_zero_window.rs": {
+    "mtime": 1783348311.8323917,
+    "ast_hash": "0dff0d3eddf852f1839aa90912e2ad28",
+    "semantic_hash": "0dff0d3eddf852f1839aa90912e2ad28"
+  },
+  "redteam_rust_core/src/core/net_evasion/tls13_0rtt.rs": {
+    "mtime": 1783348311.8323917,
+    "ast_hash": "17aa506cad59fb3ceacf8f2c38b00c0e",
+    "semantic_hash": "17aa506cad59fb3ceacf8f2c38b00c0e"
+  },
+  "redteam_rust_core/src/core/net_evasion/tls_raw_forge.rs": {
+    "mtime": 1783348311.8324258,
+    "ast_hash": "f04321cd25559486d8002a18705fae6f",
+    "semantic_hash": "f04321cd25559486d8002a18705fae6f"
+  },
+  "redteam_rust_core/src/core/net_evasion/topology_prober.rs": {
+    "mtime": 1783348311.8324554,
+    "ast_hash": "6c2bf4124a3c6ab4fa85451a93d28245",
+    "semantic_hash": "6c2bf4124a3c6ab4fa85451a93d28245"
+  },
+  "redteam_rust_core/src/core/net_evasion/ttl_insertion.rs": {
+    "mtime": 1783348311.8324761,
+    "ast_hash": "cd74b1c3bd991fd9211a0ee147214602",
+    "semantic_hash": "cd74b1c3bd991fd9211a0ee147214602"
+  },
+  "redteam_rust_core/src/core/notifications/discord.rs": {
+    "mtime": 1788915469.7800808,
+    "ast_hash": "8a4df916c5d6fe520e9dae433c6c228b",
+    "semantic_hash": ""
+  },
+  "redteam_rust_core/src/core/notifications/mod.rs": {
+    "mtime": 1783348311.8325276,
+    "ast_hash": "f00acd1d43f25317dcd6b81724ae2b6d",
+    "semantic_hash": "f00acd1d43f25317dcd6b81724ae2b6d"
+  },
+  "redteam_rust_core/src/core/orchestrator/c2/mod.rs": {
+    "mtime": 1783348311.8325398,
+    "ast_hash": "ee3b4304d37cc5b90cd387aab0ef59b1",
+    "semantic_hash": "ee3b4304d37cc5b90cd387aab0ef59b1"
+  },
+  "redteam_rust_core/src/core/orchestrator/c2/sliver_feedback.rs": {
+    "mtime": 1783348311.8325899,
+    "ast_hash": "e77c8f88d6dbfbad682eb2c50bac020d",
+    "semantic_hash": "e77c8f88d6dbfbad682eb2c50bac020d"
+  },
+  "redteam_rust_core/src/core/orchestrator/c2/sliver_proto.rs": {
+    "mtime": 1783348311.832603,
+    "ast_hash": "d2dd3c4ec80c85bbb4205199258b320e",
+    "semantic_hash": "d2dd3c4ec80c85bbb4205199258b320e"
+  },
+  "redteam_rust_core/src/core/orchestrator/dispatch.rs": {
+    "mtime": 1788915456.8260696,
+    "ast_hash": "3d820285afd5fe056b64bfaf833f9589",
+    "semantic_hash": ""
+  },
+  "redteam_rust_core/src/core/orchestrator/enrichment.rs": {
+    "mtime": 1783348311.8326652,
+    "ast_hash": "7acfeda0abdb4a77b3f2585f8e530319",
+    "semantic_hash": "7acfeda0abdb4a77b3f2585f8e530319"
+  },
+  "redteam_rust_core/src/core/orchestrator/lifecycle/mod.rs": {
+    "mtime": 1783348311.8326771,
+    "ast_hash": "9404beddb2628618135015e78c35158a",
+    "semantic_hash": "9404beddb2628618135015e78c35158a"
+  },
+  "redteam_rust_core/src/core/orchestrator/lifecycle/shutdown.rs": {
+    "mtime": 1783348311.8327005,
+    "ast_hash": "a5e25e8c74bfbcf99bda724ef7855095",
+    "semantic_hash": "a5e25e8c74bfbcf99bda724ef7855095"
+  },
+  "redteam_rust_core/src/core/orchestrator/lifecycle/state.rs": {
+    "mtime": 1783348311.8327286,
+    "ast_hash": "bfc1ec3c121e2102c4241feb75557175",
+    "semantic_hash": "bfc1ec3c121e2102c4241feb75557175"
+  },
+  "redteam_rust_core/src/core/orchestrator/mod.rs": {
+    "mtime": 1783348311.8327286,
+    "ast_hash": "aa0ff23da96aa4dd13f43ed9ddc4c12d",
+    "semantic_hash": "aa0ff23da96aa4dd13f43ed9ddc4c12d"
+  },
+  "redteam_rust_core/src/core/orchestrator/monitor.rs": {
+    "mtime": 1783348311.8327923,
+    "ast_hash": "1a1359c66a172a0dcf2d007b8fecdc83",
+    "semantic_hash": "1a1359c66a172a0dcf2d007b8fecdc83"
+  },
+  "redteam_rust_core/src/core/orchestrator/reactive.rs": {
+    "mtime": 1783348311.8328114,
+    "ast_hash": "e34751b74689ab1be015b5b11fd20593",
+    "semantic_hash": "e34751b74689ab1be015b5b11fd20593"
+  },
+  "redteam_rust_core/src/core/orchestrator/scope_guard.rs": {
+    "mtime": 1783348311.8328269,
+    "ast_hash": "d1ba7ac468c92c113b3fac45ba7aa346",
+    "semantic_hash": "d1ba7ac468c92c113b3fac45ba7aa346"
+  },
+  "redteam_rust_core/src/core/orchestrator/swarm/agent.rs": {
+    "mtime": 1783348311.8328757,
+    "ast_hash": "c750a39db5e3e44d2bff879ccbb4e80a",
+    "semantic_hash": "c750a39db5e3e44d2bff879ccbb4e80a"
+  },
+  "redteam_rust_core/src/core/orchestrator/swarm/budget.rs": {
+    "mtime": 1783348311.8329012,
+    "ast_hash": "ba43a1cd82b95670e319343e68e401f4",
+    "semantic_hash": "ba43a1cd82b95670e319343e68e401f4"
+  },
+  "redteam_rust_core/src/core/orchestrator/swarm/coordinator.rs": {
+    "mtime": 1783348311.8330102,
+    "ast_hash": "b18c8b54ba701fc3de10c53f55489b95",
+    "semantic_hash": "b18c8b54ba701fc3de10c53f55489b95"
+  },
+  "redteam_rust_core/src/core/orchestrator/swarm/correlation.rs": {
+    "mtime": 1783348311.833029,
+    "ast_hash": "b4c20411c225f8333e764e6a954988e2",
+    "semantic_hash": "b4c20411c225f8333e764e6a954988e2"
+  },
+  "redteam_rust_core/src/core/orchestrator/swarm/inventory.rs": {
+    "mtime": 1783348311.8330495,
+    "ast_hash": "bfebe19d6423cee61fcce24d7d4417cc",
+    "semantic_hash": "bfebe19d6423cee61fcce24d7d4417cc"
+  },
+  "redteam_rust_core/src/core/orchestrator/swarm/mod.rs": {
+    "mtime": 1783348311.8331056,
+    "ast_hash": "71b90141fbff98c4123065768a4b1a3f",
+    "semantic_hash": "71b90141fbff98c4123065768a4b1a3f"
+  },
+  "redteam_rust_core/src/core/persistence.rs": {
+    "mtime": 1783348311.8331056,
+    "ast_hash": "935826a021d2d365116a6194a1c0e493",
+    "semantic_hash": "935826a021d2d365116a6194a1c0e493"
+  },
+  "redteam_rust_core/src/core/pipeline/builder.rs": {
+    "mtime": 1783348311.8331056,
+    "ast_hash": "1944a0ffede2f9e0020eed9fa2995ba8",
+    "semantic_hash": "1944a0ffede2f9e0020eed9fa2995ba8"
+  },
+  "redteam_rust_core/src/core/pipeline/enrichment.rs": {
+    "mtime": 1783348311.8332067,
+    "ast_hash": "72b0826f8bd551c83951184e1d6f29a5",
+    "semantic_hash": "72b0826f8bd551c83951184e1d6f29a5"
+  },
+  "redteam_rust_core/src/core/pipeline/mod.rs": {
+    "mtime": 1783348311.8332067,
+    "ast_hash": "ea278949b5464a9d9d877cac2e125555",
+    "semantic_hash": "ea278949b5464a9d9d877cac2e125555"
+  },
+  "redteam_rust_core/src/core/pipeline/stages/discovery.rs": {
+    "mtime": 1783348311.8332067,
+    "ast_hash": "6512be083e6c35bf698e785e20219352",
+    "semantic_hash": "6512be083e6c35bf698e785e20219352"
+  },
+  "redteam_rust_core/src/core/pipeline/stages/liveness.rs": {
+    "mtime": 1783348311.833302,
+    "ast_hash": "3faed9e31e5a7b4725fe1787b9406c87",
+    "semantic_hash": "3faed9e31e5a7b4725fe1787b9406c87"
+  },
+  "redteam_rust_core/src/core/pipeline/stages/mod.rs": {
+    "mtime": 1783348311.833302,
+    "ast_hash": "bf299d56155a364e609eaac56dd54d06",
+    "semantic_hash": "bf299d56155a364e609eaac56dd54d06"
+  },
+  "redteam_rust_core/src/core/pipeline/stages/scanning.rs": {
+    "mtime": 1783348311.8333254,
+    "ast_hash": "ac3eee00709a737fd36ef6606180df93",
+    "semantic_hash": "ac3eee00709a737fd36ef6606180df93"
+  },
+  "redteam_rust_core/src/core/pipeline/stages/sink.rs": {
+    "mtime": 1783348311.8333254,
+    "ast_hash": "ebe7977250ed5c298967ea7964fba8c0",
+    "semantic_hash": "ebe7977250ed5c298967ea7964fba8c0"
+  },
+  "redteam_rust_core/src/core/plugin_loader.rs": {
+    "mtime": 1783348311.8333254,
+    "ast_hash": "f9d7621c5e26f77b9fbb8690a45fb2f6",
+    "semantic_hash": "f9d7621c5e26f77b9fbb8690a45fb2f6"
+  },
+  "redteam_rust_core/src/core/policy/mod.rs": {
+    "mtime": 1783348311.8333254,
+    "ast_hash": "e1ea4bf5de5392c8a7983b7bee72f537",
+    "semantic_hash": "e1ea4bf5de5392c8a7983b7bee72f537"
+  },
+  "redteam_rust_core/src/core/policy/scope_syncer.rs": {
+    "mtime": 1783348311.8334467,
+    "ast_hash": "9a6f2571c6e9e85b4eed10fc2d7da2fd",
+    "semantic_hash": "9a6f2571c6e9e85b4eed10fc2d7da2fd"
+  },
+  "redteam_rust_core/src/core/reactive_engine.rs": {
+    "mtime": 1783348311.8334467,
+    "ast_hash": "a96b0c974480fca64b1de2ac91492c92",
+    "semantic_hash": "a96b0c974480fca64b1de2ac91492c92"
+  },
+  "redteam_rust_core/src/core/resource_manager.rs": {
+    "mtime": 1783348311.8334467,
+    "ast_hash": "957ddece5a4cc33cdc2bc6556ad70d0b",
+    "semantic_hash": "957ddece5a4cc33cdc2bc6556ad70d0b"
+  },
+  "redteam_rust_core/src/core/sandbox/mod.rs": {
+    "mtime": 1783348311.8335257,
+    "ast_hash": "dbe9f0a891af819fbc6a421f3c01d048",
+    "semantic_hash": "dbe9f0a891af819fbc6a421f3c01d048"
+  },
+  "redteam_rust_core/src/core/sandbox/wasm.rs": {
+    "mtime": 1783348311.8335843,
+    "ast_hash": "22d5c2322d4352cc1ba4838a0697bf5b",
+    "semantic_hash": "22d5c2322d4352cc1ba4838a0697bf5b"
+  },
+  "redteam_rust_core/src/core/selection/mod.rs": {
+    "mtime": 1783348311.8335843,
+    "ast_hash": "190f4d0d35742d4572e33575e4d26ce8",
+    "semantic_hash": "190f4d0d35742d4572e33575e4d26ce8"
+  },
+  "redteam_rust_core/src/core/selection/rubric.rs": {
+    "mtime": 1783348311.833631,
+    "ast_hash": "3c6b04b8fa2074bb60e5ea870f02c986",
+    "semantic_hash": "3c6b04b8fa2074bb60e5ea870f02c986"
+  },
+  "redteam_rust_core/src/core/sink/bounty.rs": {
+    "mtime": 1783348311.833631,
+    "ast_hash": "72058282766b134a6c9e1b1a2f517cb8",
+    "semantic_hash": "72058282766b134a6c9e1b1a2f517cb8"
+  },
+  "redteam_rust_core/src/core/sink/bounty_draft.rs": {
+    "mtime": 1783348311.83368,
+    "ast_hash": "8085f90db89467fe086f1a0bc536e1c9",
+    "semantic_hash": "8085f90db89467fe086f1a0bc536e1c9"
+  },
+  "redteam_rust_core/src/core/sink/buffered.rs": {
+    "mtime": 1783348311.833696,
+    "ast_hash": "4d210a1f932cb9a856af747f1eac15f2",
+    "semantic_hash": "4d210a1f932cb9a856af747f1eac15f2"
+  },
+  "redteam_rust_core/src/core/sink/jsonl.rs": {
+    "mtime": 1783348311.833696,
+    "ast_hash": "196f68583f38c0e6e3786d10b11a7ee5",
+    "semantic_hash": "196f68583f38c0e6e3786d10b11a7ee5"
+  },
+  "redteam_rust_core/src/core/sink/markdown.rs": {
+    "mtime": 1783348311.8337305,
+    "ast_hash": "c37cdb37135c9b7ae94f0b43558baab5",
+    "semantic_hash": "c37cdb37135c9b7ae94f0b43558baab5"
+  },
+  "redteam_rust_core/src/core/sink/mod.rs": {
+    "mtime": 1783348311.8337824,
+    "ast_hash": "ce4a77594e53fa59f3edb016b32f73db",
+    "semantic_hash": "ce4a77594e53fa59f3edb016b32f73db"
+  },
+  "redteam_rust_core/src/core/sink/nats_sink.rs": {
+    "mtime": 1783348311.8337824,
+    "ast_hash": "f48d5b7a9fb8c28b06f487449e171b6d",
+    "semantic_hash": "f48d5b7a9fb8c28b06f487449e171b6d"
+  },
+  "redteam_rust_core/src/core/sink/postgres.rs": {
+    "mtime": 1783348311.8338382,
+    "ast_hash": "778b73dd1eef8275fc7bb4fe7f42fea8",
+    "semantic_hash": "778b73dd1eef8275fc7bb4fe7f42fea8"
+  },
+  "redteam_rust_core/src/core/sink/timeline.rs": {
+    "mtime": 1783348311.8338382,
+    "ast_hash": "5fd0afb9038dcdcae7b17d00cc886b38",
+    "semantic_hash": "5fd0afb9038dcdcae7b17d00cc886b38"
+  },
+  "redteam_rust_core/src/core/sink/webhook.rs": {
+    "mtime": 1783348311.8338702,
+    "ast_hash": "7726e5ba4bc1502e3f48333d68935b76",
+    "semantic_hash": "7726e5ba4bc1502e3f48333d68935b76"
+  },
+  "redteam_rust_core/src/core/skills/mod.rs": {
+    "mtime": 1783348311.8338702,
+    "ast_hash": "0fd1166c5be07744cf562f145297da83",
+    "semantic_hash": "0fd1166c5be07744cf562f145297da83"
+  },
+  "redteam_rust_core/src/core/source_analyzer.rs": {
+    "mtime": 1783348311.8338702,
+    "ast_hash": "2e7dea9176f9a4b88c8f98122d9de5ef",
+    "semantic_hash": "2e7dea9176f9a4b88c8f98122d9de5ef"
+  },
+  "redteam_rust_core/src/core/temporal.rs": {
+    "mtime": 1783348311.8338702,
+    "ast_hash": "afb41f50b42c3b5fab4ce77d5fa0c064",
+    "semantic_hash": "afb41f50b42c3b5fab4ce77d5fa0c064"
+  },
+  "redteam_rust_core/src/core/tests.rs": {
+    "mtime": 1783348311.8340054,
+    "ast_hash": "2f653c7a940a2d1cf4d509749bac7a3a",
+    "semantic_hash": "2f653c7a940a2d1cf4d509749bac7a3a"
+  },
+  "redteam_rust_core/src/core/validation/executor.rs": {
+    "mtime": 1783348311.8340054,
+    "ast_hash": "23ed5b978e716be43ecf41def4ded64c",
+    "semantic_hash": "23ed5b978e716be43ecf41def4ded64c"
+  },
+  "redteam_rust_core/src/core/validation/generator.rs": {
+    "mtime": 1783348311.8340523,
+    "ast_hash": "b0cec201a3991a2a2c420e9a4f96734b",
+    "semantic_hash": "b0cec201a3991a2a2c420e9a4f96734b"
+  },
+  "redteam_rust_core/src/core/validation/mod.rs": {
+    "mtime": 1783348311.8340867,
+    "ast_hash": "9542cb548a7b34041e6d1dd9ce2007b1",
+    "semantic_hash": "9542cb548a7b34041e6d1dd9ce2007b1"
+  },
+  "redteam_rust_core/src/core/validation/remote.rs": {
+    "mtime": 1783348311.8342197,
+    "ast_hash": "74f1b7ce59eafbee5cd970edcbf9dd42",
+    "semantic_hash": "74f1b7ce59eafbee5cd970edcbf9dd42"
+  },
+  "redteam_rust_core/src/core/validation/sovereign.rs": {
+    "mtime": 1783348311.8342953,
+    "ast_hash": "bf57cf74cfa3863dc19ab135e71d9646",
+    "semantic_hash": "bf57cf74cfa3863dc19ab135e71d9646"
+  },
+  "redteam_rust_core/src/core/verification/interaction.rs": {
+    "mtime": 1783348311.83438,
+    "ast_hash": "ed42dc6dfbe01e5485cf88e2c4591559",
+    "semantic_hash": "ed42dc6dfbe01e5485cf88e2c4591559"
+  },
+  "redteam_rust_core/src/core/verification/mod.rs": {
+    "mtime": 1783348311.8344119,
+    "ast_hash": "c4334324941b87028e821f59ed551f1e",
+    "semantic_hash": "c4334324941b87028e821f59ed551f1e"
+  },
+  "redteam_rust_core/src/core/verification/oob_correlator.rs": {
+    "mtime": 1783348311.8344543,
+    "ast_hash": "df1451fe43a9cb7298326f8a2dd91c86",
+    "semantic_hash": "df1451fe43a9cb7298326f8a2dd91c86"
+  },
+  "redteam_rust_core/src/core/verification/pipeline.rs": {
+    "mtime": 1783348311.83453,
+    "ast_hash": "8a2e1b810dd0def6b83f7648bdd3857b",
+    "semantic_hash": "8a2e1b810dd0def6b83f7648bdd3857b"
+  },
+  "redteam_rust_core/src/core/waf/engine.rs": {
+    "mtime": 1783348311.8346093,
+    "ast_hash": "6443cbc502da73ebc94168f997b23ed7",
+    "semantic_hash": "6443cbc502da73ebc94168f997b23ed7"
+  },
+  "redteam_rust_core/src/core/waf/mod.rs": {
+    "mtime": 1783348311.8346403,
+    "ast_hash": "355e1c96e7f7559a16fec47874bb482f",
+    "semantic_hash": "355e1c96e7f7559a16fec47874bb482f"
+  },
+  "redteam_rust_core/src/core/waf/policy.rs": {
+    "mtime": 1783348311.8346734,
+    "ast_hash": "a3d852b06906daf562eeb7a09b06475e",
+    "semantic_hash": "a3d852b06906daf562eeb7a09b06475e"
+  },
+  "redteam_rust_core/src/core/waf/profiles.rs": {
+    "mtime": 1783348311.834715,
+    "ast_hash": "48f1f411e8a68427beb4de9e6853f063",
+    "semantic_hash": "48f1f411e8a68427beb4de9e6853f063"
+  },
+  "redteam_rust_core/src/core/web/assets.rs": {
+    "mtime": 1783348311.834715,
+    "ast_hash": "0f2ff1f963e00070084f5fd69136e342",
+    "semantic_hash": "0f2ff1f963e00070084f5fd69136e342"
+  },
+  "redteam_rust_core/src/core/web/assets/app.js": {
+    "mtime": 1783348311.8348057,
+    "ast_hash": "6a6b473e15f0c92146df5e5e55a03a44",
+    "semantic_hash": "6a6b473e15f0c92146df5e5e55a03a44"
+  },
+  "redteam_rust_core/src/core/web/handlers/approvals.rs": {
+    "mtime": 1783348311.8364449,
+    "ast_hash": "fe144cabd10bb6674b362a00da731cdc",
+    "semantic_hash": "fe144cabd10bb6674b362a00da731cdc"
+  },
+  "redteam_rust_core/src/core/web/handlers/credentials.rs": {
+    "mtime": 1783348311.8364563,
+    "ast_hash": "ff174b7f0c300585ab6adf73c664d44e",
+    "semantic_hash": "ff174b7f0c300585ab6adf73c664d44e"
+  },
+  "redteam_rust_core/src/core/web/handlers/findings.rs": {
+    "mtime": 1783348311.8364563,
+    "ast_hash": "0bb483be77bf22fe148ee81233f49448",
+    "semantic_hash": "0bb483be77bf22fe148ee81233f49448"
+  },
+  "redteam_rust_core/src/core/web/handlers/missions.rs": {
+    "mtime": 1783348311.8364787,
+    "ast_hash": "671031562c6aab5d335ffd3e4275ab94",
+    "semantic_hash": "671031562c6aab5d335ffd3e4275ab94"
+  },
+  "redteam_rust_core/src/core/web/handlers/mobile.rs": {
+    "mtime": 1783348311.8365042,
+    "ast_hash": "8967f123f84531938aebc791bec5d11e",
+    "semantic_hash": "8967f123f84531938aebc791bec5d11e"
+  },
+  "redteam_rust_core/src/core/web/handlers/mod.rs": {
+    "mtime": 1783348311.8365247,
+    "ast_hash": "ae28bf9307edad0854f6bc4ca379b2d6",
+    "semantic_hash": "ae28bf9307edad0854f6bc4ca379b2d6"
+  },
+  "redteam_rust_core/src/core/web/handlers/reports.rs": {
+    "mtime": 1783348311.836545,
+    "ast_hash": "9913c0e24c321825a80e1b44156eb580",
+    "semantic_hash": "9913c0e24c321825a80e1b44156eb580"
+  },
+  "redteam_rust_core/src/core/web/handlers/status.rs": {
+    "mtime": 1783348311.8365755,
+    "ast_hash": "29ffadebe3a4498fba78ce86fcc3d58e",
+    "semantic_hash": "29ffadebe3a4498fba78ce86fcc3d58e"
+  },
+  "redteam_rust_core/src/core/web/handlers/targets.rs": {
+    "mtime": 1783348311.8365936,
+    "ast_hash": "70d25f841e33d9bfbcc1f9e1902bc69c",
+    "semantic_hash": "70d25f841e33d9bfbcc1f9e1902bc69c"
+  },
+  "redteam_rust_core/src/core/web/mod.rs": {
+    "mtime": 1783348311.8365936,
+    "ast_hash": "6790c3079b83551225b5da7126d4f841",
+    "semantic_hash": "6790c3079b83551225b5da7126d4f841"
+  },
+  "redteam_rust_core/src/core/web/models.rs": {
+    "mtime": 1783348311.8365936,
+    "ast_hash": "815a2891b139a32fe6ec7d7309e7f32d",
+    "semantic_hash": "815a2891b139a32fe6ec7d7309e7f32d"
+  },
+  "redteam_rust_core/src/core/web/probe.rs": {
+    "mtime": 1783348311.8366628,
+    "ast_hash": "7674849e5f85beda8b418a98a543b67a",
+    "semantic_hash": "7674849e5f85beda8b418a98a543b67a"
+  },
+  "redteam_rust_core/src/core/web/state.rs": {
+    "mtime": 1783348311.8366854,
+    "ast_hash": "c0967cc1bdc421e3257279e51b41e472",
+    "semantic_hash": "c0967cc1bdc421e3257279e51b41e472"
+  },
+  "redteam_rust_core/src/infrastructure/certstream.rs": {
+    "mtime": 1783348311.8366854,
+    "ast_hash": "ec6aaa68c213e834777538f778ef22dc",
+    "semantic_hash": "ec6aaa68c213e834777538f778ef22dc"
+  },
+  "redteam_rust_core/src/infrastructure/decoy/config.rs": {
+    "mtime": 1783348311.8367262,
+    "ast_hash": "ea8da5be380dfe916ddf14f886ccd859",
+    "semantic_hash": "ea8da5be380dfe916ddf14f886ccd859"
+  },
+  "redteam_rust_core/src/infrastructure/decoy/controller.rs": {
+    "mtime": 1783348311.8367765,
+    "ast_hash": "308ff3188b322f6b58dab919483edc5a",
+    "semantic_hash": "308ff3188b322f6b58dab919483edc5a"
+  },
+  "redteam_rust_core/src/infrastructure/decoy/mod.rs": {
+    "mtime": 1783348311.8367982,
+    "ast_hash": "9c04ecba8b642d155338ed817567a106",
+    "semantic_hash": "9c04ecba8b642d155338ed817567a106"
+  },
+  "redteam_rust_core/src/infrastructure/decoy/models.rs": {
+    "mtime": 1783348311.8367982,
+    "ast_hash": "a08b16caaf76b7d884557f90724dd0ae",
+    "semantic_hash": "a08b16caaf76b7d884557f90724dd0ae"
+  },
+  "redteam_rust_core/src/infrastructure/decoy/persistence.rs": {
+    "mtime": 1783348311.8368318,
+    "ast_hash": "c5e6812273772b4467041897562b7919",
+    "semantic_hash": "c5e6812273772b4467041897562b7919"
+  },
+  "redteam_rust_core/src/infrastructure/digital_ocean.rs": {
+    "mtime": 1788914718.8544326,
+    "ast_hash": "e8195d140f381ee1e68204c09e10a779",
+    "semantic_hash": ""
+  },
+  "redteam_rust_core/src/infrastructure/mod.rs": {
+    "mtime": 1783348311.8368318,
+    "ast_hash": "1ad29c6533e0a67725ef0704e17f9337",
+    "semantic_hash": "1ad29c6533e0a67725ef0704e17f9337"
+  },
+  "redteam_rust_core/src/infrastructure/proxy/builder.rs": {
+    "mtime": 1783348311.8369024,
+    "ast_hash": "4e4872fef43bde3dd94d1f75f73e14d7",
+    "semantic_hash": "4e4872fef43bde3dd94d1f75f73e14d7"
+  },
+  "redteam_rust_core/src/infrastructure/proxy/fingerprint.rs": {
+    "mtime": 1783348311.8369389,
+    "ast_hash": "7649367db866469f2070d3c4cccbde86",
+    "semantic_hash": "7649367db866469f2070d3c4cccbde86"
+  },
+  "redteam_rust_core/src/infrastructure/proxy/health.rs": {
+    "mtime": 1783348311.8369536,
+    "ast_hash": "1f3c08317a3582fc4c4ee99a849cf95c",
+    "semantic_hash": "1f3c08317a3582fc4c4ee99a849cf95c"
+  },
+  "redteam_rust_core/src/infrastructure/proxy/kill_switch.rs": {
+    "mtime": 1783348311.8369536,
+    "ast_hash": "69c8b1703748916688cf6270eb25f0c3",
+    "semantic_hash": "69c8b1703748916688cf6270eb25f0c3"
+  },
+  "redteam_rust_core/src/infrastructure/proxy/managed_exit.rs": {
+    "mtime": 1783348311.837052,
+    "ast_hash": "46ce1d200df7a29034615e9ea4556b28",
+    "semantic_hash": "46ce1d200df7a29034615e9ea4556b28"
+  },
+  "redteam_rust_core/src/infrastructure/proxy/manager.rs": {
+    "mtime": 1783348311.8370786,
+    "ast_hash": "a4c20a9173f910970153f22e9d2eff16",
+    "semantic_hash": "a4c20a9173f910970153f22e9d2eff16"
+  },
+  "redteam_rust_core/src/infrastructure/proxy/mod.rs": {
+    "mtime": 1783348311.8370786,
+    "ast_hash": "f7ba5679136804adb92ad250b07ceeb4",
+    "semantic_hash": "f7ba5679136804adb92ad250b07ceeb4"
+  },
+  "redteam_rust_core/src/infrastructure/proxy/types.rs": {
+    "mtime": 1783348311.837112,
+    "ast_hash": "bfa272239db083f7dc5d0c3b57cf0fca",
+    "semantic_hash": "bfa272239db083f7dc5d0c3b57cf0fca"
+  },
+  "redteam_rust_core/src/infrastructure/proxy/wrap_cmd.rs": {
+    "mtime": 1783348311.8371377,
+    "ast_hash": "2751049b16af5d6f2d489bcb7b427389",
+    "semantic_hash": "2751049b16af5d6f2d489bcb7b427389"
+  },
+  "redteam_rust_core/src/infrastructure/proxy_tests.rs": {
+    "mtime": 1783348311.8371377,
+    "ast_hash": "1957f97a939a643b3c13ba173afb6cab",
+    "semantic_hash": "1957f97a939a643b3c13ba173afb6cab"
+  },
+  "redteam_rust_core/src/lib.rs": {
+    "mtime": 1783348311.8371377,
+    "ast_hash": "772d8e8f7748604829c1797b57488dea",
+    "semantic_hash": "772d8e8f7748604829c1797b57488dea"
+  },
+  "redteam_rust_core/src/main.rs": {
+    "mtime": 1783348311.8371377,
+    "ast_hash": "5acdccbafa64ff8e8078334c564dc35e",
+    "semantic_hash": "5acdccbafa64ff8e8078334c564dc35e"
+  },
+  "redteam_rust_core/src/menu.rs": {
+    "mtime": 1783348311.8372173,
+    "ast_hash": "b1da6b7a8d01b63ba9f66d80c169ce78",
+    "semantic_hash": "b1da6b7a8d01b63ba9f66d80c169ce78"
+  },
+  "redteam_rust_core/src/models/constants.rs": {
+    "mtime": 1783348311.8372173,
+    "ast_hash": "0ddc3a7773e7f9842b817d703e1f62f1",
+    "semantic_hash": "0ddc3a7773e7f9842b817d703e1f62f1"
+  },
+  "redteam_rust_core/src/models/engagement.rs": {
+    "mtime": 1783348311.8372746,
+    "ast_hash": "718a834621662afa4264898e2311e797",
+    "semantic_hash": "718a834621662afa4264898e2311e797"
+  },
+  "redteam_rust_core/src/models/export.rs": {
+    "mtime": 1783348311.8372884,
+    "ast_hash": "a61ccee768bb03e382ed2f5c1c1f1772",
+    "semantic_hash": "a61ccee768bb03e382ed2f5c1c1f1772"
+  },
+  "redteam_rust_core/src/models/findings/classification.rs": {
+    "mtime": 1783348311.8372884,
+    "ast_hash": "fe8e7887c8a097f9d12fe29077f86cb2",
+    "semantic_hash": "fe8e7887c8a097f9d12fe29077f86cb2"
+  },
+  "redteam_rust_core/src/models/findings/core_fields.rs": {
+    "mtime": 1783348311.8373432,
+    "ast_hash": "5ea49c1fbb690145b5aa5140f209d5ff",
+    "semantic_hash": "5ea49c1fbb690145b5aa5140f209d5ff"
+  },
+  "redteam_rust_core/src/models/findings/enrichment.rs": {
+    "mtime": 1783348311.8373432,
+    "ast_hash": "d04b24bae7c618bfabaf69a7e2450ed4",
+    "semantic_hash": "d04b24bae7c618bfabaf69a7e2450ed4"
+  },
+  "redteam_rust_core/src/models/findings/evidence.rs": {
+    "mtime": 1783348311.8373752,
+    "ast_hash": "40d2c16b2e90d55cfd08c19a1014f5ac",
+    "semantic_hash": "40d2c16b2e90d55cfd08c19a1014f5ac"
+  },
+  "redteam_rust_core/src/models/findings/mod.rs": {
+    "mtime": 1783348311.837401,
+    "ast_hash": "d35bc8311c68998251416c2e2100f8f0",
+    "semantic_hash": "d35bc8311c68998251416c2e2100f8f0"
+  },
+  "redteam_rust_core/src/models/mod.rs": {
+    "mtime": 1783348311.837401,
+    "ast_hash": "db8c96b4d8d431cc74959e4a6f2b14ef",
+    "semantic_hash": "db8c96b4d8d431cc74959e4a6f2b14ef"
+  },
+  "redteam_rust_core/src/models/objectives.rs": {
+    "mtime": 1783348311.837401,
+    "ast_hash": "8a939375cf08363ddf8e92f1fd20c9c2",
+    "semantic_hash": "8a939375cf08363ddf8e92f1fd20c9c2"
+  },
+  "redteam_rust_core/src/models/objectives_tests.rs": {
+    "mtime": 1783348311.8374653,
+    "ast_hash": "6dd599f24c36cde68f1e8dfa8b5be2e7",
+    "semantic_hash": "6dd599f24c36cde68f1e8dfa8b5be2e7"
+  },
+  "redteam_rust_core/src/models/scan_result.rs": {
+    "mtime": 1783348311.8374903,
+    "ast_hash": "d07b3545d0624c89be596e2f9c3ce99a",
+    "semantic_hash": "d07b3545d0624c89be596e2f9c3ce99a"
+  },
+  "redteam_rust_core/src/models/spill.rs": {
+    "mtime": 1783348311.8375065,
+    "ast_hash": "f44a722ee8a6574d95cb62a5b5dcc7e2",
+    "semantic_hash": "f44a722ee8a6574d95cb62a5b5dcc7e2"
+  },
+  "redteam_rust_core/src/models/worker_profile.rs": {
+    "mtime": 1783348311.8375065,
+    "ast_hash": "f30846ca1d1f4906d9c4d295d300ccc1",
+    "semantic_hash": "f30846ca1d1f4906d9c4d295d300ccc1"
+  },
+  "redteam_rust_core/src/plugins/compliance/checkov.rs": {
+    "mtime": 1783348311.8375344,
+    "ast_hash": "9e11b054e60f021a43b6fd80f41e11a2",
+    "semantic_hash": "9e11b054e60f021a43b6fd80f41e11a2"
+  },
+  "redteam_rust_core/src/plugins/compliance/cosign.rs": {
+    "mtime": 1783348311.8376122,
+    "ast_hash": "f22da66018adb221b3a88423faa55bfc",
+    "semantic_hash": "f22da66018adb221b3a88423faa55bfc"
+  },
+  "redteam_rust_core/src/plugins/compliance/grype.rs": {
+    "mtime": 1783348311.8376548,
+    "ast_hash": "f32a331175432e542ca0faf48c0adfbe",
+    "semantic_hash": "f32a331175432e542ca0faf48c0adfbe"
+  },
+  "redteam_rust_core/src/plugins/compliance/kubescape.rs": {
+    "mtime": 1783348311.8376968,
+    "ast_hash": "a608209baf4ad1058274acbee23bd6aa",
+    "semantic_hash": "a608209baf4ad1058274acbee23bd6aa"
+  },
+  "redteam_rust_core/src/plugins/compliance/mod.rs": {
+    "mtime": 1783348311.8376968,
+    "ast_hash": "594864be8182951bbd21566d7f56c405",
+    "semantic_hash": "594864be8182951bbd21566d7f56c405"
+  },
+  "redteam_rust_core/src/plugins/compliance/osv_scanner.rs": {
+    "mtime": 1783348311.8377347,
+    "ast_hash": "42f1e0c15dc9f7e7261d8c8c1158335b",
+    "semantic_hash": "42f1e0c15dc9f7e7261d8c8c1158335b"
+  },
+  "redteam_rust_core/src/plugins/compliance/semgrep.rs": {
+    "mtime": 1783348311.8377457,
+    "ast_hash": "5ed61553a867d23cc85ac9863bd701fe",
+    "semantic_hash": "5ed61553a867d23cc85ac9863bd701fe"
+  },
+  "redteam_rust_core/src/plugins/compliance/syft.rs": {
+    "mtime": 1783348311.8377802,
+    "ast_hash": "87e9a08313bf495d4061faf01b68d460",
+    "semantic_hash": "87e9a08313bf495d4061faf01b68d460"
+  },
+  "redteam_rust_core/src/plugins/compliance/trivy.rs": {
+    "mtime": 1783348311.83779,
+    "ast_hash": "883e4e41784d4f417ea8aa4c1dfd7214",
+    "semantic_hash": "883e4e41784d4f417ea8aa4c1dfd7214"
+  },
+  "redteam_rust_core/src/plugins/config.rs": {
+    "mtime": 1783348311.83779,
+    "ast_hash": "c6e269726d840748e8356c1d60c6a1b0",
+    "semantic_hash": "c6e269726d840748e8356c1d60c6a1b0"
+  },
+  "redteam_rust_core/src/plugins/detection_evasion/donut.rs": {
+    "mtime": 1783348311.83779,
+    "ast_hash": "2db50cff6100eb3f296c38a349c195cc",
+    "semantic_hash": "2db50cff6100eb3f296c38a349c195cc"
+  },
+  "redteam_rust_core/src/plugins/detection_evasion/jitter.rs": {
+    "mtime": 1783348311.8378446,
+    "ast_hash": "19a12ea993b7069d4fa999e33a3dd339",
+    "semantic_hash": "19a12ea993b7069d4fa999e33a3dd339"
+  },
+  "redteam_rust_core/src/plugins/detection_evasion/mod.rs": {
+    "mtime": 1783348311.8378446,
+    "ast_hash": "ae4a687bb07c2dcf94ed3eb79d8f41fc",
+    "semantic_hash": "ae4a687bb07c2dcf94ed3eb79d8f41fc"
+  },
+  "redteam_rust_core/src/plugins/detection_evasion/scarecrow.rs": {
+    "mtime": 1783348311.8378446,
+    "ast_hash": "f8cb03af8b4cc429793efdd15a1d5049",
+    "semantic_hash": "f8cb03af8b4cc429793efdd15a1d5049"
+  },
+  "redteam_rust_core/src/plugins/detection_evasion/stealth_policy.rs": {
+    "mtime": 1783348311.837921,
+    "ast_hash": "d7f6f18b421cf4b1d98109dccb0eba49",
+    "semantic_hash": "d7f6f18b421cf4b1d98109dccb0eba49"
+  },
+  "redteam_rust_core/src/plugins/discovery_factory.rs": {
+    "mtime": 1783348311.837921,
+    "ast_hash": "c91ecb274fe440eaf29bc4f1cff69687",
+    "semantic_hash": "c91ecb274fe440eaf29bc4f1cff69687"
+  },
+  "redteam_rust_core/src/plugins/enumeration/cloud/cloudbrute.rs": {
+    "mtime": 1783348311.8379602,
+    "ast_hash": "fa17eb4d38671603f0f3b9e87495e268",
+    "semantic_hash": "fa17eb4d38671603f0f3b9e87495e268"
+  },
+  "redteam_rust_core/src/plugins/enumeration/cloud/cloudenum.rs": {
+    "mtime": 1783348311.8380122,
+    "ast_hash": "998e659e70ab7dede2553417873991a4",
+    "semantic_hash": "998e659e70ab7dede2553417873991a4"
+  },
+  "redteam_rust_core/src/plugins/enumeration/cloud/cloudfox.rs": {
+    "mtime": 1783348311.8380122,
+    "ast_hash": "477e4d4af6b20955a748709559a98e93",
+    "semantic_hash": "477e4d4af6b20955a748709559a98e93"
+  },
+  "redteam_rust_core/src/plugins/enumeration/cloud/kubebench.rs": {
+    "mtime": 1783348311.8380122,
+    "ast_hash": "b1375f35c04757c436d273ddf9259a95",
+    "semantic_hash": "b1375f35c04757c436d273ddf9259a95"
+  },
+  "redteam_rust_core/src/plugins/enumeration/cloud/mod.rs": {
+    "mtime": 1783348311.8380122,
+    "ast_hash": "02282431c47d5f955af74b974cd4fff9",
+    "semantic_hash": "02282431c47d5f955af74b974cd4fff9"
+  },
+  "redteam_rust_core/src/plugins/enumeration/cloud/pacu.rs": {
+    "mtime": 1783348311.8380797,
+    "ast_hash": "09c4cda5a104f600d0b16da8960a476c",
+    "semantic_hash": "09c4cda5a104f600d0b16da8960a476c"
+  },
+  "redteam_rust_core/src/plugins/enumeration/cloud/prowler.rs": {
+    "mtime": 1783348311.8380797,
+    "ast_hash": "b6fd08a8f078a7f758bb80966075f1c7",
+    "semantic_hash": "b6fd08a8f078a7f758bb80966075f1c7"
+  },
+  "redteam_rust_core/src/plugins/enumeration/cloud/s3scanner.rs": {
+    "mtime": 1783348311.8381684,
+    "ast_hash": "3c042440adee8eb00f0e6fffbe34d785",
+    "semantic_hash": "3c042440adee8eb00f0e6fffbe34d785"
+  },
+  "redteam_rust_core/src/plugins/enumeration/cloud/scoutsuite.rs": {
+    "mtime": 1783348311.8382056,
+    "ast_hash": "cbda6031dad988101f6b38a0ca9babe8",
+    "semantic_hash": "cbda6031dad988101f6b38a0ca9babe8"
+  },
+  "redteam_rust_core/src/plugins/enumeration/mod.rs": {
+    "mtime": 1783348311.8382056,
+    "ast_hash": "592602a6fb42493818ceba33007869a6",
+    "semantic_hash": "592602a6fb42493818ceba33007869a6"
+  },
+  "redteam_rust_core/src/plugins/enumeration/network/enum4linux.rs": {
+    "mtime": 1783348311.8382056,
+    "ast_hash": "0caa44edf36dac66889303baf2c7cd95",
+    "semantic_hash": "0caa44edf36dac66889303baf2c7cd95"
+  },
+  "redteam_rust_core/src/plugins/enumeration/network/kerbrute.rs": {
+    "mtime": 1783348311.838276,
+    "ast_hash": "2ef97a01ee0deaa310b323e80ed948ba",
+    "semantic_hash": "2ef97a01ee0deaa310b323e80ed948ba"
+  },
+  "redteam_rust_core/src/plugins/enumeration/network/mod.rs": {
+    "mtime": 1783348311.838276,
+    "ast_hash": "1a46a3b0eed9e1fff8d45271ec429934",
+    "semantic_hash": "1a46a3b0eed9e1fff8d45271ec429934"
+  },
+  "redteam_rust_core/src/plugins/enumeration/network/net.rs": {
+    "mtime": 1783348311.838356,
+    "ast_hash": "991a2706124f1f073f5f1af406697f03",
+    "semantic_hash": "991a2706124f1f073f5f1af406697f03"
+  },
+  "redteam_rust_core/src/plugins/enumeration/network/nmap/classifier.rs": {
+    "mtime": 1783348311.838356,
+    "ast_hash": "b272f133f6010f3e5a99398d8fe39b1f",
+    "semantic_hash": "b272f133f6010f3e5a99398d8fe39b1f"
+  },
+  "redteam_rust_core/src/plugins/enumeration/network/nmap/mod.rs": {
+    "mtime": 1783348311.8383973,
+    "ast_hash": "dcd8701277a73eb408bc3be74fbb96af",
+    "semantic_hash": "dcd8701277a73eb408bc3be74fbb96af"
+  },
+  "redteam_rust_core/src/plugins/enumeration/network/nmap/parser.rs": {
+    "mtime": 1783348311.8384295,
+    "ast_hash": "c12e677e6c9ac280ca6b04ac396c0340",
+    "semantic_hash": "c12e677e6c9ac280ca6b04ac396c0340"
+  },
+  "redteam_rust_core/src/plugins/enumeration/network/nmap_parser.rs": {
+    "mtime": 1783348311.8384295,
+    "ast_hash": "e83032c0348b81c94c2b0966ce6a9462",
+    "semantic_hash": "e83032c0348b81c94c2b0966ce6a9462"
+  },
+  "redteam_rust_core/src/plugins/enumeration/network/rustscan.rs": {
+    "mtime": 1783348311.8384707,
+    "ast_hash": "81e71b1c155e18e5b08dd760db2a71a7",
+    "semantic_hash": "81e71b1c155e18e5b08dd760db2a71a7"
+  },
+  "redteam_rust_core/src/plugins/enumeration/web/api/clairvoyance.rs": {
+    "mtime": 1783348311.8384848,
+    "ast_hash": "97fe12b06db6e043e9de44f5ba9e1eab",
+    "semantic_hash": "97fe12b06db6e043e9de44f5ba9e1eab"
+  },
+  "redteam_rust_core/src/plugins/enumeration/web/api/crackql.rs": {
+    "mtime": 1783348311.8385494,
+    "ast_hash": "5039ed06cf46090b5737dfc130b8c0fe",
+    "semantic_hash": "5039ed06cf46090b5737dfc130b8c0fe"
+  },
+  "redteam_rust_core/src/plugins/enumeration/web/api/graphw00f.rs": {
+    "mtime": 1783348311.8385932,
+    "ast_hash": "291cd6a0e0e8add9da22dd675f6800de",
+    "semantic_hash": "291cd6a0e0e8add9da22dd675f6800de"
+  },
+  "redteam_rust_core/src/plugins/enumeration/web/api/mod.rs": {
+    "mtime": 1783348311.8385932,
+    "ast_hash": "1560bc61964f71a56216374b86e89575",
+    "semantic_hash": "1560bc61964f71a56216374b86e89575"
+  },
+  "redteam_rust_core/src/plugins/enumeration/web/api/schemathesis.rs": {
+    "mtime": 1783348311.8386242,
+    "ast_hash": "71fdbd368ec2a12b598e2a76f9c0b89c",
+    "semantic_hash": "71fdbd368ec2a12b598e2a76f9c0b89c"
+  },
+  "redteam_rust_core/src/plugins/enumeration/web/arjun.rs": {
+    "mtime": 1783348311.8386242,
+    "ast_hash": "c6e3d1ec349ebf13d0c372369539463e",
+    "semantic_hash": "c6e3d1ec349ebf13d0c372369539463e"
+  },
+  "redteam_rust_core/src/plugins/enumeration/web/corsy.rs": {
+    "mtime": 1783348311.838653,
+    "ast_hash": "1ba9bdac165ee76321da41783ed645c8",
+    "semantic_hash": "1ba9bdac165ee76321da41783ed645c8"
+  },
+  "redteam_rust_core/src/plugins/enumeration/web/crlfuzz.rs": {
+    "mtime": 1783348311.8386745,
+    "ast_hash": "4b20bed4e74e11b2b4afa8a75e5ab29e",
+    "semantic_hash": "4b20bed4e74e11b2b4afa8a75e5ab29e"
+  },
+  "redteam_rust_core/src/plugins/enumeration/web/engine.rs": {
+    "mtime": 1783348311.838708,
+    "ast_hash": "2ff00227eb360ae0cafd3a18ae24afc4",
+    "semantic_hash": "2ff00227eb360ae0cafd3a18ae24afc4"
+  },
+  "redteam_rust_core/src/plugins/enumeration/web/feroxbuster.rs": {
+    "mtime": 1783348311.8387313,
+    "ast_hash": "77f0cf0d39656b9d096402bae54cd843",
+    "semantic_hash": "77f0cf0d39656b9d096402bae54cd843"
+  },
+  "redteam_rust_core/src/plugins/enumeration/web/ffuf.rs": {
+    "mtime": 1783348311.8387506,
+    "ast_hash": "ee5c03c51facac6a859c864b400b0a67",
+    "semantic_hash": "ee5c03c51facac6a859c864b400b0a67"
+  },
+  "redteam_rust_core/src/plugins/enumeration/web/gauplus.rs": {
+    "mtime": 1783348311.8387506,
+    "ast_hash": "37f6909e7f12cfcb257244a880a94688",
+    "semantic_hash": "37f6909e7f12cfcb257244a880a94688"
+  },
+  "redteam_rust_core/src/plugins/enumeration/web/gf.rs": {
+    "mtime": 1783348311.838792,
+    "ast_hash": "e025490d576a2fc18432174ded73396e",
+    "semantic_hash": "e025490d576a2fc18432174ded73396e"
+  },
+  "redteam_rust_core/src/plugins/enumeration/web/gowitness.rs": {
+    "mtime": 1783348311.838792,
+    "ast_hash": "f6299fed06d7fa88e2f95ba14044fc34",
+    "semantic_hash": "f6299fed06d7fa88e2f95ba14044fc34"
+  },
+  "redteam_rust_core/src/plugins/enumeration/web/inql.rs": {
+    "mtime": 1783348311.8388245,
+    "ast_hash": "751ddcee54448aa7bdc23847ecfa256c",
+    "semantic_hash": "751ddcee54448aa7bdc23847ecfa256c"
+  },
+  "redteam_rust_core/src/plugins/enumeration/web/interactsh.rs": {
+    "mtime": 1783348311.8388805,
+    "ast_hash": "c3446bc8531b930210801110bd29f23d",
+    "semantic_hash": "c3446bc8531b930210801110bd29f23d"
+  },
+  "redteam_rust_core/src/plugins/enumeration/web/js_deep.rs": {
+    "mtime": 1783348311.8388927,
+    "ast_hash": "0c0da71a8290f2a670a87dab125221e7",
+    "semantic_hash": "0c0da71a8290f2a670a87dab125221e7"
+  },
+  "redteam_rust_core/src/plugins/enumeration/web/jsluice.rs": {
+    "mtime": 1783348311.8389232,
+    "ast_hash": "3db2ba9f11d0f3e9e957e3e353f87353",
+    "semantic_hash": "3db2ba9f11d0f3e9e957e3e353f87353"
+  },
+  "redteam_rust_core/src/plugins/enumeration/web/jwks_discovery.rs": {
+    "mtime": 1783348311.8389463,
+    "ast_hash": "17841640a6443bb5b4b7dedbe719b447",
+    "semantic_hash": "17841640a6443bb5b4b7dedbe719b447"
+  },
+  "redteam_rust_core/src/plugins/enumeration/web/katana.rs": {
+    "mtime": 1783348311.8389776,
+    "ast_hash": "9266a90a91e83bc68e2029a6cb35a9c6",
+    "semantic_hash": "9266a90a91e83bc68e2029a6cb35a9c6"
+  },
+  "redteam_rust_core/src/plugins/enumeration/web/kiterunner.rs": {
+    "mtime": 1783348311.8389966,
+    "ast_hash": "e75d12949d62dc42b2659ff55565cbf1",
+    "semantic_hash": "e75d12949d62dc42b2659ff55565cbf1"
+  },
+  "redteam_rust_core/src/plugins/enumeration/web/linkfinder.rs": {
+    "mtime": 1783348311.8390453,
+    "ast_hash": "25af21b396d146baf8914e6ffdc3da65",
+    "semantic_hash": "25af21b396d146baf8914e6ffdc3da65"
+  },
+  "redteam_rust_core/src/plugins/enumeration/web/mod.rs": {
+    "mtime": 1783348311.8390596,
+    "ast_hash": "5fda4d8f73e631931ef4b1032fa62b32",
+    "semantic_hash": "5fda4d8f73e631931ef4b1032fa62b32"
+  },
+  "redteam_rust_core/src/plugins/enumeration/web/nikto.rs": {
+    "mtime": 1783348311.8390696,
+    "ast_hash": "1176e5a71ef638ba21f2432ffddc0b68",
+    "semantic_hash": "1176e5a71ef638ba21f2432ffddc0b68"
+  },
+  "redteam_rust_core/src/plugins/enumeration/web/oauth_security.rs": {
+    "mtime": 1783348311.8390696,
+    "ast_hash": "0d06c3158473e5d069f0415db561b115",
+    "semantic_hash": "0d06c3158473e5d069f0415db561b115"
+  },
+  "redteam_rust_core/src/plugins/enumeration/web/ppmap.rs": {
+    "mtime": 1783348311.8390954,
+    "ast_hash": "a88130c08483e636b9aaec8846e9db22",
+    "semantic_hash": "a88130c08483e636b9aaec8846e9db22"
+  },
+  "redteam_rust_core/src/plugins/enumeration/web/secretfinder.rs": {
+    "mtime": 1783348311.8391225,
+    "ast_hash": "d336bc7c33af6f6abff26acb15293bbb",
+    "semantic_hash": "d336bc7c33af6f6abff26acb15293bbb"
+  },
+  "redteam_rust_core/src/plugins/enumeration/web/snallygaster.rs": {
+    "mtime": 1783348311.839141,
+    "ast_hash": "34795881236c132706be331ea519c37c",
+    "semantic_hash": "34795881236c132706be331ea519c37c"
+  },
+  "redteam_rust_core/src/plugins/enumeration/web/tsunami.rs": {
+    "mtime": 1783348311.8391619,
+    "ast_hash": "541e684a651b6eb1ae99c68b2aabf368",
+    "semantic_hash": "541e684a651b6eb1ae99c68b2aabf368"
+  },
+  "redteam_rust_core/src/plugins/enumeration/web/wcd.rs": {
+    "mtime": 1783348311.8391948,
+    "ast_hash": "f02e5b551d908e3572f889fb55ee2c39",
+    "semantic_hash": "f02e5b551d908e3572f889fb55ee2c39"
+  },
+  "redteam_rust_core/src/plugins/enumeration/web/wcvs.rs": {
+    "mtime": 1783348311.8392134,
+    "ast_hash": "1357cfd1d80d52a0686e867825dccac3",
+    "semantic_hash": "1357cfd1d80d52a0686e867825dccac3"
+  },
+  "redteam_rust_core/src/plugins/enumeration/web/whatweb.rs": {
+    "mtime": 1783348311.8392332,
+    "ast_hash": "bce6d6d9d25114deb492303665d5a161",
+    "semantic_hash": "bce6d6d9d25114deb492303665d5a161"
+  },
+  "redteam_rust_core/src/plugins/enumeration/web/wpsec.rs": {
+    "mtime": 1783348311.8392332,
+    "ast_hash": "040803f8dbe1adc020b9313f441031b8",
+    "semantic_hash": "040803f8dbe1adc020b9313f441031b8"
+  },
+  "redteam_rust_core/src/plugins/enumeration/web/x8.rs": {
+    "mtime": 1783348311.8392808,
+    "ast_hash": "41cb32e9ad9a8bde6762c8fb23b06f22",
+    "semantic_hash": "41cb32e9ad9a8bde6762c8fb23b06f22"
+  },
+  "redteam_rust_core/src/plugins/exploitation/ai_llm/garak.rs": {
+    "mtime": 1783348311.8392968,
+    "ast_hash": "cb5d69ef15c8c2c521d45f73d4fbb7d8",
+    "semantic_hash": "cb5d69ef15c8c2c521d45f73d4fbb7d8"
+  },
+  "redteam_rust_core/src/plugins/exploitation/ai_llm/llmfuzzer.rs": {
+    "mtime": 1783348311.8393934,
+    "ast_hash": "91f02e5469ee686d29c3fe9077567714",
+    "semantic_hash": "91f02e5469ee686d29c3fe9077567714"
+  },
+  "redteam_rust_core/src/plugins/exploitation/ai_llm/mod.rs": {
+    "mtime": 1783348311.8394086,
+    "ast_hash": "fd08b3423d45a2f994bcb7268af17f49",
+    "semantic_hash": "fd08b3423d45a2f994bcb7268af17f49"
+  },
+  "redteam_rust_core/src/plugins/exploitation/ai_llm/modelscan.rs": {
+    "mtime": 1783348311.8394315,
+    "ast_hash": "8abed91587ace8edd1883dff39007b31",
+    "semantic_hash": "8abed91587ace8edd1883dff39007b31"
+  },
+  "redteam_rust_core/src/plugins/exploitation/ai_llm/profile.rs": {
+    "mtime": 1783348311.8394535,
+    "ast_hash": "b529266fe435d36e89d8d2eed462f3f4",
+    "semantic_hash": "b529266fe435d36e89d8d2eed462f3f4"
+  },
+  "redteam_rust_core/src/plugins/exploitation/ai_llm/promptfoo.rs": {
+    "mtime": 1783348311.8394752,
+    "ast_hash": "d7d32d99729acc251a71827d7ac2fe4b",
+    "semantic_hash": "d7d32d99729acc251a71827d7ac2fe4b"
+  },
+  "redteam_rust_core/src/plugins/exploitation/ai_llm/promptinject.rs": {
+    "mtime": 1783348311.8394752,
+    "ast_hash": "b1260d1cc3660e9c7d18f458a7be84a4",
+    "semantic_hash": "b1260d1cc3660e9c7d18f458a7be84a4"
+  },
+  "redteam_rust_core/src/plugins/exploitation/ai_llm/promptmap.rs": {
+    "mtime": 1783348311.8395092,
+    "ast_hash": "0c9241b9e2f8f7bdacd7c1a77e17e481",
+    "semantic_hash": "0c9241b9e2f8f7bdacd7c1a77e17e481"
+  },
+  "redteam_rust_core/src/plugins/exploitation/ai_llm/pyrit.rs": {
+    "mtime": 1783348311.8395092,
+    "ast_hash": "fb3424061a314309b136bba623990579",
+    "semantic_hash": "fb3424061a314309b136bba623990579"
+  },
+  "redteam_rust_core/src/plugins/exploitation/ai_llm/rebuff.rs": {
+    "mtime": 1783348311.83956,
+    "ast_hash": "25a5efb961271ec40891990b46c735b5",
+    "semantic_hash": "25a5efb961271ec40891990b46c735b5"
+  },
+  "redteam_rust_core/src/plugins/exploitation/ai_llm/vigil.rs": {
+    "mtime": 1783348311.8395715,
+    "ast_hash": "da712cd7d31e6907ab488534d6b209cd",
+    "semantic_hash": "da712cd7d31e6907ab488534d6b209cd"
+  },
+  "redteam_rust_core/src/plugins/exploitation/auth/mod.rs": {
+    "mtime": 1783348311.8395715,
+    "ast_hash": "8ba883c821cd777f56cfa4c65f4160c6",
+    "semantic_hash": "8ba883c821cd777f56cfa4c65f4160c6"
+  },
+  "redteam_rust_core/src/plugins/exploitation/auth/state_machine.rs": {
+    "mtime": 1783348311.8396537,
+    "ast_hash": "89ff96bc2f6c22d0c7c9d288bac818f6",
+    "semantic_hash": "89ff96bc2f6c22d0c7c9d288bac818f6"
+  },
+  "redteam_rust_core/src/plugins/exploitation/cloud/imds_bypass.rs": {
+    "mtime": 1783348311.8396986,
+    "ast_hash": "f01158a6720bedeaa3cd01384d39cc16",
+    "semantic_hash": "f01158a6720bedeaa3cd01384d39cc16"
+  },
+  "redteam_rust_core/src/plugins/exploitation/cloud/mod.rs": {
+    "mtime": 1783348311.83971,
+    "ast_hash": "3bf65145b4beca5b327eea3057e7a17c",
+    "semantic_hash": "3bf65145b4beca5b327eea3057e7a17c"
+  },
+  "redteam_rust_core/src/plugins/exploitation/mobile/apkleaks.rs": {
+    "mtime": 1783348311.8397446,
+    "ast_hash": "2b5e4bcd9a3c768d0e30d8195c33382c",
+    "semantic_hash": "2b5e4bcd9a3c768d0e30d8195c33382c"
+  },
+  "redteam_rust_core/src/plugins/exploitation/mobile/apktool.rs": {
+    "mtime": 1783348311.839785,
+    "ast_hash": "cf3ca8263f16f84a6121d4523ac14822",
+    "semantic_hash": "cf3ca8263f16f84a6121d4523ac14822"
+  },
+  "redteam_rust_core/src/plugins/exploitation/mobile/drozer.rs": {
+    "mtime": 1783348311.8397973,
+    "ast_hash": "6e13af05da1f7a7a6cf3e9b78caf1ae8",
+    "semantic_hash": "6e13af05da1f7a7a6cf3e9b78caf1ae8"
+  },
+  "redteam_rust_core/src/plugins/exploitation/mobile/frida.rs": {
+    "mtime": 1783348311.8398254,
+    "ast_hash": "da43a445c1004c2f74cc9549a9d45fe0",
+    "semantic_hash": "da43a445c1004c2f74cc9549a9d45fe0"
+  },
+  "redteam_rust_core/src/plugins/exploitation/mobile/jadx.rs": {
+    "mtime": 1783348311.8398523,
+    "ast_hash": "d4993527d6504220e1a5c58808a92a8c",
+    "semantic_hash": "d4993527d6504220e1a5c58808a92a8c"
+  },
+  "redteam_rust_core/src/plugins/exploitation/mobile/mariana_trench.rs": {
+    "mtime": 1783348311.839876,
+    "ast_hash": "360c505412fa1ffd010f7d564d3ee6de",
+    "semantic_hash": "360c505412fa1ffd010f7d564d3ee6de"
+  },
+  "redteam_rust_core/src/plugins/exploitation/mobile/mobsf.rs": {
+    "mtime": 1783348311.8399036,
+    "ast_hash": "9e6543bc6cac4fcbdab0cf80e17fb462",
+    "semantic_hash": "9e6543bc6cac4fcbdab0cf80e17fb462"
+  },
+  "redteam_rust_core/src/plugins/exploitation/mobile/mod.rs": {
+    "mtime": 1783348311.8399148,
+    "ast_hash": "ed1e9a69e345c5c5b186ab11f8f4390d",
+    "semantic_hash": "ed1e9a69e345c5c5b186ab11f8f4390d"
+  },
+  "redteam_rust_core/src/plugins/exploitation/mobile/objection.rs": {
+    "mtime": 1783348311.8399346,
+    "ast_hash": "77d76aad8a9ac767facac68c3331cec0",
+    "semantic_hash": "77d76aad8a9ac767facac68c3331cec0"
+  },
+  "redteam_rust_core/src/plugins/exploitation/mod.rs": {
+    "mtime": 1783348311.8399346,
+    "ast_hash": "3cc16b9cdc619f094ed1ee37440205e7",
+    "semantic_hash": "3cc16b9cdc619f094ed1ee37440205e7"
+  },
+  "redteam_rust_core/src/plugins/exploitation/network/coercer.rs": {
+    "mtime": 1783348311.8399885,
+    "ast_hash": "a2533c8c4c99ef948fb9ee7ac6f2f06b",
+    "semantic_hash": "a2533c8c4c99ef948fb9ee7ac6f2f06b"
+  },
+  "redteam_rust_core/src/plugins/exploitation/network/hydra.rs": {
+    "mtime": 1783348311.8399994,
+    "ast_hash": "278e74719ffd4a791c92041ee5cd8760",
+    "semantic_hash": "278e74719ffd4a791c92041ee5cd8760"
+  },
+  "redteam_rust_core/src/plugins/exploitation/network/impacket.rs": {
+    "mtime": 1783348311.8400164,
+    "ast_hash": "287a31eebfca3f24ef72ac54b2b1e78f",
+    "semantic_hash": "287a31eebfca3f24ef72ac54b2b1e78f"
+  },
+  "redteam_rust_core/src/plugins/exploitation/network/mod.rs": {
+    "mtime": 1783348311.8400269,
+    "ast_hash": "c4a55b3f17f6c978c1080590877f7d49",
+    "semantic_hash": "c4a55b3f17f6c978c1080590877f7d49"
+  },
+  "redteam_rust_core/src/plugins/exploitation/network/netexec.rs": {
+    "mtime": 1783348311.840046,
+    "ast_hash": "4099c67ecbe672a326109628e4ab8bb0",
+    "semantic_hash": "4099c67ecbe672a326109628e4ab8bb0"
+  },
+  "redteam_rust_core/src/plugins/exploitation/network/petitpotam.rs": {
+    "mtime": 1783348311.8400729,
+    "ast_hash": "9c5d4961bb0de263b4224cb1a74c55d9",
+    "semantic_hash": "9c5d4961bb0de263b4224cb1a74c55d9"
+  },
+  "redteam_rust_core/src/plugins/exploitation/network/responder.rs": {
+    "mtime": 1783348311.840109,
+    "ast_hash": "9c68926d290ff131f0821bdf1a78dedc",
+    "semantic_hash": "9c68926d290ff131f0821bdf1a78dedc"
+  },
+  "redteam_rust_core/src/plugins/exploitation/network/sliver_automator.rs": {
+    "mtime": 1783348311.8401418,
+    "ast_hash": "0046eca45ac2131017ced7766d04a8b3",
+    "semantic_hash": "0046eca45ac2131017ced7766d04a8b3"
+  },
+  "redteam_rust_core/src/plugins/exploitation/web/business_logic.rs": {
+    "mtime": 1783348311.840181,
+    "ast_hash": "a62d957e12e5d85d96855b951a0dad81",
+    "semantic_hash": "a62d957e12e5d85d96855b951a0dad81"
+  },
+  "redteam_rust_core/src/plugins/exploitation/web/cloud_metadata.rs": {
+    "mtime": 1783348311.8402128,
+    "ast_hash": "d3659c46efbe8aa8fe9d1b23a02bacdd",
+    "semantic_hash": "d3659c46efbe8aa8fe9d1b23a02bacdd"
+  },
+  "redteam_rust_core/src/plugins/exploitation/web/commix.rs": {
+    "mtime": 1783348311.840254,
+    "ast_hash": "0b4fbaa31c0bc9d621a4180d4bfd4743",
+    "semantic_hash": "0b4fbaa31c0bc9d621a4180d4bfd4743"
+  },
+  "redteam_rust_core/src/plugins/exploitation/web/cors_exfil.rs": {
+    "mtime": 1783348311.8402758,
+    "ast_hash": "4b7aa3661f5a8f43383f55b756dc4271",
+    "semantic_hash": "4b7aa3661f5a8f43383f55b756dc4271"
+  },
+  "redteam_rust_core/src/plugins/exploitation/web/dalfox.rs": {
+    "mtime": 1783348311.8402758,
+    "ast_hash": "2cd28501c552c178bb73fc883bb6868e",
+    "semantic_hash": "2cd28501c552c178bb73fc883bb6868e"
+  },
+  "redteam_rust_core/src/plugins/exploitation/web/deserialization.rs": {
+    "mtime": 1783348311.8403115,
+    "ast_hash": "3e8aa38a4ea27be9f9e7dcb0a8377d96",
+    "semantic_hash": "3e8aa38a4ea27be9f9e7dcb0a8377d96"
+  },
+  "redteam_rust_core/src/plugins/exploitation/web/ghauri.rs": {
+    "mtime": 1783348311.840351,
+    "ast_hash": "1dd2d54d3d512475b7a5c47472125e9d",
+    "semantic_hash": "1dd2d54d3d512475b7a5c47472125e9d"
+  },
+  "redteam_rust_core/src/plugins/exploitation/web/gopherus.rs": {
+    "mtime": 1783348311.840374,
+    "ast_hash": "fa38eaf6c11774ac73cc6ad0c6edd353",
+    "semantic_hash": "fa38eaf6c11774ac73cc6ad0c6edd353"
+  },
+  "redteam_rust_core/src/plugins/exploitation/web/graphql_cop.rs": {
+    "mtime": 1783348311.840374,
+    "ast_hash": "0797b103d737c138e47f8710de00e6f8",
+    "semantic_hash": "0797b103d737c138e47f8710de00e6f8"
+  },
+  "redteam_rust_core/src/plugins/exploitation/web/graphql_exploiter.rs": {
+    "mtime": 1783348311.8404102,
+    "ast_hash": "bda1b8b30d065cf61b1b8acc49c169d9",
+    "semantic_hash": "bda1b8b30d065cf61b1b8acc49c169d9"
+  },
+  "redteam_rust_core/src/plugins/exploitation/web/h2csmuggler.rs": {
+    "mtime": 1783348311.8404365,
+    "ast_hash": "72ccb57500564f3ecfb3bd9d5ee14d80",
+    "semantic_hash": "72ccb57500564f3ecfb3bd9d5ee14d80"
+  },
+  "redteam_rust_core/src/plugins/exploitation/web/jwt_forge.rs": {
+    "mtime": 1783348311.840469,
+    "ast_hash": "8e09749a839db9e0a335c56a2ae42a9e",
+    "semantic_hash": "8e09749a839db9e0a335c56a2ae42a9e"
+  },
+  "redteam_rust_core/src/plugins/exploitation/web/jwt_tool.rs": {
+    "mtime": 1783348311.840497,
+    "ast_hash": "a150faa7b0b233781c8870f90d054c31",
+    "semantic_hash": "a150faa7b0b233781c8870f90d054c31"
+  },
+  "redteam_rust_core/src/plugins/exploitation/web/kxss.rs": {
+    "mtime": 1783348311.840524,
+    "ast_hash": "2d76ccd6342f56223c53476463bf202e",
+    "semantic_hash": "2d76ccd6342f56223c53476463bf202e"
+  },
+  "redteam_rust_core/src/plugins/exploitation/web/mod.rs": {
+    "mtime": 1783348311.8405397,
+    "ast_hash": "1a61d1d95a9e25d12adb676b31090a52",
+    "semantic_hash": "1a61d1d95a9e25d12adb676b31090a52"
+  },
+  "redteam_rust_core/src/plugins/exploitation/web/nomore403.rs": {
+    "mtime": 1783348311.84057,
+    "ast_hash": "edd649a547a64736c04354d377aadfc3",
+    "semantic_hash": "edd649a547a64736c04354d377aadfc3"
+  },
+  "redteam_rust_core/src/plugins/exploitation/web/nosqlmap.rs": {
+    "mtime": 1783348311.8405905,
+    "ast_hash": "06254ebc992be903b50881e1b76d14a0",
+    "semantic_hash": "06254ebc992be903b50881e1b76d14a0"
+  },
+  "redteam_rust_core/src/plugins/exploitation/web/openredirex.rs": {
+    "mtime": 1783348311.840614,
+    "ast_hash": "b9a285d92ca8c3212bc8d165100c9546",
+    "semantic_hash": "b9a285d92ca8c3212bc8d165100c9546"
+  },
+  "redteam_rust_core/src/plugins/exploitation/web/smuggler.rs": {
+    "mtime": 1783348311.8406372,
+    "ast_hash": "55de124221664d407b64e9b4fbeb4b37",
+    "semantic_hash": "55de124221664d407b64e9b4fbeb4b37"
+  },
+  "redteam_rust_core/src/plugins/exploitation/web/sqlmap.rs": {
+    "mtime": 1783348311.840662,
+    "ast_hash": "55b7c902eda529c8dbced0ea0f2a7df4",
+    "semantic_hash": "55b7c902eda529c8dbced0ea0f2a7df4"
+  },
+  "redteam_rust_core/src/plugins/exploitation/web/ssrf_king.rs": {
+    "mtime": 1783348311.8406873,
+    "ast_hash": "2107bcdf4a05ce68fe5c492d00ff09b1",
+    "semantic_hash": "2107bcdf4a05ce68fe5c492d00ff09b1"
+  },
+  "redteam_rust_core/src/plugins/exploitation/web/ssrfmap.rs": {
+    "mtime": 1783348311.8406873,
+    "ast_hash": "a6cd2e21f24168c8341aa5b244119fb9",
+    "semantic_hash": "a6cd2e21f24168c8341aa5b244119fb9"
+  },
+  "redteam_rust_core/src/plugins/exploitation/web/tplmap.rs": {
+    "mtime": 1783348311.8407235,
+    "ast_hash": "029030e60da5bd8920adb361dc8e211a",
+    "semantic_hash": "029030e60da5bd8920adb361dc8e211a"
+  },
+  "redteam_rust_core/src/plugins/exploitation/web/upload_strike.rs": {
+    "mtime": 1783348311.8407562,
+    "ast_hash": "260f2c8263645c559076a424beac47f3",
+    "semantic_hash": "260f2c8263645c559076a424beac47f3"
+  },
+  "redteam_rust_core/src/plugins/exploitation/web/wapiti.rs": {
+    "mtime": 1783348311.8407562,
+    "ast_hash": "c53c1d10038b7ebf94479701fa6b2961",
+    "semantic_hash": "c53c1d10038b7ebf94479701fa6b2961"
+  },
+  "redteam_rust_core/src/plugins/exploitation/wireless/mod.rs": {
+    "mtime": 1783348311.8407562,
+    "ast_hash": "0e6363a37701f8b49a9603621f634c95",
+    "semantic_hash": "0e6363a37701f8b49a9603621f634c95"
+  },
+  "redteam_rust_core/src/plugins/ffi.rs": {
+    "mtime": 1783348311.8407562,
+    "ast_hash": "957ed2570c00ca53f1783d61a6a6208c",
+    "semantic_hash": "957ed2570c00ca53f1783d61a6a6208c"
+  },
+  "redteam_rust_core/src/plugins/intelligence/abuseipdb.rs": {
+    "mtime": 1783348311.8408947,
+    "ast_hash": "1413cc6f7be3900504ecf2d4b0db0323",
+    "semantic_hash": "1413cc6f7be3900504ecf2d4b0db0323"
+  },
+  "redteam_rust_core/src/plugins/intelligence/alienvault_otx.rs": {
+    "mtime": 1783348311.8409495,
+    "ast_hash": "d959719223bc847ab2126da25ee2c8e3",
+    "semantic_hash": "d959719223bc847ab2126da25ee2c8e3"
+  },
+  "redteam_rust_core/src/plugins/intelligence/credential_leak.rs": {
+    "mtime": 1783348311.8409982,
+    "ast_hash": "55f441256c3680e1e92fa80ed2f12f93",
+    "semantic_hash": "55f441256c3680e1e92fa80ed2f12f93"
+  },
+  "redteam_rust_core/src/plugins/intelligence/greynoise.rs": {
+    "mtime": 1783348311.8410344,
+    "ast_hash": "964e57b69d17a13d0572d0124bbc0b50",
+    "semantic_hash": "964e57b69d17a13d0572d0124bbc0b50"
+  },
+  "redteam_rust_core/src/plugins/intelligence/jaeles.rs": {
+    "mtime": 1783348311.8410344,
+    "ast_hash": "e1f147cf599135a7da36a609d4b1a983",
+    "semantic_hash": "e1f147cf599135a7da36a609d4b1a983"
+  },
+  "redteam_rust_core/src/plugins/intelligence/mod.rs": {
+    "mtime": 1783348311.841056,
+    "ast_hash": "56204bd3224b2986ecdf8cfbef849879",
+    "semantic_hash": "56204bd3224b2986ecdf8cfbef849879"
+  },
+  "redteam_rust_core/src/plugins/intelligence/nuclei.rs": {
+    "mtime": 1783348311.841087,
+    "ast_hash": "a509d256812791ac5ec34c605e827dd8",
+    "semantic_hash": "a509d256812791ac5ec34c605e827dd8"
+  },
+  "redteam_rust_core/src/plugins/intelligence/nvd_monitor.rs": {
+    "mtime": 1783348311.8411222,
+    "ast_hash": "fcc649a66a5e852470439170f779544b",
+    "semantic_hash": "fcc649a66a5e852470439170f779544b"
+  },
+  "redteam_rust_core/src/plugins/intelligence/searchsploit.rs": {
+    "mtime": 1783348311.8411458,
+    "ast_hash": "6c1026b97b79d971229903c40301282c",
+    "semantic_hash": "6c1026b97b79d971229903c40301282c"
+  },
+  "redteam_rust_core/src/plugins/intern.rs": {
+    "mtime": 1783348311.8411458,
+    "ast_hash": "dc438dd9b0d5d7c036b76cadf7ea78fb",
+    "semantic_hash": "dc438dd9b0d5d7c036b76cadf7ea78fb"
+  },
+  "redteam_rust_core/src/plugins/lateral_movement/bloodhound.rs": {
+    "mtime": 1783348311.8412235,
+    "ast_hash": "3571ee1b5af2b9e1e646288be55bca8e",
+    "semantic_hash": "3571ee1b5af2b9e1e646288be55bca8e"
+  },
+  "redteam_rust_core/src/plugins/lateral_movement/ligolo.rs": {
+    "mtime": 1783348311.8412375,
+    "ast_hash": "4bc0183b8907fbecd610a2cc32739514",
+    "semantic_hash": "4bc0183b8907fbecd610a2cc32739514"
+  },
+  "redteam_rust_core/src/plugins/lateral_movement/mod.rs": {
+    "mtime": 1783348311.8412375,
+    "ast_hash": "e30c26eefd364def34014dba3513e719",
+    "semantic_hash": "e30c26eefd364def34014dba3513e719"
+  },
+  "redteam_rust_core/src/plugins/lateral_movement/sliver.rs": {
+    "mtime": 1783348311.8412569,
+    "ast_hash": "a7fd1a811cc6e515a318fbf14cfb500d",
+    "semantic_hash": "a7fd1a811cc6e515a318fbf14cfb500d"
+  },
+  "redteam_rust_core/src/plugins/lateral_movement/sliver_sovereign.rs": {
+    "mtime": 1783348311.8412962,
+    "ast_hash": "e1d4359e4533248f1ecdd0e106d28af3",
+    "semantic_hash": "e1d4359e4533248f1ecdd0e106d28af3"
+  },
+  "redteam_rust_core/src/plugins/mod.rs": {
+    "mtime": 1783348311.8412962,
+    "ast_hash": "9fe550dfbc12c5031776227e1c4947fa",
+    "semantic_hash": "9fe550dfbc12c5031776227e1c4947fa"
+  },
+  "redteam_rust_core/src/plugins/persistence/havoc.rs": {
+    "mtime": 1783348311.8413808,
+    "ast_hash": "1ff06297919bebda0ed520fb0f1a405e",
+    "semantic_hash": "1ff06297919bebda0ed520fb0f1a405e"
+  },
+  "redteam_rust_core/src/plugins/persistence/mod.rs": {
+    "mtime": 1783348311.8413923,
+    "ast_hash": "c2d08c54b8fa89edd22fef1f537e0cb3",
+    "semantic_hash": "c2d08c54b8fa89edd22fef1f537e0cb3"
+  },
+  "redteam_rust_core/src/plugins/privilege_escalation/certipy.rs": {
+    "mtime": 1783348311.8413923,
+    "ast_hash": "e85fcdc11fe9ea0e7ae8afb56e64e672",
+    "semantic_hash": "e85fcdc11fe9ea0e7ae8afb56e64e672"
+  },
+  "redteam_rust_core/src/plugins/privilege_escalation/mod.rs": {
+    "mtime": 1783348311.841421,
+    "ast_hash": "fceacfd14c7e8c95c7d0505a0eb6584d",
+    "semantic_hash": "fceacfd14c7e8c95c7d0505a0eb6584d"
+  },
+  "redteam_rust_core/src/plugins/privilege_escalation/privesc_hunter.rs": {
+    "mtime": 1783348311.8414712,
+    "ast_hash": "9d5ea325a24d80db6fb7edad4852ca6e",
+    "semantic_hash": "9d5ea325a24d80db6fb7edad4852ca6e"
+  },
+  "redteam_rust_core/src/plugins/reconnaissance/active/asnmap.rs": {
+    "mtime": 1783348311.841494,
+    "ast_hash": "790191f8e8f40eb6c1e4888b7b642d27",
+    "semantic_hash": "790191f8e8f40eb6c1e4888b7b642d27"
+  },
+  "redteam_rust_core/src/plugins/reconnaissance/active/azurehound.rs": {
+    "mtime": 1783348311.841548,
+    "ast_hash": "32461145447b3e96849ddf4b9a259e7a",
+    "semantic_hash": "32461145447b3e96849ddf4b9a259e7a"
+  },
+  "redteam_rust_core/src/plugins/reconnaissance/active/cdncheck.rs": {
+    "mtime": 1783348311.841571,
+    "ast_hash": "b4521925ac5116b52491a9e850ad8470",
+    "semantic_hash": "b4521925ac5116b52491a9e850ad8470"
+  },
+  "redteam_rust_core/src/plugins/reconnaissance/active/dnsx.rs": {
+    "mtime": 1783348311.8415875,
+    "ast_hash": "13f8cc46503e9ae58b46ce2c4fbe1df2",
+    "semantic_hash": "13f8cc46503e9ae58b46ce2c4fbe1df2"
+  },
+  "redteam_rust_core/src/plugins/reconnaissance/active/httpx.rs": {
+    "mtime": 1783348311.8416097,
+    "ast_hash": "066fc53fa45ce0917fc722d1b446d149",
+    "semantic_hash": "066fc53fa45ce0917fc722d1b446d149"
+  },
+  "redteam_rust_core/src/plugins/reconnaissance/active/mod.rs": {
+    "mtime": 1783348311.8416097,
+    "ast_hash": "91bc8d9974d881e374382df5d1c820d6",
+    "semantic_hash": "91bc8d9974d881e374382df5d1c820d6"
+  },
+  "redteam_rust_core/src/plugins/reconnaissance/active/naabu.rs": {
+    "mtime": 1783348311.8416352,
+    "ast_hash": "be29992d9387c4b5c5c57d2825479579",
+    "semantic_hash": "be29992d9387c4b5c5c57d2825479579"
+  },
+  "redteam_rust_core/src/plugins/reconnaissance/active/roadrecon.rs": {
+    "mtime": 1783348311.8416595,
+    "ast_hash": "ae3238855ee14fce70e47ee8a65cc4bd",
+    "semantic_hash": "ae3238855ee14fce70e47ee8a65cc4bd"
+  },
+  "redteam_rust_core/src/plugins/reconnaissance/active/subzy.rs": {
+    "mtime": 1783348311.8416822,
+    "ast_hash": "e30671f68179254d29d219fdbbccabe6",
+    "semantic_hash": "e30671f68179254d29d219fdbbccabe6"
+  },
+  "redteam_rust_core/src/plugins/reconnaissance/active/tlsx.rs": {
+    "mtime": 1783348311.8417103,
+    "ast_hash": "eb5542be35e8d4f94c62c8497cb0cd3e",
+    "semantic_hash": "eb5542be35e8d4f94c62c8497cb0cd3e"
+  },
+  "redteam_rust_core/src/plugins/reconnaissance/mod.rs": {
+    "mtime": 1783348311.8417103,
+    "ast_hash": "bd77a9284d05680ad86cc21e150c5fe9",
+    "semantic_hash": "bd77a9284d05680ad86cc21e150c5fe9"
+  },
+  "redteam_rust_core/src/plugins/reconnaissance/osint/alterx.rs": {
+    "mtime": 1783348311.8417103,
+    "ast_hash": "9e6038f0718b587b41469b10ebfbd481",
+    "semantic_hash": "9e6038f0718b587b41469b10ebfbd481"
+  },
+  "redteam_rust_core/src/plugins/reconnaissance/osint/amass.rs": {
+    "mtime": 1783348311.8417673,
+    "ast_hash": "c26b5b262608a0feacf43b13dadcaaa4",
+    "semantic_hash": "c26b5b262608a0feacf43b13dadcaaa4"
+  },
+  "redteam_rust_core/src/plugins/reconnaissance/osint/bbscope.rs": {
+    "mtime": 1783348311.8417895,
+    "ast_hash": "05adc0fdcdd6ed8ee4d7061e24023818",
+    "semantic_hash": "05adc0fdcdd6ed8ee4d7061e24023818"
+  },
+  "redteam_rust_core/src/plugins/reconnaissance/osint/engine.rs": {
+    "mtime": 1783348311.8418179,
+    "ast_hash": "84a29d6f91303c84789c11392fa11207",
+    "semantic_hash": "84a29d6f91303c84789c11392fa11207"
+  },
+  "redteam_rust_core/src/plugins/reconnaissance/osint/mod.rs": {
+    "mtime": 1783348311.8418307,
+    "ast_hash": "64af1b585e9bb9b1430060a53552d3f8",
+    "semantic_hash": "64af1b585e9bb9b1430060a53552d3f8"
+  },
+  "redteam_rust_core/src/plugins/reconnaissance/osint/puredns.rs": {
+    "mtime": 1783348311.8418546,
+    "ast_hash": "a7b1b7357089585040aa99e240a42d22",
+    "semantic_hash": "a7b1b7357089585040aa99e240a42d22"
+  },
+  "redteam_rust_core/src/plugins/reconnaissance/osint/shuffledns.rs": {
+    "mtime": 1783348311.841881,
+    "ast_hash": "6acc6ec027986b70d49370463fe87348",
+    "semantic_hash": "6acc6ec027986b70d49370463fe87348"
+  },
+  "redteam_rust_core/src/plugins/reconnaissance/osint/sovereign_recon/free_legitimate.rs": {
+    "mtime": 1783348311.8419218,
+    "ast_hash": "c0413ae43782aaea4b6fd71d5c0ad9e6",
+    "semantic_hash": "c0413ae43782aaea4b6fd71d5c0ad9e6"
+  },
+  "redteam_rust_core/src/plugins/reconnaissance/osint/sovereign_recon/mod.rs": {
+    "mtime": 1783348311.8419678,
+    "ast_hash": "4a73bbd6240c539219409367b4710f1b",
+    "semantic_hash": "4a73bbd6240c539219409367b4710f1b"
+  },
+  "redteam_rust_core/src/plugins/reconnaissance/osint/sovereign_recon/sources.rs": {
+    "mtime": 1783348311.8420434,
+    "ast_hash": "99ed408ba43cb8be28c3a51be200ffd2",
+    "semantic_hash": "99ed408ba43cb8be28c3a51be200ffd2"
+  },
+  "redteam_rust_core/src/plugins/reconnaissance/osint/subfinder.rs": {
+    "mtime": 1783348311.8420434,
+    "ast_hash": "96c3a959512fe1a991b0dd868d6decae",
+    "semantic_hash": "96c3a959512fe1a991b0dd868d6decae"
+  },
+  "redteam_rust_core/src/plugins/reconnaissance/osint/uncover.rs": {
+    "mtime": 1783348311.8420825,
+    "ast_hash": "6b8f8432dbafd12e552cd35527398dad",
+    "semantic_hash": "6b8f8432dbafd12e552cd35527398dad"
+  },
+  "redteam_rust_core/src/plugins/reconnaissance/passive/favicon_hash.rs": {
+    "mtime": 1783348311.842138,
+    "ast_hash": "2259257e1a1147a96e72f48781b9c617",
+    "semantic_hash": "2259257e1a1147a96e72f48781b9c617"
+  },
+  "redteam_rust_core/src/plugins/reconnaissance/passive/github_dorks.rs": {
+    "mtime": 1783348311.8421621,
+    "ast_hash": "e7ca010f594375a03b592f423c24f433",
+    "semantic_hash": "e7ca010f594375a03b592f423c24f433"
+  },
+  "redteam_rust_core/src/plugins/reconnaissance/passive/gitleaks.rs": {
+    "mtime": 1783348311.8421962,
+    "ast_hash": "f7657d7a0ca5842eb13a5e27b6a62060",
+    "semantic_hash": "f7657d7a0ca5842eb13a5e27b6a62060"
+  },
+  "redteam_rust_core/src/plugins/reconnaissance/passive/mod.rs": {
+    "mtime": 1783348311.8422132,
+    "ast_hash": "d93c1680e06d9d3605737fc8c23699aa",
+    "semantic_hash": "d93c1680e06d9d3605737fc8c23699aa"
+  },
+  "redteam_rust_core/src/plugins/reconnaissance/passive/trufflehog.rs": {
+    "mtime": 1783348311.842242,
+    "ast_hash": "fa769f7b5e39d86c0b169fbabf92b72d",
+    "semantic_hash": "fa769f7b5e39d86c0b169fbabf92b72d"
+  },
+  "redteam_rust_core/src/plugins/reconnaissance/passive/wafw00f.rs": {
+    "mtime": 1783348311.842242,
+    "ast_hash": "4481259e7c719c580473610078d8757a",
+    "semantic_hash": "4481259e7c719c580473610078d8757a"
+  },
+  "redteam_rust_core/src/plugins/reconnaissance/passive/wayback.rs": {
+    "mtime": 1783348311.8422744,
+    "ast_hash": "6bd65267f5f1f6f9269d3713b9da2643",
+    "semantic_hash": "6bd65267f5f1f6f9269d3713b9da2643"
+  },
+  "redteam_rust_core/src/plugins/reconnaissance/passive/waymore.rs": {
+    "mtime": 1783348311.842297,
+    "ast_hash": "c9152e3ccbdc98f792894945bf41d5bc",
+    "semantic_hash": "c9152e3ccbdc98f792894945bf41d5bc"
+  },
+  "redteam_rust_core/src/plugins/registry.rs": {
+    "mtime": 1783348311.842297,
+    "ast_hash": "929f7f5dfb195420f4d691ce0b1c05d3",
+    "semantic_hash": "929f7f5dfb195420f4d691ce0b1c05d3"
+  },
+  "redteam_rust_core/src/plugins/reporting/bug_bounty/helpers.rs": {
+    "mtime": 1783348311.8424077,
+    "ast_hash": "fbed8034189bef36fb1ebffaaaa79388",
+    "semantic_hash": "fbed8034189bef36fb1ebffaaaa79388"
+  },
+  "redteam_rust_core/src/plugins/reporting/bug_bounty/mod.rs": {
+    "mtime": 1783348311.8424451,
+    "ast_hash": "3647e4bf43858c2b91d68d057b031269",
+    "semantic_hash": "3647e4bf43858c2b91d68d057b031269"
+  },
+  "redteam_rust_core/src/plugins/reporting/bug_bounty/score.rs": {
+    "mtime": 1783348311.842466,
+    "ast_hash": "003eefdeca1f7109629dc0f564e9e788",
+    "semantic_hash": "003eefdeca1f7109629dc0f564e9e788"
+  },
+  "redteam_rust_core/src/plugins/reporting/bug_bounty/tests.rs": {
+    "mtime": 1783348311.8424792,
+    "ast_hash": "e1b0c791e16f9b8ef494acce207a04ec",
+    "semantic_hash": "e1b0c791e16f9b8ef494acce207a04ec"
+  },
+  "redteam_rust_core/src/plugins/reporting/mod.rs": {
+    "mtime": 1783348311.8424792,
+    "ast_hash": "6ebb80d642d151e7ce6cb402f100c86b",
+    "semantic_hash": "6ebb80d642d151e7ce6cb402f100c86b"
+  },
+  "redteam_rust_core/src/plugins/reporting/platform_client.rs": {
+    "mtime": 1783348311.8425195,
+    "ast_hash": "84d848d7a8e05bdc8fc7b65b3b556f53",
+    "semantic_hash": "84d848d7a8e05bdc8fc7b65b3b556f53"
+  },
+  "redteam_rust_core/src/plugins/scanner_factory.rs": {
+    "mtime": 1783348311.8425195,
+    "ast_hash": "2bc198b236f098a377762251489c219b",
+    "semantic_hash": "2bc198b236f098a377762251489c219b"
+  },
+  "redteam_rust_core/src/plugins/triage/bk_tree.rs": {
+    "mtime": 1783348311.8425715,
+    "ast_hash": "12ccb2b318560c94838c50c26f96313e",
+    "semantic_hash": "12ccb2b318560c94838c50c26f96313e"
+  },
+  "redteam_rust_core/src/plugins/triage/dedup_rules.rs": {
+    "mtime": 1783348311.842637,
+    "ast_hash": "765b116148eb0ace5891c432a645421b",
+    "semantic_hash": "765b116148eb0ace5891c432a645421b"
+  },
+  "redteam_rust_core/src/plugins/triage/fingerprint.rs": {
+    "mtime": 1783348311.8426602,
+    "ast_hash": "8e7cd18a577eab6df88351f8793f4c02",
+    "semantic_hash": "8e7cd18a577eab6df88351f8793f4c02"
+  },
+  "redteam_rust_core/src/plugins/triage/mod.rs": {
+    "mtime": 1783348311.8426766,
+    "ast_hash": "5077a6c99906a53df2175a38554f4ccf",
+    "semantic_hash": "5077a6c99906a53df2175a38554f4ccf"
+  },
+  "redteam_rust_core/src/plugins/triage/similarity_engine.rs": {
+    "mtime": 1783348311.8427045,
+    "ast_hash": "e61eec10e209b6bbf5b3fd521fd47cda",
+    "semantic_hash": "e61eec10e209b6bbf5b3fd521fd47cda"
+  },
+  "redteam_rust_core/src/plugins/triage/tests/tlsh_metric_test.rs": {
+    "mtime": 1783348311.8427362,
+    "ast_hash": "56901f5c2b070505f9e6f17be5b75b52",
+    "semantic_hash": "56901f5c2b070505f9e6f17be5b75b52"
+  },
+  "redteam_rust_core/src/plugins/verification/burp.rs": {
+    "mtime": 1783348311.8427658,
+    "ast_hash": "e1c12304dc97e9e315ef10d4b3614fca",
+    "semantic_hash": "e1c12304dc97e9e315ef10d4b3614fca"
+  },
+  "redteam_rust_core/src/plugins/verification/caido.rs": {
+    "mtime": 1783348311.8428001,
+    "ast_hash": "42d193e5e981c217dc392ead41288693",
+    "semantic_hash": "42d193e5e981c217dc392ead41288693"
+  },
+  "redteam_rust_core/src/plugins/verification/dns_verifier.rs": {
+    "mtime": 1783348311.8428257,
+    "ast_hash": "92779d85e9f78d35a833222a8dd1827f",
+    "semantic_hash": "92779d85e9f78d35a833222a8dd1827f"
+  },
+  "redteam_rust_core/src/plugins/verification/mod.rs": {
+    "mtime": 1783348311.8428257,
+    "ast_hash": "fe2f955970455c8d84ff876d3c697707",
+    "semantic_hash": "fe2f955970455c8d84ff876d3c697707"
+  },
+  "redteam_rust_core/src/plugins/verification/poc.rs": {
+    "mtime": 1783348311.842896,
+    "ast_hash": "0aa65c86a2d7b05719c62bea834fd476",
+    "semantic_hash": "0aa65c86a2d7b05719c62bea834fd476"
+  },
+  "redteam_rust_core/src/plugins/verification/secret_validator.rs": {
+    "mtime": 1783348311.8429193,
+    "ast_hash": "403058bd2705c5d043faa0e6034fc038",
+    "semantic_hash": "403058bd2705c5d043faa0e6034fc038"
+  },
+  "redteam_rust_core/src/plugins/verification/zap.rs": {
+    "mtime": 1783348311.842947,
+    "ast_hash": "f35d750216ab8e6a083cc798f50282e2",
+    "semantic_hash": "f35d750216ab8e6a083cc798f50282e2"
+  },
+  "redteam_rust_core/src/utils/activity_log.rs": {
+    "mtime": 1783348311.8429794,
+    "ast_hash": "0df15d67ac8c675f6479e1d83eeab0a5",
+    "semantic_hash": "0df15d67ac8c675f6479e1d83eeab0a5"
+  },
+  "redteam_rust_core/src/utils/api_budget.rs": {
+    "mtime": 1783348311.8430133,
+    "ast_hash": "7f9c04f22fd32b13e536af7d24ea9521",
+    "semantic_hash": "7f9c04f22fd32b13e536af7d24ea9521"
+  },
+  "redteam_rust_core/src/utils/api_cache.rs": {
+    "mtime": 1783348311.8430345,
+    "ast_hash": "69713ba16b57248c96f0961939614635",
+    "semantic_hash": "69713ba16b57248c96f0961939614635"
+  },
+  "redteam_rust_core/src/utils/bounty_exporter.rs": {
+    "mtime": 1783348311.8430593,
+    "ast_hash": "5daf8d070c97cef9ebd593b4c99b2b41",
+    "semantic_hash": "5daf8d070c97cef9ebd593b4c99b2b41"
+  },
+  "redteam_rust_core/src/utils/common.rs": {
+    "mtime": 1783348311.843092,
+    "ast_hash": "8bfe7abb36ba82675b0026d0b663772e",
+    "semantic_hash": "8bfe7abb36ba82675b0026d0b663772e"
+  },
+  "redteam_rust_core/src/utils/config.rs": {
+    "mtime": 1783348311.8431323,
+    "ast_hash": "0fe007e83449247993b7630312baa475",
+    "semantic_hash": "0fe007e83449247993b7630312baa475"
+  },
+  "redteam_rust_core/src/utils/cve_cache.rs": {
+    "mtime": 1783348311.8431592,
+    "ast_hash": "639887b50042b165565c92e628e99c82",
+    "semantic_hash": "639887b50042b165565c92e628e99c82"
+  },
+  "redteam_rust_core/src/utils/cvss.rs": {
+    "mtime": 1783348311.8431754,
+    "ast_hash": "8c2894d2462805c25e30fc418cbccb20",
+    "semantic_hash": "8c2894d2462805c25e30fc418cbccb20"
+  },
+  "redteam_rust_core/src/utils/deduplication.rs": {
+    "mtime": 1783348311.8431962,
+    "ast_hash": "a9802f6d10e2dd702ec943705b8afcbf",
+    "semantic_hash": "a9802f6d10e2dd702ec943705b8afcbf"
+  },
+  "redteam_rust_core/src/utils/downloader.rs": {
+    "mtime": 1783348311.8432126,
+    "ast_hash": "88263626f9a4f738154ee92948e948e0",
+    "semantic_hash": "88263626f9a4f738154ee92948e948e0"
+  },
+  "redteam_rust_core/src/utils/executor.rs": {
+    "mtime": 1783348311.843243,
+    "ast_hash": "a0a0a7a14550550deb1b9ad076aef1cb",
+    "semantic_hash": "a0a0a7a14550550deb1b9ad076aef1cb"
+  },
+  "redteam_rust_core/src/utils/hardware_detection.rs": {
+    "mtime": 1783348311.843258,
+    "ast_hash": "e48f1fc946e6c32541c405ffe185091d",
+    "semantic_hash": "e48f1fc946e6c32541c405ffe185091d"
+  },
+  "redteam_rust_core/src/utils/ja4.rs": {
+    "mtime": 1783348311.8432913,
+    "ast_hash": "d9821409a2ec82a9ddaa2a64f962852b",
+    "semantic_hash": "d9821409a2ec82a9ddaa2a64f962852b"
+  },
+  "redteam_rust_core/src/utils/jitter.rs": {
+    "mtime": 1783348311.8433108,
+    "ast_hash": "5862c8c4190093c8dd657f8861085134",
+    "semantic_hash": "5862c8c4190093c8dd657f8861085134"
+  },
+  "redteam_rust_core/src/utils/liveness.rs": {
+    "mtime": 1783348311.8433425,
+    "ast_hash": "0fe02b0d2c44e4b51eac15ca6dce0645",
+    "semantic_hash": "0fe02b0d2c44e4b51eac15ca6dce0645"
+  },
+  "redteam_rust_core/src/utils/memory_monitor.rs": {
+    "mtime": 1783348311.8433652,
+    "ast_hash": "984422495ddea5dd010ae05ad15d9f7a",
+    "semantic_hash": "984422495ddea5dd010ae05ad15d9f7a"
+  },
+  "redteam_rust_core/src/utils/mod.rs": {
+    "mtime": 1783348311.8433826,
+    "ast_hash": "28cabd37dd4dd9eac1f33c90316d1686",
+    "semantic_hash": "28cabd37dd4dd9eac1f33c90316d1686"
+  },
+  "redteam_rust_core/src/utils/output_filter.rs": {
+    "mtime": 1783348311.8434038,
+    "ast_hash": "3ae4452f7a3db546f9027e7b2be80af3",
+    "semantic_hash": "3ae4452f7a3db546f9027e7b2be80af3"
+  },
+  "redteam_rust_core/src/utils/payload_server.rs": {
+    "mtime": 1783348311.8434255,
+    "ast_hash": "6911c2c0b8f8000ce878bb9b359b3622",
+    "semantic_hash": "6911c2c0b8f8000ce878bb9b359b3622"
+  },
+  "redteam_rust_core/src/utils/poc_generator.rs": {
+    "mtime": 1783348311.8434439,
+    "ast_hash": "616f58fbf49de7b608c1cd961883d66d",
+    "semantic_hash": "616f58fbf49de7b608c1cd961883d66d"
+  },
+  "redteam_rust_core/src/utils/process_guard.rs": {
+    "mtime": 1783348311.8434634,
+    "ast_hash": "88cbbfa3e2395542cd6e4d8dccb436d7",
+    "semantic_hash": "88cbbfa3e2395542cd6e4d8dccb436d7"
+  },
+  "redteam_rust_core/src/utils/program_config.rs": {
+    "mtime": 1783348311.8434808,
+    "ast_hash": "6c7811d89da0ac167ee1272348eff188",
+    "semantic_hash": "6c7811d89da0ac167ee1272348eff188"
+  },
+  "redteam_rust_core/src/utils/proxy.rs": {
+    "mtime": 1783348311.8434808,
+    "ast_hash": "002d4194929e40853f4affd493e7e778",
+    "semantic_hash": "002d4194929e40853f4affd493e7e778"
+  },
+  "redteam_rust_core/src/utils/report_gen.rs": {
+    "mtime": 1783348311.8435352,
+    "ast_hash": "0528043be8c86f132defb36b71d32161",
+    "semantic_hash": "0528043be8c86f132defb36b71d32161"
+  },
+  "redteam_rust_core/src/utils/security.rs": {
+    "mtime": 1783348311.8435671,
+    "ast_hash": "b5ad74e597671254da05bfcaf480c915",
+    "semantic_hash": "b5ad74e597671254da05bfcaf480c915"
+  },
+  "redteam_rust_core/src/utils/shodan_keyring.rs": {
+    "mtime": 1783348311.843587,
+    "ast_hash": "68f57510a636d18a37445b18a8a22a31",
+    "semantic_hash": "68f57510a636d18a37445b18a8a22a31"
+  },
+  "redteam_rust_core/src/utils/stealth_detect.rs": {
+    "mtime": 1783348311.843602,
+    "ast_hash": "975a5b95febe1c52cb8b65393d62e029",
+    "semantic_hash": "975a5b95febe1c52cb8b65393d62e029"
+  },
+  "redteam_rust_core/src/utils/stealth_http.rs": {
+    "mtime": 1783348311.8436494,
+    "ast_hash": "e4792b193b259104a208ff8f003e01d6",
+    "semantic_hash": "e4792b193b259104a208ff8f003e01d6"
+  },
+  "redteam_rust_core/src/utils/telemetry.rs": {
+    "mtime": 1783348311.843688,
+    "ast_hash": "3b37c0cce59cda0eb03594b46245d96d",
+    "semantic_hash": "3b37c0cce59cda0eb03594b46245d96d"
+  },
+  "redteam_rust_core/src/utils/tone.rs": {
+    "mtime": 1783348311.8437324,
+    "ast_hash": "89a1f566b363aad6b79f86354d52ace0",
+    "semantic_hash": "89a1f566b363aad6b79f86354d52ace0"
+  },
+  "redteam_rust_core/src/utils/tool_detection.rs": {
+    "mtime": 1783348311.843767,
+    "ast_hash": "5e3546f28385e29437f55c6af9399b28",
+    "semantic_hash": "5e3546f28385e29437f55c6af9399b28"
+  },
+  "redteam_rust_core/src/utils/transport.rs": {
+    "mtime": 1783348311.8437834,
+    "ast_hash": "20a5358b4eada3c5beb679290766d1d5",
+    "semantic_hash": "20a5358b4eada3c5beb679290766d1d5"
+  },
+  "redteam_rust_core/tests/baselines/golden_baseline.json": {
+    "mtime": 1783348311.84388,
+    "ast_hash": "99f9a86b54f000c2c174f74c8ab1599b",
+    "semantic_hash": "99f9a86b54f000c2c174f74c8ab1599b"
+  },
+  "redteam_rust_core/tests/boot_singletons_test.rs": {
+    "mtime": 1783348311.84388,
+    "ast_hash": "e52e8cb946249287f49a6c536390f9a9",
+    "semantic_hash": "e52e8cb946249287f49a6c536390f9a9"
+  },
+  "redteam_rust_core/tests/integration_oob.rs": {
+    "mtime": 1783348311.8439329,
+    "ast_hash": "91280b460ad6911094e038720b1c200b",
+    "semantic_hash": "91280b460ad6911094e038720b1c200b"
+  },
+  "redteam_rust_core/tests/integration_zero_cost.rs": {
+    "mtime": 1783348311.843954,
+    "ast_hash": "9c7c26b389bb8380e0123a8f0ea3c7f9",
+    "semantic_hash": "9c7c26b389bb8380e0123a8f0ea3c7f9"
+  },
+  "redteam_rust_core/tests/lateral_movement_test.rs": {
+    "mtime": 1783348311.8439977,
+    "ast_hash": "a0fa62446c487de06652f4f05dc7ab3e",
+    "semantic_hash": "a0fa62446c487de06652f4f05dc7ab3e"
+  },
+  "redteam_rust_core/tests/monitor_lifecycle_test.rs": {
+    "mtime": 1783348311.8440182,
+    "ast_hash": "dc917e98c3bc8ff5e55fa584cf1fae17",
+    "semantic_hash": "dc917e98c3bc8ff5e55fa584cf1fae17"
+  },
+  "redteam_rust_core/tests/reactive_integration_test.rs": {
+    "mtime": 1783348311.8440394,
+    "ast_hash": "e201a1f74a137ae63373a9259be6cedf",
+    "semantic_hash": "e201a1f74a137ae63373a9259be6cedf"
+  },
+  "redteam_rust_core/tests/swarm_acl_test.rs": {
+    "mtime": 1783348311.844056,
+    "ast_hash": "c0e6aea149165c58254e31a07c33d15c",
+    "semantic_hash": "c0e6aea149165c58254e31a07c33d15c"
+  },
+  "redteam_rust_core/tests/tls_impersonation_test.rs": {
+    "mtime": 1783348311.844072,
+    "ast_hash": "03f0e922ad8316b6d53967f76fdbcbc8",
+    "semantic_hash": "03f0e922ad8316b6d53967f76fdbcbc8"
+  },
+  "redteam_rust_core/xtask/src/main.rs": {
+    "mtime": 1783348311.8440995,
+    "ast_hash": "419557477953dcc7f0b29a663450c2c1",
+    "semantic_hash": "419557477953dcc7f0b29a663450c2c1"
+  },
+  "skills/T1190.json": {
+    "mtime": 1783348311.8440995,
+    "ast_hash": "9296f468800d9babf05458bda21f60ee",
+    "semantic_hash": "9296f468800d9babf05458bda21f60ee"
+  },
+  ".github/workflows/ci.yml": {
+    "mtime": 1783348311.8188426,
+    "ast_hash": "cdfef1ce8024ee61df94fd3a56bc2db2",
+    "semantic_hash": ""
+  },
+  ".github/workflows/release.yml": {
+    "mtime": 1783348311.8189387,
+    "ast_hash": "bb3cfbd8193d75304c58344fe5502278",
+    "semantic_hash": ""
+  },
+  "CLAUDE.md": {
+    "mtime": 1783348311.8190274,
+    "ast_hash": "5500d30aaa04dfc8807c83d8d7403155",
+    "semantic_hash": ""
+  },
+  "HANDOFF.md": {
+    "mtime": 1783348311.8190274,
+    "ast_hash": "8cc0f3c03ef357bfcd2e571d0a2563d7",
+    "semantic_hash": ""
+  },
+  "HISTORIAL.md": {
+    "mtime": 1788914240.7211738,
+    "ast_hash": "454212afd5705dfd80e6337b65bdb015",
+    "semantic_hash": ""
+  },
+  "MEMORIA.md": {
+    "mtime": 1783348311.819357,
+    "ast_hash": "47172d1ce56533d187cf4ccb587e9533",
+    "semantic_hash": ""
+  },
+  "ORACLE_DEPLOY_RUNBOOK.md": {
+    "mtime": 1783348311.8194857,
+    "ast_hash": "bf1d4e5cb33462a4c267357433d3afe5",
+    "semantic_hash": ""
+  },
+  "ORACLE_WORKER_SECURITY.md": {
+    "mtime": 1783348311.819536,
+    "ast_hash": "e4fae9691ba6e6f064a4db4d97157109",
+    "semantic_hash": ""
+  },
+  "README.md": {
+    "mtime": 1788914258.8191824,
+    "ast_hash": "41fa17a89c74cae00b4158d47d8513bb",
+    "semantic_hash": ""
+  },
+  "ROADMAP_REPORTING.md": {
+    "mtime": 1783348311.819567,
+    "ast_hash": "2665a3b2341a60dc96d50a5b79816713",
+    "semantic_hash": ""
+  },
+  "RTK_PROTOCOL.md": {
+    "mtime": 1783348311.8195884,
+    "ast_hash": "41b49e5849f9315f45bbfc3ad2d7e3ec",
+    "semantic_hash": ""
+  },
+  "azure-pipelines.yml": {
+    "mtime": 1783348311.8218844,
+    "ast_hash": "de92f605ce2efdaffc8de2ed4f2fef8e",
+    "semantic_hash": ""
+  },
+  "docker-compose.db.yml": {
+    "mtime": 1783348311.822727,
+    "ast_hash": "84cb8a7d759f6c1d42ec87ba39395f9a",
+    "semantic_hash": ""
+  },
+  "prompts/audit_v12_prompt.md": {
+    "mtime": 1783348311.8238845,
+    "ast_hash": "087edbeba77bca35f8b7ad1a387868d7",
+    "semantic_hash": ""
+  },
+  "prompts/audit_v13_excellence_prompt.md": {
+    "mtime": 1783348311.8243773,
+    "ast_hash": "40a26118b3c4e795e6f26d3570a97280",
+    "semantic_hash": ""
+  },
+  "prompts/documentation_v14_prompt.md": {
+    "mtime": 1783348311.824441,
+    "ast_hash": "04e6e1381899b1e1b2352d2433a6f049",
+    "semantic_hash": ""
+  },
+  "prompts/remediation_v12_prompt.md": {
+    "mtime": 1783348311.8244896,
+    "ast_hash": "476b44ad893e0b63fb7ee20f528fc9d0",
+    "semantic_hash": ""
+  },
+  "redteam_rust_core/.github/workflows/parity.yml": {
+    "mtime": 1783348311.824605,
+    "ast_hash": "a050259dede2d8ab5ea5a94dcad53b52",
+    "semantic_hash": ""
+  },
+  "redteam_rust_core/.nuclei-config/nuclei/reporting-config.yaml": {
+    "mtime": 1783348311.8247266,
+    "ast_hash": "77900f34b397622f7a838cb812179ea2",
+    "semantic_hash": ""
+  },
+  "redteam_rust_core/AUDIT_PHASE1.md": {
+    "mtime": 1783348311.8247266,
+    "ast_hash": "310c7360c0e7802c375f235e3d867cda",
+    "semantic_hash": ""
+  },
+  "redteam_rust_core/CLAUDE.md": {
+    "mtime": 1783348311.8248453,
+    "ast_hash": "07e504f09e5213427ba3c83fcafb1633",
+    "semantic_hash": ""
+  },
+  "redteam_rust_core/HISTORIAL.md": {
+    "mtime": 1783348311.8274548,
+    "ast_hash": "baebfe10fcdf39533eb8622f0f541e90",
+    "semantic_hash": ""
+  },
+  "redteam_rust_core/REMEDIATION_P0.md": {
+    "mtime": 1788914231.2751691,
+    "ast_hash": "459bb55399e9ed024459fe3d6445dc84",
+    "semantic_hash": ""
+  },
+  "redteam_rust_core/docker-compose.mobile.yml": {
+    "mtime": 1783348311.8282638,
+    "ast_hash": "3168a03d4e2cb1074c74677417abbd98",
+    "semantic_hash": ""
+  },
+  "redteam_rust_core/docker-compose.test.yml": {
+    "mtime": 1783348311.8282957,
+    "ast_hash": "0677e4094896cba1406a2eba3e928ab9",
+    "semantic_hash": ""
+  },
+  "redteam_rust_core/docker-compose.yml": {
+    "mtime": 1783348311.8283298,
+    "ast_hash": "f4c5e6b07519173792667f53a1b3062e",
+    "semantic_hash": ""
+  },
+  "redteam_rust_core/docs/ADR-011-ORCHESTRATOR-DOMAIN.md": {
+    "mtime": 1783348311.825377,
+    "ast_hash": "feca2841405d2ac06651c9dc0e20f521",
+    "semantic_hash": ""
+  },
+  "redteam_rust_core/docs/ADR-012-AI-CONTEXT-HARDENING.md": {
+    "mtime": 1783348311.825429,
+    "ast_hash": "ec0d2417b27b99055b865b2862ed77dd",
+    "semantic_hash": ""
+  },
+  "redteam_rust_core/docs/ADR-013-LLM-RATE-LIMITING-RETRY.md": {
+    "mtime": 1783348311.8254745,
+    "ast_hash": "04273f029cfe652bb76fc8136d330d67",
+    "semantic_hash": ""
+  },
+  "redteam_rust_core/docs/ARCH-11-STAGE3-WALKTHROUGH.md": {
+    "mtime": 1783348311.8255126,
+    "ast_hash": "ad91267f5ccc7ed2c669a12546bedc45",
+    "semantic_hash": ""
+  },
+  "redteam_rust_core/docs/ARCHITECTURE.md": {
+    "mtime": 1783348311.8255935,
+    "ast_hash": "bb9cd680dffa5ca9a904fac693b7a90c",
+    "semantic_hash": ""
+  },
+  "redteam_rust_core/docs/PLUGIN_METADATA_AUDIT.md": {
+    "mtime": 1783348311.8256545,
+    "ast_hash": "4f06084871ac3ab88406c317bf8b585e",
+    "semantic_hash": ""
+  },
+  "redteam_rust_core/docs/README.md": {
+    "mtime": 1788914338.4262202,
+    "ast_hash": "00e36f9bd5c9e35994d508825a061e3b",
+    "semantic_hash": ""
+  },
+  "redteam_rust_core/docs/ai_infrastructure.md": {
+    "mtime": 1783348311.825805,
+    "ast_hash": "6c5419a0a7e7cefa48178a60165f248f",
+    "semantic_hash": ""
+  },
+  "redteam_rust_core/docs/deployment/00_OVERVIEW.md": {
+    "mtime": 1783348311.8258882,
+    "ast_hash": "c7f45a6f173955506218cf28a6ed6b21",
+    "semantic_hash": ""
+  },
+  "redteam_rust_core/docs/deployment/01_BASE_HARDENING.md": {
+    "mtime": 1783348311.8259695,
+    "ast_hash": "446a910e4e896946b1c29c47b66d3767",
+    "semantic_hash": ""
+  },
+  "redteam_rust_core/docs/deployment/02_BOX1_AI_ENRICHMENT.md": {
+    "mtime": 1783348311.82607,
+    "ast_hash": "abe7291b5648699c3737ab6e786f82dc",
+    "semantic_hash": ""
+  },
+  "redteam_rust_core/docs/deployment/03_BOX2_COORDINATOR.md": {
+    "mtime": 1783348311.8261626,
+    "ast_hash": "b32d755377d1242be5c7127c797d2ba8",
+    "semantic_hash": ""
+  },
+  "redteam_rust_core/docs/deployment/04_BOX3_INTEL_OBSERVABILITY.md": {
+    "mtime": 1783348311.8262599,
+    "ast_hash": "6ae85c6dc99d86fed055d3a5488ca63f",
+    "semantic_hash": ""
+  },
+  "redteam_rust_core/docs/deployment/05_BOX4_INTERACTSH.md": {
+    "mtime": 1783348311.8263433,
+    "ast_hash": "2a35f0d1eedb516aa4c55640fc4865ad",
+    "semantic_hash": ""
+  },
+  "redteam_rust_core/docs/deployment/05_TAILSCALE_MESH.md": {
+    "mtime": 1783348311.8264122,
+    "ast_hash": "acd4d9aad576ca19d7fad1aa7f05e389",
+    "semantic_hash": ""
+  },
+  "redteam_rust_core/docs/deployment/06_DO_EPHEMERAL_WORKERS.md": {
+    "mtime": 1783348311.8265035,
+    "ast_hash": "604fd8e0b8bdf0525f1b0e7ac050ddc2",
+    "semantic_hash": ""
+  },
+  "redteam_rust_core/docs/deployment/07_DASHBOARD_PUBLIC_ACCESS.md": {
+    "mtime": 1783348311.8265638,
+    "ast_hash": "deba69ddcbf6b5f5ce1fd67a9ab05efd",
+    "semantic_hash": ""
+  },
+  "redteam_rust_core/docs/deployment/07b_BOX2_MIMIKRI_ME_DOMAIN.md": {
+    "mtime": 1783348311.8266218,
+    "ast_hash": "2218dd83d42ce9a6fe75ae2fd548e06a",
+    "semantic_hash": ""
+  },
+  "redteam_rust_core/docs/deployment/07b_BOX2_MIMIKRI_ME_DOMAIN_IMPROVED.md": {
+    "mtime": 1783348311.8266916,
+    "ast_hash": "eb49bfd73d3a141cb2a138873ffdc8c3",
+    "semantic_hash": ""
+  },
+  "redteam_rust_core/docs/deployment/08_SECRETS_MANAGEMENT.md": {
+    "mtime": 1783348311.8267577,
+    "ast_hash": "93f2cb5f0ae4b23af91ad2687d7a2a8a",
+    "semantic_hash": ""
+  },
+  "redteam_rust_core/docs/deployment/09_INCIDENT_RESPONSE.md": {
+    "mtime": 1783348311.8268354,
+    "ast_hash": "2d2e4518248f8d2c5049396b318c9709",
+    "semantic_hash": ""
+  },
+  "redteam_rust_core/docs/deployment/10_SMOKE_TEST.md": {
+    "mtime": 1783348311.8268948,
+    "ast_hash": "772c03289b555568f2218883b260c02a",
+    "semantic_hash": ""
+  },
+  "redteam_rust_core/docs/deployment/HYBRID_DEPLOYMENT_TOPOLOGY.md": {
+    "mtime": 1783348311.826999,
+    "ast_hash": "70e19d277e3d983b741242946f7a5cd1",
+    "semantic_hash": ""
+  },
+  "redteam_rust_core/docs/engine_core.md": {
+    "mtime": 1783348311.826999,
+    "ast_hash": "1d25d06d3549ffeea9da5b5d004f2a8b",
+    "semantic_hash": ""
+  },
+  "redteam_rust_core/docs/performance/PERF-001_rustls_dup.md": {
+    "mtime": 1783348311.8283975,
+    "ast_hash": "0f330aa4398048084d538b90001d2830",
+    "semantic_hash": ""
+  },
+  "redteam_rust_core/docs/plugins_and_tools.md": {
+    "mtime": 1783348311.8271322,
+    "ast_hash": "1d3c07669e58c6af6c2a889a21c90c6c",
+    "semantic_hash": ""
+  },
+  "redteam_rust_core/docs/security/SEC-004_sandbox_spike.md": {
+    "mtime": 1783348311.8284554,
+    "ast_hash": "e35732579c1d72fd1489ca14530cc234",
+    "semantic_hash": ""
+  },
+  "redteam_rust_core/docs/sink_persistence.md": {
+    "mtime": 1783348311.8272252,
+    "ast_hash": "1782312c896d1a04c3ab4a3d50e7290e",
+    "semantic_hash": ""
+  },
+  "redteam_rust_core/docs/sprints/AUDIT_20260603_5c2918d0.md": {
+    "mtime": 1783348311.8285913,
+    "ast_hash": "b8e0342c0eaea6216d1450f29de1b3d9",
+    "semantic_hash": ""
+  },
+  "redteam_rust_core/docs/sprints/BACKLOG_NICHE_TOOLS.md": {
+    "mtime": 1783348311.8286395,
+    "ast_hash": "f8be0de7a085f4150773cfe4ae5885ad",
+    "semantic_hash": ""
+  },
+  "redteam_rust_core/docs/sprints/PLAN_SPRINT_5b.md": {
+    "mtime": 1783348311.8286812,
+    "ast_hash": "c3575bc4416dbc7ba1201636ea89b128",
+    "semantic_hash": ""
+  },
+  "redteam_rust_core/docs/sprints/RETROSPECTIVE_5703882.md": {
+    "mtime": 1783348311.8287225,
+    "ast_hash": "8d17ab91aeb3ab91cfe1629439a0e056",
+    "semantic_hash": ""
+  },
+  "redteam_rust_core/docs/sprints/SECURITY_REVIEW_20260606_NigaNinja.md": {
+    "mtime": 1783348311.8287625,
+    "ast_hash": "74e57d6be93078ea1633e72283caf365",
+    "semantic_hash": ""
+  },
+  "redteam_rust_core/docs/sprints/SENTINEL_NET_EVASION_ROADMAP.md": {
+    "mtime": 1783348311.8288286,
+    "ast_hash": "8a65ae9affdecd21b09aa23387628e96",
+    "semantic_hash": ""
+  },
+  "redteam_rust_core/docs/sprints/v15.1_sprint3.md": {
+    "mtime": 1783348311.8288703,
+    "ast_hash": "2a0401f437e9f6a2522e60630388648d",
+    "semantic_hash": ""
+  },
+  "redteam_rust_core/docs/stealth_opsec.md": {
+    "mtime": 1783348311.8272877,
+    "ast_hash": "95dff9e07082be8d06778b4d53da282f",
+    "semantic_hash": ""
+  },
+  "redteam_rust_core/docs/swarm_intelligence.md": {
+    "mtime": 1783348311.8273466,
+    "ast_hash": "54b59f32fe7541e1532d7056a51a2266",
+    "semantic_hash": ""
+  },
+  "redteam_rust_core/nuclei-config.yaml": {
+    "mtime": 1783348311.829106,
+    "ast_hash": "245cf389ad5bdfdfe93e6fbcf2e01f6f",
+    "semantic_hash": ""
+  },
+  "redteam_rust_core/nuclei/config.yaml": {
+    "mtime": 1783348311.829197,
+    "ast_hash": "336e19a2186d5a8ab41eaec87f66e714",
+    "semantic_hash": ""
+  },
+  "redteam_rust_core/src/core/web/assets/index.html": {
+    "mtime": 1788915433.2370496,
+    "ast_hash": "63d3f4111726b5655e2740a1f5ba1e0f",
+    "semantic_hash": ""
+  },
+  "redteam_rust_core/src/core/web/assets/login.html": {
+    "mtime": 1783348311.8349578,
+    "ast_hash": "58a2f0c9a9bbd2c671c2a84c959916b8",
+    "semantic_hash": ""
+  },
+  "redteam_rust_core/tests/baselines/DEGRADED_STATUS.md": {
+    "mtime": 1783348311.843829,
+    "ast_hash": "daf2f0abaa290d4780045d4b9d6a1989",
+    "semantic_hash": ""
+  },
+  "roadmap_databe.md": {
+    "mtime": 1783348311.8440995,
+    "ast_hash": "648c9f87e7318113693c8c2094f39d94",
+    "semantic_hash": ""
+  }
+}
