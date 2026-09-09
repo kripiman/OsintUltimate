@@ -140,6 +140,8 @@ runcmd:
                         .to_string()
                 });
             let interactsh_token = std::env::var("INTERACTSH_TOKEN").unwrap_or_default();
+            let redteam_destructive = std::env::var("REDTEAM_DESTRUCTIVE").unwrap_or_else(|_| "0".to_string());
+            let max_layer = std::env::var("MAX_LAYER").unwrap_or_else(|_| "Verification".to_string());
             let node_id = format!("do-{}", uuid::Uuid::new_v4().to_string()[..8].to_string());
             format!(r#"#cloud-config
 package_update: true
@@ -148,6 +150,7 @@ packages:
   - masscan
   - curl
   - ca-certificates
+  - netcat-openbsd
 write_files:
   - path: /usr/local/sbin/self-destruct.sh
     permissions: '0700'
@@ -181,11 +184,23 @@ NUCLEICFG
   - curl -fsSL https://tailscale.com/install.sh | sh
   - tailscale up --auth-key={ts_key} --hostname={node_id} --ephemeral --accept-routes=false --accept-dns=false --ssh=false
   - |
+    # Wait for Tailscale interface IP allocation
+    for i in $(seq 1 30); do tailscale ip -4 && break || sleep 2; done
+    # Parse DB host & port, and wait for connectivity
+    DB_HOST=$(echo "{db_url}" | sed -e 's|[^:]*://[^@]*@||' -e 's|/.*||' -e 's|:[0-9]*$||')
+    DB_PORT=$(echo "{db_url}" | sed -e 's|[^:]*://[^@]*@||' -e 's|/.*||' | grep -o ':[0-9]*$' | tr -d ':')
+    [ -z "$DB_PORT" ] && DB_PORT=5432
+    if [ -n "$DB_HOST" ] && [ "$DB_HOST" != "localhost" ] && [ "$DB_HOST" != "127.0.0.1" ]; then
+      for i in $(seq 1 30); do
+        nc -zv -w 2 "$DB_HOST" "$DB_PORT" && break || sleep 5
+      done
+    fi
+  - |
     cat > /etc/systemd/system/redteam-worker.service <<EOF
     [Unit]
     Description=Mimikri Worker
-    After=network-online.target
-    Wants=network-online.target
+    After=network-online.target tailscaled.service
+    Wants=network-online.target tailscaled.service
     [Service]
     Type=simple
     User=root
@@ -196,7 +211,8 @@ NUCLEICFG
     Environment="INTERACTSH_SERVER_URL={interactsh_server_url}"
     Environment="INTERACTSH_URL={interactsh_url}"
     Environment="INTERACTSH_TOKEN={interactsh_token}"
-    ExecStart=/usr/local/bin/redteam_rust_core --worker --max-layer Verification --vuln-scan --postgres-url {db_url} --node-id {node_id} --profile scan --concurrency 4 --soft-mem-limit-mb 600
+    Environment="REDTEAM_DESTRUCTIVE={redteam_destructive}"
+    ExecStart=/usr/local/bin/redteam_rust_core --worker --max-layer {max_layer} --vuln-scan --postgres-url {db_url} --node-id {node_id} --profile scan --concurrency 16 --soft-mem-limit-mb 12000
     Restart=no
     TimeoutStopSec=60s
     RuntimeMaxSec=21600
@@ -216,7 +232,7 @@ NUCLEICFG
     SystemCallFilter=@system-service
     AmbientCapabilities=CAP_NET_RAW CAP_NET_ADMIN CAP_NET_BIND_SERVICE
     CapabilityBoundingSet=CAP_NET_RAW CAP_NET_ADMIN CAP_NET_BIND_SERVICE
-    MemoryMax=900M
+    MemoryMax=14G
     LimitNOFILE=8192
     [Install]
     WantedBy=multi-user.target
@@ -262,6 +278,15 @@ impl DigitalOceanClient {
     }
 
     pub async fn create_droplet(&self, name: &str, region: &str, mode: ProxyMode) -> Result<Droplet> {
+        // Cutoff block check from .env (e.g. DO_BLOCK_DATE=2026-08-01T00:00:00+00:00)
+        if let Ok(block_date_str) = std::env::var("DO_BLOCK_DATE") {
+            if let Ok(block_date) = chrono::DateTime::parse_from_rfc3339(&block_date_str) {
+                if chrono::Utc::now() >= block_date.with_timezone(&chrono::Utc) {
+                    anyhow::bail!("🚨 DO_BLOCK: DigitalOcean VPS generation is blocked (cutoff date reached: {}).", block_date_str);
+                }
+            }
+        }
+
         let socks_user = "operator"; 
         let socks_pass = uuid::Uuid::new_v4().to_string()[..12].to_string();
 
@@ -271,9 +296,9 @@ impl DigitalOceanClient {
         }
 
         let size = if mode == ProxyMode::Worker {
-            std::env::var("DO_DROPLET_SIZE").unwrap_or_else(|_| "s-1vcpu-1gb".to_string())
+            std::env::var("DO_DROPLET_SIZE").unwrap_or_else(|_| "s-8vcpu-16gb".to_string())
         } else {
-            std::env::var("DO_DROPLET_SIZE").unwrap_or_else(|_| "s-1vcpu-512mb".to_string())
+            std::env::var("DO_DROPLET_SIZE").unwrap_or_else(|_| "s-2vcpu-4gb".to_string())
         };
 
         let request = CreateDropletRequest {
