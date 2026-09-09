@@ -403,8 +403,8 @@ fn test_unknown_category_fails_secure() {
 ## 📚 Referencias
 
 - [SEC-004_sandbox_spike.md](docs/security/SEC-004_sandbox_spike.md#L97) — Recommendation #2
-- [stealth_opsec.md](DOCS/stealth_opsec.md#L11) — StealthExecutor mandatory policy
-- [ADR-012](DOCS/ADR-012-AI-CONTEXT-HARDENING.md#L40) — StealthClientBuilder permanent compilation
+- [stealth_opsec.md](docs/stealth_opsec.md#L11) — StealthExecutor mandatory policy
+- [ADR-012](docs/ADR-012-AI-CONTEXT-HARDENING.md#L40) — StealthClientBuilder permanent compilation
 
 ---
 
