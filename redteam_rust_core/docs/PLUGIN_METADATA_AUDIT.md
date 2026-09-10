@@ -2,6 +2,8 @@
 
 Este reporte documenta el estado y completitud de los metadatos para todos los plugins registrados.
 
+> ⚠️ **STALE (flagged 2026-09-09)**: `scanner_factory.rs` + `discovery_factory.rs` currently register **148** plugins (137 scanners + 11 discovery), not the 142 counted below — at least 39 scanner structs in source (e.g. `AbuseIPDBScanner`, `DnsxScanner`, `KiterunnerScanner`, `MobSFScanner`, `TrivyScanner`, `WPScanner`, `SemgrepScanner`, `AzureHoundScanner`) have no row in the tables below. This report needs a full regeneration with real per-plugin metadata (risk level, MITRE mapping, etc.) — the counts and tables that follow are outdated and should not be cited as current until that happens.
+
 ## Resumen de Hallazgos
 
 - **Total de plugins analizados**: 142

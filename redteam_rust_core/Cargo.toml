@@ -4,6 +4,7 @@ version = "0.1.0"
 edition = "2021"
 authors = ["Senior Architect <architect@redteam.lab>"]
 description = "High-performance, async-first Red Team assessment engine"
+license = "AGPL-3.0-or-later"
 
 [dependencies]
 # Async Runtime

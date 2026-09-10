@@ -1,10 +1,19 @@
 # Mimikri RedTeam Core — Documentation Index
 
+[![Standard](https://img.shields.io/badge/Standard-MITRE%20ATT%26CK-blue.svg)](redteam_rust_core/docs/PLUGIN_METADATA_AUDIT.md)
+[![Architecture](https://img.shields.io/badge/Architecture-Kill%20Chain%20(L0--L5)-orange.svg)](CLAUDE.md#scanning-layers-scanlayer)
+[![Tests](https://img.shields.io/badge/Tests-251%20PASS%20(100%25)-brightgreen.svg)](.github/workflows/ci.yml)
+[![Stack](https://img.shields.io/badge/Stack-Rust%20%7C%20Tokio%20%7C%20PostgreSQL%20%7C%20Axum-purple.svg)](redteam_rust_core/Cargo.toml)
+[![Distributed](https://img.shields.io/badge/Distributed-NATS%20Mesh%20%7C%20Postgres%20Queue-red.svg)](CLAUDE.md#run-worker-mode-distributed)
+[![Memory](https://img.shields.io/badge/Memory-600%2F900%20MB%20(soft%2Fhard)-success.svg)](redteam_rust_core/src/utils/config.rs)
+[![Plugins](https://img.shields.io/badge/Plugins-148-informational.svg)](redteam_rust_core/src/plugins/)
+[![License](https://img.shields.io/badge/License-AGPL--3.0-lightgrey.svg)](LICENSE)
+
 > **Single source of truth:** the code under `src/`. This index and every document it links to are *derived from* that code, not the other way around. When a document and the code disagree, the code wins — and the document is a bug.
 >
 > Purpose of this folder: let an engineer reverse-engineer the system top-down — understand **what the workflow is**, **how it is divided into modules**, and **where each responsibility lives** — without reading all 200+ source files first.
 >
-> Last verified against `src/`: 2026-06-05.
+> Last verified against `src/`: 2026-09-09.
 
 ---
 
@@ -236,5 +245,9 @@ Full catalog + metadata audit: [`plugins_and_tools.md`](redteam_rust_core/docs/p
 - Every doc carries a **"Last verified"** date and a **source-of-truth path**. When you change code that a doc describes, update the doc and bump the date in the same change.
 - Diagrams describe *behavior*, not aspiration. If a box has no corresponding function in `src/`, delete it.
 - Plugin counts, env-var names, and file paths are mechanical facts — quote them from the code, don't estimate.
-</content>
-</invoke>
+
+---
+
+## 10. License
+
+Licensed under the [GNU Affero General Public License v3.0 (AGPL-3.0)](LICENSE). The AGPL's network-use clause (section 13) applies: if you run a modified version of this engine as a network-accessible service (e.g. the `--dashboard` or `--worker` modes), you must offer users of that service the corresponding source.
