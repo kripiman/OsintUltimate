@@ -3,15 +3,15 @@
     "id": "PLUGIN_ERROR",
     "category": "misconfiguration",
     "severity": "info",
-    "title": "Plugin NucleiScanner failed",
-    "description": "Plugin NucleiScanner failed",
-    "timestamps": "2026-06-01T23:24:53.931794886Z",
+    "title": "Plugin BusinessLogic failed",
+    "description": "Plugin BusinessLogic failed",
+    "timestamps": "2026-09-09T15:53:17.429670222Z",
     "version": 0,
     "source_plugin": null,
     "scope_id": "",
     "reactive_depth": 0,
     "evidence": {
-      "error": "DNS Pinning Violation: Nuclei requires a resolved and pinned IP to prevent Rebinding.",
+      "error": "V14.1 OPSEC Violation: No proxy available for client configuration.",
       "confidence": 0.5,
       "verified": false
     },
@@ -34,139 +34,15 @@
     "id": "PLUGIN_ERROR",
     "category": "misconfiguration",
     "severity": "info",
-    "title": "Plugin kiterunner failed",
-    "description": "Plugin kiterunner failed",
-    "timestamps": "2026-06-01T23:24:53.935670449Z",
+    "title": "Plugin UploadStrike failed",
+    "description": "Plugin UploadStrike failed",
+    "timestamps": "2026-09-09T15:53:17.429688708Z",
     "version": 0,
     "source_plugin": null,
     "scope_id": "",
     "reactive_depth": 0,
     "evidence": {
-      "error": "DNS Pinning Violation: Kiterunner requires a resolved and pinned IP.",
-      "confidence": 0.5,
-      "verified": false
-    },
-    "enrichment": {
-      "cvss_version": "4.0"
-    },
-    "context": {
-      "iteration": 0,
-      "validation": {
-        "status": "unverified",
-        "confidence_score": 0.0,
-        "judge_notes": "",
-        "negative_control_passed": false,
-        "proof_of_execution": null,
-        "validated_at": null
-      }
-    }
-  },
-  {
-    "id": "PLUGIN_ERROR",
-    "category": "misconfiguration",
-    "severity": "info",
-    "title": "Plugin dnsx failed",
-    "description": "Plugin dnsx failed",
-    "timestamps": "2026-06-01T23:24:54.161243193Z",
-    "version": 0,
-    "source_plugin": null,
-    "scope_id": "",
-    "reactive_depth": 0,
-    "evidence": {
-      "error": "V14.1 Security Block: Command failed policy validation.",
-      "confidence": 0.5,
-      "verified": false
-    },
-    "enrichment": {
-      "cvss_version": "4.0"
-    },
-    "context": {
-      "iteration": 0,
-      "validation": {
-        "status": "unverified",
-        "confidence_score": 0.0,
-        "judge_notes": "",
-        "negative_control_passed": false,
-        "proof_of_execution": null,
-        "validated_at": null
-      }
-    }
-  },
-  {
-    "id": "PLUGIN_ERROR",
-    "category": "misconfiguration",
-    "severity": "info",
-    "title": "Plugin NucleiScanner failed",
-    "description": "Plugin NucleiScanner failed",
-    "timestamps": "2026-06-01T23:24:54.165973555Z",
-    "version": 0,
-    "source_plugin": null,
-    "scope_id": "",
-    "reactive_depth": 0,
-    "evidence": {
-      "error": "DNS Pinning Violation: Nuclei requires a resolved and pinned IP to prevent Rebinding.",
-      "confidence": 0.5,
-      "verified": false
-    },
-    "enrichment": {
-      "cvss_version": "4.0"
-    },
-    "context": {
-      "iteration": 0,
-      "validation": {
-        "status": "unverified",
-        "confidence_score": 0.0,
-        "judge_notes": "",
-        "negative_control_passed": false,
-        "proof_of_execution": null,
-        "validated_at": null
-      }
-    }
-  },
-  {
-    "id": "PLUGIN_ERROR",
-    "category": "misconfiguration",
-    "severity": "info",
-    "title": "Plugin kiterunner failed",
-    "description": "Plugin kiterunner failed",
-    "timestamps": "2026-06-01T23:24:54.168014594Z",
-    "version": 0,
-    "source_plugin": null,
-    "scope_id": "",
-    "reactive_depth": 0,
-    "evidence": {
-      "error": "DNS Pinning Violation: Kiterunner requires a resolved and pinned IP.",
-      "confidence": 0.5,
-      "verified": false
-    },
-    "enrichment": {
-      "cvss_version": "4.0"
-    },
-    "context": {
-      "iteration": 0,
-      "validation": {
-        "status": "unverified",
-        "confidence_score": 0.0,
-        "judge_notes": "",
-        "negative_control_passed": false,
-        "proof_of_execution": null,
-        "validated_at": null
-      }
-    }
-  },
-  {
-    "id": "PLUGIN_ERROR",
-    "category": "misconfiguration",
-    "severity": "info",
-    "title": "Plugin dnsx failed",
-    "description": "Plugin dnsx failed",
-    "timestamps": "2026-06-01T23:24:54.227991525Z",
-    "version": 0,
-    "source_plugin": null,
-    "scope_id": "",
-    "reactive_depth": 0,
-    "evidence": {
-      "error": "V14.1 Security Block: Command failed policy validation.",
+      "error": "V14.1 OPSEC Violation: No proxy available for client configuration.",
       "confidence": 0.5,
       "verified": false
     },

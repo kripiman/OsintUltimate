@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-**Mimikri RedTeam Core** — High-performance async-first red team assessment engine supporting multiple target types (web, network, mobile, cloud, container) with 70+ built-in plugins, distributed worker mode, and AI-powered autonomous assessment.
+**Mimikri RedTeam Core** — High-performance async-first red team assessment engine supporting multiple target types (web, network, mobile, cloud, container) with 148 built-in plugins (verified 2026-09-09 against `src/plugins/scanner_factory.rs` + `discovery_factory.rs`), distributed worker mode, and AI-powered autonomous assessment.
 
 ## Build & Test Commands
 
@@ -54,7 +54,7 @@ cargo tarpaulin --package redteam_rust_core --out Html
     └──────┬──────┘          └───────────┬────────┘
            │                             │
      ┌─────▼─────────────────────────────▼──────┐
-     │      Plugin Registry (70+ plugins)        │
+     │      Plugin Registry (148 plugins)        │
      │  ┌──────────────────────────────────────┐ │
      │  │ Reconnaissance  │ Enumeration        │ │
      │  │ Exploitation    │ Verification       │ │
@@ -326,7 +326,7 @@ Dashboard allows live mission injection (new targets added mid-scan).
 - Wiremock for HTTP mocking (external APIs)
 
 ## Known Issues & TODOs (Sprint 4.2 Backlog)
-- `rquest` (TLS impersonation) temporarily disabled due to yanked versions. Intent tracked via `tls-impersonation` feature.
+- `rquest` (TLS impersonation) has been **replaced** by `wreq`/`wreq-util` (see `tls-impersonation` feature in `Cargo.toml`) — `rquest` no longer appears in the codebase. Verified 2026-09-09.
 - `JA4S` (Server Fingerprinting): Prober currently returns a **placeholder** ("t130200_1301_000000000000"). Real prober implementation deferred to Sprint 4.2.
 - `SharpHound 2.0`: Supported via `AdIngestor` schema adaptation and `bloodhound.rs` case-insensitive matching.
 - Mobile feature requires MobSF API key (see placeholder check in plugins/mod.rs)
@@ -341,7 +341,10 @@ Dashboard allows live mission injection (new targets added mid-scan).
 - **Sink interface** — `src/core/sink.rs::DataSink` trait for output backends
 
 ## Active Audit Status
-- **Status**: ✅ AUDIT COMPLETE — All production blockers closed. Post-audit debt tracking in Phase 5–6.
+
+> ⚠️ **Stale as of 2026-09-09**: this section's `HEAD` (`c0f58b0`) is 48 commits behind the actual current HEAD. It previously existed as two contradicting copies (this file said "AUDIT COMPLETE"; `redteam_rust_core/CLAUDE.md` independently said "Sprint 11 Stage C IN PROGRESS" at a *different*, even staler HEAD `98d92a2`, 70 commits behind). That duplicate has been removed — `redteam_rust_core/CLAUDE.md` is now a symlink to this file, so there is exactly one copy from now on. The status below is carried forward as the more recent of the two conflicting snapshots, not independently re-verified against current HEAD — treat it as directional, not current, until someone re-audits.
+
+- **Status**: ✅ AUDIT COMPLETE (as of `c0f58b0`, 2026-06-05) — All production blockers closed as of that commit. Post-audit debt tracking in Phase 5–6.
 - **Closed blockers**: MEM-002 (WasmPlugin leak-once), MEM-001 (FFI leak contract), SEC-001 (LruCache bounded), SEC-002 (read_unaligned FFI), PERF-002 (dotenv→dotenvy), SEC-004 (sandbox spike doc), name interner (Option A, Arc<str> rejected by auditor)
 - **Deferred**: PERF-001 (rustls 0.21+0.23 dup — risk register), Stage C (DEGRADED — recovery path documented)
 - **HEAD**: c0f58b0 (baseline target-type fix + recovery docs)
@@ -349,7 +352,7 @@ Dashboard allows live mission injection (new targets added mid-scan).
 - **Violations cumulative**: 25 (Sprint 7=13, Sprint 7.5=5, Sprint 11=2, Sprint 4+5a bundling=1, Sprint 5a=1, Stage-C false-report=1, V24-bundling=1, V25-bundling=1)
 
 ## Backlog (carried forward)
-- `Baseline SHA256` (DEGRADED) — Root causes documented in `tests/baselines/DEGRADED_STATUS.md`: DNS pinning violations, missing external tools (nuclei, kiterunner, dnsx), V14.1 security blocks. Recovery requires: (1) install external tools, (2) configure local DNS for 127.0.0.1, (3) relax ApprovalGate for baseline capture.
+- `Baseline SHA256` (DEGRADED) — **Update 2026-09-09**: found and fixed the real bug (**BASELINE-HANG-001**) — `capture_baseline.rs`'s `memory_semaphore` was hardcoded to 1024 permits while the `permits_needed` formula in `dispatch.rs` derived its request size from a separate `hard_limit_mb=2048`; any plugin with `cost >= 6` requested more permits than the semaphore could ever grant, and `Semaphore::acquire_many()` has no timeout, so it hung forever and starved all concurrency slots. Fixed by sizing the semaphore from `memory_monitor.hard_limit_mb()`, matching the already-correct pattern in `core/orchestrator/mod.rs`. Verified: capture now completes in minutes instead of hanging indefinitely. Remaining gap: still only 2 `PLUGIN_ERROR` findings (proxy-required plugins refusing to run unproxied) — better than the 6 `PLUGIN_ERROR`s in the currently committed baseline, but not yet "real findings." Full evidence in `tests/baselines/DEGRADED_STATUS.md`. DEGRADED → now needs proxy infra for a genuinely clean capture, not a hang fix.
 - WCD cross-user refinement: req2 unauthenticated drop-cookie → sensitive match = `Confidence::Definite`
 - Reporting discipline: always run `cargo test --package redteam_rust_core` (documented cmd), not `--lib` subset
 - PERF-001 (rustls duplication) — defer until reqwest 0.12 required (see `docs/performance/PERF-001_rustls_dup.md`)

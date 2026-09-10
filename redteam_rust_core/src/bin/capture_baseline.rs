@@ -25,7 +25,14 @@ async fn main() -> Result<()> {
     let approval_gate = Arc::new(ApprovalGate::for_red_team()); 
     
     let memory_monitor = Arc::new(MemoryMonitor::new(1024, 2048, None)); // 1GB/2GB limits, no shutdown token for baseline capture
-    let memory_semaphore = Arc::new(Semaphore::new(1024)); // 1024 permits
+    // BASELINE-HANG-001: memory_semaphore MUST be sized from the same hard_limit_mb
+    // the dispatch.rs permits_needed formula reads (memory_monitor.hard_limit_mb()) —
+    // matches the pattern in core/orchestrator/mod.rs:23. A hardcoded/mismatched size
+    // here let permits_needed exceed the semaphore's real capacity for any plugin with
+    // cost >= 6, and Semaphore::acquire_many() has no timeout: that permanently hangs
+    // the task (and its concurrency_semaphore slot) with zero warning, eventually
+    // starving all 10 concurrency slots and freezing the whole capture silently.
+    let memory_semaphore = Arc::new(Semaphore::new(memory_monitor.hard_limit_mb() as usize));
     
     // 2. Define Controlled Targets (matches docker-compose.test.yml)
     let targets = vec![
