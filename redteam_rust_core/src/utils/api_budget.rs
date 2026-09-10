@@ -290,7 +290,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_database_budget_sync() {
-        let db_url = std::env::var("DATABASE_URL").unwrap_or_else(|_| "postgres://osintuser:WENYANULTRA_SECURE_PASS@localhost:5432/osintdb".to_string());
+        let db_url = std::env::var("DATABASE_URL").unwrap_or_else(|_| "postgres://osintuser@localhost:5432/osintdb".to_string());
         let pool = match sqlx::PgPool::connect(&db_url).await {
             Ok(p) => p,
             _ => {

@@ -117,41 +117,46 @@ pub async fn setup_dashboard(
                         .unwrap_or_else(|| (*cli_scope_id).clone()),
                 };
 
-                // Determine if we should push to local stream OR to database queue
-                let is_oracle = std::env::var("ORACLE_OVERRIDE").is_err() && 
+                // Determine if we should push to local stream OR to database queue.
+                // Only Oracle Cloud (OCI) egress nodes are the designated relays that
+                // fan missions out to the shared Postgres queue — matches the same
+                // is_oracle gate used in core/pipeline/stages/discovery.rs.
+                let is_oracle = std::env::var("ORACLE_OVERRIDE").is_err() &&
                                 redteam_rust_core::utils::stealth_detect::is_oracle_cloud().await;
-                
-                if let Ok(db_url) = std::env::var("DATABASE_URL") {
-                    let pool_res = sqlx::PgPool::connect(&db_url).await;
-                    if let Ok(pool) = pool_res {
-                        let exists: Option<(i64,)> = sqlx::query_as("SELECT COUNT(*) FROM scan_queue WHERE host = $1")
-                            .bind(&host.host)
-                            .fetch_optional(&pool)
-                            .await
-                            .ok()
-                            .flatten();
 
-                        if let Some((count,)) = exists {
-                            if count > 0 {
-                                info!("⏭️ [MISSION-QUEUE] Mission {} is already in the queue. Skipping DB insert, but WILL run OSINT for new subdomains.", host.host);
-                                // We don't 'continue' here anymore. We want to fall through and run the OSINT pipeline!
-                            } else {
-                                let res = sqlx::query(
-                                    "INSERT INTO scan_queue (host, target_type, tactical_context, priority, status, worker_profile) VALUES ($1, $2, $3, $4, 'pending', 'scan')"
-                                )
+                if is_oracle {
+                    if let Ok(db_url) = std::env::var("DATABASE_URL") {
+                        let pool_res = sqlx::PgPool::connect(&db_url).await;
+                        if let Ok(pool) = pool_res {
+                            let exists: Option<(i64,)> = sqlx::query_as("SELECT COUNT(*) FROM scan_queue WHERE host = $1")
                                 .bind(&host.host)
-                                .bind(format!("{:?}", host.target_type))
-                                .bind(&*host.tactical_context)
-                                .bind(1i32)
-                                .execute(&pool)
-                                .await;
-                                
-                                match res {
-                                    Ok(_) => {
-                                        info!("📦 [MISSION-QUEUE] Saved mission directly to Postgres for Distributed Swarm: {}", host.host);
-                                    }
-                                    Err(e) => {
-                                        warn!("⚠️ [MISSION-QUEUE] Failed DB insert, falling back to local stream: {}", e);
+                                .fetch_optional(&pool)
+                                .await
+                                .ok()
+                                .flatten();
+
+                            if let Some((count,)) = exists {
+                                if count > 0 {
+                                    info!("⏭️ [MISSION-QUEUE] Mission {} is already in the queue. Skipping DB insert, but WILL run OSINT for new subdomains.", host.host);
+                                    // We don't 'continue' here anymore. We want to fall through and run the OSINT pipeline!
+                                } else {
+                                    let res = sqlx::query(
+                                        "INSERT INTO scan_queue (host, target_type, tactical_context, priority, status, worker_profile) VALUES ($1, $2, $3, $4, 'pending', 'scan')"
+                                    )
+                                    .bind(&host.host)
+                                    .bind(format!("{:?}", host.target_type))
+                                    .bind(&*host.tactical_context)
+                                    .bind(1i32)
+                                    .execute(&pool)
+                                    .await;
+
+                                    match res {
+                                        Ok(_) => {
+                                            info!("📦 [MISSION-QUEUE] Saved mission directly to Postgres for Distributed Swarm: {}", host.host);
+                                        }
+                                        Err(e) => {
+                                            warn!("⚠️ [MISSION-QUEUE] Failed DB insert, falling back to local stream: {}", e);
+                                        }
                                     }
                                 }
                             }
