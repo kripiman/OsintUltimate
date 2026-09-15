@@ -61,12 +61,29 @@ pub async fn build_multi_sink(
         }
     }
 
-    // --- DISCORD NOTIFICATIONS (V14.1 Quick Alerts) ---
-    if let Some(webhook_url) = utils_config.discord_webhook_url.clone() {
-        if webhook_url.starts_with("https://discord.com/api/webhooks/") {
+    // --- DISCORD NOTIFICATIONS (V14.1 Quick Alerts, V16: all severities + auto-report on close) ---
+    match utils_config.discord_webhook_url.clone() {
+        Some(webhook_url) if webhook_url.starts_with("https://discord.com/api/webhooks/") => {
             use redteam_rust_core::core::notifications::discord::DiscordSink;
-            multi_sink.add(Box::new(DiscordSink::new(webhook_url, engine.proxy_manager())));
-            info!("🔔 [DiscordSink] Notification routing attached for High/Critical findings.");
+            multi_sink.add(Box::new(DiscordSink::new(
+                webhook_url,
+                engine.proxy_manager(),
+                utils_config.workspace_dir.clone(),
+            )));
+            info!("🔔 [DiscordSink] Notification routing attached for ALL severities (Low/Medium/High/Critical). Auto-report on scan close enabled.");
+        }
+        Some(webhook_url) => {
+            // Truncate before logging: a Discord webhook URL embeds a secret token in its path.
+            let preview: String = webhook_url.chars().take(40).collect();
+            tracing::warn!(
+                "⚠️ [DiscordSink] DISCORD_WEBHOOK_URL está configurado pero no tiene el formato esperado \
+                 (debe empezar con 'https://discord.com/api/webhooks/'). Valor recibido: '{}...'. \
+                 Notificaciones y auto-reporte por Discord DESACTIVADOS para esta ejecución.",
+                preview
+            );
+        }
+        None => {
+            tracing::info!("ℹ️ [DiscordSink] DISCORD_WEBHOOK_URL no configurado — notificaciones y auto-reporte por Discord desactivados para esta ejecución.");
         }
     }
 

@@ -73,10 +73,6 @@ impl ValidationPipeline {
         target: &TargetHost,
         proxy_manager: &ProxyManager,
     ) -> Result<Option<String>> {
-        if finding.core.severity < Severity::High {
-            return Ok(None);
-        }
-
         let category = format!("{:?}", finding.core.category).to_lowercase();
         let evidence_data = finding.evidence.primary.as_ref();
         let evidence = match evidence_data {
@@ -85,7 +81,7 @@ impl ValidationPipeline {
         };
 
         if category.contains("vulnerability") && finding.core.title.to_lowercase().contains("sqli") {
-            return Ok(Self::verify_sqli(evidence, target, proxy_manager).await);
+            return Ok(Self::verify_sqli(evidence, &finding.core.title, target, proxy_manager).await);
         }
 
         if finding.core.title.to_lowercase().contains("lfi") || finding.core.title.to_lowercase().contains("inclusion") {
@@ -103,9 +99,27 @@ impl ValidationPipeline {
         Ok(None)
     }
 
-    async fn verify_sqli(evidence: &Value, _target: &TargetHost, _pm: &ProxyManager) -> Option<String> {
+    async fn verify_sqli(evidence: &Value, title: &str, _target: &TargetHost, _pm: &ProxyManager) -> Option<String> {
         let timing = evidence.get("time_taken_ms").and_then(|v| v.as_u64()).unwrap_or(0);
-        if timing > 5000 {
+        let payload = evidence.get("payload").and_then(|v| v.as_str()).unwrap_or("").to_lowercase();
+        let title_lower = title.to_lowercase();
+
+        // Timing guard: Only accept time-delay signature if the finding explicitly targets
+        // timing/delay/blind OR the payload contains delay commands (sleep/waitfor/pg_sleep/benchmark).
+        // Prevents random network latency (>5000ms) on low/medium error-based or generic findings
+        // from falsely auto-promoting to Verified 1.0.
+        let is_time_based = title_lower.contains("time")
+            || title_lower.contains("delay")
+            || title_lower.contains("blind")
+            || payload.contains("sleep")
+            || payload.contains("waitfor")
+            || payload.contains("benchmark")
+            || payload.contains("pg_sleep")
+            || payload.contains("dbms_pipe")
+            || payload.contains("dbms_lock")
+            || payload.contains("receive_message");
+
+        if timing > 5000 && is_time_based {
             return Some(format!("Confirmed SQLi via time-delay signature ({}ms).", timing));
         }
         
@@ -278,7 +292,7 @@ impl ValidationPipeline {
         } else {
             status = ValidationStatus::Unverified;
             confidence = 0.5;
-            notes = "PASSED Negative Control. Skipping Layer 2/3 for low/medium severity.".to_string();
+            notes = "PASSED Negative Control. No deterministic proof marker found (Layer 3 AI Judge skipped for low/medium severity).".to_string();
         }
 
         finding.validation = Some(ValidationMetadata {
@@ -317,5 +331,178 @@ impl ValidationPipeline {
         b = b.replace("nslookup ", "echo ").replace("ping ", "echo ");
         b = b.replace("{{", "{").replace("}}", "}");
         b
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::models::{Category, Finding, Severity, TargetHost};
+    use crate::utils::proxy::ProxyManager;
+    use crate::utils::config::ProxyMode;
+    use serde_json::json;
+
+    fn dummy_target() -> TargetHost {
+        TargetHost {
+            host: "http://example.com".to_string(),
+            ..Default::default()
+        }
+    }
+
+    fn dummy_proxy_manager() -> ProxyManager {
+        ProxyManager::new(vec![], false, ProxyMode::None, 0)
+    }
+
+    #[tokio::test]
+    async fn test_verify_proof_low_severity_lfi() {
+        let finding = Finding::builder("f-lfi-1", Category::Vulnerability, Severity::Low, "Local File Inclusion in doc path")
+            .with_evidence(json!({
+                "response_body": "root:x:0:0:root:/root:/bin/bash\ndaemon:x:1:1:daemon:/usr/sbin:/usr/sbin/nologin"
+            }))
+            .build();
+
+        let target = dummy_target();
+        let pm = dummy_proxy_manager();
+
+        let res = ValidationPipeline::verify_proof(&finding, &target, &pm).await.unwrap();
+        assert!(res.is_some());
+        assert!(res.unwrap().contains("/etc/passwd"));
+    }
+
+    #[tokio::test]
+    async fn test_verify_proof_medium_severity_rce() {
+        let finding = Finding::builder("f-rce-1", Category::Vulnerability, Severity::Medium, "Remote Code Execution via ping")
+            .with_evidence(json!({
+                "response_body": "uid=1000(app) gid=1000(app) groups=1000(app)"
+            }))
+            .build();
+
+        let target = dummy_target();
+        let pm = dummy_proxy_manager();
+
+        let res = ValidationPipeline::verify_proof(&finding, &target, &pm).await.unwrap();
+        assert!(res.is_some());
+        assert!(res.unwrap().contains("command output verification"));
+    }
+
+    #[tokio::test]
+    async fn test_verify_proof_low_severity_xss() {
+        let nonce = "test_nonce_abc123";
+        let finding = Finding::builder("f-xss-1", Category::Vulnerability, Severity::Low, "Reflected XSS in search")
+            .with_evidence(json!({
+                "nonce": nonce,
+                "response_body": format!("<div>Result: <script>confirm('{}')</script></div>", nonce)
+            }))
+            .build();
+
+        let target = dummy_target();
+        let pm = dummy_proxy_manager();
+
+        let res = ValidationPipeline::verify_proof(&finding, &target, &pm).await.unwrap();
+        assert!(res.is_some());
+        assert!(res.unwrap().contains("exact nonce reflection"));
+    }
+
+    #[tokio::test]
+    async fn test_verify_proof_medium_severity_sqli_error() {
+        let finding = Finding::builder("f-sqli-1", Category::Vulnerability, Severity::Medium, "Error SQLi in id parameter")
+            .with_evidence(json!({
+                "response_body": "Fatal error: mysql_fetch_array() expects parameter 1 to be resource"
+            }))
+            .build();
+
+        let target = dummy_target();
+        let pm = dummy_proxy_manager();
+
+        let res = ValidationPipeline::verify_proof(&finding, &target, &pm).await.unwrap();
+        assert!(res.is_some());
+        assert!(res.unwrap().contains("mysql_fetch"));
+    }
+
+    #[tokio::test]
+    async fn test_verify_proof_without_markers_returns_none() {
+        let finding = Finding::builder("f-info-1", Category::Vulnerability, Severity::Low, "Generic information disclosure")
+            .with_evidence(json!({
+                "response_body": "Welcome to our web portal"
+            }))
+            .build();
+
+        let target = dummy_target();
+        let pm = dummy_proxy_manager();
+
+        let res = ValidationPipeline::verify_proof(&finding, &target, &pm).await.unwrap();
+        assert!(res.is_none());
+    }
+
+    #[tokio::test]
+    async fn test_verify_proof_sqli_high_latency_without_timing_context_rejected() {
+        let finding = Finding::builder("f-sqli-lag", Category::Vulnerability, Severity::Low, "SQLi parameter probe")
+            .with_evidence(json!({
+                "payload": "id=1' OR 1=1--",
+                "time_taken_ms": 6500,
+                "response_body": "User details here"
+            }))
+            .build();
+
+        let target = dummy_target();
+        let pm = dummy_proxy_manager();
+
+        let res = ValidationPipeline::verify_proof(&finding, &target, &pm).await.unwrap();
+        // Casual latency > 5000ms must NOT auto-verify if not time-based
+        assert!(res.is_none());
+    }
+
+    #[tokio::test]
+    async fn test_verify_proof_sqli_time_based_with_sleep_payload_accepted() {
+        let finding = Finding::builder("f-sqli-sleep", Category::Vulnerability, Severity::Medium, "SQLi in query")
+            .with_evidence(json!({
+                "payload": "1' AND SLEEP(5)--",
+                "time_taken_ms": 5200,
+                "response_body": "ok"
+            }))
+            .build();
+
+        let target = dummy_target();
+        let pm = dummy_proxy_manager();
+
+        let res = ValidationPipeline::verify_proof(&finding, &target, &pm).await.unwrap();
+        assert!(res.is_some());
+        assert!(res.unwrap().contains("time-delay signature"));
+    }
+
+    #[tokio::test]
+    async fn test_verify_proof_sqli_time_based_with_delay_title_accepted() {
+        let finding = Finding::builder("f-sqli-blind", Category::Vulnerability, Severity::Low, "Time-delay Blind SQLi in user_id")
+            .with_evidence(json!({
+                "payload": "",
+                "time_taken_ms": 5500,
+                "response_body": ""
+            }))
+            .build();
+
+        let target = dummy_target();
+        let pm = dummy_proxy_manager();
+
+        let res = ValidationPipeline::verify_proof(&finding, &target, &pm).await.unwrap();
+        assert!(res.is_some());
+        assert!(res.unwrap().contains("time-delay signature"));
+    }
+
+    #[tokio::test]
+    async fn test_verify_proof_sqli_oracle_time_based_accepted() {
+        let finding = Finding::builder("f-sqli-oracle", Category::Vulnerability, Severity::Medium, "Oracle SQLi injection")
+            .with_evidence(json!({
+                "payload": "1' AND DBMS_PIPE.RECEIVE_MESSAGE('RDS', 5)=1--",
+                "time_taken_ms": 5300,
+                "response_body": ""
+            }))
+            .build();
+
+        let target = dummy_target();
+        let pm = dummy_proxy_manager();
+
+        let res = ValidationPipeline::verify_proof(&finding, &target, &pm).await.unwrap();
+        assert!(res.is_some());
+        assert!(res.unwrap().contains("time-delay signature"));
     }
 }

@@ -90,6 +90,7 @@ pub fn get_all_scanners<M: ExecutorMode>(config: GlobalConfig<M>) -> Vec<Box<dyn
     use crate::plugins::enumeration::web::corsy::CorsyScanner; // NUEVO
     use crate::plugins::enumeration::web::wcd::WcdScanner; // NUEVO
     use crate::plugins::exploitation::web::ssrf_king::SsrfKingScanner;
+    use crate::plugins::exploitation::web::active_ssrf::ActiveSsrfScanner;
     use crate::plugins::exploitation::web::tplmap::TplmapScanner;
     use crate::plugins::exploitation::web::openredirex::OpenRedirexScanner;
     use crate::plugins::enumeration::web::linkfinder::LinkFinderScanner;
@@ -255,6 +256,7 @@ pub fn get_all_scanners<M: ExecutorMode>(config: GlobalConfig<M>) -> Vec<Box<dyn
         Box::new(CorsyScanner::new()),
         Box::new(WcdScanner::new()),
         Box::new(SsrfKingScanner::new(config.proxy_manager.clone())),
+        Box::new(ActiveSsrfScanner::new(config.proxy_manager.clone())),
         Box::new(TplmapScanner::new()),
         Box::new(OpenRedirexScanner::new()),
         Box::new(LinkFinderScanner::new(&config)),

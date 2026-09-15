@@ -79,6 +79,7 @@ pub enum Capability {
     AuthStateMachine,   // V14.6: Stateful OAuth/custom auth flow probing
     FaviconAssetDiscovery, // V14.3 Sprint 11.B: Favicon hash pivot for related asset discovery
     CredentialLeakValidation, // V14.3 Sprint 11.C: Credential leak validation via h8mail + HIBP
+    Ssrf, // Active & blind SSRF probing via OOB callback
 }
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, PartialOrd, Ord)]

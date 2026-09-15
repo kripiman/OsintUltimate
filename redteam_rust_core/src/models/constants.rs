@@ -154,6 +154,7 @@ pub const PLUGIN_PPMAP: &str = "PpmapScanner";
 pub const PLUGIN_CORSY: &str = "CorsyScanner";
 pub const PLUGIN_WCD: &str = "WcdScanner";
 pub const PLUGIN_SSRF_KING: &str = "SsrfKingScanner";
+pub const PLUGIN_ACTIVE_SSRF: &str = "ActiveSsrfScanner";
 pub const PLUGIN_COMMIX: &str = "CommixScanner";
 pub const PLUGIN_TPLMAP: &str = "TplmapScanner";
 pub const PLUGIN_OPEN_REDIRECT: &str = "OpenRedirexScanner";

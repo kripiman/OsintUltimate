@@ -199,6 +199,7 @@ redteam_rust_core/.uncover-config/
 # graphify cache and timestamp archives
 graphify-out/cache/
 graphify-out/20*
+graphify-out/.graphify_python*
 
 
 # Markdown offline preview
