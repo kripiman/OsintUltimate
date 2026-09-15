@@ -90,9 +90,9 @@
     "semantic_hash": "834f34843c5fb1c5127020f05a76abff"
   },
   "redteam_rust_core/src/boot/sink_setup.rs": {
-    "mtime": 1783348311.8297057,
-    "ast_hash": "9ddc2b6479fe74773bace9ded548654b",
-    "semantic_hash": "9ddc2b6479fe74773bace9ded548654b"
+    "mtime": 1789486712.4525466,
+    "ast_hash": "e9481f77bd798f608bec55adb1b00d2c",
+    "semantic_hash": ""
   },
   "redteam_rust_core/src/boot/stealth.rs": {
     "mtime": 1783348311.8297057,
@@ -555,8 +555,8 @@
     "semantic_hash": "cd74b1c3bd991fd9211a0ee147214602"
   },
   "redteam_rust_core/src/core/notifications/discord.rs": {
-    "mtime": 1788915469.7800808,
-    "ast_hash": "8a4df916c5d6fe520e9dae433c6c228b",
+    "mtime": 1789486703.506666,
+    "ast_hash": "aca5e2935cce1b120f8dcb7ef791ef2b",
     "semantic_hash": ""
   },
   "redteam_rust_core/src/core/notifications/mod.rs": {
@@ -855,9 +855,9 @@
     "semantic_hash": "df1451fe43a9cb7298326f8a2dd91c86"
   },
   "redteam_rust_core/src/core/verification/pipeline.rs": {
-    "mtime": 1783348311.83453,
-    "ast_hash": "8a2e1b810dd0def6b83f7648bdd3857b",
-    "semantic_hash": "8a2e1b810dd0def6b83f7648bdd3857b"
+    "mtime": 1789504919.3069694,
+    "ast_hash": "d2e5b200e6e94d5d1dad418014e48b54",
+    "semantic_hash": ""
   },
   "redteam_rust_core/src/core/waf/engine.rs": {
     "mtime": 1783348311.8346093,
@@ -1060,9 +1060,9 @@
     "semantic_hash": "b1da6b7a8d01b63ba9f66d80c169ce78"
   },
   "redteam_rust_core/src/models/constants.rs": {
-    "mtime": 1783348311.8372173,
-    "ast_hash": "0ddc3a7773e7f9842b817d703e1f62f1",
-    "semantic_hash": "0ddc3a7773e7f9842b817d703e1f62f1"
+    "mtime": 1789503096.5480144,
+    "ast_hash": "a6c4bc344aaff0f1f63a86fc72b71d6c",
+    "semantic_hash": ""
   },
   "redteam_rust_core/src/models/engagement.rs": {
     "mtime": 1783348311.8372746,
@@ -1710,9 +1710,9 @@
     "semantic_hash": "2d76ccd6342f56223c53476463bf202e"
   },
   "redteam_rust_core/src/plugins/exploitation/web/mod.rs": {
-    "mtime": 1783348311.8405397,
-    "ast_hash": "1a61d1d95a9e25d12adb676b31090a52",
-    "semantic_hash": "1a61d1d95a9e25d12adb676b31090a52"
+    "mtime": 1789503124.6220438,
+    "ast_hash": "30342dbf38bb74660305f53cc6093a32",
+    "semantic_hash": ""
   },
   "redteam_rust_core/src/plugins/exploitation/web/nomore403.rs": {
     "mtime": 1783348311.84057,
@@ -1850,9 +1850,9 @@
     "semantic_hash": "e1d4359e4533248f1ecdd0e106d28af3"
   },
   "redteam_rust_core/src/plugins/mod.rs": {
-    "mtime": 1783348311.8412962,
-    "ast_hash": "9fe550dfbc12c5031776227e1c4947fa",
-    "semantic_hash": "9fe550dfbc12c5031776227e1c4947fa"
+    "mtime": 1789503086.9310043,
+    "ast_hash": "f81bc9546065ab3216d1ed64671317f2",
+    "semantic_hash": ""
   },
   "redteam_rust_core/src/plugins/persistence/havoc.rs": {
     "mtime": 1783348311.8413808,
@@ -2070,9 +2070,9 @@
     "semantic_hash": "84d848d7a8e05bdc8fc7b65b3b556f53"
   },
   "redteam_rust_core/src/plugins/scanner_factory.rs": {
-    "mtime": 1783348311.8425195,
-    "ast_hash": "2bc198b236f098a377762251489c219b",
-    "semantic_hash": "2bc198b236f098a377762251489c219b"
+    "mtime": 1789503148.72807,
+    "ast_hash": "029448c0080ef81713d7e3e7264ca82a",
+    "semantic_hash": ""
   },
   "redteam_rust_core/src/plugins/triage/bk_tree.rs": {
     "mtime": 1783348311.8425715,
@@ -2699,34 +2699,14 @@
     "ast_hash": "648c9f87e7318113693c8c2094f39d94",
     "semantic_hash": ""
   },
-  ".offline-markdown-preview/remote-images/771cf10906b596974c80720c.svg": {
-    "mtime": 1788956260.5190632,
-    "ast_hash": "cdb92d4bc021c2bae28d4a7f0a259151",
-    "semantic_hash": ""
-  },
-  ".offline-markdown-preview/remote-images/a486c22f37f87acc53ec954f.svg": {
-    "mtime": 1788956262.976591,
-    "ast_hash": "a614136ca5182f9b99e4d95610ea06cf",
-    "semantic_hash": ""
-  },
-  ".offline-markdown-preview/remote-images/c04092685ab23d14d1e5dfbe.svg": {
-    "mtime": 1788956259.3739133,
-    "ast_hash": "2056cd98eea589e724ca6afe0e1f82c0",
-    "semantic_hash": ""
-  },
-  ".offline-markdown-preview/remote-images/d33839c510cfc1d63af4def3.svg": {
-    "mtime": 1788956261.9541876,
-    "ast_hash": "0d24ca24d8bf77e0a4900339ef7ec465",
-    "semantic_hash": ""
-  },
-  ".offline-markdown-preview/remote-images/d9c4474340e009e41ed9599a.svg": {
-    "mtime": 1788956258.0697212,
-    "ast_hash": "75dd30111d0f346546bfadda6a365721",
-    "semantic_hash": ""
-  },
   "redteam_rust_core/docs/VPS_DO_ALTERNATIVES.md": {
-    "mtime": 1789069960.291591,
-    "ast_hash": "b7bf8c83d84318082f25c984f8ee8daa",
+    "mtime": 1789074599.8531997,
+    "ast_hash": "100a66a797b5e794053081cfca40abd2",
+    "semantic_hash": ""
+  },
+  "redteam_rust_core/src/plugins/exploitation/web/active_ssrf.rs": {
+    "mtime": 1789504224.8202868,
+    "ast_hash": "54fc9d2c6abeb7588cc82a1e3b5bfca0",
     "semantic_hash": ""
   }
 }

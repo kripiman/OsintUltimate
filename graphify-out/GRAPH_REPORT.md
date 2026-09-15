@@ -1,16 +1,16 @@
-# Graph Report - OsintUltimate  (2026-09-10)
+# Graph Report - OsintUltimate  (2026-09-15)
 
 ## Corpus Check
-- 528 files · ~267,565 words
+- 529 files · ~270,281 words
 - Verdict: corpus is large enough that graph structure adds value.
 
 ## Summary
-- 6806 nodes · 13283 edges · 432 communities (425 shown, 7 thin omitted)
+- 6847 nodes · 13391 edges · 444 communities (436 shown, 8 thin omitted)
 - Extraction: 99% EXTRACTED · 1% INFERRED · 0% AMBIGUOUS · INFERRED: 163 edges (avg confidence: 0.8)
 - Token cost: 0 input · 0 output
 
 ## Graph Freshness
-- Built from commit: `6c917127`
+- Built from commit: `b99ab7b2`
 - Run `git rev-parse HEAD` and compare to check if the graph is stale.
 - Run `graphify update .` after code changes (no API cost).
 
@@ -19,32 +19,32 @@
 - ProxyManager
 - QuinnEvasionClient
 - PostgresSink
-- Cache Deception Detection
+- cache_deception.rs
 - OobInteractionManager
 - Decoy Configuration Management
 - BkTree
 - JA4 Evasion Client
 - Objective
-- WorkerProfile
+- worker.rs
 - StaticPolicy
 - S3BucketScanner
 - TcpEvasionStrategy
-- TokenBudget
-- PipelineBuilder
-- PluginMetadata
-- CoreFinding
+- constants.rs
+- PipelineBuilder<M>
+- DummyDestructivePlugin
+- CredentialLeakScanner
 - TargetHost
 - TieredAIRouter
 - Finding
 - NetEvasionOrchestrator
-- Self
+- IpBuilder
 - CorrelationEngine
 - AbuseIPDBScanner
 - Authentication State Machine
 - ECH Client Management
-- MockMonitor
+- MockPlugin
 - Favicon Hash Scanner
-- ScannerPlugin
+- DynamicPluginLoader
 - DataSanitizer
 - ApprovalGate
 - MemoryMonitor
@@ -55,7 +55,7 @@
 - OptimizationLevel
 - c2/mod.rs
 - LivenessChecker
-- NatsSink
+- DataSink
 - lateral_movement_test.rs
 - CVE Cache Management
 - McpServer
@@ -63,7 +63,7 @@
 - TacticalPlan
 - StealthExecutor
 - Buffered Sink Management
-- JWT Forging Scanner
+- JwtForgeScanner
 - Privilege Escalation Scanner
 - Lock-Free Sink Management
 - QUIC Key Management
@@ -80,22 +80,22 @@
 - .process_finding
 - Web Application Management
 - OSV Package Scanner
-- CredentialLeakScanner
+- BountySink
 - Caido Scanner
 - DecisionConfig
-- kimi_cli.rs
-- DigitalOceanClient
+- ai/mod.rs
+- PluginMetadata
 - TCP Session Management
 - Program Analysis
 - Finding Metrics Management
 - WebFuzzer
-- MobSF Scanner
-- Sliver Scanner
+- MobSFScanner<M>
+- SliverScanner<M>
 - Sovereign Recon Scanner
-- API Budget Management
+- ApiBudgetRegistry
 - Red Team Framework
-- FalsePositiveFilter
-- DiscoveryPlugin
+- MockMonitor
+- spawn_discovery_stage
 - Credential Probing
 - Vigil Scanner
 - Commix Scanner
@@ -104,7 +104,7 @@
 - common.rs
 - IoUring Scanner
 - ScanLayerPolicy
-- PolicyProvider
+- MiddlewareRegistry
 - Reactive Engine Management
 - SkillManager
 - Source Analysis
@@ -118,7 +118,7 @@
 - Legitimate Proxy Management
 - WAFW00F Scanner
 - Certificate Stream Processing
-- cvss.rs
+- OpenRedirexScanner
 - Checkov Security Scanning
 - Katana Security Scanner
 - Responder Log Analysis
@@ -129,22 +129,22 @@
 - KubescapeScanner
 - AF XDP Channel Management
 - SEC-004 Sandbox Spike — FluidLocal Tier Hardening for net_evasion
-- SwarmOrchestrator
-- BBScopeScanner
+- swarm/mod.rs
+- DiscoveryResult
 - Nmap XML Parsing
 - RustScan Network Scanning
-- OpenRedirexScanner
+- TsunamiScanner
 - WhatWeb Scanner
 - APKLeaks Analysis
 - ApktoolScanner
 - DrozerScanner
 - JadxScanner
 - BloodHound Data Ingestion
-- Sovereign Recon Management
+- SearchsploitScanner
 - PlatformClient
 - Process Guard Management
 - Target Query Management
-- worker.rs
+- Args
 - GeminiClient
 - File Ranking System
 - BloodHound Data Ingestor
@@ -171,15 +171,15 @@
 - 6. Loki + Grafana + Tempo (observability stack)
 - AnthropicClient
 - Tool Management
-- ScopeSyncer
+- SovereignReconScanner
 - PocValidator
 - Kerbrute Scanner
 - FFUF Scanner
 - InQL Scanner
-- JsluiceScanner
+- Command
 - ObjectionScanner
 - SliverFeedbackLoop
-- triage/fingerprint.rs
+- Orchestrator
 - Ligolo Scanner
 - CDN Check Scanner
 - Dnsx Scanner
@@ -189,10 +189,10 @@
 - Parity Report Management
 - Autonomous Agent Management
 - .verify_proof
-- .dfs_paths
+- AttackPath
 - H2C Probe Client
 - Scanning Management
-- Webhook Management
+- TacticalWebhookSink
 - Approval Management
 - CosignScanner
 - VPS — Alternativas / Clones de DigitalOcean (efímeros o no)
@@ -201,7 +201,7 @@
 - CloudBrute Scanner
 - CloudEnum Scanner
 - CloudFox Scanner
-- TriageEngine
+- KubeBenchScanner
 - Pacu Scanner
 - Prowler Scanner
 - ScoutSuiteScanner
@@ -210,7 +210,7 @@
 - CrackqlScanner
 - GraphW00fScanner
 - SchemathesisScanner
-- build_report
+- ArjunScanner
 - CorsyScanner
 - CRLF Scanner
 - Feroxbuster Scanner
@@ -220,14 +220,14 @@
 - Interactsh Scanner
 - JWKS Discovery Scanner
 - Kiterunner Scanner
-- Nikto Scanner
+- NiktoScanner
 - handle_execute_plugin
 - SecretFinderScanner<M>
 - Snallygaster Scanner
 - Wcvs Scanner
-- WP Scanner
+- WPScanner
 - X8Scanner
-- DiscoveryResult
+- PpmapScanner
 - Coercer Scanner
 - Impacket Scanner
 - NetExec Scanner
@@ -237,12 +237,12 @@
 - Deserialization Scanner
 - GraphQL Cop Scanner
 - SmugglerScanner
-- Wapiti Scanner
+- ImdsBypassScanner
 - Jaeles Scanner
-- Searchsploit Scanner
+- active_ssrf.rs
 - ADR-012: AI Context Pipeline Hardening & Dense Serialization
 - ASNMap Scanner
-- Httpx Scanner
+- PurednsScanner
 - Naabu Scanner
 - AlterX Scanner
 - Amass Scanner
@@ -253,14 +253,14 @@
 - TruffleHog Scanner
 - Wayback Scanner
 - Waymore Scanner
-- PluginRegistry
+- ScannerPlugin
 - Severity
 - DNS Hijack Verifier
 - Secret Validator
 - 10 — End-to-End Smoke Test
 - Payload Server
 - detect_tool_system
-- Config
+- MultiSink
 - Base LLM Client
 - Plugin Namespaces
 - .build_default_router
@@ -277,26 +277,26 @@
 - SqlMapScanner
 - Subzy Scanner
 - GitHub Dorks Scanner
-- CavemanLevel
+- ZapScanner
 - PoC Verifier
-- Zap Scanner
-- Bounty Exporter
+- security.rs
+- BountyExporter
 - Correlation Engine (V15.1)
-- AzureOpenAIClient
-- .decide_action
-- Secret Scrubber
-- GoogleAIStudioClient
 - LlmClient
-- ai/types.rs
+- .decide_action
+- PipelineBuilder
+- GoogleAIStudioClient
+- GroqClient
+- EngagementState
 - OllamaClient
 - OpenAIClient
 - QUIC Evasion Strategy
-- Discord Sink
+- DiscordSink
 - GarakScanner<M>
 - SSRFMap Scanner
 - ScanMetadata
 - Hybrid Deployment Topology — Oracle Control Plane + DigitalOcean Ephemeral Data Plane
-- IpBuilder
+- .split_packet
 - Markdown Sink
 - AIAnalysis
 - LinkFinder Scanner
@@ -311,7 +311,7 @@
 - KimiClient
 - 07 — Dashboard Public Access via Cloudflare Tunnel
 - Program Config
-- security.rs
+- PolicyProvider
 - Sprint 3 Walkthrough - Advanced Hardening
 - Ingestor
 - Network Topology Probing
@@ -319,22 +319,22 @@
 - Container Status Management
 - DonutScanner
 - 07b — Box2: Dashboard Access via mimikri.me (Cloudflare Tunnel)
-- Command
+- ValidationMetadata
 - 🎯 P0-1: tcp_session.rs — iptables Bypass
 - Report Generation
 - Mobile Scan Submission
 - 🧪 Plan de Testing
-- Correlation Processing
+- WapitiScanner
 - Ethernet Frame Parsing
-- C2Operator
+- bug_bounty/tests.rs
 - Monitoring Loop
 - Asset Serving
-- Report Exporting
-- 🎯 P0-2: SEC-004 Rec#2 — net_evasion → StrictDocker
+- BurpScanner
+- ScopeSyncer
 - net.rs
-- sliver_feedback.rs
+- transport.rs
 - 07b — Box2: Dashboard Access via mimikri.me (Cloudflare Tunnel)
-- Credential Management
+- get_credentials
 - Benchmarking
 - Lazy
 - Proxy Management
@@ -353,7 +353,7 @@
 - Main Application Entry
 - Deployment Runbook — Overview & Threat Model
 - 02 — Box1: AI Enrichment (Ollama Client + Router + BloodHound) + OCI Paid Services ⚠️ Sacrificable
-- DataSink
+- TimelineSink
 - Health Checking
 - 05 — Box4: Interactsh OOB Server (Azure Africa VPS) ✅ Permanent
 - .new
@@ -361,11 +361,11 @@
 - Finding Enrichment
 - .request
 - .request
-- Orchestrator
+- AiScanProfile
 - OAuthScanner
 - 🧠 AI Infrastructure & Prompt Engineering
 - Swarm Intelligence & Multi-Agent System
-- SsrfKingScanner
+- CertipyScanner
 - 5. External AI Tool Token Strategy (Garak / PyRIT / Promptfoo / etc.) `sovereign`
 - Mimikri Core — System Architecture Reference
 - 05 — Tailscale Cross-Tenancy Mesh + ACL Policy
@@ -375,44 +375,56 @@
 - 🛡️ THE RED TEAM / BUG BOUNTY LIFECYCLE (PHASES)
 - Decisions
 - Stealth & OPSEC Architecture
-- bug_bounty/tests.rs
+- triage/fingerprint.rs
 - Mimikri RedTeam Core — Documentation Index
 - 審 Phase 1 計劃 (Review of Phase 1 Plan)
 - ARCH-11 Phase 1: Orchestrator Domain Decomposition (Stage 4 Finalization)
 - Mimikri RedTeam Core — Documentation Index
 - 🔥 REMEDIACIÓN P0 — Vulnerabilidades Críticas
-- BugBountyDraftSink
-- 🎯 P1-3: source_analyzer.rs git
+- TriageEngine
+- C2Operator
 - OSINT-ULTIMATE: LEAD SECURITY HARDENING ENGINEER (V14.1)
 - 7. Cost Model — Student Credit Only (Zero Out-of-Pocket Target)
 - 4. Nginx — Reverse Proxy + SSL
 - ADR-011: Orchestrator Domain Decomposition & SSOT Strategy
 - 8. Failure and Degradation Modes
 - Sprint 3: Advanced Cloud & GraphQL Hardening (2026-05-14)
-- submit_mission
+- HttpxScanner
 - Sprint Audit Remediation Handoff — Post-Production Blockers (2026-06-05)
 - 1. Hardening inicial del servidor
 - 6. Herramientas BlackArch y seguridad
 - ScareCrowScanner
-- generate_dashboard_token
+- BugBountyDraftSink
+- TargetProcessContext
 - 🗺️ OsintUltimate Cloud Roadmap
 - 📜 奏摺圖錄 (ROADMAP: BOUNTY EXPORTER)
 - MEMORIA
 - 3. Rust y compilación ARM64
 - Decisions
+- FalsePositiveFilter
 - 📜 Plugin Metadata Audit Report
 - Correlation Engine State (V15.1)
+- spawn_liveness_stage
 - 2. Docker y PostgreSQL
+- .select_tools
+- .for_red_team
 - RTK Protocol & Division of Authority
 - 12. Tailscale — Instalación y configuración OPSEC
 - Prompt de Auditoría de Seguridad (V11 -> V12)
+- .sovereign_handover
+- correlation.rs
+- export_report
+- build_report
+- 🎯 P0-3: Wildcard Fail-Secure
+- objectives_tests.rs
+- 🎯 P0-2: SEC-004 Rec#2 — net_evasion → StrictDocker
 
 ## God Nodes (most connected - your core abstractions)
-1. `Finding` - 338 edges
-2. `TargetHost` - 313 edges
-3. `ScannerPlugin` - 180 edges
-4. `PluginMetadata` - 178 edges
-5. `Capability` - 166 edges
+1. `Finding` - 340 edges
+2. `TargetHost` - 316 edges
+3. `ScannerPlugin` - 181 edges
+4. `PluginMetadata` - 179 edges
+5. `Capability` - 167 edges
 6. `GlobalConfig` - 59 edges
 7. `StealthExecutor` - 52 edges
 8. `TieredAIRouter` - 49 edges
@@ -420,14 +432,14 @@
 10. `DataSink` - 47 edges
 
 ## Surprising Connections (you probably didn't know these)
-- `main()` --calls--> `dispatch_scan()`  [INFERRED]
-  redteam_rust_core/src/bin/capture_baseline.rs → redteam_rust_core/src/core/orchestrator/dispatch.rs
+- `build_target_stream()` --calls--> `validate_target()`  [INFERRED]
+  redteam_rust_core/src/boot/targets.rs → redteam_rust_core/src/utils/security.rs
+- `main()` --calls--> `get_all_scanners()`  [INFERRED]
+  redteam_rust_core/src/bin/capture_baseline.rs → redteam_rust_core/src/plugins/scanner_factory.rs
 - `setup_dashboard()` --calls--> `generate_dashboard_token()`  [INFERRED]
   redteam_rust_core/src/boot/dashboard.rs → redteam_rust_core/src/core/web/mod.rs
 - `build_multi_sink()` --calls--> `is_ssrf_safe_host_async()`  [INFERRED]
   redteam_rust_core/src/boot/sink_setup.rs → redteam_rust_core/src/utils/security.rs
-- `build_target_stream()` --calls--> `validate_target()`  [INFERRED]
-  redteam_rust_core/src/boot/targets.rs → redteam_rust_core/src/utils/security.rs
 - `GraphAnalyzer` --references--> `AttackGraph`  [EXTRACTED]
   redteam_rust_core/src/core/correlation/analyzer.rs → redteam_rust_core/src/core/correlation/mod.rs
 
@@ -439,31 +451,31 @@
 ## Hyperedges (group relationships)
 - **Mimikri RedTeam Core Architecture** — core_engine, core_pipeline, core_orchestrator, core_reactive_engine, core_plugin_loader, core_sink, core_factory, core_approval_gate, core_policy, core_resource_manager [EXTRACTED 0.75]
 
-## Communities (432 total, 7 thin omitted)
+## Communities (444 total, 8 thin omitted)
 
 ### Community 0 - "WafEvasionEngine"
 Cohesion: 0.07
 Nodes (35): Engine, Default, Result, Self, String, WasmRuntime, EvasionAttempt, RequestContext (+27 more)
 
 ### Community 1 - "ProxyManager"
-Cohesion: 0.07
-Nodes (30): AbortHandle, MutexGuard, ProxyManager, Result, String, Vec, ProxyManager, Arc (+22 more)
+Cohesion: 0.05
+Nodes (46): AbortHandle, MutexGuard, CreateDropletRequest, DigitalOceanClient, Droplet, generate_user_data(), Network, Networks (+38 more)
 
 ### Community 2 - "QuinnEvasionClient"
 Cohesion: 0.13
 Nodes (16): Connection, RecvStream, QuinnConnection, QuinnEvasionClient, Arc, AtomicBool, ClientConfig, Duration (+8 more)
 
 ### Community 3 - "PostgresSink"
-Cohesion: 0.09
-Nodes (24): BountySink, make_finding(), Arc, Option, PgPool, Result, Self, String (+16 more)
+Cohesion: 0.16
+Nodes (10): AgentSession, PostgresSink, HashMap, Into, Option, PathBuf, PgPool, Result (+2 more)
 
-### Community 4 - "Cache Deception Detection"
-Cohesion: 0.06
-Nodes (31): CacheDeceptionConfig, CacheDeceptionProbe, CacheDeceptionResult, HashMap, Option, Response, Result, String (+23 more)
+### Community 4 - "cache_deception.rs"
+Cohesion: 0.08
+Nodes (23): CacheDeceptionConfig, CacheDeceptionProbe, CacheDeceptionResult, HashMap, Option, Response, Result, String (+15 more)
 
 ### Community 5 - "OobInteractionManager"
-Cohesion: 0.12
-Nodes (16): InteractshPollResponse, OobInteraction, OobInteractionManager, Arc, Option, ProxyManager, Result, Self (+8 more)
+Cohesion: 0.08
+Nodes (23): InteractshPollResponse, OobInteraction, OobInteractionManager, Arc, Option, ProxyManager, Result, Self (+15 more)
 
 ### Community 6 - "Decoy Configuration Management"
 Cohesion: 0.06
@@ -478,12 +490,12 @@ Cohesion: 0.07
 Nodes (39): Ja4EvasionClient, Client, Response, Result, Self, String, test_client_construction(), test_unknown_ja4_fallback() (+31 more)
 
 ### Community 9 - "Objective"
-Cohesion: 0.07
-Nodes (31): EngagementState, DateTime, P, Result, Self, String, Utc, Vec (+23 more)
+Cohesion: 0.14
+Nodes (20): Objective, ObjectivePhase, ObjectiveStatus, OPPLAN, OpsecLevel, DateTime, Display, Formatter (+12 more)
 
-### Community 10 - "WorkerProfile"
-Cohesion: 0.18
-Nodes (7): Display, Err, Formatter, FromStr, Result, Self, WorkerProfile
+### Community 10 - "worker.rs"
+Cohesion: 0.11
+Nodes (16): mock_args_cve_only(), mock_args_with_profile(), resolve_max_layer(), resolve_worker_profile(), run_worker_mode(), test_resolve_profile_cve_alias(), test_resolve_profile_cve_correlation(), test_resolve_profile_enrich() (+8 more)
 
 ### Community 11 - "StaticPolicy"
 Cohesion: 0.14
@@ -497,45 +509,45 @@ Nodes (26): c_char, M, Option, Result, Self, String, Value, Vec (+18 more)
 Cohesion: 0.07
 Nodes (24): NetEvasionStrategy, Send, Sync, TcpEvasionStrategy, Ipv4Addr, Result, SocketAddrV4, TcpFastOpenBypass (+16 more)
 
-### Community 14 - "TokenBudget"
+### Community 14 - "constants.rs"
+Cohesion: 0.08
+Nodes (24): Arc, AtomicU32, Drop, Option, Self, TaskPriority, TokenBudget, TokenGuard (+16 more)
+
+### Community 15 - "PipelineBuilder<M>"
+Cohesion: 0.18
+Nodes (7): PipelineBuilder<M>, Arc, Box, Default, M, Result, Self
+
+### Community 16 - "DummyDestructivePlugin"
+Cohesion: 0.15
+Nodes (6): DummyDestructivePlugin, DummyPolicy, Option, Result, String, Vec
+
+### Community 17 - "CredentialLeakScanner"
 Cohesion: 0.07
-Nodes (25): Arc, AtomicU32, Drop, Option, Self, TaskPriority, TokenBudget, TokenGuard (+17 more)
-
-### Community 15 - "PipelineBuilder"
-Cohesion: 0.12
-Nodes (15): PipelineBuilder, PipelineBuilder<M>, Arc, Box, CancellationToken, DashMap, Default, M (+7 more)
-
-### Community 16 - "PluginMetadata"
-Cohesion: 0.07
-Nodes (20): RetireScanner, Default, Result, Self, String, Vec, SourceMapperScanner, SubJSScanner (+12 more)
-
-### Community 17 - "CoreFinding"
-Cohesion: 0.13
-Nodes (19): Deref, CoreFinding, ExecutionContext, DateTime, Option, String, Utc, Vec (+11 more)
+Nodes (37): OnceLock, CredentialLeakScanner, H8mailHit, Client, Default, HashSet, Option, Regex (+29 more)
 
 ### Community 18 - "TargetHost"
 Cohesion: 0.13
-Nodes (14): diff_target(), PgPool, Result, PocValidator<M>, Result, String, PocValidator<M>, Option (+6 more)
+Nodes (16): diff_target(), PgPool, Result, PocValidator<M>, Result, String, default_arc_json(), Arc (+8 more)
 
 ### Community 19 - "TieredAIRouter"
-Cohesion: 0.15
-Nodes (19): ArcSwap, Iterator, iter_levels_upward(), RouterError, Arc, Cache, Default, Duration (+11 more)
+Cohesion: 0.08
+Nodes (37): ArcSwap, Iterator, CavemanOptimizer, String, iter_levels_upward(), RouterError, Arc, Cache (+29 more)
 
 ### Community 20 - "Finding"
-Cohesion: 0.09
-Nodes (15): PluginRagManager, Option, Vec, Category, Finding, FindingBuilder, Option, Self (+7 more)
+Cohesion: 0.08
+Nodes (20): Deref, Category, CoreFinding, ExecutionContext, DateTime, Option, String, Utc (+12 more)
 
 ### Community 21 - "NetEvasionOrchestrator"
 Cohesion: 0.20
 Nodes (9): EvasionResult, NetEvasionOrchestrator, Ipv4Addr, Mutex, Result, Self, SocketAddrV4, Value (+1 more)
 
-### Community 22 - "Self"
+### Community 22 - "IpBuilder"
 Cohesion: 0.12
-Nodes (9): IcmpBuilder, PacketForge, Ipv4Addr, Option, Self, Vec, TcpBuilder, test_ip_builder_checksum() (+1 more)
+Nodes (10): IcmpBuilder, IpBuilder, PacketForge, Ipv4Addr, Option, Self, Vec, TcpBuilder (+2 more)
 
 ### Community 23 - "CorrelationEngine"
 Cohesion: 0.11
-Nodes (15): AttackGraph, AttackPath, CorrelationEngine, OutcomeType, Default, HashMap, HashSet, Option (+7 more)
+Nodes (14): AttackGraph, CorrelationEngine, OutcomeType, Default, HashMap, HashSet, Option, Path (+6 more)
 
 ### Community 24 - "AbuseIPDBScanner"
 Cohesion: 0.20
@@ -549,25 +561,25 @@ Nodes (20): AuthStateMachineScanner, mock_proxy(), mock_target(), Arc, Client, O
 Cohesion: 0.11
 Nodes (19): EchStatus, EchClient, EchConnection, Arc, ClientConfig, Result, Self, TcpStream (+11 more)
 
-### Community 27 - "MockMonitor"
-Cohesion: 0.10
-Nodes (12): PluginStatus, MockMonitor, Arc, AtomicU32, Mutex, Result, Vec, test_monitor_stop_on_crash() (+4 more)
+### Community 27 - "MockPlugin"
+Cohesion: 0.18
+Nodes (5): PluginStatus, MockPlugin, Result, Sender, Vec
 
 ### Community 28 - "Favicon Hash Scanner"
 Cohesion: 0.17
 Nodes (18): FaviconHashScanner, Client, Default, Option, Result, Self, String, Vec (+10 more)
 
-### Community 29 - "ScannerPlugin"
-Cohesion: 0.18
-Nodes (13): Library, DynamicPluginLoader, LoadedPlugin, Arc, Box, Default, Path, Result (+5 more)
+### Community 29 - "DynamicPluginLoader"
+Cohesion: 0.16
+Nodes (12): Library, DynamicPluginLoader, LoadedPlugin, Arc, Box, Default, Path, Result (+4 more)
 
 ### Community 30 - "DataSanitizer"
-Cohesion: 0.15
-Nodes (15): LruCache, DataSanitizer, OutputFilter, Arc, Default, HashMap, RwLock, Self (+7 more)
+Cohesion: 0.13
+Nodes (18): LruCache, DataSanitizer, FilterStrategy, OutputFilter, Arc, Default, HashMap, Regex (+10 more)
 
 ### Community 31 - "ApprovalGate"
-Cohesion: 0.17
-Nodes (18): ApprovalGate, ApprovalRequest, ApprovalStatus, AuditLogEntry, Arc, DashMap, DateTime, Option (+10 more)
+Cohesion: 0.21
+Nodes (17): ApprovalGate, ApprovalRequest, ApprovalStatus, AuditLogEntry, Arc, DashMap, DateTime, Option (+9 more)
 
 ### Community 32 - "MemoryMonitor"
 Cohesion: 0.20
@@ -578,8 +590,8 @@ Cohesion: 0.12
 Nodes (16): Pipeline, Pipeline<M>, Arc, Box, BoxStream, CancellationToken, DashMap, JoinHandle (+8 more)
 
 ### Community 34 - "ActivityLog"
-Cohesion: 0.13
-Nodes (19): Arc, Result, Self, TimelineSink, ActivityLog, Actor, EventKind, LogEvent (+11 more)
+Cohesion: 0.20
+Nodes (15): ActivityLog, Actor, EventKind, LogEvent, Arc, File, Mutex, Option (+7 more)
 
 ### Community 35 - "SovereignSliverOperator<M>"
 Cohesion: 0.15
@@ -594,16 +606,16 @@ Cohesion: 0.09
 Nodes (29): OptimizationLevel, PromptOptimizer, Box, Default, Self, String, Vec, test_entropy_pruner() (+21 more)
 
 ### Community 38 - "c2/mod.rs"
-Cohesion: 0.14
-Nodes (17): C2Session, Deployed, Established, HavocOperator, InfrastructureConfig, DateTime, Option, PhantomData (+9 more)
+Cohesion: 0.12
+Nodes (18): C2Session, Deployed, Established, HavocOperator, HavocOperator<S>, InfrastructureConfig, DateTime, Option (+10 more)
 
 ### Community 39 - "LivenessChecker"
-Cohesion: 0.14
-Nodes (18): CancellationToken, JoinHandle, Receiver, Sender, spawn_liveness_stage(), is_safe_ip(), is_ssrf_safe_host(), is_target_live() (+10 more)
+Cohesion: 0.20
+Nodes (13): is_safe_ip(), is_ssrf_safe_host(), is_target_live(), LivenessChecker, Arc, IpAddr, Option, ProxyManager (+5 more)
 
-### Community 40 - "NatsSink"
-Cohesion: 0.27
-Nodes (5): NatsSink, Client, Result, Self, String
+### Community 40 - "DataSink"
+Cohesion: 0.12
+Nodes (17): enrich_target_findings_static(), Arc, Box, JoinHandle, Receiver, Result, Sender, run_sink_stage() (+9 more)
 
 ### Community 41 - "lateral_movement_test.rs"
 Cohesion: 0.10
@@ -618,12 +630,12 @@ Cohesion: 0.12
 Nodes (20): McpServer, Arc, AtomicU32, AtomicU64, Cache, DashMap, Event, FromRequestParts (+12 more)
 
 ### Community 44 - "Self"
-Cohesion: 0.13
-Nodes (11): HavocOperator<Deployed>, HavocOperator<Established>, HavocOperator<S>, HavocOperator<Sovereign>, HavocOperator<Staged>, Default, Self, SliverOperator<Deployed> (+3 more)
+Cohesion: 0.15
+Nodes (10): HavocOperator<Deployed>, HavocOperator<Established>, HavocOperator<Sovereign>, HavocOperator<Staged>, Default, Self, SliverOperator<Deployed>, SliverOperator<Established> (+2 more)
 
 ### Community 45 - "TacticalPlan"
-Cohesion: 0.19
-Nodes (12): PersistenceMethod, PersistenceOrchestrator, PersistenceOrchestrator<M>, Arc, M, Option, Result, Self (+4 more)
+Cohesion: 0.13
+Nodes (17): PersistenceMethod, PersistenceOrchestrator, PersistenceOrchestrator<M>, Arc, M, Option, Result, Self (+9 more)
 
 ### Community 46 - "StealthExecutor"
 Cohesion: 0.13
@@ -633,8 +645,8 @@ Nodes (21): Output, BreachMode, ExecutorMode, GhostMode, Arc, Child, Clone, M (+
 Cohesion: 0.12
 Nodes (14): BufferedSink, Arc, Mutex, Option, Result, Self, Vec, NdjsonSpillWriter (+6 more)
 
-### Community 48 - "JWT Forging Scanner"
-Cohesion: 0.21
+### Community 48 - "JwtForgeScanner"
+Cohesion: 0.22
 Nodes (8): JwtForgeScanner, Client, Default, Option, Result, Self, String, Vec
 
 ### Community 49 - "Privilege Escalation Scanner"
@@ -662,8 +674,8 @@ Cohesion: 0.19
 Nodes (10): ExecutionTier, Arc, Child, Option, ProxyManager, Result, Self, String (+2 more)
 
 ### Community 55 - "ProviderRateLimiter"
-Cohesion: 0.21
-Nodes (10): DefaultClock, InMemoryState, NotKeyed, RateLimiter, ProviderRateLimiter, DashMap, Default, Duration (+2 more)
+Cohesion: 0.14
+Nodes (15): AsRef, DefaultClock, InMemoryState, NotKeyed, RateLimiter, ProviderRateLimiter, DashMap, Default (+7 more)
 
 ### Community 56 - "09 — Incident Response Playbooks"
 Cohesion: 0.05
@@ -686,12 +698,12 @@ Cohesion: 0.20
 Nodes (9): HavocScanner, HavocScanner<M>, Arc, Client, M, Result, Self, String (+1 more)
 
 ### Community 61 - "SwarmInventory"
-Cohesion: 0.18
-Nodes (9): InventoryItem, DashMap, Default, Self, String, T, Vec, SwarmInventory (+1 more)
+Cohesion: 0.14
+Nodes (13): Arc, Box, Vec, run_reactive_logic(), InventoryItem, DashMap, Default, Self (+5 more)
 
 ### Community 62 - ".process_finding"
-Cohesion: 0.14
-Nodes (23): AdaptiveContext, AgentRole, AgentTask, execute_c2_operator(), execute_exploiter(), execute_reporter(), execute_scout(), Arc (+15 more)
+Cohesion: 0.12
+Nodes (26): AgentRole, AgentTask, execute_c2_operator(), execute_exploiter(), execute_reporter(), execute_scout(), Arc, DashSet (+18 more)
 
 ### Community 63 - "Web Application Management"
 Cohesion: 0.21
@@ -701,25 +713,25 @@ Nodes (21): addFindingToStream(), authFetch(), authHeaders(), decide(), drag(), 
 Cohesion: 0.19
 Nodes (13): OSVPackage, OSVPackageResult, OSVResult, OSVScanner, OSVVulnerability, PackageInfo, Default, Option (+5 more)
 
-### Community 65 - "CredentialLeakScanner"
-Cohesion: 0.07
-Nodes (37): OnceLock, CredentialLeakScanner, H8mailHit, Client, Default, HashSet, Option, Regex (+29 more)
+### Community 65 - "BountySink"
+Cohesion: 0.19
+Nodes (14): BountySink, make_finding(), Arc, Option, PgPool, Result, Self, String (+6 more)
 
 ### Community 66 - "Caido Scanner"
 Cohesion: 0.17
 Nodes (11): CaidoScanner, Arc, Child, Mutex, Option, ProxyManager, Result, Self (+3 more)
 
 ### Community 67 - "DecisionConfig"
-Cohesion: 0.21
-Nodes (10): OpenRouterClient, Option, ProxyManager, Result, Self, String, Value, DecisionConfig (+2 more)
+Cohesion: 0.19
+Nodes (11): OpenRouterClient, Arc, Option, ProxyManager, Result, Self, String, Value (+3 more)
 
-### Community 68 - "kimi_cli.rs"
-Cohesion: 0.17
-Nodes (13): CliLlmConfig, Option, Result, String, run_cli_prompt(), KimiCliClient, Arc, Option (+5 more)
+### Community 68 - "ai/mod.rs"
+Cohesion: 0.09
+Nodes (19): CliLlmConfig, Option, Result, String, run_cli_prompt(), KimiCliClient, Arc, Option (+11 more)
 
-### Community 69 - "DigitalOceanClient"
-Cohesion: 0.20
-Nodes (15): CreateDropletRequest, DigitalOceanClient, Droplet, generate_user_data(), Network, Networks, Arc, Client (+7 more)
+### Community 69 - "PluginMetadata"
+Cohesion: 0.11
+Nodes (13): RetireScanner, Default, Result, Self, String, Vec, SourceMapperScanner, SubJSScanner (+5 more)
 
 ### Community 70 - "TCP Session Management"
 Cohesion: 0.21
@@ -737,11 +749,11 @@ Nodes (19): findings_stream(), get_metrics(), get_roi_rankings(), get_stats_hand
 Cohesion: 0.19
 Nodes (13): Arc, Client, Option, ProxyManager, Result, Self, String, Vec (+5 more)
 
-### Community 74 - "MobSF Scanner"
+### Community 74 - "MobSFScanner<M>"
 Cohesion: 0.17
 Nodes (11): MobSFScanner, MobSFScanner<M>, Client, M, PhantomData, Result, Self, String (+3 more)
 
-### Community 75 - "Sliver Scanner"
+### Community 75 - "SliverScanner<M>"
 Cohesion: 0.20
 Nodes (9): Arc, Client, M, Result, Self, String, Vec, SliverScanner (+1 more)
 
@@ -749,7 +761,7 @@ Nodes (9): Arc, Client, M, Result, Self, String, Vec, SliverScanner (+1 more)
 Cohesion: 0.27
 Nodes (6): apply_cap(), HashSet, String, Vec, SovereignReconScanner, test_per_api_cap_respects_zero_disables()
 
-### Community 77 - "API Budget Management"
+### Community 77 - "ApiBudgetRegistry"
 Cohesion: 0.20
 Nodes (13): ApiBudgetRegistry, BudgetWindow, CreditManager, AtomicU32, AtomicU64, HashMap, Option, PgPool (+5 more)
 
@@ -757,13 +769,13 @@ Nodes (13): ApiBudgetRegistry, BudgetWindow, CreditManager, AtomicU32, AtomicU64
 Cohesion: 0.10
 Nodes (19): Approval Gate, RedTeamEngine, Factory, Orchestrator, Pipeline, Plugin Loader, Policy, Reactive Engine (+11 more)
 
-### Community 79 - "FalsePositiveFilter"
-Cohesion: 0.16
-Nodes (12): FalsePositiveFilter, Default, Self, enrich_target_findings_static(), Arc, Box, JoinHandle, Receiver (+4 more)
+### Community 79 - "MockMonitor"
+Cohesion: 0.21
+Nodes (7): MockMonitor, Arc, AtomicU32, Mutex, Result, Vec, test_monitor_stop_on_crash()
 
-### Community 80 - "DiscoveryPlugin"
-Cohesion: 0.10
-Nodes (19): Arc, Box, CancellationToken, JoinHandle, Option, Receiver, Sender, Vec (+11 more)
+### Community 80 - "spawn_discovery_stage"
+Cohesion: 0.15
+Nodes (12): Arc, Box, CancellationToken, JoinHandle, Option, Receiver, Sender, Vec (+4 more)
 
 ### Community 81 - "Credential Probing"
 Cohesion: 0.16
@@ -786,36 +798,36 @@ Cohesion: 0.21
 Nodes (10): CrtShEntry, OsintScanner, Arc, Client, HashSet, ProxyManager, Result, Self (+2 more)
 
 ### Community 86 - "common.rs"
-Cohesion: 0.15
-Nodes (8): kill_pgid_sync(), PgidKillGuard, Drop, Option, ProxyManager, Self, stealth_command(), test_jitter_range()
+Cohesion: 0.18
+Nodes (5): kill_pgid_sync(), PgidKillGuard, Drop, Self, test_jitter_range()
 
 ### Community 87 - "IoUring Scanner"
 Cohesion: 0.19
 Nodes (11): IoUring, IoUringScanner, NativeScanner, Ipv4Addr, Mutex, Result, Self, Send (+3 more)
 
 ### Community 88 - "ScanLayerPolicy"
-Cohesion: 0.08
-Nodes (22): Err, FromStr, Result, Self, ScanLayer, ScanLayerPolicy, test_approval_policy(), dispatch_scan() (+14 more)
+Cohesion: 0.14
+Nodes (7): Err, FromStr, Result, Self, ScanLayer, ScanLayerPolicy, test_approval_policy()
 
-### Community 89 - "PolicyProvider"
-Cohesion: 0.12
-Nodes (19): BlackArchTool, CommandMiddleware, FlagSafetyMiddleware, MiddlewareRegistry, Arc, Default, Result, Self (+11 more)
+### Community 89 - "MiddlewareRegistry"
+Cohesion: 0.16
+Nodes (11): CommandMiddleware, FlagSafetyMiddleware, MiddlewareRegistry, Arc, Default, Self, Send, Sync (+3 more)
 
 ### Community 90 - "Reactive Engine Management"
 Cohesion: 0.20
 Nodes (14): ContextExtractor, evaluate(), get_all_rules(), ReactiveContext, ReactiveEngine, ReactiveRule, Box, DashSet (+6 more)
 
 ### Community 91 - "SkillManager"
-Cohesion: 0.18
-Nodes (15): Posture, Arc, HashMap, HashSet, Mutex, Option, P, Result (+7 more)
+Cohesion: 0.19
+Nodes (14): Arc, HashMap, HashSet, Mutex, Option, P, Result, Self (+6 more)
 
 ### Community 92 - "Source Analysis"
 Cohesion: 0.32
 Nodes (10): Path, PathBuf, Result, Self, String, Vec, SourceAnalyzer, SourceFinding (+2 more)
 
 ### Community 93 - "web/models.rs"
-Cohesion: 0.27
-Nodes (11): CredentialStatus, DashboardAuth, MissionRequest, Option, String, Value, Vec, SwarmAgentStatus (+3 more)
+Cohesion: 0.16
+Nodes (17): Arc, IntoResponse, Json, State, ValidatedOperator, submit_mission(), CredentialStatus, DashboardAuth (+9 more)
 
 ### Community 94 - "Proxy Client Management"
 Cohesion: 0.30
@@ -853,9 +865,9 @@ Nodes (8): Default, Result, Self, String, Vec, sanitize_id(), Wafw00fEntry, Wafw
 Cohesion: 0.24
 Nodes (11): Message, CertStreamDaemon, Error, Option, Receiver, Result, S, Self (+3 more)
 
-### Community 103 - "cvss.rs"
-Cohesion: 0.27
-Nodes (5): Cvss31, Cvss40, Option, Self, String
+### Community 103 - "OpenRedirexScanner"
+Cohesion: 0.23
+Nodes (6): OpenRedirexScanner, Default, Result, Self, String, Vec
 
 ### Community 104 - "Checkov Security Scanning"
 Cohesion: 0.19
@@ -897,13 +909,13 @@ Nodes (10): ManuallyDrop, RawFd, AfXdpChannel, Drop, Duration, Option, Result, S
 Cohesion: 0.25
 Nodes (8): PERF-001 — rustls 0.21 + 0.23 Duplication Risk Register, SEC-004 Sandbox Spike — FluidLocal Tier Hardening for net_evasion, Informe de Auditoría Profesional — RedTeam Rust Core, Backlog — Niche Tools & Deferred Integrations, Sprint 5b Plan: Quinn QUIC + HTTP/3 Full Client, Retrospective Plan — Commit 5703882 (net_evasion Module), Security Review — Branch: NigaNinja, SENTINEL Net Evasion Engine — Sprint Roadmap
 
-### Community 114 - "SwarmOrchestrator"
-Cohesion: 0.14
-Nodes (11): Arc, M, Mutex, Option, ProxyManager, SwarmOrchestrator, Arc, M (+3 more)
+### Community 114 - "swarm/mod.rs"
+Cohesion: 0.22
+Nodes (5): Arc, M, Option, ProxyManager, SwarmConfig
 
-### Community 115 - "BBScopeScanner"
-Cohesion: 0.24
-Nodes (7): BBScopeScanner, M, Option, Result, Self, String, Vec
+### Community 115 - "DiscoveryResult"
+Cohesion: 0.23
+Nodes (8): DiscoveryResult, BBScopeScanner, M, Option, Result, Self, String, Vec
 
 ### Community 116 - "Nmap XML Parsing"
 Cohesion: 0.28
@@ -913,9 +925,9 @@ Nodes (16): classify_script_severity(), Host, NmapRun, Os, OsMatch, Port, Ports,
 Cohesion: 0.19
 Nodes (9): Arc, Default, M, Result, Self, String, Vec, RustScanScanner (+1 more)
 
-### Community 118 - "OpenRedirexScanner"
-Cohesion: 0.05
-Nodes (27): KubeBenchScanner, Default, Result, Self, String, Vec, Default, Result (+19 more)
+### Community 118 - "TsunamiScanner"
+Cohesion: 0.21
+Nodes (9): Default, Result, Self, String, Vec, TsunamiFinding, TsunamiReport, TsunamiScanner (+1 more)
 
 ### Community 119 - "WhatWeb Scanner"
 Cohesion: 0.18
@@ -930,7 +942,7 @@ Cohesion: 0.22
 Nodes (7): ApktoolScanner, Default, PathBuf, Result, Self, String, Vec
 
 ### Community 122 - "DrozerScanner"
-Cohesion: 0.23
+Cohesion: 0.21
 Nodes (7): DrozerScanner, Default, Option, Result, Self, String, Vec
 
 ### Community 123 - "JadxScanner"
@@ -941,9 +953,9 @@ Nodes (7): JadxScanner, Default, PathBuf, Result, Self, String, Vec
 Cohesion: 0.21
 Nodes (9): BloodHoundScanner, BloodHoundScanner<M>, Arc, M, Mutex, Result, Self, String (+1 more)
 
-### Community 125 - "Sovereign Recon Management"
-Cohesion: 0.21
-Nodes (9): Arc, Client, Option, ProxyManager, Result, Self, String, Vec (+1 more)
+### Community 125 - "SearchsploitScanner"
+Cohesion: 0.23
+Nodes (6): Default, Result, Self, String, Vec, SearchsploitScanner
 
 ### Community 126 - "PlatformClient"
 Cohesion: 0.34
@@ -957,9 +969,9 @@ Nodes (12): ExitStatus, ExternalToolGuard, Arc, Drop, Duration, Mutex, Option, P
 Cohesion: 0.24
 Nodes (15): Query, get_attack_graph(), get_target_findings(), get_targets(), Arc, IntoResponse, Json, Option (+7 more)
 
-### Community 129 - "worker.rs"
-Cohesion: 0.11
-Nodes (20): Args, parse(), Option, String, dispatch(), Result, init(), Result (+12 more)
+### Community 129 - "Args"
+Cohesion: 0.06
+Nodes (34): Args, parse(), Option, String, Arc, DashMap, Option, Sender (+26 more)
 
 ### Community 130 - "GeminiClient"
 Cohesion: 0.20
@@ -986,15 +998,15 @@ Cohesion: 0.16
 Nodes (11): Orchestrator<M>, Arc, CancellationToken, DashMap, M, Option, ProxyManager, Receiver (+3 more)
 
 ### Community 136 - ".run"
-Cohesion: 0.25
-Nodes (8): DashSet, JoinSet, Path, Result, Self, Sender, String, SwarmOrchestrator<M>
+Cohesion: 0.21
+Nodes (10): DashSet, JoinSet, M, Mutex, Path, Result, Self, Sender (+2 more)
 
 ### Community 137 - "GrypeScanner"
-Cohesion: 0.21
+Cohesion: 0.19
 Nodes (7): GrypeScanner, Default, PathBuf, Result, Self, String, Vec
 
 ### Community 138 - "SyftScanner"
-Cohesion: 0.21
+Cohesion: 0.19
 Nodes (7): Default, PathBuf, Result, Self, String, Vec, SyftScanner
 
 ### Community 139 - "ModelScanScanner<M>"
@@ -1002,12 +1014,12 @@ Cohesion: 0.18
 Nodes (8): ModelScanScanner, ModelScanScanner<M>, Arc, M, Result, Self, String, Vec
 
 ### Community 140 - "FridaScanner"
-Cohesion: 0.25
+Cohesion: 0.23
 Nodes (6): FridaScanner, Default, Result, Self, String, Vec
 
 ### Community 141 - "MarianaTrenchScanner"
-Cohesion: 0.07
-Nodes (19): ArjunScanner, Default, Result, Self, String, Vec, PpmapScanner, Default (+11 more)
+Cohesion: 0.21
+Nodes (7): MarianaTrenchScanner, Default, PathBuf, Result, Self, String, Vec
 
 ### Community 142 - "Dalfox Scanner"
 Cohesion: 0.20
@@ -1018,7 +1030,7 @@ Cohesion: 0.19
 Nodes (8): build_nested_query(), GraphqlExploiter, Client, Default, Result, Self, String, Vec
 
 ### Community 144 - "NoMore403Scanner"
-Cohesion: 0.25
+Cohesion: 0.23
 Nodes (7): NoMore403Scanner, Default, Result, Self, String, Vec, check_tool_availability()
 
 ### Community 145 - "Upload Strike Management"
@@ -1050,8 +1062,8 @@ Cohesion: 0.07
 Nodes (26): Active Audit Status, Add a New Scanner Plugin, Architecture Overview, Backlog (carried forward), Build & Test Commands, Common Development Tasks, Configuration & Environment, Core Module Organization (+18 more)
 
 ### Community 152 - "GlobalConfig"
-Cohesion: 0.16
-Nodes (14): main(), Result, GlobalConfig, NmapOptions, Arc, M, Mutex, Option (+6 more)
+Cohesion: 0.14
+Nodes (16): GlobalConfig, NmapOptions, Arc, M, Mutex, Option, ProxyManager, String (+8 more)
 
 ### Community 153 - "6. Loki + Grafana + Tempo (observability stack)"
 Cohesion: 0.08
@@ -1065,12 +1077,12 @@ Nodes (8): AnthropicClient, Arc, Option, ProxyManager, Result, Self, String, Val
 Cohesion: 0.34
 Nodes (14): cap_content(), handle_checkpoint_save(), handle_compress_memory(), handle_detect_waste(), handle_get_stats(), handle_route_task(), handle_smart_read(), Arc (+6 more)
 
-### Community 156 - "ScopeSyncer"
-Cohesion: 0.31
-Nodes (7): Arc, PathBuf, Result, Self, String, Vec, ScopeSyncer
+### Community 156 - "SovereignReconScanner"
+Cohesion: 0.21
+Nodes (9): Arc, Client, Option, ProxyManager, Result, Self, String, Vec (+1 more)
 
 ### Community 157 - "PocValidator"
-Cohesion: 0.23
+Cohesion: 0.21
 Nodes (9): PocValidator, PocValidator<M>, Arc, M, Option, ProxyManager, Result, Self (+1 more)
 
 ### Community 158 - "Kerbrute Scanner"
@@ -1085,21 +1097,21 @@ Nodes (8): FfufItem, FfufResult, FfufScanner, Option, Result, Self, String, Vec
 Cohesion: 0.23
 Nodes (7): InQLScanner, is_graphql_candidate(), Default, Result, Self, String, Vec
 
-### Community 161 - "JsluiceScanner"
-Cohesion: 0.26
-Nodes (7): is_js_file(), JsluiceScanner, Default, Result, Self, String, Vec
+### Community 161 - "Command"
+Cohesion: 0.15
+Nodes (12): Command, is_js_file(), JsluiceScanner, Default, Result, Self, String, Vec (+4 more)
 
 ### Community 162 - "ObjectionScanner"
-Cohesion: 0.24
+Cohesion: 0.22
 Nodes (6): ObjectionScanner, Default, Result, Self, String, Vec
 
 ### Community 163 - "SliverFeedbackLoop"
-Cohesion: 0.25
-Nodes (11): C, Arc, CallExtension, CallExtensionReq, Option, Result, Self, String (+3 more)
+Cohesion: 0.18
+Nodes (15): C, C2Client, Arc, CallExtension, CallExtensionReq, Clone, Option, Result (+7 more)
 
-### Community 164 - "triage/fingerprint.rs"
-Cohesion: 0.31
-Nodes (9): build_fingerprint(), build_fingerprint_includes_title(), build_fingerprint_is_deterministic(), canonical_json_numeric_no_quotes(), canonical_json_sorts_keys(), canonical_json_string_values_are_quoted(), canonicalize_json(), String (+1 more)
+### Community 164 - "Orchestrator"
+Cohesion: 0.24
+Nodes (13): Orchestrator, OrchestratorConfig, Arc, Box, DashMap, M, Option, PgPool (+5 more)
 
 ### Community 165 - "Ligolo Scanner"
 Cohesion: 0.20
@@ -1134,12 +1146,12 @@ Cohesion: 0.23
 Nodes (9): AutonomousAgent, AutonomousAgent<M>, Arc, M, Option, ProxyManager, Result, Self (+1 more)
 
 ### Community 174 - ".verify_proof"
-Cohesion: 0.36
-Nodes (7): Arc, Option, ProxyManager, Result, String, Value, ValidationPipeline
+Cohesion: 0.24
+Nodes (18): dummy_proxy_manager(), dummy_target(), Arc, Option, ProxyManager, Result, String, Value (+10 more)
 
-### Community 175 - ".dfs_paths"
+### Community 175 - "AttackPath"
 Cohesion: 0.32
-Nodes (6): GraphAnalyzer, GraphAnalyzer<'a>, HashSet, Self, String, Vec
+Nodes (7): GraphAnalyzer, GraphAnalyzer<'a>, HashSet, Self, String, Vec, AttackPath
 
 ### Community 176 - "H2C Probe Client"
 Cohesion: 0.23
@@ -1149,8 +1161,8 @@ Nodes (6): H2cProbeClient, H2cProbeResult, Option, Result, String, test_h2c_prob
 Cohesion: 0.21
 Nodes (13): Arc, CancellationToken, DashMap, JoinHandle, M, Option, ProxyManager, Receiver (+5 more)
 
-### Community 178 - "Webhook Management"
-Cohesion: 0.26
+### Community 178 - "TacticalWebhookSink"
+Cohesion: 0.28
 Nodes (8): Arc, Option, ProxyManager, Result, Self, String, Vec, TacticalWebhookSink
 
 ### Community 179 - "Approval Management"
@@ -1158,12 +1170,12 @@ Cohesion: 0.23
 Nodes (13): ApprovalDecisionPayload, get_approvals(), post_approval_decision(), Arc, IntoResponse, Json, Option, Path (+5 more)
 
 ### Community 180 - "CosignScanner"
-Cohesion: 0.24
+Cohesion: 0.22
 Nodes (6): CosignScanner, Default, Result, Self, String, Vec
 
 ### Community 181 - "VPS — Alternativas / Clones de DigitalOcean (efímeros o no)"
-Cohesion: 0.20
-Nodes (9): 1. ¿Qué rol llena este VPS? (importante — no es cualquier nodo), 2. Clones de DO — ¿efímero o no?, 3. ⚠️ Caveat de código CRÍTICO — el auto-provisioning está hardcodeado a DO, 4. Presupuesto — efímero ≠ mensual, y ≠ gratis, 5. Nota de higiene (aplicada 2026-09-10), 6. Referencias, ❌ NO usar: "VPS gratis para estudiantes" dudosos (verificado 2026-09-09), Requisitos del worker (de `06_DO_EPHEMERAL_WORKERS.md`) (+1 more)
+Cohesion: 0.15
+Nodes (12): 1. ¿Qué rol llena este VPS? (importante — no es cualquier nodo), 2.1 ¿Cuáles sirven realmente para bug bounty? (aptitud, verificado 2026-09-10), 2.2 Más clones horarios + criterios OPSEC (verificado 2026-09-10), 2. Clones de DO — ¿efímero o no?, 3. ⚠️ Caveat de código CRÍTICO — el auto-provisioning está hardcodeado a DO, 4. Presupuesto — efímero ≠ mensual, y ≠ gratis, 5. Nota de higiene (aplicada 2026-09-10), 6. Referencias (+4 more)
 
 ### Community 182 - "Semgrep Scanner"
 Cohesion: 0.22
@@ -1185,9 +1197,9 @@ Nodes (6): CloudEnumScanner, Default, Result, Self, String, Vec
 Cohesion: 0.23
 Nodes (6): CloudFoxScanner, Default, Result, Self, String, Vec
 
-### Community 187 - "TriageEngine"
-Cohesion: 0.31
-Nodes (6): Default, HashMap, Self, Vec, ShardKey, TriageEngine
+### Community 187 - "KubeBenchScanner"
+Cohesion: 0.23
+Nodes (6): KubeBenchScanner, Default, Result, Self, String, Vec
 
 ### Community 188 - "Pacu Scanner"
 Cohesion: 0.24
@@ -1198,8 +1210,8 @@ Cohesion: 0.23
 Nodes (6): ProwlerScanner, Default, Result, Self, String, Vec
 
 ### Community 190 - "ScoutSuiteScanner"
-Cohesion: 0.08
-Nodes (18): Default, Result, Self, String, Vec, ScoutSuiteScanner, CertipyScanner, Default (+10 more)
+Cohesion: 0.24
+Nodes (6): Default, Result, Self, String, Vec, ScoutSuiteScanner
 
 ### Community 191 - "Script Classification"
 Cohesion: 0.19
@@ -1210,23 +1222,23 @@ Cohesion: 0.20
 Nodes (7): ClairvoyanceScanner, M, Option, Result, Self, String, Vec
 
 ### Community 193 - "CrackqlScanner"
-Cohesion: 0.24
+Cohesion: 0.22
 Nodes (6): CrackqlScanner, Default, Result, Self, String, Vec
 
 ### Community 194 - "GraphW00fScanner"
-Cohesion: 0.24
+Cohesion: 0.22
 Nodes (6): GraphW00fScanner, Default, Result, Self, String, Vec
 
 ### Community 195 - "SchemathesisScanner"
-Cohesion: 0.24
+Cohesion: 0.22
 Nodes (6): Default, Result, Self, String, Vec, SchemathesisScanner
 
-### Community 196 - "build_report"
-Cohesion: 0.39
-Nodes (7): BugBountyReport, build_report(), generate_attack_chain_report(), generate_reports(), Option, String, Vec
+### Community 196 - "ArjunScanner"
+Cohesion: 0.23
+Nodes (6): ArjunScanner, Default, Result, Self, String, Vec
 
 ### Community 197 - "CorsyScanner"
-Cohesion: 0.26
+Cohesion: 0.24
 Nodes (6): CorsyScanner, Default, Result, Self, String, Vec
 
 ### Community 198 - "CRLF Scanner"
@@ -1261,7 +1273,7 @@ Nodes (6): JwksDiscoveryScanner, Client, Default, Result, Self, Vec
 Cohesion: 0.23
 Nodes (6): KiterunnerScanner, Default, Result, Self, String, Vec
 
-### Community 206 - "Nikto Scanner"
+### Community 206 - "NiktoScanner"
 Cohesion: 0.23
 Nodes (6): NiktoScanner, Default, Result, Self, String, Vec
 
@@ -1281,17 +1293,17 @@ Nodes (6): Default, Result, Self, String, Vec, SnallygasterScanner
 Cohesion: 0.22
 Nodes (6): Default, Result, Self, String, Vec, WcvsScanner
 
-### Community 211 - "WP Scanner"
+### Community 211 - "WPScanner"
 Cohesion: 0.23
 Nodes (6): Default, Result, Self, String, Vec, WPScanner
 
 ### Community 212 - "X8Scanner"
-Cohesion: 0.26
+Cohesion: 0.23
 Nodes (6): Default, Result, Self, String, Vec, X8Scanner
 
-### Community 213 - "DiscoveryResult"
-Cohesion: 0.38
-Nodes (5): default_arc_json(), DiscoveryResult, Arc, Value, TargetStatus
+### Community 213 - "PpmapScanner"
+Cohesion: 0.24
+Nodes (6): PpmapScanner, Default, Result, Self, String, Vec
 
 ### Community 214 - "Coercer Scanner"
 Cohesion: 0.22
@@ -1326,20 +1338,20 @@ Cohesion: 0.22
 Nodes (6): GraphQLCopScanner, Default, Result, Self, String, Vec
 
 ### Community 222 - "SmugglerScanner"
-Cohesion: 0.26
+Cohesion: 0.23
 Nodes (6): Default, Result, Self, String, Vec, SmugglerScanner
 
-### Community 223 - "Wapiti Scanner"
-Cohesion: 0.23
-Nodes (6): Default, Result, Self, String, Vec, WapitiScanner
+### Community 223 - "ImdsBypassScanner"
+Cohesion: 0.22
+Nodes (6): ImdsBypassScanner, Client, Default, Result, Self, Vec
 
 ### Community 224 - "Jaeles Scanner"
 Cohesion: 0.23
 Nodes (6): JaelesScanner, Default, Result, Self, String, Vec
 
-### Community 225 - "Searchsploit Scanner"
-Cohesion: 0.23
-Nodes (6): Default, Result, Self, String, Vec, SearchsploitScanner
+### Community 225 - "active_ssrf.rs"
+Cohesion: 0.09
+Nodes (22): ActiveSsrfScanner, Arc, Option, ProxyManager, Result, Self, String, Vec (+14 more)
 
 ### Community 226 - "ADR-012: AI Context Pipeline Hardening & Dense Serialization"
 Cohesion: 0.33
@@ -1349,9 +1361,9 @@ Nodes (4): ADR-012: AI Context Pipeline Hardening & Dense Serialization, Consequ
 Cohesion: 0.22
 Nodes (6): AsnmapScanner, Default, Result, Self, String, Vec
 
-### Community 228 - "Httpx Scanner"
+### Community 228 - "PurednsScanner"
 Cohesion: 0.24
-Nodes (7): HttpxScanner, Arc, ProxyManager, Result, Self, String, Vec
+Nodes (7): PurednsScanner, Arc, ProxyManager, Result, Self, String, Vec
 
 ### Community 229 - "Naabu Scanner"
 Cohesion: 0.23
@@ -1366,8 +1378,8 @@ Cohesion: 0.23
 Nodes (6): AmassScanner, Default, Result, Self, String, Vec
 
 ### Community 232 - ".detect_tool"
-Cohesion: 0.12
-Nodes (13): Default, Result, Self, String, Vec, TplmapScanner, PurednsScanner, Arc (+5 more)
+Cohesion: 0.25
+Nodes (6): Default, Result, Self, String, Vec, TplmapScanner
 
 ### Community 233 - "Shuffledns Scanner"
 Cohesion: 0.20
@@ -1393,13 +1405,13 @@ Nodes (6): Default, Result, Self, String, Vec, WaybackScanner
 Cohesion: 0.23
 Nodes (6): Default, Result, Self, String, Vec, WaymoreScanner
 
-### Community 239 - "PluginRegistry"
-Cohesion: 0.23
-Nodes (8): TargetType, get_registry(), PluginRegistry, Box, Default, M, Self, Vec
+### Community 239 - "ScannerPlugin"
+Cohesion: 0.17
+Nodes (12): DiscoveryPlugin, RiskLevel, Send, Sync, ScannerPlugin, get_registry(), PluginRegistry, Box (+4 more)
 
 ### Community 240 - "Severity"
-Cohesion: 0.14
-Nodes (11): ReportPlatform, Display, Formatter, Result, Severity, default_impact(), default_remediation(), http_evidence_view() (+3 more)
+Cohesion: 0.10
+Nodes (16): ReportPlatform, Display, Formatter, Result, Severity, default_impact(), default_remediation(), http_evidence_view() (+8 more)
 
 ### Community 241 - "DNS Hijack Verifier"
 Cohesion: 0.22
@@ -1421,9 +1433,9 @@ Nodes (9): PayloadServer, Arc, Default, HashMap, PathBuf, Result, RwLock, Self (
 Cohesion: 0.29
 Nodes (12): Cow, detect_blackarch_tool(), detect_tool(), detect_tool_cow(), detect_tool_system(), Option, PathBuf, Result (+4 more)
 
-### Community 246 - "Config"
-Cohesion: 0.08
-Nodes (25): Arc, DashMap, Option, Sender, String, Vec, setup_dashboard(), build_multi_sink() (+17 more)
+### Community 246 - "MultiSink"
+Cohesion: 0.17
+Nodes (8): MultiSink, Box, Default, Option, PgPool, Result, Self, Vec
 
 ### Community 247 - "Base LLM Client"
 Cohesion: 0.22
@@ -1462,11 +1474,11 @@ Cohesion: 0.23
 Nodes (6): HydraScanner, Option, Result, Self, String, Vec
 
 ### Community 256 - "GhauriScanner"
-Cohesion: 0.26
+Cohesion: 0.23
 Nodes (6): GhauriScanner, M, Result, Self, String, Vec
 
 ### Community 257 - "GopherusScanner"
-Cohesion: 0.26
+Cohesion: 0.23
 Nodes (6): GopherusScanner, M, Result, Self, String, Vec
 
 ### Community 258 - "H2C Smuggler Scanner"
@@ -1474,7 +1486,7 @@ Cohesion: 0.21
 Nodes (6): H2CSmugglerScanner, H2CSmugglerScanner<M>, M, Result, Self, Vec
 
 ### Community 259 - "NoSqlMapScanner"
-Cohesion: 0.24
+Cohesion: 0.22
 Nodes (6): NoSqlMapScanner, M, Result, Self, String, Vec
 
 ### Community 260 - "SqlMapScanner"
@@ -1489,45 +1501,45 @@ Nodes (6): Default, Result, Self, String, Vec, SubzyScanner
 Cohesion: 0.21
 Nodes (6): GitHubDorksScanner, GitHubDorksScanner<M>, M, Result, Self, Vec
 
-### Community 263 - "CavemanLevel"
-Cohesion: 0.47
-Nodes (3): CavemanOptimizer, String, CavemanLevel
+### Community 263 - "ZapScanner"
+Cohesion: 0.24
+Nodes (6): Option, Result, Self, String, Vec, ZapScanner
 
 ### Community 264 - "PoC Verifier"
 Cohesion: 0.26
 Nodes (5): PoCVerifier, Default, Result, Self, Vec
 
-### Community 265 - "Zap Scanner"
-Cohesion: 0.24
-Nodes (6): Option, Result, Self, String, Vec, ZapScanner
+### Community 265 - "security.rs"
+Cohesion: 0.27
+Nodes (10): build_ssrf_safe_client(), is_ip_safe(), is_ssrf_safe_host(), is_ssrf_safe_host_async(), Client, Error, IpAddr, Result (+2 more)
 
 ### Community 267 - "Correlation Engine (V15.1)"
 Cohesion: 0.40
 Nodes (5): Correlation Engine (V15.1), Decoupling (ARCH-8), Engine Core: Sovereign Pipeline, Graph Analysis (ARCH-10), State Persistence (ARCH-9)
 
-### Community 268 - "AzureOpenAIClient"
-Cohesion: 0.24
-Nodes (8): AzureOpenAIClient, Arc, Option, ProxyManager, Result, Self, String, Value
+### Community 268 - "LlmClient"
+Cohesion: 0.19
+Nodes (11): AzureOpenAIClient, Arc, Option, ProxyManager, Result, Self, String, Value (+3 more)
 
 ### Community 269 - ".decide_action"
 Cohesion: 0.24
 Nodes (8): ClaudeCodeClient, Arc, Option, ProxyManager, Result, Self, String, Value
 
-### Community 270 - "Secret Scrubber"
-Cohesion: 0.21
-Nodes (6): Default, Regex, Self, String, Vec, SecretScrubber
+### Community 270 - "PipelineBuilder"
+Cohesion: 0.19
+Nodes (8): PipelineBuilder, CancellationToken, DashMap, Option, ProxyManager, Sender, String, Vec
 
 ### Community 271 - "GoogleAIStudioClient"
 Cohesion: 0.24
 Nodes (8): GoogleAIStudioClient, Arc, Option, ProxyManager, Result, Self, String, Value
 
-### Community 272 - "LlmClient"
-Cohesion: 0.16
-Nodes (12): GroqClient, Arc, Option, ProxyManager, Result, Self, String, Value (+4 more)
+### Community 272 - "GroqClient"
+Cohesion: 0.24
+Nodes (8): GroqClient, Arc, Option, ProxyManager, Result, Self, String, Value
 
-### Community 273 - "ai/types.rs"
-Cohesion: 0.12
-Nodes (18): AsRef, CacheMetrics, CapabilityGap, LlmProviderKind, PluginIndex, PluginVector, ProviderEntry, Arc (+10 more)
+### Community 273 - "EngagementState"
+Cohesion: 0.19
+Nodes (8): EngagementState, DateTime, P, Result, Self, String, Utc, Vec
 
 ### Community 274 - "OllamaClient"
 Cohesion: 0.24
@@ -1541,13 +1553,13 @@ Nodes (8): OpenAIClient, Arc, Option, ProxyManager, Result, Self, String, Value
 Cohesion: 0.26
 Nodes (9): QuicEvasionStrategy, retry_token_probe(), RetryInfo, RetryProbeResult, Result, Self, SocketAddrV4, Vec (+1 more)
 
-### Community 277 - "Discord Sink"
-Cohesion: 0.29
-Nodes (6): DiscordSink, Arc, ProxyManager, Result, Self, String
+### Community 277 - "DiscordSink"
+Cohesion: 0.25
+Nodes (8): DiscordSink, Arc, ProxyManager, Result, Self, String, Value, Vec
 
 ### Community 278 - "GarakScanner<M>"
-Cohesion: 0.29
-Nodes (4): GarakScanner<M>, Result, Self, Vec
+Cohesion: 0.26
+Nodes (5): GarakScanner<M>, M, Result, Self, Vec
 
 ### Community 279 - "SSRFMap Scanner"
 Cohesion: 0.26
@@ -1561,17 +1573,17 @@ Nodes (17): MockSink, OobEnrichingSink, Arc, Box, Mutex, Option, PgPool, Result 
 Cohesion: 0.09
 Nodes (23): 10. TOS Compliance Notes, 11. Implementation Status, 12. References, 1. Motivation, 2.1 Box Inventory, 2. High-Level Topology, 3.1 Control Plane (Oracle — never touches targets), 3.2 Data Plane (DigitalOcean ephemeral — touches targets) (+15 more)
 
-### Community 282 - "IpBuilder"
-Cohesion: 0.31
-Nodes (7): FragmentAssembler, Vec, test_empty_payload(), test_poison_first_overlap(), test_tiny_fragments(), OverlapStrategy, IpBuilder
+### Community 282 - ".split_packet"
+Cohesion: 0.38
+Nodes (6): FragmentAssembler, Vec, test_empty_payload(), test_poison_first_overlap(), test_tiny_fragments(), OverlapStrategy
 
 ### Community 283 - "Markdown Sink"
 Cohesion: 0.29
 Nodes (6): MarkdownSink, File, Into, PathBuf, Result, Self
 
 ### Community 284 - "AIAnalysis"
-Cohesion: 0.23
-Nodes (11): PocValidator<M>, Result, ConsolidationUrgency, AIAnalysis, FindingEnrichment, PocDefinition, PocStrategy, Option (+3 more)
+Cohesion: 0.22
+Nodes (13): PocValidator<M>, Option, Result, ConsolidationUrgency, AIAnalysis, FindingEnrichment, PocDefinition, PocStrategy (+5 more)
 
 ### Community 285 - "LinkFinder Scanner"
 Cohesion: 0.21
@@ -1598,16 +1610,16 @@ Cohesion: 0.30
 Nodes (6): FragmentProber, Ipv4Addr, Result, Self, Vec, ReassemblyPolicy
 
 ### Community 291 - "LLMFuzzerScanner<M>"
-Cohesion: 0.19
-Nodes (8): LLMFuzzerScanner, LLMFuzzerScanner<M>, Arc, M, Result, Self, String, Vec
+Cohesion: 0.27
+Nodes (5): LLMFuzzerScanner<M>, M, Result, Self, Vec
 
 ### Community 292 - "PromptInjectScanner<M>"
-Cohesion: 0.27
-Nodes (5): PromptInjectScanner<M>, M, Result, Self, Vec
+Cohesion: 0.31
+Nodes (4): PromptInjectScanner<M>, Result, Self, Vec
 
 ### Community 293 - "PromptmapScanner<M>"
-Cohesion: 0.19
-Nodes (8): PromptmapScanner, PromptmapScanner<M>, Arc, M, Result, Self, String, Vec
+Cohesion: 0.27
+Nodes (5): PromptmapScanner<M>, M, Result, Self, Vec
 
 ### Community 294 - "KimiClient"
 Cohesion: 0.24
@@ -1621,9 +1633,9 @@ Nodes (20): 07 — Dashboard Public Access via Cloudflare Tunnel, 10. Pitfalls, 
 Cohesion: 0.22
 Nodes (7): ProgramConfig, Option, P, Result, Self, String, Vec
 
-### Community 297 - "security.rs"
+### Community 297 - "PolicyProvider"
 Cohesion: 0.31
-Nodes (9): build_ssrf_safe_client(), is_ip_safe(), is_ssrf_safe_host(), is_ssrf_safe_host_async(), Client, Error, IpAddr, Result (+1 more)
+Nodes (8): BlackArchTool, Result, String, check_scope(), Arc, PolicyProvider, Send, Sync
 
 ### Community 298 - "Sprint 3 Walkthrough - Advanced Hardening"
 Cohesion: 0.50
@@ -1653,6 +1665,10 @@ Nodes (3): DonutScanner, Result, Vec
 Cohesion: 0.10
 Nodes (20): 07b — Box2: Dashboard Access via mimikri.me (Cloudflare Tunnel), 10. Pitfalls, 1. Threat model for public access, 2.1 Sign in to Cloudflare Zero Trust, 2.2 Configure identity provider, 2.3 Define Access Policy for dashboard, 2.4 Add OWASP managed rules, 2.5 Rate limiting (+12 more)
 
+### Community 305 - "ValidationMetadata"
+Cohesion: 0.24
+Nodes (11): Evidence, EvidenceFile, FindingEvidence, DateTime, Option, String, Utc, Value (+3 more)
+
 ### Community 306 - "🎯 P0-1: tcp_session.rs — iptables Bypass"
 Cohesion: 0.50
 Nodes (4): Archivos a modificar, 🎯 P0-1: tcp_session.rs — iptables Bypass, Problema, Solución
@@ -1669,17 +1685,17 @@ Nodes (7): Multipart, Arc, IntoResponse, State, ValidatedOperator, submit_mobile
 Cohesion: 0.50
 Nodes (4): 🧪 Plan de Testing, Test 1: tcp_session iptables con PolicyProvider mock, Test 2: Sandbox capabilities check, Test 3: Wildcard unknown category
 
-### Community 310 - "Correlation Processing"
-Cohesion: 0.29
-Nodes (6): ce_state_path(), process_correlation(), HashSet, PathBuf, String, Vec
+### Community 310 - "WapitiScanner"
+Cohesion: 0.23
+Nodes (6): Default, Result, Self, String, Vec, WapitiScanner
 
 ### Community 311 - "Ethernet Frame Parsing"
 Cohesion: 0.39
 Nodes (6): EthernetFrame, EthernetFrame<'a>, ParseResult, test_parse_arp(), test_parse_ipv4(), test_parse_too_short()
 
-### Community 312 - "C2Operator"
+### Community 312 - "bug_bounty/tests.rs"
 Cohesion: 0.22
-Nodes (6): C2Operator, Send, Sync, Option, Option, Option
+Nodes (11): build_curl_from_raw(), String, bare_finding(), test_build_curl_get(), test_build_curl_post_json(), test_triage_score_ai_enrichment_adds_30(), test_triage_score_bare_is_zero(), test_triage_score_cvss_adds_20() (+3 more)
 
 ### Community 313 - "Monitoring Loop"
 Cohesion: 0.29
@@ -1689,27 +1705,27 @@ Nodes (7): Arc, Box, CancellationToken, Option, Sender, Vec, run_monitor_loop()
 Cohesion: 0.50
 Nodes (7): Assets, IntoResponse, Path, String, serve_asset(), serve_index(), serve_login()
 
-### Community 315 - "Report Exporting"
-Cohesion: 0.36
-Nodes (7): export_report(), Arc, Json, Response, State, ValidatedOperator, ExportRequest
+### Community 315 - "BurpScanner"
+Cohesion: 0.24
+Nodes (6): BurpScanner, Option, Result, Self, String, Vec
 
-### Community 316 - "🎯 P0-2: SEC-004 Rec#2 — net_evasion → StrictDocker"
-Cohesion: 0.67
-Nodes (3): 🎯 P0-2: SEC-004 Rec#2 — net_evasion → StrictDocker, Problema, Solución
+### Community 316 - "ScopeSyncer"
+Cohesion: 0.31
+Nodes (7): Arc, PathBuf, Result, Self, String, Vec, ScopeSyncer
 
 ### Community 317 - "net.rs"
 Cohesion: 0.16
 Nodes (9): NmapScanner, NmapScanner<M>, Arc, M, Option, Result, Self, String (+1 more)
 
-### Community 318 - "sliver_feedback.rs"
-Cohesion: 0.22
-Nodes (7): C2Client, Clone, Send, Sync, String, to_ascii_safe(), to_shell_safe()
+### Community 318 - "transport.rs"
+Cohesion: 0.50
+Nodes (3): String, to_ascii_safe(), to_shell_safe()
 
 ### Community 319 - "07b — Box2: Dashboard Access via mimikri.me (Cloudflare Tunnel)"
 Cohesion: 0.10
 Nodes (19): 07b — Box2: Dashboard Access via mimikri.me (Cloudflare Tunnel), 10. Pitfalls, 11. Alternative: Tailscale Funnel (NOT recommended), 1. Threat model & OPSEC, 2.1 Configure Identity Provider, 2.2 Define Access Policy for `mimikri.me`, 2.3 WAF & Rate Limiting, 2. Cloudflare Zero Trust setup (+11 more)
 
-### Community 320 - "Credential Management"
+### Community 320 - "get_credentials"
 Cohesion: 0.38
 Nodes (6): get_credentials(), Arc, Json, State, ValidatedOperator, Vec
 
@@ -1718,8 +1734,8 @@ Cohesion: 0.53
 Nodes (5): Criterion, apply_cap(), bench_apply_cap(), HashSet, String
 
 ### Community 322 - "Lazy"
-Cohesion: 0.28
-Nodes (7): Lazy, FilterStrategy, Regex, Vec, intern_deduplicates_identical_names(), intern_distinct_names_different(), intern_name()
+Cohesion: 0.47
+Nodes (4): Lazy, intern_deduplicates_identical_names(), intern_distinct_names_different(), intern_name()
 
 ### Community 325 - "Command Wrapping"
 Cohesion: 0.33
@@ -1773,9 +1789,9 @@ Nodes (16): 1. Index, 2.1 Assets, 2.2 Adversaries, 2.3 Out of scope, 2. Threat M
 Cohesion: 0.12
 Nodes (16): 02 — Box1: AI Enrichment (Ollama Client + Router + BloodHound) + OCI Paid Services ⚠️ Sacrificable, 1. Service user + directory layout, 2.1 LUKS encryption (applies to any Postgres data volume), 2. PostgreSQL (read-only replica — optional), 3. NATS client configuration, 4.1 Build (operator workstation, reproducible), 4.2 Upload + install on Box1, 4. `redteam_rust_core` binary deployment (+8 more)
 
-### Community 341 - "DataSink"
-Cohesion: 0.15
-Nodes (11): DataSink, MultiSink, Box, Default, Option, PgPool, Result, Self (+3 more)
+### Community 341 - "TimelineSink"
+Cohesion: 0.36
+Nodes (4): Arc, Result, Self, TimelineSink
 
 ### Community 345 - "05 — Box4: Interactsh OOB Server (Azure Africa VPS) ✅ Permanent"
 Cohesion: 0.12
@@ -1801,9 +1817,9 @@ Nodes (9): Http3EvasionClient, Http3Response, Bytes, HeaderMap, Method, Option, 
 Cohesion: 0.27
 Nodes (9): DomainFrontClient, Bytes, HeaderMap, Method, Option, Result, Self, String (+1 more)
 
-### Community 387 - "Orchestrator"
-Cohesion: 0.24
-Nodes (13): Orchestrator, OrchestratorConfig, Arc, Box, DashMap, M, Option, PgPool (+5 more)
+### Community 387 - "AiScanProfile"
+Cohesion: 0.35
+Nodes (6): AiScanProfile, ProbeSelection, Option, Self, String, Vec
 
 ### Community 388 - "OAuthScanner"
 Cohesion: 0.22
@@ -1817,9 +1833,9 @@ Nodes (13): 1. Tiered Routing (`TieredAIRouter`), 2. Token Optimization Pipeline
 Cohesion: 0.15
 Nodes (13): 1. Agent Roles, 2. Token Budget (`TokenBudget`), 3. Concurrency Control, 4. Engagement State & OPPLAN (V15), 5. Proxy Readiness Gate, 6. Swarm vs Autonomous Mode, 7. Swarm Decision Flow (Full), 8. ARCH-9: CE State Persistence & fired_chains Sync (+5 more)
 
-### Community 391 - "SsrfKingScanner"
-Cohesion: 0.26
-Nodes (7): Arc, ProxyManager, Result, Self, String, Vec, SsrfKingScanner
+### Community 391 - "CertipyScanner"
+Cohesion: 0.23
+Nodes (6): CertipyScanner, Default, Result, Self, String, Vec
 
 ### Community 392 - "5. External AI Tool Token Strategy (Garak / PyRIT / Promptfoo / etc.) `sovereign`"
 Cohesion: 0.17
@@ -1857,9 +1873,9 @@ Nodes (10): 1. Per-Provider Local Rate Limiting with `governor`, 2. Structured `
 Cohesion: 0.18
 Nodes (11): 1. StealthExecutor — The Only Authorized Execution Path, 2. SandboxDispatcher — Two-Tier Isolation, 3. Egress Shield — Output Sanitization, 4. ProxyManager — Tactical Egress Management, 5. Fail-Closed Principle, CommandFilter (tool-specific), Execution Modes, Kill Switch (+3 more)
 
-### Community 401 - "bug_bounty/tests.rs"
-Cohesion: 0.22
-Nodes (11): build_curl_from_raw(), String, bare_finding(), test_build_curl_get(), test_build_curl_post_json(), test_triage_score_ai_enrichment_adds_30(), test_triage_score_bare_is_zero(), test_triage_score_cvss_adds_20() (+3 more)
+### Community 401 - "triage/fingerprint.rs"
+Cohesion: 0.31
+Nodes (9): build_fingerprint(), build_fingerprint_includes_title(), build_fingerprint_is_deterministic(), canonical_json_numeric_no_quotes(), canonical_json_sorts_keys(), canonical_json_string_values_are_quoted(), canonicalize_json(), String (+1 more)
 
 ### Community 402 - "Mimikri RedTeam Core — Documentation Index"
 Cohesion: 0.18
@@ -1879,15 +1895,15 @@ Nodes (10): 1. What this system is, 2. How the codebase is divided, 3. End-to-en
 
 ### Community 406 - "🔥 REMEDIACIÓN P0 — Vulnerabilidades Críticas"
 Cohesion: 0.20
-Nodes (10): 📋 Checklist de Deploy, 📊 Estadísticas de Violación, 🎯 P0-3: Wildcard Fail-Secure, 🎯 P1-2: sandbox/mod.rs env_clear(), Problema, Problema, 📚 Referencias, 🔥 REMEDIACIÓN P0 — Vulnerabilidades Críticas (+2 more)
+Nodes (10): 📋 Checklist de Deploy, 📊 Estadísticas de Violación, 🎯 P1-2: sandbox/mod.rs env_clear(), 🎯 P1-3: source_analyzer.rs git, Problema, Problema, 📚 Referencias, 🔥 REMEDIACIÓN P0 — Vulnerabilidades Críticas (+2 more)
 
-### Community 407 - "BugBountyDraftSink"
-Cohesion: 0.36
-Nodes (4): BugBountyDraftSink, PathBuf, Result, Self
+### Community 407 - "TriageEngine"
+Cohesion: 0.31
+Nodes (6): Default, HashMap, Self, Vec, ShardKey, TriageEngine
 
-### Community 408 - "🎯 P1-3: source_analyzer.rs git"
-Cohesion: 0.67
-Nodes (3): 🎯 P1-3: source_analyzer.rs git, Problema, Solución
+### Community 408 - "C2Operator"
+Cohesion: 0.22
+Nodes (6): C2Operator, Send, Sync, Option, Option, Option
 
 ### Community 409 - "OSINT-ULTIMATE: LEAD SECURITY HARDENING ENGINEER (V14.1)"
 Cohesion: 0.25
@@ -1913,9 +1929,9 @@ Nodes (7): $300 credit exhausted (day 365) — Box1 student credit only, 8. Fail
 Cohesion: 0.29
 Nodes (6): [2026-05-20 23:59:59] Sprint 7 Closed (Stage 7.H), [COMPLETED], [OPEN / NEXT], Project Historial - Mimikri RedTeam Core (V15.1), Sprint 3: Advanced Cloud & GraphQL Hardening (2026-05-14), [VERIFICATION]
 
-### Community 415 - "submit_mission"
-Cohesion: 0.38
-Nodes (6): Arc, IntoResponse, Json, State, ValidatedOperator, submit_mission()
+### Community 415 - "HttpxScanner"
+Cohesion: 0.24
+Nodes (7): HttpxScanner, Arc, ProxyManager, Result, Self, String, Vec
 
 ### Community 416 - "Sprint Audit Remediation Handoff — Post-Production Blockers (2026-06-05)"
 Cohesion: 0.33
@@ -1933,9 +1949,13 @@ Nodes (6): 6.1 BlackArch via Docker (recomendado en Oracle), 6.2 Herramientas na
 Cohesion: 0.31
 Nodes (3): Result, Vec, ScareCrowScanner
 
-### Community 421 - "generate_dashboard_token"
-Cohesion: 0.40
-Nodes (5): generate_dashboard_token(), Arc, String, start_dashboard(), SigningKey
+### Community 420 - "BugBountyDraftSink"
+Cohesion: 0.36
+Nodes (4): BugBountyDraftSink, PathBuf, Result, Self
+
+### Community 421 - "TargetProcessContext"
+Cohesion: 0.22
+Nodes (13): main(), Result, dispatch_scan(), process_target(), Arc, Box, DashMap, Option (+5 more)
 
 ### Community 422 - "🗺️ OsintUltimate Cloud Roadmap"
 Cohesion: 0.33
@@ -1957,6 +1977,10 @@ Nodes (5): 3.1 Instalar Rust, 3.2 Dependencias del sistema, 3.3 Compilar, 3.4 Mi
 Cohesion: 0.40
 Nodes (5): 1. Unified Tactical Header Whitelist, 2. Dense Finding Serialization Format, 3. Target Lean Compression Integration, 4. StealthClientBuilder Permanent Non-Gated Compilation, Decisions
 
+### Community 427 - "FalsePositiveFilter"
+Cohesion: 0.36
+Nodes (3): FalsePositiveFilter, Default, Self
+
 ### Community 428 - "📜 Plugin Metadata Audit Report"
 Cohesion: 0.40
 Nodes (5): Auditoría Detallada de Discovery Plugins, Auditoría Detallada de Scanners, Estadísticas de Valores por Defecto o Potenciales Brechas (Leakage), 📜 Plugin Metadata Audit Report, Resumen de Hallazgos
@@ -1965,9 +1989,17 @@ Nodes (5): Auditoría Detallada de Discovery Plugins, Auditoría Detallada de Sc
 Cohesion: 0.40
 Nodes (5): Content, Correlation Engine State (V15.1), fired_chains Sync (ARCH-9), Resolution & Security, Sink & Persistence Layer
 
+### Community 430 - "spawn_liveness_stage"
+Cohesion: 0.33
+Nodes (5): CancellationToken, JoinHandle, Receiver, Sender, spawn_liveness_stage()
+
 ### Community 431 - "2. Docker y PostgreSQL"
 Cohesion: 0.50
 Nodes (4): 2.1 Instalar Docker en ARM64, 2.2 Transferir el repo y levantar PostgreSQL, 2.3 Verificar PostgreSQL, 2. Docker y PostgreSQL
+
+### Community 432 - ".select_tools"
+Cohesion: 0.40
+Nodes (3): PluginRagManager, Option, Vec
 
 ### Community 434 - "RTK Protocol & Division of Authority"
 Cohesion: 0.50
@@ -1977,25 +2009,49 @@ Nodes (3): Division of Authority & Verdict Rules, RTK Protocol & Division of Aut
 Cohesion: 0.67
 Nodes (3): 12.1 Instalar Tailscale en el servidor Oracle, 12.2 Instalación de Tailscale en tu laptop, 12. Tailscale — Instalación y configuración OPSEC
 
+### Community 438 - "correlation.rs"
+Cohesion: 0.29
+Nodes (6): ce_state_path(), process_correlation(), HashSet, PathBuf, String, Vec
+
+### Community 439 - "export_report"
+Cohesion: 0.36
+Nodes (7): export_report(), Arc, Json, Response, State, ValidatedOperator, ExportRequest
+
+### Community 440 - "build_report"
+Cohesion: 0.39
+Nodes (7): BugBountyReport, build_report(), generate_attack_chain_report(), generate_reports(), Option, String, Vec
+
+### Community 441 - "🎯 P0-3: Wildcard Fail-Secure"
+Cohesion: 0.67
+Nodes (3): 🎯 P0-3: Wildcard Fail-Secure, Problema, Solución
+
+### Community 442 - "objectives_tests.rs"
+Cohesion: 0.50
+Nodes (3): Result, test_graph_blocked_deps(), test_graph_resolution_multiple_deps()
+
+### Community 443 - "🎯 P0-2: SEC-004 Rec#2 — net_evasion → StrictDocker"
+Cohesion: 0.67
+Nodes (3): 🎯 P0-2: SEC-004 Rec#2 — net_evasion → StrictDocker, Problema, Solución
+
 ## Knowledge Gaps
-- **600 isolated node(s):** `retire`, `EthernetFrame<'a>`, `QuicEvasionStrategy`, `Staged`, `SliverOperator<S>` (+595 more)
+- **601 isolated node(s):** `retire`, `EthernetFrame<'a>`, `QuicEvasionStrategy`, `Staged`, `SliverOperator<S>` (+596 more)
   These have ≤1 connection - possible missing edges or undocumented components.
-- **7 thin communities (<3 nodes) omitted from report** — run `graphify query` to explore isolated nodes.
+- **8 thin communities (<3 nodes) omitted from report** — run `graphify query` to explore isolated nodes.
 
 ## Suggested Questions
 _Questions this graph is uniquely positioned to answer:_
 
-- **Why does `Finding` connect `Finding` to `PostgresSink`, `Cache Deception Detection`, `Decoy Configuration Management`, `BkTree`, `S3BucketScanner`, `PipelineBuilder`, `PluginMetadata`, `CoreFinding`, `TargetHost`, `TieredAIRouter`, `NetEvasionOrchestrator`, `CorrelationEngine`, `AbuseIPDBScanner`, `Authentication State Machine`, `MockMonitor`, `ScannerPlugin`, `Pipeline`, `ActivityLog`, `SovereignSliverOperator<M>`, `lateral_movement_test.rs`, `CVE Cache Management`, `TacticalPlan`, `Buffered Sink Management`, `JWT Forging Scanner`, `Privilege Escalation Scanner`, `RedTeamEngine`, `HavocScanner<M>`, `SwarmInventory`, `.process_finding`, `OSV Package Scanner`, `CredentialLeakScanner`, `Caido Scanner`, `DecisionConfig`, `WebFuzzer`, `MobSF Scanner`, `Sliver Scanner`, `FalsePositiveFilter`, `Credential Probing`, `Vigil Scanner`, `Commix Scanner`, `NVD Monitoring`, `IoUring Scanner`, `ScanLayerPolicy`, `Reactive Engine Management`, `SkillManager`, `Source Analysis`, `OffPathAiEngine`, `Rebuff Scanner`, `Business Logic Scanner`, `AlienVault OTX Scanner`, `TLSX Scanner`, `WAFW00F Scanner`, `Checkov Security Scanning`, `Katana Security Scanner`, `Responder Log Analysis`, `Cloud Metadata Extraction`, `JWT Tool Scanner`, `GreyNoise Threat Intelligence`, `Nuclei Vulnerability Scanning`, `KubescapeScanner`, `Nmap XML Parsing`, `RustScan Network Scanning`, `OpenRedirexScanner`, `WhatWeb Scanner`, `APKLeaks Analysis`, `ApktoolScanner`, `DrozerScanner`, `JadxScanner`, `BloodHound Data Ingestion`, `Orchestrator Management`, `.run`, `GrypeScanner`, `SyftScanner`, `ModelScanScanner<M>`, `FridaScanner`, `MarianaTrenchScanner`, `Dalfox Scanner`, `GraphQL Exploitation`, `NoMore403Scanner`, `Upload Strike Management`, `AzureHound Scanning`, `RoadRecon Analysis`, `PocValidator`, `Kerbrute Scanner`, `FFUF Scanner`, `InQL Scanner`, `JsluiceScanner`, `ObjectionScanner`, `triage/fingerprint.rs`, `Ligolo Scanner`, `CDN Check Scanner`, `Dnsx Scanner`, `Gitleaks Scanner`, `Context Compression`, `Parity Report Management`, `.verify_proof`, `Scanning Management`, `CosignScanner`, `Semgrep Scanner`, `Trivy Scanner`, `CloudBrute Scanner`, `CloudEnum Scanner`, `CloudFox Scanner`, `TriageEngine`, `Pacu Scanner`, `Prowler Scanner`, `ScoutSuiteScanner`, `Script Classification`, `Clairvoyance Scanner`, `CrackqlScanner`, `GraphW00fScanner`, `SchemathesisScanner`, `build_report`, `CorsyScanner`, `CRLF Scanner`, `Feroxbuster Scanner`, `GauPlus Scanner`, `Gf Scanner`, `GoWitness Scanner`, `Interactsh Scanner`, `JWKS Discovery Scanner`, `Kiterunner Scanner`, `Nikto Scanner`, `SecretFinderScanner<M>`, `Snallygaster Scanner`, `Wcvs Scanner`, `WP Scanner`, `X8Scanner`, `DiscoveryResult`, `Coercer Scanner`, `Impacket Scanner`, `NetExec Scanner`, `PetitPotam Scanner`, `Sliver Automator`, `CORS Token Exfiltrator`, `Deserialization Scanner`, `GraphQL Cop Scanner`, `SmugglerScanner`, `Wapiti Scanner`, `Jaeles Scanner`, `Searchsploit Scanner`, `Httpx Scanner`, `Naabu Scanner`, `.detect_tool`, `TruffleHog Scanner`, `Wayback Scanner`, `Waymore Scanner`, `Severity`, `DNS Hijack Verifier`, `Secret Validator`, `Config`, `Enum4Linux Scanner`, `Hydra Scanner`, `GhauriScanner`, `GopherusScanner`, `H2C Smuggler Scanner`, `NoSqlMapScanner`, `SqlMapScanner`, `Subzy Scanner`, `GitHub Dorks Scanner`, `PoC Verifier`, `Zap Scanner`, `Bounty Exporter`, `GarakScanner<M>`, `SSRFMap Scanner`, `AIAnalysis`, `LinkFinder Scanner`, `PromptfooScanner<M>`, `PyRIT Scanner`, `LLMFuzzerScanner<M>`, `PromptInjectScanner<M>`, `PromptmapScanner<M>`, `Ingestor`, `DonutScanner`, `Report Generation`, `Correlation Processing`, `Monitoring Loop`, `net.rs`, `Proof of Concept Generation`, `Finding Enrichment`, `Orchestrator`, `OAuthScanner`, `SsrfKingScanner`, `bug_bounty/tests.rs`, `ScareCrowScanner`?**
-  _High betweenness centrality (0.225) - this node is a cross-community bridge._
-- **Why does `TargetHost` connect `TargetHost` to `PostgresSink`, `Cache Deception Detection`, `S3BucketScanner`, `PipelineBuilder`, `PluginMetadata`, `TieredAIRouter`, `Finding`, `AbuseIPDBScanner`, `Authentication State Machine`, `MockMonitor`, `Favicon Hash Scanner`, `ScannerPlugin`, `Pipeline`, `ActivityLog`, `SovereignSliverOperator<M>`, `LivenessChecker`, `NatsSink`, `lateral_movement_test.rs`, `TacticalPlan`, `StealthExecutor`, `Buffered Sink Management`, `JWT Forging Scanner`, `Privilege Escalation Scanner`, `Lock-Free Sink Management`, `.build`, `RedTeamEngine`, `HavocScanner<M>`, `SwarmInventory`, `.process_finding`, `OSV Package Scanner`, `CredentialLeakScanner`, `Caido Scanner`, `DecisionConfig`, `WebFuzzer`, `MobSF Scanner`, `Sliver Scanner`, `FalsePositiveFilter`, `DiscoveryPlugin`, `Credential Probing`, `Vigil Scanner`, `Commix Scanner`, `NVD Monitoring`, `OSINT Scanning`, `ScanLayerPolicy`, `PolicyProvider`, `Reactive Engine Management`, `OffPathAiEngine`, `Rebuff Scanner`, `Business Logic Scanner`, `AlienVault OTX Scanner`, `TLSX Scanner`, `WAFW00F Scanner`, `Checkov Security Scanning`, `Katana Security Scanner`, `Responder Log Analysis`, `Cloud Metadata Extraction`, `JWT Tool Scanner`, `GreyNoise Threat Intelligence`, `Nuclei Vulnerability Scanning`, `KubescapeScanner`, `BBScopeScanner`, `RustScan Network Scanning`, `OpenRedirexScanner`, `WhatWeb Scanner`, `APKLeaks Analysis`, `ApktoolScanner`, `DrozerScanner`, `JadxScanner`, `BloodHound Data Ingestion`, `Sovereign Recon Management`, `Orchestrator Management`, `.run`, `GrypeScanner`, `SyftScanner`, `ModelScanScanner<M>`, `FridaScanner`, `MarianaTrenchScanner`, `Dalfox Scanner`, `GraphQL Exploitation`, `NoMore403Scanner`, `Upload Strike Management`, `AzureHound Scanning`, `RoadRecon Analysis`, `PocValidator`, `Kerbrute Scanner`, `FFUF Scanner`, `InQL Scanner`, `JsluiceScanner`, `ObjectionScanner`, `Ligolo Scanner`, `CDN Check Scanner`, `Dnsx Scanner`, `Gitleaks Scanner`, `Context Compression`, `Autonomous Agent Management`, `.verify_proof`, `Scanning Management`, `Webhook Management`, `CosignScanner`, `Semgrep Scanner`, `Trivy Scanner`, `CloudBrute Scanner`, `CloudEnum Scanner`, `CloudFox Scanner`, `Pacu Scanner`, `Prowler Scanner`, `ScoutSuiteScanner`, `Clairvoyance Scanner`, `CrackqlScanner`, `GraphW00fScanner`, `SchemathesisScanner`, `build_report`, `CorsyScanner`, `CRLF Scanner`, `Feroxbuster Scanner`, `GauPlus Scanner`, `Gf Scanner`, `GoWitness Scanner`, `Interactsh Scanner`, `JWKS Discovery Scanner`, `Kiterunner Scanner`, `Nikto Scanner`, `SecretFinderScanner<M>`, `Snallygaster Scanner`, `Wcvs Scanner`, `WP Scanner`, `X8Scanner`, `DiscoveryResult`, `Coercer Scanner`, `Impacket Scanner`, `NetExec Scanner`, `PetitPotam Scanner`, `Sliver Automator`, `CORS Token Exfiltrator`, `Deserialization Scanner`, `GraphQL Cop Scanner`, `SmugglerScanner`, `Wapiti Scanner`, `Jaeles Scanner`, `Searchsploit Scanner`, `ASNMap Scanner`, `Httpx Scanner`, `Naabu Scanner`, `AlterX Scanner`, `Amass Scanner`, `.detect_tool`, `Shuffledns Scanner`, `Subfinder Scanner`, `Uncover Scanner`, `TruffleHog Scanner`, `Wayback Scanner`, `Waymore Scanner`, `PluginRegistry`, `DNS Hijack Verifier`, `Secret Validator`, `Config`, `JSONL Sink`, `Mock Sink`, `Enum4Linux Scanner`, `Hydra Scanner`, `GhauriScanner`, `GopherusScanner`, `H2C Smuggler Scanner`, `NoSqlMapScanner`, `SqlMapScanner`, `Subzy Scanner`, `GitHub Dorks Scanner`, `PoC Verifier`, `Zap Scanner`, `Discord Sink`, `GarakScanner<M>`, `SSRFMap Scanner`, `ScanMetadata`, `Markdown Sink`, `AIAnalysis`, `LinkFinder Scanner`, `PromptfooScanner<M>`, `PyRIT Scanner`, `LLMFuzzerScanner<M>`, `PromptInjectScanner<M>`, `PromptmapScanner<M>`, `Remote Execution`, `DonutScanner`, `net.rs`, `DataSink`, `Orchestrator`, `OAuthScanner`, `SsrfKingScanner`, `BugBountyDraftSink`, `ScareCrowScanner`?**
-  _High betweenness centrality (0.153) - this node is a cross-community bridge._
-- **Why does `ScannerPlugin` connect `ScannerPlugin` to `Cache Deception Detection`, `S3BucketScanner`, `PipelineBuilder`, `PluginMetadata`, `AbuseIPDBScanner`, `Authentication State Machine`, `MockMonitor`, `Pipeline`, `SovereignSliverOperator<M>`, `lateral_movement_test.rs`, `JWT Forging Scanner`, `Privilege Escalation Scanner`, `HavocScanner<M>`, `OSV Package Scanner`, `CredentialLeakScanner`, `Caido Scanner`, `WebFuzzer`, `MobSF Scanner`, `Sliver Scanner`, `DiscoveryPlugin`, `Vigil Scanner`, `Commix Scanner`, `NVD Monitoring`, `ScanLayerPolicy`, `Reactive Engine Management`, `Rebuff Scanner`, `Business Logic Scanner`, `AlienVault OTX Scanner`, `TLSX Scanner`, `WAFW00F Scanner`, `Checkov Security Scanning`, `Katana Security Scanner`, `Responder Log Analysis`, `Cloud Metadata Extraction`, `JWT Tool Scanner`, `GreyNoise Threat Intelligence`, `Nuclei Vulnerability Scanning`, `KubescapeScanner`, `RustScan Network Scanning`, `OpenRedirexScanner`, `WhatWeb Scanner`, `APKLeaks Analysis`, `ApktoolScanner`, `DrozerScanner`, `JadxScanner`, `BloodHound Data Ingestion`, `GrypeScanner`, `SyftScanner`, `ModelScanScanner<M>`, `FridaScanner`, `MarianaTrenchScanner`, `Dalfox Scanner`, `GraphQL Exploitation`, `NoMore403Scanner`, `Upload Strike Management`, `AzureHound Scanning`, `RoadRecon Analysis`, `GlobalConfig`, `Kerbrute Scanner`, `FFUF Scanner`, `InQL Scanner`, `JsluiceScanner`, `ObjectionScanner`, `Ligolo Scanner`, `CDN Check Scanner`, `Dnsx Scanner`, `Gitleaks Scanner`, `CosignScanner`, `Semgrep Scanner`, `Trivy Scanner`, `CloudBrute Scanner`, `CloudEnum Scanner`, `CloudFox Scanner`, `Pacu Scanner`, `Prowler Scanner`, `ScoutSuiteScanner`, `Clairvoyance Scanner`, `CrackqlScanner`, `GraphW00fScanner`, `SchemathesisScanner`, `CorsyScanner`, `CRLF Scanner`, `Feroxbuster Scanner`, `GauPlus Scanner`, `Gf Scanner`, `GoWitness Scanner`, `Interactsh Scanner`, `JWKS Discovery Scanner`, `Kiterunner Scanner`, `Nikto Scanner`, `SecretFinderScanner<M>`, `Snallygaster Scanner`, `Wcvs Scanner`, `WP Scanner`, `X8Scanner`, `Coercer Scanner`, `Impacket Scanner`, `NetExec Scanner`, `PetitPotam Scanner`, `Sliver Automator`, `CORS Token Exfiltrator`, `Deserialization Scanner`, `GraphQL Cop Scanner`, `SmugglerScanner`, `Wapiti Scanner`, `Jaeles Scanner`, `Searchsploit Scanner`, `Httpx Scanner`, `Naabu Scanner`, `.detect_tool`, `TruffleHog Scanner`, `Wayback Scanner`, `Waymore Scanner`, `PluginRegistry`, `DNS Hijack Verifier`, `Secret Validator`, `Enum4Linux Scanner`, `Hydra Scanner`, `GhauriScanner`, `GopherusScanner`, `H2C Smuggler Scanner`, `NoSqlMapScanner`, `SqlMapScanner`, `Subzy Scanner`, `GitHub Dorks Scanner`, `PoC Verifier`, `Zap Scanner`, `GarakScanner<M>`, `SSRFMap Scanner`, `LinkFinder Scanner`, `PromptfooScanner<M>`, `PyRIT Scanner`, `LLMFuzzerScanner<M>`, `PromptInjectScanner<M>`, `PromptmapScanner<M>`, `DonutScanner`, `Monitoring Loop`, `net.rs`, `Orchestrator`, `OAuthScanner`, `SsrfKingScanner`, `ScareCrowScanner`?**
-  _High betweenness centrality (0.110) - this node is a cross-community bridge._
+- **Why does `Finding` connect `Finding` to `cache_deception.rs`, `OobInteractionManager`, `Decoy Configuration Management`, `BkTree`, `S3BucketScanner`, `DummyDestructivePlugin`, `CredentialLeakScanner`, `TargetHost`, `TieredAIRouter`, `NetEvasionOrchestrator`, `CorrelationEngine`, `AbuseIPDBScanner`, `Authentication State Machine`, `MockPlugin`, `DynamicPluginLoader`, `Pipeline`, `ActivityLog`, `SovereignSliverOperator<M>`, `lateral_movement_test.rs`, `CVE Cache Management`, `TacticalPlan`, `Buffered Sink Management`, `JwtForgeScanner`, `Privilege Escalation Scanner`, `RedTeamEngine`, `HavocScanner<M>`, `SwarmInventory`, `.process_finding`, `OSV Package Scanner`, `BountySink`, `Caido Scanner`, `DecisionConfig`, `PluginMetadata`, `WebFuzzer`, `MobSFScanner<M>`, `SliverScanner<M>`, `MockMonitor`, `Credential Probing`, `Vigil Scanner`, `Commix Scanner`, `NVD Monitoring`, `IoUring Scanner`, `Reactive Engine Management`, `SkillManager`, `Source Analysis`, `OffPathAiEngine`, `Rebuff Scanner`, `Business Logic Scanner`, `AlienVault OTX Scanner`, `TLSX Scanner`, `WAFW00F Scanner`, `OpenRedirexScanner`, `Checkov Security Scanning`, `Katana Security Scanner`, `Responder Log Analysis`, `Cloud Metadata Extraction`, `JWT Tool Scanner`, `GreyNoise Threat Intelligence`, `Nuclei Vulnerability Scanning`, `KubescapeScanner`, `Nmap XML Parsing`, `RustScan Network Scanning`, `TsunamiScanner`, `WhatWeb Scanner`, `APKLeaks Analysis`, `ApktoolScanner`, `DrozerScanner`, `JadxScanner`, `BloodHound Data Ingestion`, `SearchsploitScanner`, `Args`, `Orchestrator Management`, `.run`, `GrypeScanner`, `SyftScanner`, `ModelScanScanner<M>`, `FridaScanner`, `MarianaTrenchScanner`, `Dalfox Scanner`, `GraphQL Exploitation`, `NoMore403Scanner`, `Upload Strike Management`, `AzureHound Scanning`, `RoadRecon Analysis`, `PocValidator`, `Kerbrute Scanner`, `FFUF Scanner`, `InQL Scanner`, `Command`, `ObjectionScanner`, `Orchestrator`, `Ligolo Scanner`, `CDN Check Scanner`, `Dnsx Scanner`, `Gitleaks Scanner`, `Context Compression`, `Parity Report Management`, `.verify_proof`, `Scanning Management`, `CosignScanner`, `Semgrep Scanner`, `Trivy Scanner`, `CloudBrute Scanner`, `CloudEnum Scanner`, `CloudFox Scanner`, `KubeBenchScanner`, `Pacu Scanner`, `Prowler Scanner`, `ScoutSuiteScanner`, `Script Classification`, `Clairvoyance Scanner`, `CrackqlScanner`, `GraphW00fScanner`, `SchemathesisScanner`, `ArjunScanner`, `CorsyScanner`, `CRLF Scanner`, `Feroxbuster Scanner`, `GauPlus Scanner`, `Gf Scanner`, `GoWitness Scanner`, `Interactsh Scanner`, `JWKS Discovery Scanner`, `Kiterunner Scanner`, `NiktoScanner`, `SecretFinderScanner<M>`, `Snallygaster Scanner`, `Wcvs Scanner`, `WPScanner`, `X8Scanner`, `PpmapScanner`, `Coercer Scanner`, `Impacket Scanner`, `NetExec Scanner`, `PetitPotam Scanner`, `Sliver Automator`, `CORS Token Exfiltrator`, `Deserialization Scanner`, `GraphQL Cop Scanner`, `SmugglerScanner`, `ImdsBypassScanner`, `Jaeles Scanner`, `active_ssrf.rs`, `Naabu Scanner`, `.detect_tool`, `TruffleHog Scanner`, `Wayback Scanner`, `Waymore Scanner`, `Severity`, `DNS Hijack Verifier`, `Secret Validator`, `Enum4Linux Scanner`, `Hydra Scanner`, `GhauriScanner`, `GopherusScanner`, `H2C Smuggler Scanner`, `NoSqlMapScanner`, `SqlMapScanner`, `Subzy Scanner`, `GitHub Dorks Scanner`, `ZapScanner`, `PoC Verifier`, `BountyExporter`, `PipelineBuilder`, `DiscordSink`, `GarakScanner<M>`, `SSRFMap Scanner`, `AIAnalysis`, `LinkFinder Scanner`, `PromptfooScanner<M>`, `PyRIT Scanner`, `LLMFuzzerScanner<M>`, `PromptInjectScanner<M>`, `PromptmapScanner<M>`, `Ingestor`, `DonutScanner`, `ValidationMetadata`, `Report Generation`, `WapitiScanner`, `bug_bounty/tests.rs`, `Monitoring Loop`, `BurpScanner`, `net.rs`, `Proof of Concept Generation`, `Finding Enrichment`, `OAuthScanner`, `CertipyScanner`, `triage/fingerprint.rs`, `TriageEngine`, `HttpxScanner`, `ScareCrowScanner`, `TargetProcessContext`, `FalsePositiveFilter`, `.select_tools`, `.sovereign_handover`, `correlation.rs`, `build_report`?**
+  _High betweenness centrality (0.219) - this node is a cross-community bridge._
+- **Why does `TargetHost` connect `TargetHost` to `PostgresSink`, `cache_deception.rs`, `OobInteractionManager`, `S3BucketScanner`, `DummyDestructivePlugin`, `CredentialLeakScanner`, `TieredAIRouter`, `Finding`, `AbuseIPDBScanner`, `Authentication State Machine`, `MockPlugin`, `Favicon Hash Scanner`, `DynamicPluginLoader`, `Pipeline`, `SovereignSliverOperator<M>`, `DataSink`, `lateral_movement_test.rs`, `TacticalPlan`, `StealthExecutor`, `Buffered Sink Management`, `JwtForgeScanner`, `Privilege Escalation Scanner`, `Lock-Free Sink Management`, `.build`, `RedTeamEngine`, `HavocScanner<M>`, `SwarmInventory`, `.process_finding`, `OSV Package Scanner`, `BountySink`, `Caido Scanner`, `DecisionConfig`, `PluginMetadata`, `WebFuzzer`, `MobSFScanner<M>`, `SliverScanner<M>`, `MockMonitor`, `spawn_discovery_stage`, `Credential Probing`, `Vigil Scanner`, `Commix Scanner`, `NVD Monitoring`, `OSINT Scanning`, `Reactive Engine Management`, `OffPathAiEngine`, `Rebuff Scanner`, `Business Logic Scanner`, `AlienVault OTX Scanner`, `TLSX Scanner`, `WAFW00F Scanner`, `OpenRedirexScanner`, `Checkov Security Scanning`, `Katana Security Scanner`, `Responder Log Analysis`, `Cloud Metadata Extraction`, `JWT Tool Scanner`, `GreyNoise Threat Intelligence`, `Nuclei Vulnerability Scanning`, `KubescapeScanner`, `DiscoveryResult`, `RustScan Network Scanning`, `TsunamiScanner`, `WhatWeb Scanner`, `APKLeaks Analysis`, `ApktoolScanner`, `DrozerScanner`, `JadxScanner`, `BloodHound Data Ingestion`, `SearchsploitScanner`, `Args`, `Orchestrator Management`, `.run`, `GrypeScanner`, `SyftScanner`, `ModelScanScanner<M>`, `FridaScanner`, `MarianaTrenchScanner`, `Dalfox Scanner`, `GraphQL Exploitation`, `NoMore403Scanner`, `Upload Strike Management`, `AzureHound Scanning`, `RoadRecon Analysis`, `SovereignReconScanner`, `PocValidator`, `Kerbrute Scanner`, `FFUF Scanner`, `InQL Scanner`, `Command`, `ObjectionScanner`, `Orchestrator`, `Ligolo Scanner`, `CDN Check Scanner`, `Dnsx Scanner`, `Gitleaks Scanner`, `Context Compression`, `Autonomous Agent Management`, `.verify_proof`, `Scanning Management`, `TacticalWebhookSink`, `CosignScanner`, `Semgrep Scanner`, `Trivy Scanner`, `CloudBrute Scanner`, `CloudEnum Scanner`, `CloudFox Scanner`, `KubeBenchScanner`, `Pacu Scanner`, `Prowler Scanner`, `ScoutSuiteScanner`, `Clairvoyance Scanner`, `CrackqlScanner`, `GraphW00fScanner`, `SchemathesisScanner`, `ArjunScanner`, `CorsyScanner`, `CRLF Scanner`, `Feroxbuster Scanner`, `GauPlus Scanner`, `Gf Scanner`, `GoWitness Scanner`, `Interactsh Scanner`, `JWKS Discovery Scanner`, `Kiterunner Scanner`, `NiktoScanner`, `SecretFinderScanner<M>`, `Snallygaster Scanner`, `Wcvs Scanner`, `WPScanner`, `X8Scanner`, `PpmapScanner`, `Coercer Scanner`, `Impacket Scanner`, `NetExec Scanner`, `PetitPotam Scanner`, `Sliver Automator`, `CORS Token Exfiltrator`, `Deserialization Scanner`, `GraphQL Cop Scanner`, `SmugglerScanner`, `ImdsBypassScanner`, `Jaeles Scanner`, `active_ssrf.rs`, `ASNMap Scanner`, `PurednsScanner`, `Naabu Scanner`, `AlterX Scanner`, `Amass Scanner`, `.detect_tool`, `Shuffledns Scanner`, `Subfinder Scanner`, `Uncover Scanner`, `TruffleHog Scanner`, `Wayback Scanner`, `Waymore Scanner`, `DNS Hijack Verifier`, `Secret Validator`, `MultiSink`, `JSONL Sink`, `Mock Sink`, `Enum4Linux Scanner`, `Hydra Scanner`, `GhauriScanner`, `GopherusScanner`, `H2C Smuggler Scanner`, `NoSqlMapScanner`, `SqlMapScanner`, `Subzy Scanner`, `GitHub Dorks Scanner`, `ZapScanner`, `PoC Verifier`, `PipelineBuilder`, `DiscordSink`, `GarakScanner<M>`, `SSRFMap Scanner`, `ScanMetadata`, `Markdown Sink`, `AIAnalysis`, `LinkFinder Scanner`, `PromptfooScanner<M>`, `PyRIT Scanner`, `LLMFuzzerScanner<M>`, `PromptInjectScanner<M>`, `PromptmapScanner<M>`, `PolicyProvider`, `Remote Execution`, `DonutScanner`, `WapitiScanner`, `BurpScanner`, `net.rs`, `TimelineSink`, `OAuthScanner`, `CertipyScanner`, `HttpxScanner`, `ScareCrowScanner`, `BugBountyDraftSink`, `TargetProcessContext`, `spawn_liveness_stage`, `.sovereign_handover`, `build_report`?**
+  _High betweenness centrality (0.163) - this node is a cross-community bridge._
+- **Why does `ScannerPlugin` connect `ScannerPlugin` to `cache_deception.rs`, `OobInteractionManager`, `S3BucketScanner`, `PipelineBuilder<M>`, `DummyDestructivePlugin`, `CredentialLeakScanner`, `AbuseIPDBScanner`, `Authentication State Machine`, `MockPlugin`, `DynamicPluginLoader`, `Pipeline`, `SovereignSliverOperator<M>`, `lateral_movement_test.rs`, `JwtForgeScanner`, `Privilege Escalation Scanner`, `HavocScanner<M>`, `SwarmInventory`, `OSV Package Scanner`, `Caido Scanner`, `PluginMetadata`, `WebFuzzer`, `MobSFScanner<M>`, `SliverScanner<M>`, `MockMonitor`, `Vigil Scanner`, `Commix Scanner`, `NVD Monitoring`, `Reactive Engine Management`, `Rebuff Scanner`, `Business Logic Scanner`, `AlienVault OTX Scanner`, `TLSX Scanner`, `WAFW00F Scanner`, `OpenRedirexScanner`, `Checkov Security Scanning`, `Katana Security Scanner`, `Responder Log Analysis`, `Cloud Metadata Extraction`, `JWT Tool Scanner`, `GreyNoise Threat Intelligence`, `Nuclei Vulnerability Scanning`, `KubescapeScanner`, `RustScan Network Scanning`, `TsunamiScanner`, `WhatWeb Scanner`, `APKLeaks Analysis`, `ApktoolScanner`, `DrozerScanner`, `JadxScanner`, `BloodHound Data Ingestion`, `SearchsploitScanner`, `GrypeScanner`, `SyftScanner`, `ModelScanScanner<M>`, `FridaScanner`, `MarianaTrenchScanner`, `Dalfox Scanner`, `GraphQL Exploitation`, `NoMore403Scanner`, `Upload Strike Management`, `AzureHound Scanning`, `RoadRecon Analysis`, `GlobalConfig`, `Kerbrute Scanner`, `FFUF Scanner`, `InQL Scanner`, `Command`, `ObjectionScanner`, `Orchestrator`, `Ligolo Scanner`, `CDN Check Scanner`, `Dnsx Scanner`, `Gitleaks Scanner`, `CosignScanner`, `Semgrep Scanner`, `Trivy Scanner`, `CloudBrute Scanner`, `CloudEnum Scanner`, `CloudFox Scanner`, `KubeBenchScanner`, `Pacu Scanner`, `Prowler Scanner`, `ScoutSuiteScanner`, `Clairvoyance Scanner`, `CrackqlScanner`, `GraphW00fScanner`, `SchemathesisScanner`, `ArjunScanner`, `CorsyScanner`, `CRLF Scanner`, `Feroxbuster Scanner`, `GauPlus Scanner`, `Gf Scanner`, `GoWitness Scanner`, `Interactsh Scanner`, `JWKS Discovery Scanner`, `Kiterunner Scanner`, `NiktoScanner`, `SecretFinderScanner<M>`, `Snallygaster Scanner`, `Wcvs Scanner`, `WPScanner`, `X8Scanner`, `PpmapScanner`, `Coercer Scanner`, `Impacket Scanner`, `NetExec Scanner`, `PetitPotam Scanner`, `Sliver Automator`, `CORS Token Exfiltrator`, `Deserialization Scanner`, `GraphQL Cop Scanner`, `SmugglerScanner`, `ImdsBypassScanner`, `Jaeles Scanner`, `active_ssrf.rs`, `Naabu Scanner`, `.detect_tool`, `TruffleHog Scanner`, `Wayback Scanner`, `Waymore Scanner`, `DNS Hijack Verifier`, `Secret Validator`, `Enum4Linux Scanner`, `Hydra Scanner`, `GhauriScanner`, `GopherusScanner`, `H2C Smuggler Scanner`, `NoSqlMapScanner`, `SqlMapScanner`, `Subzy Scanner`, `GitHub Dorks Scanner`, `ZapScanner`, `PoC Verifier`, `PipelineBuilder`, `GarakScanner<M>`, `SSRFMap Scanner`, `LinkFinder Scanner`, `PromptfooScanner<M>`, `PyRIT Scanner`, `LLMFuzzerScanner<M>`, `PromptInjectScanner<M>`, `PromptmapScanner<M>`, `DonutScanner`, `WapitiScanner`, `Monitoring Loop`, `BurpScanner`, `net.rs`, `OAuthScanner`, `CertipyScanner`, `HttpxScanner`, `ScareCrowScanner`, `TargetProcessContext`?**
+  _High betweenness centrality (0.093) - this node is a cross-community bridge._
 - **What connects `retire`, `EthernetFrame<'a>`, `QuicEvasionStrategy` to the rest of the system?**
-  _600 weakly-connected nodes found - possible documentation gaps or missing edges._
+  _601 weakly-connected nodes found - possible documentation gaps or missing edges._
 - **Should `WafEvasionEngine` be split into smaller, more focused modules?**
   _Cohesion score 0.06896551724137931 - nodes in this community are weakly interconnected._
 - **Should `ProxyManager` be split into smaller, more focused modules?**
-  _Cohesion score 0.06823529411764706 - nodes in this community are weakly interconnected._
+  _Cohesion score 0.05379746835443038 - nodes in this community are weakly interconnected._
 - **Should `QuinnEvasionClient` be split into smaller, more focused modules?**
   _Cohesion score 0.1349206349206349 - nodes in this community are weakly interconnected._
